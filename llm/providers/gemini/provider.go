@@ -1,18 +1,19 @@
 package gemini
 
 import (
-	"bufio"
-	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	googlegenai "github.com/BaSui01/agentflow/llm/internal/googlegenai"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+	"google.golang.org/genai"
 
 	"github.com/BaSui01/agentflow/types"
 
@@ -87,26 +88,51 @@ func NewGeminiProvider(cfg providers.GeminiConfig, logger *zap.Logger) *GeminiPr
 
 func (p *GeminiProvider) Name() string { return "gemini" }
 
+func (p *GeminiProvider) sdkClient(ctx context.Context) (*genai.Client, error) {
+	return googlegenai.NewClient(ctx, googlegenai.ClientConfig{
+		APIKey:     p.resolveAPIKey(ctx),
+		BaseURL:    p.cfg.BaseURL,
+		ProjectID:  p.cfg.ProjectID,
+		Region:     p.cfg.Region,
+		AuthType:   p.cfg.AuthType,
+		Timeout:    p.cfg.Timeout,
+		HTTPClient: p.client,
+	})
+}
+
+func (p *GeminiProvider) mapSDKError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var apiErr genai.APIError
+	if errors.As(err, &apiErr) {
+		return providerbase.MapHTTPError(apiErr.Code, strings.TrimSpace(apiErr.Message), p.Name())
+	}
+
+	return &types.Error{
+		Code:       llm.ErrUpstreamError,
+		Message:    err.Error(),
+		Cause:      err,
+		HTTPStatus: http.StatusBadGateway,
+		Retryable:  true,
+		Provider:   p.Name(),
+	}
+}
+
 func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := p.modelsEndpoint()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
+	client, err := p.sdkClient(ctx)
 	latency := time.Since(start)
 	if err != nil {
-		return &llm.HealthStatus{Healthy: false, Latency: latency}, err
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, p.mapSDKError(err)
 	}
-	defer resp.Body.Close()
+	_, err = client.Models.List(ctx, &genai.ListModelsConfig{PageSize: 1})
+	latency = time.Since(start)
+	if err != nil {
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, p.mapSDKError(err)
+	}
 
-	if resp.StatusCode != http.StatusOK {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("gemini health check failed: status=%d msg=%s", resp.StatusCode, msg)
-	}
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
 
@@ -118,89 +144,45 @@ func (p *GeminiProvider) SupportsStructuredOutput() bool { return true }
 
 // ListModels 获取 Gemini 支持的模型列表
 func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	endpoint := p.modelsEndpoint()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
-	resp, err := p.client.Do(httpReq)
+	page, err := client.Models.List(ctx, &genai.ListModelsConfig{})
 	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
+		return nil, p.mapSDKError(err)
+	}
+
+	source := page.Items
+	for page.NextPageToken != "" {
+		page, err = page.Next(ctx)
+		if err != nil {
+			return nil, p.mapSDKError(err)
 		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	type geminiModelPayload struct {
-		Name                  string   `json:"name"`
-		ID                    string   `json:"id"`
-		Model                 string   `json:"model"`
-		BaseModelID           string   `json:"baseModelId"`
-		Version               string   `json:"version"`
-		DisplayName           string   `json:"displayName"`
-		Description           string   `json:"description"`
-		InputTokenLimit       int      `json:"inputTokenLimit"`
-		OutputTokenLimit      int      `json:"outputTokenLimit"`
-		MaxInputTokens        int      `json:"max_input_tokens"`
-		MaxOutputTokens       int      `json:"max_output_tokens"`
-		SupportedMethods      []string `json:"supportedGenerationMethods"`
-		SupportedMethodsSnake []string `json:"supported_generation_methods"`
-	}
-	var modelsResp struct {
-		Models []geminiModelPayload `json:"models"`
-		Data   []geminiModelPayload `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-
-	source := modelsResp.Models
-	if len(source) == 0 && len(modelsResp.Data) > 0 {
-		source = modelsResp.Data
+		source = append(source, page.Items...)
 	}
 
 	// 转换为统一格式
 	models := make([]llm.Model, 0, len(source))
 	for _, m := range source {
+		if m == nil {
+			continue
+		}
 		// 提取模型 ID（去掉 "models/" 前缀）
 		modelID := strings.TrimSpace(firstNonEmpty(
 			strings.TrimPrefix(strings.TrimSpace(m.Name), "models/"),
-			strings.TrimSpace(m.ID),
-			strings.TrimSpace(m.Model),
 		))
 		if modelID == "" {
 			continue
 		}
-		caps := resolveGeminiCapabilities(modelID, m.DisplayName, m.Description, firstNonEmptyMethods(m.SupportedMethods, m.SupportedMethodsSnake))
-		maxInput := m.InputTokenLimit
-		if maxInput == 0 {
-			maxInput = m.MaxInputTokens
-		}
-		maxOutput := m.OutputTokenLimit
-		if maxOutput == 0 {
-			maxOutput = m.MaxOutputTokens
-		}
+		caps := resolveGeminiCapabilities(modelID, m.DisplayName, m.Description, m.SupportedActions)
 		model := llm.Model{
 			ID:              modelID,
 			Object:          "model",
 			OwnedBy:         "google",
-			MaxInputTokens:  maxInput,
-			MaxOutputTokens: maxOutput,
+			MaxInputTokens:  int(m.InputTokenLimit),
+			MaxOutputTokens: int(m.OutputTokenLimit),
 			Capabilities:    caps,
 		}
 		models = append(models, model)
@@ -809,6 +791,322 @@ func convertToGeminiTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 	return result
 }
 
+func convertToGenAIContents(msgs []types.Message) (*genai.Content, []*genai.Content) {
+	var systemInstruction *genai.Content
+	contents := make([]*genai.Content, 0, len(msgs))
+
+	for _, m := range msgs {
+		if m.Role == llm.RoleSystem {
+			systemInstruction = genai.NewContentFromText(m.Content, genai.RoleUser)
+			continue
+		}
+
+		var role genai.Role = genai.RoleUser
+		if m.Role == llm.RoleAssistant {
+			role = genai.RoleModel
+		}
+
+		parts := make([]*genai.Part, 0, 1+len(m.ToolCalls))
+		partIndex := 0
+		if m.Role == llm.RoleAssistant && m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != "" {
+			parts = append(parts, &genai.Part{
+				Text:             *m.ReasoningContent,
+				Thought:          true,
+				ThoughtSignature: decodeThoughtSignature(geminiThoughtSignatureByIndex(m, partIndex)),
+			})
+			partIndex++
+		}
+
+		if m.Content != "" && m.Role != llm.RoleTool {
+			parts = append(parts, &genai.Part{
+				Text:             m.Content,
+				ThoughtSignature: decodeThoughtSignature(geminiThoughtSignatureByIndex(m, partIndex)),
+			})
+			partIndex++
+		}
+
+		if len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				var args map[string]any
+				if err := json.Unmarshal(tc.Arguments, &args); err != nil {
+					continue
+				}
+				parts = append(parts, &genai.Part{
+					FunctionCall: &genai.FunctionCall{
+						ID:   tc.ID,
+						Name: tc.Name,
+						Args: args,
+					},
+					ThoughtSignature: decodeThoughtSignature(geminiThoughtSignatureByIndex(m, partIndex)),
+				})
+				partIndex++
+			}
+		}
+
+		if m.Role == llm.RoleTool && m.ToolCallID != "" {
+			var response map[string]any
+			if err := json.Unmarshal([]byte(m.Content), &response); err != nil {
+				response = map[string]any{"result": m.Content}
+			}
+			parts = append(parts, &genai.Part{
+				FunctionResponse: &genai.FunctionResponse{
+					ID:       m.ToolCallID,
+					Name:     m.Name,
+					Response: response,
+				},
+			})
+		}
+
+		if len(parts) > 0 {
+			contents = append(contents, genai.NewContentFromParts(parts, role))
+		}
+	}
+
+	return systemInstruction, contents
+}
+
+func convertToGenAITools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []*genai.Tool {
+	needGoogleSearch := wsOpts != nil
+	declarations := make([]*genai.FunctionDeclaration, 0, len(tools))
+	for _, t := range tools {
+		if t.Name == "web_search" || t.Name == "google_search" {
+			needGoogleSearch = true
+			continue
+		}
+		var params any
+		if err := json.Unmarshal(t.Parameters, &params); err != nil {
+			continue
+		}
+		declarations = append(declarations, &genai.FunctionDeclaration{
+			Name:                 t.Name,
+			Description:          t.Description,
+			ParametersJsonSchema: params,
+		})
+	}
+
+	result := make([]*genai.Tool, 0, 2)
+	if len(declarations) > 0 {
+		result = append(result, &genai.Tool{
+			FunctionDeclarations: declarations,
+		})
+	}
+	if needGoogleSearch {
+		result = append(result, &genai.Tool{
+			GoogleSearch: &genai.GoogleSearch{},
+		})
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func convertToolChoiceToGenAI(toolChoice any, includeServerSide *bool) *genai.ToolConfig {
+	var cfg *genai.ToolConfig
+	buildMode := func(mode genai.FunctionCallingConfigMode, allowed []string) *genai.ToolConfig {
+		out := &genai.ToolConfig{
+			FunctionCallingConfig: &genai.FunctionCallingConfig{
+				Mode: mode,
+			},
+		}
+		if len(allowed) > 0 {
+			out.FunctionCallingConfig.AllowedFunctionNames = allowed
+		}
+		return out
+	}
+
+	switch v := toolChoice.(type) {
+	case string:
+		switch strings.TrimSpace(strings.ToLower(v)) {
+		case "auto":
+			cfg = buildMode(genai.FunctionCallingConfigModeAuto, nil)
+		case "required", "any":
+			cfg = buildMode(genai.FunctionCallingConfigModeAny, nil)
+		case "none":
+			cfg = buildMode(genai.FunctionCallingConfigModeNone, nil)
+		case "validated":
+			cfg = buildMode(genai.FunctionCallingConfigModeValidated, nil)
+		}
+	case map[string]any:
+		if fn, ok := v["function"].(map[string]any); ok {
+			if name, ok := fn["name"].(string); ok && strings.TrimSpace(name) != "" {
+				cfg = buildMode(genai.FunctionCallingConfigModeAny, []string{strings.TrimSpace(name)})
+				break
+			}
+		}
+		mode, _ := v["mode"].(string)
+		if mode == "" {
+			mode, _ = v["Mode"].(string)
+		}
+		switch strings.ToUpper(strings.TrimSpace(mode)) {
+		case "AUTO":
+			cfg = buildMode(genai.FunctionCallingConfigModeAuto, nil)
+		case "ANY":
+			cfg = buildMode(genai.FunctionCallingConfigModeAny, geminiAllowedFunctionNames(v["allowed_function_names"]))
+			if cfg.FunctionCallingConfig != nil && len(cfg.FunctionCallingConfig.AllowedFunctionNames) == 0 {
+				cfg.FunctionCallingConfig.AllowedFunctionNames = geminiAllowedFunctionNames(v["allowedFunctionNames"])
+			}
+		case "NONE":
+			cfg = buildMode(genai.FunctionCallingConfigModeNone, nil)
+		case "VALIDATED":
+			cfg = buildMode(genai.FunctionCallingConfigModeValidated, geminiAllowedFunctionNames(v["allowed_function_names"]))
+			if cfg.FunctionCallingConfig != nil && len(cfg.FunctionCallingConfig.AllowedFunctionNames) == 0 {
+				cfg.FunctionCallingConfig.AllowedFunctionNames = geminiAllowedFunctionNames(v["allowedFunctionNames"])
+			}
+		}
+		if include, ok := v["include_server_side_tool_invocations"].(bool); ok {
+			includeServerSide = &include
+		} else if include, ok := v["includeServerSideToolInvocations"].(bool); ok {
+			includeServerSide = &include
+		}
+	}
+
+	if includeServerSide != nil {
+		if cfg == nil {
+			cfg = &genai.ToolConfig{}
+		}
+		cfg.IncludeServerSideToolInvocations = includeServerSide
+	}
+	return cfg
+}
+
+func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers.GeminiSafetySetting) *genai.GenerateContentConfig {
+	cfg := &genai.GenerateContentConfig{}
+
+	if req.Temperature != 0 {
+		cfg.Temperature = genai.Ptr(req.Temperature)
+	}
+	if req.TopP != 0 {
+		cfg.TopP = genai.Ptr(req.TopP)
+	}
+	if req.MaxTokens > 0 {
+		cfg.MaxOutputTokens = int32(req.MaxTokens)
+	}
+	if len(req.Stop) > 0 {
+		cfg.StopSequences = req.Stop
+	}
+	if req.FrequencyPenalty != nil {
+		cfg.FrequencyPenalty = req.FrequencyPenalty
+	}
+	if req.PresencePenalty != nil {
+		cfg.PresencePenalty = req.PresencePenalty
+	}
+	if req.N != nil && *req.N > 0 {
+		cfg.CandidateCount = int32(*req.N)
+	}
+	if req.LogProbs != nil {
+		cfg.ResponseLogprobs = *req.LogProbs
+	}
+	if req.TopLogProbs != nil {
+		v := int32(*req.TopLogProbs)
+		cfg.Logprobs = &v
+	}
+
+	if req.ResponseFormat != nil {
+		switch req.ResponseFormat.Type {
+		case llm.ResponseFormatJSONObject:
+			cfg.ResponseMIMEType = "application/json"
+		case llm.ResponseFormatJSONSchema:
+			cfg.ResponseMIMEType = "application/json"
+			if req.ResponseFormat.JSONSchema != nil {
+				cfg.ResponseJsonSchema = req.ResponseFormat.JSONSchema.Schema
+			}
+		}
+	}
+
+	if req.ReasoningMode != "" {
+		cfg.ThinkingConfig = &genai.ThinkingConfig{
+			IncludeThoughts: true,
+		}
+		switch strings.TrimSpace(strings.ToLower(req.ReasoningMode)) {
+		case "minimal":
+			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMinimal
+		case "low":
+			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelLow
+		case "medium":
+			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
+		case "high":
+			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelHigh
+		default:
+			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
+		}
+	}
+
+	if len(safetySettings) > 0 {
+		cfg.SafetySettings = make([]*genai.SafetySetting, 0, len(safetySettings))
+		for _, s := range safetySettings {
+			cfg.SafetySettings = append(cfg.SafetySettings, &genai.SafetySetting{
+				Category:  genai.HarmCategory(strings.TrimSpace(s.Category)),
+				Threshold: genai.HarmBlockThreshold(strings.TrimSpace(s.Threshold)),
+			})
+		}
+	}
+
+	cfg.Tools = convertToGenAITools(req.Tools, req.WebSearchOptions)
+	cfg.ToolConfig = convertToolChoiceToGenAI(req.ToolChoice, req.IncludeServerSideToolInvocations)
+	cfg.CachedContent = strings.TrimSpace(req.CachedContent)
+
+	if len(req.Modalities) > 0 {
+		cfg.ResponseModalities = make([]string, 0, len(req.Modalities))
+		for _, modality := range req.Modalities {
+			modality = strings.ToUpper(strings.TrimSpace(modality))
+			if modality != "" {
+				cfg.ResponseModalities = append(cfg.ResponseModalities, modality)
+			}
+		}
+	}
+
+	if isEmptyGenAIConfig(cfg) {
+		return nil
+	}
+	return cfg
+}
+
+func isEmptyGenAIConfig(cfg *genai.GenerateContentConfig) bool {
+	if cfg == nil {
+		return true
+	}
+	return cfg.SystemInstruction == nil &&
+		cfg.Temperature == nil &&
+		cfg.TopP == nil &&
+		cfg.CandidateCount == 0 &&
+		cfg.MaxOutputTokens == 0 &&
+		len(cfg.StopSequences) == 0 &&
+		!cfg.ResponseLogprobs &&
+		cfg.Logprobs == nil &&
+		cfg.PresencePenalty == nil &&
+		cfg.FrequencyPenalty == nil &&
+		cfg.ResponseMIMEType == "" &&
+		cfg.ResponseSchema == nil &&
+		cfg.ResponseJsonSchema == nil &&
+		cfg.RoutingConfig == nil &&
+		cfg.ModelSelectionConfig == nil &&
+		len(cfg.SafetySettings) == 0 &&
+		len(cfg.Tools) == 0 &&
+		cfg.ToolConfig == nil &&
+		cfg.CachedContent == "" &&
+		len(cfg.ResponseModalities) == 0 &&
+		cfg.SpeechConfig == nil &&
+		!cfg.AudioTimestamp &&
+		cfg.ThinkingConfig == nil &&
+		cfg.ImageConfig == nil &&
+		cfg.EnableEnhancedCivicAnswers == nil &&
+		cfg.ModelArmorConfig == nil &&
+		cfg.ServiceTier == ""
+}
+
+func decodeThoughtSignature(value string) []byte {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err == nil {
+		return decoded
+	}
+	return []byte(value)
+}
+
 func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
@@ -822,67 +1120,28 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.resolveAPIKey(ctx)
-
-	systemInstruction, contents := convertToGeminiContents(req.Messages)
-
-	body := geminiRequest{
-		Contents:          contents,
-		Tools:             convertToGeminiTools(req.Tools, req.WebSearchOptions),
-		ToolConfig:        convertToolChoice(req.ToolChoice, req.IncludeServerSideToolInvocations),
-		SystemInstruction: systemInstruction,
-		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
-		CachedContent:     strings.TrimSpace(req.CachedContent),
-	}
-
-	// 生成配置
-	body.GenerationConfig = buildGenerationConfig(req)
-
-	payload, err := json.Marshal(body)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
 	model := providerbase.ChooseModel(req, p.cfg.Model, defaultModel)
-	endpoint := p.completionEndpoint(model)
+	systemInstruction, contents := convertToGenAIContents(req.Messages)
+	config := buildGenAIGenerationConfig(req, p.cfg.SafetySettings)
+	if config == nil {
+		config = &genai.GenerateContentConfig{}
+	}
+	config.SystemInstruction = systemInstruction
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	resp, err := client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, apiKey)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+		return nil, p.mapSDKError(err)
 	}
 
-	var geminiResp geminiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-
-	// 检查 promptFeedback（安全过滤导致的拒绝）
-	if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+	if err := checkPromptFeedbackFromGenAI(resp, p.Name()); err != nil {
 		return nil, err
 	}
 
-	return toGeminiChatResponse(geminiResp, p.Name(), model), nil
+	return toChatResponseFromGenAI(resp, p.Name(), model), nil
 }
 
 func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
@@ -899,139 +1158,38 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	req = rewrittenReq
 
-	apiKey := p.resolveAPIKey(ctx)
-
-	systemInstruction, contents := convertToGeminiContents(req.Messages)
-
-	body := geminiRequest{
-		Contents:          contents,
-		Tools:             convertToGeminiTools(req.Tools, req.WebSearchOptions),
-		ToolConfig:        convertToolChoice(req.ToolChoice, req.IncludeServerSideToolInvocations),
-		SystemInstruction: systemInstruction,
-		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
-		CachedContent:     strings.TrimSpace(req.CachedContent),
-	}
-
-	body.GenerationConfig = buildGenerationConfig(req)
-
-	payload, err := json.Marshal(body)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("failed to marshal request: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-			Cause:      err,
-		}
+		return nil, p.mapSDKError(err)
 	}
 	model := providerbase.ChooseModel(req, p.cfg.Model, defaultModel)
-	endpoint := p.streamEndpoint(model)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInternalError,
-			Message:    fmt.Sprintf("failed to create request: %v", err),
-			HTTPStatus: http.StatusInternalServerError,
-			Provider:   p.Name(),
-			Cause:      err,
-		}
+	systemInstruction, contents := convertToGenAIContents(req.Messages)
+	config := buildGenAIGenerationConfig(req, p.cfg.SafetySettings)
+	if config == nil {
+		config = &genai.GenerateContentConfig{}
 	}
-	p.buildHeaders(httpReq, apiKey)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
+	config.SystemInstruction = systemInstruction
 
 	ch := make(chan llm.StreamChunk)
 	go func() {
-		defer resp.Body.Close()
 		defer close(ch)
-		reader := bufio.NewReader(resp.Body)
-
-		for {
-			line, err := reader.ReadString('\n')
+		for result, err := range client.Models.GenerateContentStream(ctx, model, contents, config) {
 			if err != nil {
-				if err != io.EOF {
+				mapped := p.mapSDKError(err)
+				if te, ok := mapped.(*types.Error); ok {
 					select {
 					case <-ctx.Done():
 						return
-					case ch <- llm.StreamChunk{
-						Err: &types.Error{
-							Code:    llm.ErrUpstreamError,
-							Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-							Retryable: true,
-							Provider:  p.Name(),
-						},
-					}:
+					case ch <- llm.StreamChunk{Err: te}:
 					}
 				}
 				return
 			}
-
-			line = strings.TrimSpace(line)
-			if line == "" {
+			if result == nil {
 				continue
 			}
 
-			// Gemini SSE 格式：data: {json}\n\n；官方 streamGenerateContent 文档：
-			// https://ai.google.dev/gemini-api/docs/text-generation#streaming
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data == "" {
-				continue
-			}
-			if data == "[DONE]" {
-				return
-			}
-
-			// 流式中的错误负载：{"error":{"message":"...","code":...}}
-			var errPayload struct {
-				Err *struct {
-					Message string `json:"message"`
-					Code    int    `json:"code"`
-				} `json:"error"`
-			}
-			if err := json.Unmarshal([]byte(data), &errPayload); err == nil && errPayload.Err != nil {
-				msg := strings.TrimSpace(errPayload.Err.Message)
-				if msg == "" {
-					msg = "stream error"
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- llm.StreamChunk{
-					Err: &types.Error{
-						Code:       llm.ErrUpstreamError,
-						Message:    msg,
-						HTTPStatus: errPayload.Err.Code,
-						Provider:   p.Name(),
-					},
-				}:
-				}
-				return
-			}
-
-			var geminiResp geminiResponse
-			if err := json.Unmarshal([]byte(data), &geminiResp); err != nil {
-				continue
-			}
-
-			// 检查 promptFeedback（安全过滤导致的流式阻断）
-			if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+			if err := checkPromptFeedbackFromGenAI(result, p.Name()); err != nil {
 				select {
 				case <-ctx.Done():
 					return
@@ -1040,80 +1198,253 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				return
 			}
 
-			// 处理每个候选响应
-			for _, candidate := range geminiResp.Candidates {
-				chunk := llm.StreamChunk{
-					ID:           geminiResp.ResponseID,
-					Provider:     p.Name(),
-					Model:        model,
-					Index:        candidate.Index,
-					FinishReason: normalizeFinishReason(candidate.FinishReason),
-					Delta: types.Message{
-						Role: llm.RoleAssistant,
-					},
-				}
-
-				toolCallIndex := 0
-				for partIndex, part := range candidate.Content.Parts {
-					// Thinking content
-					if part.Thought != nil && *part.Thought {
-						appendGeminiThoughtPart(&chunk.Delta, part, partIndex, p.Name())
-						continue
-					}
-					if strings.TrimSpace(part.ThoughtSignature) != "" {
-						chunk.Delta.OpaqueReasoning = append(chunk.Delta.OpaqueReasoning, types.OpaqueReasoning{
-							Provider:  p.Name(),
-							Kind:      "thought_signature",
-							State:     part.ThoughtSignature,
-							PartIndex: partIndex,
-						})
-					}
-					if part.Text != "" {
-						chunk.Delta.Content += part.Text
-					}
-					if part.FunctionCall != nil {
-						argsJSON, err := json.Marshal(part.FunctionCall.Args)
-						if err != nil {
-							continue
-						}
-						toolCallID := fmt.Sprintf("call_%s_%d_%d", part.FunctionCall.Name, candidate.Index, toolCallIndex)
-						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, types.ToolCall{
-							ID:        toolCallID,
-							Name:      part.FunctionCall.Name,
-							Arguments: argsJSON,
-						})
-						toolCallIndex++
-					}
-				}
-
-				// 提取 grounding annotations
-				if candidate.GroundingMetadata != nil {
-					chunk.Delta.Annotations = append(chunk.Delta.Annotations, extractGroundingAnnotations(candidate.GroundingMetadata)...)
-				}
-
+			for _, chunk := range streamChunksFromGenAI(result, p.Name(), model) {
 				select {
 				case <-ctx.Done():
 					return
 				case ch <- chunk:
 				}
 			}
-
-			// Usage metadata
-			if geminiResp.UsageMetadata != nil {
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- llm.StreamChunk{
-					Provider: p.Name(),
-					Model:    model,
-					Usage:    convertUsageMetadata(geminiResp.UsageMetadata),
-				}:
-				}
-			}
 		}
 	}()
 
 	return ch, nil
+}
+
+func toChatResponseFromGenAI(gr *genai.GenerateContentResponse, provider, model string) *llm.ChatResponse {
+	if gr == nil {
+		return &llm.ChatResponse{
+			Provider: provider,
+			Model:    model,
+		}
+	}
+
+	choices := make([]llm.ChatChoice, 0, len(gr.Candidates))
+	for _, candidate := range gr.Candidates {
+		if candidate == nil {
+			continue
+		}
+		msg := messageFromGenAICandidate(gr.ResponseID, candidate, provider)
+		choices = append(choices, llm.ChatChoice{
+			Index:        int(candidate.Index),
+			FinishReason: normalizeFinishReason(string(candidate.FinishReason)),
+			Message:      msg,
+		})
+	}
+
+	resp := &llm.ChatResponse{
+		ID:       gr.ResponseID,
+		Provider: provider,
+		Model:    model,
+		Choices:  choices,
+	}
+	if gr.UsageMetadata != nil {
+		resp.Usage = *convertUsageMetadataFromGenAI(gr.UsageMetadata)
+	}
+	return resp
+}
+
+func streamChunksFromGenAI(gr *genai.GenerateContentResponse, provider, model string) []llm.StreamChunk {
+	if gr == nil {
+		return nil
+	}
+
+	chunks := make([]llm.StreamChunk, 0, len(gr.Candidates)+1)
+	for _, candidate := range gr.Candidates {
+		if candidate == nil {
+			continue
+		}
+		chunks = append(chunks, llm.StreamChunk{
+			ID:           gr.ResponseID,
+			Provider:     provider,
+			Model:        model,
+			Index:        int(candidate.Index),
+			FinishReason: normalizeFinishReason(string(candidate.FinishReason)),
+			Delta:        messageFromGenAICandidate(gr.ResponseID, candidate, provider),
+		})
+	}
+	if gr.UsageMetadata != nil {
+		chunks = append(chunks, llm.StreamChunk{
+			Provider: provider,
+			Model:    model,
+			Usage:    convertUsageMetadataFromGenAI(gr.UsageMetadata),
+		})
+	}
+	return chunks
+}
+
+func messageFromGenAICandidate(responseID string, candidate *genai.Candidate, provider string) types.Message {
+	msg := types.Message{Role: llm.RoleAssistant}
+	if candidate == nil || candidate.Content == nil {
+		return msg
+	}
+
+	toolCallIndex := 0
+	for partIndex, part := range candidate.Content.Parts {
+		if part == nil {
+			continue
+		}
+		if part.Thought {
+			appendGenAIThoughtPart(&msg, part, partIndex, provider)
+			continue
+		}
+		if len(part.ThoughtSignature) > 0 {
+			msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
+				Provider:  provider,
+				Kind:      "thought_signature",
+				State:     encodeThoughtSignature(part.ThoughtSignature),
+				PartIndex: partIndex,
+			})
+		}
+		if part.Text != "" {
+			msg.Content += part.Text
+		}
+		if part.FunctionCall != nil {
+			argsJSON, err := json.Marshal(part.FunctionCall.Args)
+			if err != nil {
+				continue
+			}
+			toolCallID := strings.TrimSpace(part.FunctionCall.ID)
+			if toolCallID == "" {
+				toolCallID = fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, toolCallIndex)
+				if responseID != "" {
+					toolCallID = fmt.Sprintf("call_%s_%s_%d", responseID, part.FunctionCall.Name, toolCallIndex)
+				}
+			}
+			msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
+				ID:        toolCallID,
+				Name:      part.FunctionCall.Name,
+				Arguments: argsJSON,
+			})
+			toolCallIndex++
+		}
+	}
+
+	if candidate.GroundingMetadata != nil {
+		msg.Annotations = append(msg.Annotations, extractGroundingAnnotationsFromGenAI(candidate.GroundingMetadata)...)
+	}
+	return msg
+}
+
+func appendGenAIThoughtPart(msg *types.Message, part *genai.Part, partIndex int, provider string) {
+	if msg == nil || part == nil {
+		return
+	}
+	if strings.TrimSpace(part.Text) != "" {
+		if msg.ReasoningContent == nil || strings.TrimSpace(*msg.ReasoningContent) == "" {
+			msg.ReasoningContent = strPtr(part.Text)
+		} else {
+			joined := strings.TrimSpace(*msg.ReasoningContent + "\n\n" + part.Text)
+			msg.ReasoningContent = strPtr(joined)
+		}
+		msg.ReasoningSummaries = append(msg.ReasoningSummaries, types.ReasoningSummary{
+			Provider: provider,
+			Kind:     "thought_summary",
+			Text:     part.Text,
+			ID:       fmt.Sprintf("part_%d", partIndex),
+		})
+	}
+	if len(part.ThoughtSignature) > 0 {
+		msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
+			Provider:  provider,
+			Kind:      "thought_signature",
+			State:     encodeThoughtSignature(part.ThoughtSignature),
+			PartIndex: partIndex,
+			ID:        fmt.Sprintf("part_%d", partIndex),
+		})
+	}
+}
+
+func encodeThoughtSignature(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+func convertUsageMetadataFromGenAI(m *genai.GenerateContentResponseUsageMetadata) *llm.ChatUsage {
+	if m == nil {
+		return nil
+	}
+	usage := &llm.ChatUsage{
+		PromptTokens:     int(m.PromptTokenCount),
+		CompletionTokens: int(m.CandidatesTokenCount),
+		TotalTokens:      int(m.TotalTokenCount),
+	}
+	if m.ThoughtsTokenCount > 0 {
+		usage.CompletionTokensDetails = &llm.CompletionTokensDetails{
+			ReasoningTokens: int(m.ThoughtsTokenCount),
+		}
+	}
+	if m.CachedContentTokenCount > 0 {
+		usage.PromptTokensDetails = &llm.PromptTokensDetails{
+			CachedTokens: int(m.CachedContentTokenCount),
+		}
+	}
+	return usage
+}
+
+func checkPromptFeedbackFromGenAI(resp *genai.GenerateContentResponse, provider string) error {
+	if resp == nil || resp.PromptFeedback == nil || resp.PromptFeedback.BlockReason == "" {
+		return nil
+	}
+	msg := fmt.Sprintf("request blocked by safety filter: %s", resp.PromptFeedback.BlockReason)
+	if resp.PromptFeedback.BlockReasonMessage != "" {
+		msg = fmt.Sprintf("%s — %s", msg, resp.PromptFeedback.BlockReasonMessage)
+	}
+	return &types.Error{
+		Code:       llm.ErrContentFiltered,
+		Message:    msg,
+		HTTPStatus: http.StatusBadRequest,
+		Provider:   provider,
+	}
+}
+
+func extractGroundingAnnotationsFromGenAI(gm *genai.GroundingMetadata) []types.Annotation {
+	if gm == nil {
+		return nil
+	}
+
+	var annotations []types.Annotation
+	if len(gm.GroundingSupports) > 0 {
+		for _, support := range gm.GroundingSupports {
+			if support == nil {
+				continue
+			}
+			for _, idx := range support.GroundingChunkIndices {
+				if idx < 0 || int(idx) >= len(gm.GroundingChunks) {
+					continue
+				}
+				chunk := gm.GroundingChunks[int(idx)]
+				if chunk == nil || chunk.Web == nil {
+					continue
+				}
+				ann := types.Annotation{
+					Type:  "url_citation",
+					URL:   chunk.Web.URI,
+					Title: chunk.Web.Title,
+				}
+				if support.Segment != nil {
+					ann.StartIndex = int(support.Segment.StartIndex)
+					ann.EndIndex = int(support.Segment.EndIndex)
+				}
+				annotations = append(annotations, ann)
+			}
+		}
+		return annotations
+	}
+
+	for _, chunk := range gm.GroundingChunks {
+		if chunk == nil || chunk.Web == nil {
+			continue
+		}
+		annotations = append(annotations, types.Annotation{
+			Type:  "url_citation",
+			URL:   chunk.Web.URI,
+			Title: chunk.Web.Title,
+		})
+	}
+	return annotations
 }
 
 func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatResponse {

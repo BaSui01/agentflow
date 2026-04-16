@@ -13,6 +13,7 @@ import (
 	"time"
 
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+	"google.golang.org/genai"
 
 	"github.com/BaSui01/agentflow/types"
 
@@ -33,80 +34,55 @@ func (p *GeminiProvider) GenerateImage(ctx context.Context, req *llm.ImageGenera
 		model = "imagen-4.0-generate-001"
 	}
 
+	client, err := p.sdkClient(ctx)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
+
 	switch imageModelFamily(model) {
 	case "imagen":
-		endpoint := fmt.Sprintf("/v1beta/models/%s:predict", model)
-		body := map[string]any{
-			"instances": []map[string]any{
-				{"prompt": req.Prompt},
-			},
+		cfg := &genai.GenerateImagesConfig{
+			NegativePrompt: req.NegativePrompt,
 		}
-		params := map[string]any{}
 		if req.N > 0 {
-			params["sampleCount"] = req.N
-		}
-		if req.NegativePrompt != "" {
-			params["negativePrompt"] = req.NegativePrompt
+			cfg.NumberOfImages = int32(req.N)
 		}
 		if ar := chooseAspectRatio(req.Size, ""); ar != "" {
-			params["aspectRatio"] = ar
+			cfg.AspectRatio = ar
 		}
-		if req.Quality != "" {
-			params["quality"] = req.Quality
-		}
-		if req.Style != "" {
-			params["style"] = req.Style
-		}
-		if len(params) > 0 {
-			body["parameters"] = params
-		}
-
-		raw, err := p.postGeminiJSON(ctx, endpoint, body)
+		resp, err := client.Models.GenerateImages(ctx, model, req.Prompt, cfg)
 		if err != nil {
-			return nil, err
+			return nil, p.mapSDKError(err)
 		}
-		return parseGeminiImageResponse(raw)
+		return imageGenerationResponseFromGenAI(resp), nil
 
 	case "gemini-image":
-		endpoint := fmt.Sprintf("/v1beta/models/%s:generateContent", model)
-		body := map[string]any{
-			"contents": []map[string]any{
-				{
-					"role": "user",
-					"parts": []map[string]any{
-						{"text": req.Prompt},
-					},
-				},
-			},
-		}
-		generationConfig := map[string]any{
-			"responseModalities": []string{"IMAGE"},
-		}
-		if req.N > 0 {
-			generationConfig["candidateCount"] = req.N
-		}
-		if ar := chooseAspectRatio(req.Size, ""); ar != "" {
-			generationConfig["aspectRatio"] = ar
+		prompt := req.Prompt
+		if req.Style != "" {
+			prompt += "\nStyle: " + req.Style
 		}
 		if req.Quality != "" {
-			generationConfig["quality"] = req.Quality
+			prompt += "\nQuality: " + req.Quality
 		}
-		if req.Style != "" {
-			generationConfig["style"] = req.Style
-		}
-		body["generationConfig"] = generationConfig
 		if req.NegativePrompt != "" {
-			body["contents"].([]map[string]any)[0]["parts"] = append(
-				body["contents"].([]map[string]any)[0]["parts"].([]map[string]any),
-				map[string]any{"text": "Avoid: " + req.NegativePrompt},
-			)
+			prompt += "\nAvoid: " + req.NegativePrompt
 		}
 
-		raw, err := p.postGeminiJSON(ctx, endpoint, body)
-		if err != nil {
-			return nil, err
+		cfg := &genai.GenerateContentConfig{
+			ResponseModalities: []string{"IMAGE"},
+			ImageConfig:        &genai.ImageConfig{},
 		}
-		return parseGeminiImageResponse(raw)
+		if req.N > 0 {
+			cfg.CandidateCount = int32(req.N)
+		}
+		if ar := chooseAspectRatio(req.Size, ""); ar != "" {
+			cfg.ImageConfig.AspectRatio = ar
+		}
+		resp, err := client.Models.GenerateContent(ctx, model, genai.Text(prompt), cfg)
+		if err != nil {
+			return nil, p.mapSDKError(err)
+		}
+		return imageGenerationResponseFromGenAIContent(resp), nil
 
 	default:
 		endpoint := fmt.Sprintf("/v1beta/models/%s:predict", model)
@@ -128,39 +104,34 @@ func (p *GeminiProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 	}
 
 	if videoModelFamily(model) == "veo" {
-		endpoint := fmt.Sprintf("/v1beta/models/%s:predictLongRunning", model)
-		body := map[string]any{
-			"instances": []map[string]any{
-				{"prompt": req.Prompt},
-			},
-		}
-		params := map[string]any{}
-		if req.Duration > 0 {
-			params["durationSeconds"] = req.Duration
-		}
-		if req.FPS > 0 {
-			params["fps"] = req.FPS
-		}
-		if req.Resolution != "" {
-			params["resolution"] = req.Resolution
-		}
-		if ar := chooseAspectRatio("", req.AspectRatio); ar != "" {
-			params["aspectRatio"] = ar
-		} else if ar := chooseAspectRatio(req.Resolution, ""); ar != "" {
-			params["aspectRatio"] = ar
-		}
-		if req.Style != "" {
-			params["style"] = req.Style
-		}
-		if len(params) > 0 {
-			body["parameters"] = params
+		client, err := p.sdkClient(ctx)
+		if err != nil {
+			return nil, p.mapSDKError(err)
 		}
 
-		raw, err := p.postGeminiJSON(ctx, endpoint, body)
-		if err != nil {
-			return nil, err
+		cfg := &genai.GenerateVideosConfig{}
+		if req.Duration > 0 {
+			v := int32(req.Duration)
+			cfg.DurationSeconds = &v
 		}
-		return parseGeminiVideoResponse(raw)
+		if req.FPS > 0 {
+			v := int32(req.FPS)
+			cfg.FPS = &v
+		}
+		if req.Resolution != "" {
+			cfg.Resolution = req.Resolution
+		}
+		if ar := chooseAspectRatio("", req.AspectRatio); ar != "" {
+			cfg.AspectRatio = ar
+		} else if ar := chooseAspectRatio(req.Resolution, ""); ar != "" {
+			cfg.AspectRatio = ar
+		}
+
+		op, err := client.Models.GenerateVideos(ctx, model, req.Prompt, nil, cfg)
+		if err != nil {
+			return nil, p.mapSDKError(err)
+		}
+		return videoGenerationResponseFromGenAI(op), nil
 	}
 
 	endpoint := fmt.Sprintf("/v1beta/models/%s:predictLongRunning", model)
@@ -412,6 +383,123 @@ func parseGeminiVideoResponse(raw []byte) (*llm.VideoGenerationResponse, error) 
 	return resp, nil
 }
 
+func imageGenerationResponseFromGenAI(resp *genai.GenerateImagesResponse) *llm.ImageGenerationResponse {
+	out := &llm.ImageGenerationResponse{
+		Created: time.Now().Unix(),
+	}
+	if resp == nil {
+		return out
+	}
+	for _, item := range resp.GeneratedImages {
+		if item == nil || item.Image == nil {
+			continue
+		}
+		image := llm.Image{
+			URL:           item.Image.GCSURI,
+			RevisedPrompt: item.EnhancedPrompt,
+		}
+		if len(item.Image.ImageBytes) > 0 {
+			image.B64JSON = base64.StdEncoding.EncodeToString(item.Image.ImageBytes)
+		}
+		if image.URL != "" || image.B64JSON != "" {
+			out.Data = append(out.Data, image)
+		}
+	}
+	return out
+}
+
+func imageGenerationResponseFromGenAIContent(resp *genai.GenerateContentResponse) *llm.ImageGenerationResponse {
+	out := &llm.ImageGenerationResponse{
+		Created: time.Now().Unix(),
+	}
+	if resp == nil {
+		return out
+	}
+	for _, candidate := range resp.Candidates {
+		if candidate == nil || candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part == nil || part.InlineData == nil || len(part.InlineData.Data) == 0 {
+				continue
+			}
+			out.Data = append(out.Data, llm.Image{
+				B64JSON: base64.StdEncoding.EncodeToString(part.InlineData.Data),
+			})
+		}
+	}
+	return out
+}
+
+func videoGenerationResponseFromGenAI(op *genai.GenerateVideosOperation) *llm.VideoGenerationResponse {
+	out := &llm.VideoGenerationResponse{
+		Created: time.Now().Unix(),
+	}
+	if op == nil {
+		return out
+	}
+	out.ID = op.Name
+	if op.Response == nil {
+		return out
+	}
+	for _, item := range op.Response.GeneratedVideos {
+		if item == nil || item.Video == nil {
+			continue
+		}
+		video := llm.Video{URL: item.Video.URI}
+		if len(item.Video.VideoBytes) > 0 {
+			video.B64JSON = base64.StdEncoding.EncodeToString(item.Video.VideoBytes)
+		}
+		if video.URL != "" || video.B64JSON != "" {
+			out.Data = append(out.Data, video)
+		}
+	}
+	return out
+}
+
+func extractAudioBytesFromGenAI(resp *genai.GenerateContentResponse) []byte {
+	if resp == nil {
+		return nil
+	}
+	for _, candidate := range resp.Candidates {
+		if candidate == nil || candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part != nil && part.InlineData != nil && len(part.InlineData.Data) > 0 {
+				return part.InlineData.Data
+			}
+		}
+	}
+	return nil
+}
+
+func llmEmbeddingResponseFromGenAI(resp *genai.EmbedContentResponse, model string) *llm.EmbeddingResponse {
+	out := &llm.EmbeddingResponse{
+		Object: "list",
+		Model:  model,
+	}
+	if resp == nil {
+		return out
+	}
+	out.Data = make([]llm.Embedding, 0, len(resp.Embeddings))
+	for i, item := range resp.Embeddings {
+		if item == nil {
+			continue
+		}
+		vector := make([]float64, 0, len(item.Values))
+		for _, v := range item.Values {
+			vector = append(vector, float64(v))
+		}
+		out.Data = append(out.Data, llm.Embedding{
+			Object:    "embedding",
+			Index:     i,
+			Embedding: vector,
+		})
+	}
+	return out
+}
+
 func extractImageFromMap(m map[string]any) llm.Image {
 	img := llm.Image{}
 
@@ -469,8 +557,32 @@ func (p *GeminiProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenera
 	if model == "" {
 		model = "gemini-2.5-flash-preview-tts"
 	}
-	endpoint := fmt.Sprintf("/v1beta/models/%s:generateContent", model)
-	return providerbase.GenerateAudioOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.resolveAPIKey(ctx), p.Name(), endpoint, req, p.buildHeaders)
+
+	client, err := p.sdkClient(ctx)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
+
+	cfg := &genai.GenerateContentConfig{
+		ResponseModalities: []string{"AUDIO"},
+	}
+	if req.Voice != "" {
+		cfg.SpeechConfig = &genai.SpeechConfig{
+			VoiceConfig: &genai.VoiceConfig{
+				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{VoiceName: req.Voice},
+			},
+		}
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, model, genai.Text(req.Input), cfg)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
+	audio := extractAudioBytesFromGenAI(resp)
+	if len(audio) == 0 {
+		return nil, fmt.Errorf("gemini audio response does not contain audio data")
+	}
+	return &llm.AudioGenerationResponse{Audio: audio}, nil
 }
 
 // TranscribeAudio 使用 Gemini 进行语音转文本.
@@ -481,68 +593,35 @@ func (p *GeminiProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
+	client, err := p.sdkClient(ctx)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
 
-	// Gemini STT 通过 generateContent + inline audio data 实现
-	import64 := base64.StdEncoding.EncodeToString(req.File)
-	mimeType := "audio/mp3"
+	mimeType := "audio/mpeg"
 	if req.ResponseFormat != "" {
 		mimeType = "audio/" + req.ResponseFormat
 	}
-
-	geminiReq := map[string]any{
-		"contents": []map[string]any{
-			{
-				"parts": []map[string]any{
-					{"inline_data": map[string]any{"mime_type": mimeType, "data": import64}},
-					{"text": "Transcribe this audio to text. Return only the transcription."},
-				},
-			},
-		},
-	}
+	prompt := "Transcribe this audio to text. Return only the transcription."
 	if req.Language != "" {
-		geminiReq["contents"].([]map[string]any)[0]["parts"].([]map[string]any)[1]["text"] = fmt.Sprintf("Transcribe this audio to text in %s. Return only the transcription.", req.Language)
+		prompt = fmt.Sprintf("Transcribe this audio to text in %s. Return only the transcription.", req.Language)
+	}
+	if strings.TrimSpace(req.Prompt) != "" {
+		prompt += "\nAdditional instructions: " + strings.TrimSpace(req.Prompt)
 	}
 
-	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
-	payload, err := json.Marshal(geminiReq)
+	contents := []*genai.Content{
+		genai.NewContentFromParts([]*genai.Part{
+			genai.NewPartFromBytes(req.File, mimeType),
+			genai.NewPartFromText(prompt),
+		}, genai.RoleUser),
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, model, contents, &genai.GenerateContentConfig{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	var geminiResp struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
-	}
-
-	text := ""
-	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
-		text = geminiResp.Candidates[0].Content.Parts[0].Text
-	}
+	text := strings.TrimSpace(resp.Text())
 
 	return &llm.AudioTranscriptionResponse{
 		Text:     text,
@@ -562,8 +641,27 @@ func (p *GeminiProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 	if model == "" {
 		model = "gemini-embedding-001"
 	}
-	endpoint := fmt.Sprintf("/v1beta/models/%s:embedContent", model)
-	return providerbase.CreateEmbeddingOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.resolveAPIKey(ctx), p.Name(), endpoint, req, p.buildHeaders)
+
+	client, err := p.sdkClient(ctx)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
+
+	contents := make([]*genai.Content, 0, len(req.Input))
+	for _, input := range req.Input {
+		contents = append(contents, genai.NewContentFromText(input, genai.RoleUser))
+	}
+	cfg := &genai.EmbedContentConfig{}
+	if req.Dimensions > 0 {
+		dims := int32(req.Dimensions)
+		cfg.OutputDimensionality = &dims
+	}
+
+	resp, err := client.Models.EmbedContent(ctx, model, contents, cfg)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
+	return llmEmbeddingResponseFromGenAI(resp, model), nil
 }
 
 // =============================================================================

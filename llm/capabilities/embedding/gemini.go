@@ -2,11 +2,12 @@ package embedding
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
+	googlegenai "github.com/BaSui01/agentflow/llm/internal/googlegenai"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"google.golang.org/genai"
 )
 
 // GeminiProvider 使用 Google Gemini API 执行嵌入.
@@ -113,85 +114,49 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 
 	model := ChooseModel(req.Model, p.cfg.Model, "gemini-embedding-001")
 	taskType := mapTaskType(req.InputType)
-
-	// 对多个输入使用批量端点
-	if len(req.Input) > 1 {
-		return p.batchEmbed(ctx, req, model, taskType)
+	client, err := googlegenai.NewClient(ctx, googlegenai.ClientConfig{
+		APIKey:  p.cfg.APIKey,
+		BaseURL: p.cfg.BaseURL,
+		Timeout: p.cfg.Timeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create google genai client: %w", err)
 	}
 
-	// 单嵌入
-	body := geminiEmbedRequest{
-		Model: fmt.Sprintf("models/%s", model),
-		Content: geminiContent{
-			Parts: []geminiPart{{Text: req.Input[0]}},
-		},
-		TaskType: taskType,
+	contents := make([]*genai.Content, 0, len(req.Input))
+	for _, text := range req.Input {
+		contents = append(contents, genai.NewContentFromText(text, genai.RoleUser))
+	}
+
+	cfg := &genai.EmbedContentConfig{
+		TaskType: string(taskType),
 	}
 	if req.Dimensions > 0 {
-		body.OutputDimensionality = req.Dimensions
+		dims := int32(req.Dimensions)
+		cfg.OutputDimensionality = &dims
+	}
+	if req.Truncate {
+		cfg.AutoTruncate = true
 	}
 
-	endpoint := fmt.Sprintf("/models/%s:embedContent", model)
-	respBody, err := p.DoRequest(ctx, "POST", endpoint, body, map[string]string{
-		"x-goog-api-key": p.cfg.APIKey,
-	})
+	resp, err := client.Models.EmbedContent(ctx, model, contents, cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gemini embed request failed: %w", err)
 	}
 
-	var gResp geminiEmbedResponse
-	if err := json.Unmarshal(respBody, &gResp); err != nil {
-		return nil, fmt.Errorf("failed to decode gemini response: %w", err)
-	}
-
-	return &EmbeddingResponse{
-		Provider: p.Name(),
-		Model:    model,
-		Embeddings: []EmbeddingData{{
-			Index:     0,
-			Embedding: gResp.Embedding.Values,
-		}},
-		CreatedAt: time.Now(),
-	}, nil
-}
-
-// 批量 Embed 处理批量嵌入请求。
-func (p *GeminiProvider) batchEmbed(ctx context.Context, req *EmbeddingRequest, model string, taskType geminiTaskType) (*EmbeddingResponse, error) {
-	requests := make([]geminiEmbedRequest, len(req.Input))
-	for i, text := range req.Input {
-		requests[i] = geminiEmbedRequest{
-			Model: fmt.Sprintf("models/%s", model),
-			Content: geminiContent{
-				Parts: []geminiPart{{Text: text}},
-			},
-			TaskType: taskType,
+	embeddings := make([]EmbeddingData, 0, len(resp.Embeddings))
+	for i, emb := range resp.Embeddings {
+		if emb == nil {
+			continue
 		}
-		if req.Dimensions > 0 {
-			requests[i].OutputDimensionality = req.Dimensions
+		vector := make([]float64, 0, len(emb.Values))
+		for _, value := range emb.Values {
+			vector = append(vector, float64(value))
 		}
-	}
-
-	body := geminiBatchEmbedRequest{Requests: requests}
-	endpoint := fmt.Sprintf("/models/%s:batchEmbedContents", model)
-
-	respBody, err := p.DoRequest(ctx, "POST", endpoint, body, map[string]string{
-		"x-goog-api-key": p.cfg.APIKey,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var gResp geminiBatchEmbedResponse
-	if err := json.Unmarshal(respBody, &gResp); err != nil {
-		return nil, fmt.Errorf("failed to decode gemini batch response: %w", err)
-	}
-
-	embeddings := make([]EmbeddingData, len(gResp.Embeddings))
-	for i, emb := range gResp.Embeddings {
-		embeddings[i] = EmbeddingData{
+		embeddings = append(embeddings, EmbeddingData{
 			Index:     i,
-			Embedding: emb.Values,
-		}
+			Embedding: vector,
+		})
 	}
 
 	return &EmbeddingResponse{

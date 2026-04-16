@@ -246,7 +246,7 @@ func TestGeminiProvider_Generate(t *testing.T) {
 			InlineData: &struct {
 				MimeType string `json:"mimeType"`
 				Data     string `json:"data"`
-			}{MimeType: "image/png", Data: "base64imgdata"},
+			}{MimeType: "image/png", Data: "YmFzZTY0aW1nZGF0YQ=="},
 		})
 		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
@@ -259,7 +259,7 @@ func TestGeminiProvider_Generate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "gemini-image", resp.Provider)
 	assert.Len(t, resp.Images, 1)
-	assert.Equal(t, "base64imgdata", resp.Images[0].B64JSON)
+	assert.Equal(t, "YmFzZTY0aW1nZGF0YQ==", resp.Images[0].B64JSON)
 	assert.Equal(t, 1, resp.Usage.ImagesGenerated)
 }
 
@@ -275,7 +275,7 @@ func TestGeminiProvider_Generate_Error(t *testing.T) {
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gemini error")
+	assert.Contains(t, err.Error(), "gemini image request failed")
 }
 
 func TestGeminiProvider_Edit(t *testing.T) {
@@ -302,7 +302,7 @@ func TestGeminiProvider_Edit(t *testing.T) {
 			InlineData: &struct {
 				MimeType string `json:"mimeType"`
 				Data     string `json:"data"`
-			}{MimeType: "image/png", Data: "edited"},
+			}{MimeType: "image/png", Data: "ZWRpdGVk"},
 		})
 		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
@@ -317,7 +317,7 @@ func TestGeminiProvider_Edit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Len(t, resp.Images, 1)
-	assert.Equal(t, "edited", resp.Images[0].B64JSON)
+	assert.Equal(t, "ZWRpdGVk", resp.Images[0].B64JSON)
 }
 
 func TestGeminiProvider_Edit_Error(t *testing.T) {
@@ -335,7 +335,7 @@ func TestGeminiProvider_Edit_Error(t *testing.T) {
 		Prompt: "edit",
 	})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gemini error")
+	assert.Contains(t, err.Error(), "gemini image edit request failed")
 }
 
 func TestGeminiProvider_CreateVariation(t *testing.T) {
@@ -362,7 +362,7 @@ func TestGeminiProvider_CreateVariation(t *testing.T) {
 			InlineData: &struct {
 				MimeType string `json:"mimeType"`
 				Data     string `json:"data"`
-			}{MimeType: "image/png", Data: "variation"},
+			}{MimeType: "image/png", Data: "dmFyaWF0aW9u"},
 		})
 		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
@@ -504,4 +504,3 @@ func TestGeminiProvider_ImplementsProvider(t *testing.T) {
 func TestFluxProvider_ImplementsProvider(t *testing.T) {
 	var _ Provider = (*FluxProvider)(nil)
 }
-

@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	googlegenai "github.com/BaSui01/agentflow/llm/internal/googlegenai"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"google.golang.org/genai"
 )
 
 // ---------- 模型常量 ----------
@@ -59,6 +61,15 @@ func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 }
 
 func (p *GeminiProvider) Name() string { return "gemini-image" }
+
+func (p *GeminiProvider) sdkClient(ctx context.Context) (*genai.Client, error) {
+	return googlegenai.NewClient(ctx, googlegenai.ClientConfig{
+		APIKey:     p.cfg.APIKey,
+		BaseURL:    p.cfg.BaseURL,
+		Timeout:    p.cfg.Timeout,
+		HTTPClient: p.client,
+	})
+}
 
 // SupportedSizes 返回 Gemini 原生分辨率格式.
 // imageSize 参数传 "1K"/"2K"/"4K"，或通过 Metadata["image_size"] 指定.
@@ -266,6 +277,99 @@ func buildGenConfig(req *GenerateRequest, defaultModalities []string) *geminiGen
 	}
 }
 
+func buildGenerateContentConfigFromImageRequest(req *GenerateRequest, allowSearch bool) (*genai.GenerateContentConfig, string) {
+	req.Metadata = ensureMeta(req.Metadata)
+	config := &genai.GenerateContentConfig{
+		ResponseModalities: []string{"IMAGE"},
+		ImageConfig:        &genai.ImageConfig{},
+	}
+
+	if v := req.Metadata[MetaResponseModalities]; v != "" {
+		parts := strings.Split(v, ",")
+		config.ResponseModalities = make([]string, 0, len(parts))
+		for _, part := range parts {
+			part = strings.ToUpper(strings.TrimSpace(part))
+			if part != "" {
+				config.ResponseModalities = append(config.ResponseModalities, part)
+			}
+		}
+	}
+
+	if v := req.Metadata[MetaImageSize]; v != "" {
+		config.ImageConfig.ImageSize = strings.ToUpper(strings.TrimSpace(v))
+	} else if size := sizeToGemini(req.Size); size != "" {
+		config.ImageConfig.ImageSize = size
+	}
+	if v := req.Metadata[MetaAspectRatio]; v != "" {
+		config.ImageConfig.AspectRatio = v
+	}
+	if v := req.Metadata[MetaPersonGeneration]; v != "" {
+		config.ImageConfig.PersonGeneration = strings.ToUpper(strings.TrimSpace(v))
+	}
+	if config.ImageConfig.ImageSize == "" && config.ImageConfig.AspectRatio == "" && config.ImageConfig.PersonGeneration == "" {
+		config.ImageConfig = nil
+	}
+	if v := req.Metadata[MetaThinkingBudget]; v != "" {
+		if budget, err := strconv.Atoi(v); err == nil && budget > 0 {
+			b := int32(budget)
+			config.ThinkingConfig = &genai.ThinkingConfig{
+				IncludeThoughts: true,
+				ThinkingBudget:  &b,
+			}
+		}
+	}
+	if v := req.Metadata[MetaCandidateCount]; v != "" {
+		if count, err := strconv.Atoi(v); err == nil && count > 0 {
+			config.CandidateCount = int32(count)
+		}
+	} else if req.N > 0 {
+		config.CandidateCount = int32(req.N)
+	}
+	if v := req.Metadata[MetaSystemPrompt]; v != "" {
+		config.SystemInstruction = genai.NewContentFromText(v, genai.RoleUser)
+	}
+	if v := req.Metadata[MetaSafetyThreshold]; v != "" {
+		threshold := genai.HarmBlockThreshold(strings.TrimSpace(v))
+		config.SafetySettings = []*genai.SafetySetting{
+			{Category: genai.HarmCategoryHarassment, Threshold: threshold},
+			{Category: genai.HarmCategoryHateSpeech, Threshold: threshold},
+			{Category: genai.HarmCategorySexuallyExplicit, Threshold: threshold},
+			{Category: genai.HarmCategoryDangerousContent, Threshold: threshold},
+			{Category: genai.HarmCategoryCivicIntegrity, Threshold: threshold},
+		}
+	}
+	if allowSearch && strings.EqualFold(strings.TrimSpace(req.Metadata[MetaEnableSearch]), "true") {
+		config.Tools = []*genai.Tool{{GoogleSearch: &genai.GoogleSearch{}}}
+	}
+
+	prompt := strings.TrimSpace(req.Prompt)
+	if req.NegativePrompt != "" {
+		prompt = strings.TrimSpace(prompt + "\nAvoid: " + req.NegativePrompt)
+	}
+	return config, prompt
+}
+
+func imageDataFromGenerateContentResponse(resp *genai.GenerateContentResponse) []ImageData {
+	images := make([]ImageData, 0)
+	if resp == nil {
+		return images
+	}
+	for _, candidate := range resp.Candidates {
+		if candidate == nil || candidate.Content == nil {
+			continue
+		}
+		for _, part := range candidate.Content.Parts {
+			if part == nil || part.InlineData == nil || len(part.InlineData.Data) == 0 {
+				continue
+			}
+			images = append(images, ImageData{
+				B64JSON: base64.StdEncoding.EncodeToString(part.InlineData.Data),
+			})
+		}
+	}
+	return images
+}
+
 // buildTools 根据元数据构建 tools 列表.
 // Google Search grounding 仅 gemini-3-pro-image-preview 官方支持；其他模型忽略该字段.
 func buildTools(meta map[string]string) []map[string]interface{} {
@@ -411,17 +515,17 @@ func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 		model = p.cfg.Model
 	}
 	req.Metadata = ensureMeta(req.Metadata)
-
-	body := buildRequest(
-		[]geminiContent{{Parts: []geminiPart{{Text: req.Prompt}}, Role: "user"}},
-		req.Metadata,
-		req,
-	)
-
-	images, err := p.doRequest(ctx, model, body)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create google genai client: %w", err)
 	}
+
+	config, prompt := buildGenerateContentConfigFromImageRequest(req, true)
+	resp, err := client.Models.GenerateContent(ctx, model, genai.Text(prompt), config)
+	if err != nil {
+		return nil, fmt.Errorf("gemini image request failed: %w", err)
+	}
+	images := imageDataFromGenerateContentResponse(resp)
 
 	return &GenerateResponse{
 		Provider: p.Name(),
@@ -452,24 +556,25 @@ func (p *GeminiProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 		model = p.cfg.Model
 	}
 	req.Metadata = ensureMeta(req.Metadata)
-
-	syntheticGenReq := &GenerateRequest{Size: req.Size, Metadata: req.Metadata}
-	body := buildRequest(
-		[]geminiContent{{
-			Parts: []geminiPart{
-				{InlineData: &geminiInline{MimeType: "image/png", Data: base64.StdEncoding.EncodeToString(imageData)}},
-				{Text: req.Prompt},
-			},
-			Role: "user",
-		}},
-		req.Metadata,
-		syntheticGenReq,
-	)
-
-	images, err := p.doRequest(ctx, model, body)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create google genai client: %w", err)
 	}
+
+	genReq := &GenerateRequest{Prompt: req.Prompt, Size: req.Size, Metadata: req.Metadata}
+	config, prompt := buildGenerateContentConfigFromImageRequest(genReq, true)
+	contents := []*genai.Content{
+		genai.NewContentFromParts([]*genai.Part{
+			genai.NewPartFromBytes(imageData, "image/png"),
+			genai.NewPartFromText(prompt),
+		}, genai.RoleUser),
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, model, contents, config)
+	if err != nil {
+		return nil, fmt.Errorf("gemini image edit request failed: %w", err)
+	}
+	images := imageDataFromGenerateContentResponse(resp)
 
 	return &GenerateResponse{
 		Provider:  p.Name(),
@@ -524,39 +629,41 @@ func (p *GeminiProvider) GenerateStream(ctx context.Context, req *GenerateReques
 	if req.Metadata[MetaResponseModalities] == "" {
 		req.Metadata[MetaResponseModalities] = "TEXT,IMAGE"
 	}
-
-	body := buildRequest(
-		[]geminiContent{{Parts: []geminiPart{{Text: req.Prompt}}, Role: "user"}},
-		req.Metadata,
-		req,
-	)
-
-	payload, err := json.Marshal(body)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return fmt.Errorf("failed to create google genai client: %w", err)
 	}
 
-	url := p.buildURL(model, true)
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("failed to create streaming request: %w", err)
+	config, prompt := buildGenerateContentConfigFromImageRequest(req, true)
+	for result, err := range client.Models.GenerateContentStream(ctx, model, genai.Text(prompt), config) {
+		if err != nil {
+			emit(StreamChunk{Err: err})
+			return err
+		}
+		if result == nil {
+			continue
+		}
+		for _, candidate := range result.Candidates {
+			if candidate == nil || candidate.Content == nil {
+				continue
+			}
+			for _, part := range candidate.Content.Parts {
+				if part == nil {
+					continue
+				}
+				if part.Text != "" && !part.Thought {
+					emit(StreamChunk{Text: part.Text})
+					continue
+				}
+				if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+					emit(StreamChunk{Image: &ImageData{B64JSON: base64.StdEncoding.EncodeToString(part.InlineData.Data)}})
+				}
+			}
+		}
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
 
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("gemini streaming request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("gemini streaming error: status=%d body=%s", resp.StatusCode, string(errBody))
-	}
-
-	return p.parseSSE(ctx, resp.Body, emit)
+	emit(StreamChunk{Done: true})
+	return nil
 }
 
 // parseSSE 解析 Gemini SSE 响应流，通过 emit 推送 StreamChunk.
