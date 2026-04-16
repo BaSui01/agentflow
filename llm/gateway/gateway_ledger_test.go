@@ -235,6 +235,9 @@ func (p *ledgerProvider) SupportsNativeFunctionCalling() bool { return false }
 func (p *ledgerProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
 
 func (p *ledgerProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *ledgerProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	return &llm.TokenCountResponse{InputTokens: 1, TotalTokens: 1}, nil
+}
 
 type ledgerMultiUsageProvider struct{}
 
@@ -287,3 +290,6 @@ func (p *ledgerMultiUsageProvider) SupportsNativeFunctionCalling() bool { return
 func (p *ledgerMultiUsageProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
 
 func (p *ledgerMultiUsageProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *ledgerMultiUsageProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	return &llm.TokenCountResponse{InputTokens: 1, TotalTokens: 1}, nil
+}

@@ -70,6 +70,10 @@ jobs:
         continue-on-error: true
         run: "$(go env GOPATH)/bin/go-arch-lint" check
 
+      - name: Run architecture guard script
+        shell: pwsh
+        run: ./scripts/arch_guard.ps1
+
       - name: Vet selected packages
         run: go vet ${{ steps.pkgset.outputs.pkgs }}
 

@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -21,20 +20,18 @@ import (
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
-	llmtokenizer "github.com/BaSui01/agentflow/llm/tokenizer"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // Config 定义 gateway 运行依赖。
 type Config struct {
-	ChatProvider      llm.Provider
-	Capabilities      *capabilities.Entry
-	CostCalculator    *observability.CostCalculator
-	Ledger            observability.Ledger
-	PolicyManager     *llmpolicy.Manager
-	TokenizerResolver func(model string) llmtokenizer.Tokenizer
-	Logger            *zap.Logger
+	ChatProvider   llm.Provider
+	Capabilities   *capabilities.Entry
+	CostCalculator *observability.CostCalculator
+	Ledger         observability.Ledger
+	PolicyManager  *llmpolicy.Manager
+	Logger         *zap.Logger
 }
 
 // ToolsInput 是 tools 能力统一 payload。
@@ -100,13 +97,12 @@ type AvatarInput struct {
 
 // Service 是统一入口 gateway 实现。
 type Service struct {
-	chatProvider      llm.Provider
-	capabilities      *capabilities.Entry
-	costCalculator    *observability.CostCalculator
-	ledger            observability.Ledger
-	policyManager     *llmpolicy.Manager
-	tokenizerResolver func(model string) llmtokenizer.Tokenizer
-	logger            *zap.Logger
+	chatProvider   llm.Provider
+	capabilities   *capabilities.Entry
+	costCalculator *observability.CostCalculator
+	ledger         observability.Ledger
+	policyManager  *llmpolicy.Manager
+	logger         *zap.Logger
 }
 
 var _ llmcore.Gateway = (*Service)(nil)
@@ -125,18 +121,13 @@ func New(cfg Config) *Service {
 	if ledger == nil {
 		ledger = observability.NewNoopLedger()
 	}
-	resolver := cfg.TokenizerResolver
-	if resolver == nil {
-		resolver = llmtokenizer.GetTokenizerOrEstimator
-	}
 	return &Service{
-		chatProvider:      cfg.ChatProvider,
-		capabilities:      cfg.Capabilities,
-		costCalculator:    calc,
-		ledger:            ledger,
-		policyManager:     cfg.PolicyManager,
-		tokenizerResolver: resolver,
-		logger:            logger,
+		chatProvider:   cfg.ChatProvider,
+		capabilities:   cfg.Capabilities,
+		costCalculator: calc,
+		ledger:         ledger,
+		policyManager:  cfg.PolicyManager,
+		logger:         logger,
 	}
 }
 
@@ -903,7 +894,11 @@ func (s *Service) preflightPolicy(ctx context.Context, req *llmcore.UnifiedReque
 
 	estimatedTokens := parseInt(metadataValue(req, "estimated_tokens"))
 	if estimatedTokens == 0 {
-		estimatedTokens = s.estimateRequestTokens(req)
+		var err error
+		estimatedTokens, err = s.estimateRequestTokens(ctx, req)
+		if err != nil {
+			return err
+		}
 		if estimatedTokens > 0 {
 			ensureMetadata(req)["estimated_tokens"] = strconv.Itoa(estimatedTokens)
 		}
@@ -915,85 +910,37 @@ func (s *Service) preflightPolicy(ctx context.Context, req *llmcore.UnifiedReque
 	return s.policyManager.PreCheck(ctx, estimatedTokens, estimatedCost)
 }
 
-func (s *Service) estimateRequestTokens(req *llmcore.UnifiedRequest) int {
+func (s *Service) estimateRequestTokens(ctx context.Context, req *llmcore.UnifiedRequest) (int, error) {
 	if s == nil || req == nil || req.Payload == nil {
-		return 0
+		return 0, nil
 	}
 
 	switch req.Capability {
 	case llmcore.CapabilityChat:
 		chatReq, ok := req.Payload.(*llm.ChatRequest)
 		if !ok || chatReq == nil {
-			return 0
+			return 0, nil
 		}
-		return s.estimateChatTokens(req, chatReq)
-	case llmcore.CapabilityEmbedding:
-		input, ok := req.Payload.(*EmbeddingInput)
-		if !ok || input == nil || input.Request == nil {
-			return 0
-		}
-		model := firstNonEmpty(input.Request.Model, req.ModelHint)
-		return s.countTextsTokens(model, input.Request.Input)
-	case llmcore.CapabilityRerank:
-		input, ok := req.Payload.(*RerankInput)
-		if !ok || input == nil || input.Request == nil {
-			return 0
-		}
-		model := firstNonEmpty(input.Request.Model, req.ModelHint)
-		texts := make([]string, 0, len(input.Request.Documents)+1)
-		texts = append(texts, input.Request.Query)
-		for _, doc := range input.Request.Documents {
-			texts = append(texts, doc.Title, doc.Text)
-		}
-		return s.countTextsTokens(model, texts)
-	case llmcore.CapabilityModeration:
-		input, ok := req.Payload.(*ModerationInput)
-		if !ok || input == nil || input.Request == nil {
-			return 0
-		}
-		model := firstNonEmpty(input.Request.Model, req.ModelHint)
-		return s.countTextsTokens(model, input.Request.Input)
-	case llmcore.CapabilityTools:
-		input, ok := req.Payload.(*ToolsInput)
-		if !ok || input == nil {
-			return 0
-		}
-		texts := make([]string, 0, len(input.Calls)*2)
-		for _, call := range input.Calls {
-			texts = append(texts, call.Name, string(call.Arguments))
-		}
-		return s.countTextsTokens(req.ModelHint, texts)
+		return s.estimateChatTokens(ctx, req, chatReq)
 	default:
-		return 0
+		return 0, nil
 	}
 }
 
-func (s *Service) estimateChatTokens(req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) int {
-	model := firstNonEmpty(chatReq.Model, req.ModelHint)
-	tokenizer := s.resolveTokenizer(model)
-	if tokenizer == nil {
-		return 0
+func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) (int, error) {
+	tokenCounter, ok := s.chatProvider.(llm.TokenCountProvider)
+	if !ok {
+		return 0, llmcore.GatewayUnavailableError("chat provider does not implement native token counting")
 	}
-
-	messages := toTokenizerMessages(chatReq.Messages)
-	promptTokens, err := tokenizer.CountMessages(messages)
+	countResp, err := tokenCounter.CountTokens(ctx, chatReq)
 	if err != nil {
-		promptTokens = s.countTextsTokens(model, messageContents(chatReq.Messages))
+		return 0, err
+	}
+	if countResp == nil {
+		return 0, llmcore.GatewayUnavailableError("native token counting returned no result")
 	}
 
-	toolsTokens := 0
-	for _, schema := range chatReq.Tools {
-		raw, marshalErr := json.Marshal(schema)
-		if marshalErr != nil {
-			continue
-		}
-		tokens, countErr := tokenizer.CountTokens(string(raw))
-		if countErr != nil {
-			continue
-		}
-		toolsTokens += tokens
-	}
-
+	promptTokens := countResp.InputTokens
 	completionBudget := 0
 	if chatReq.MaxCompletionTokens != nil && *chatReq.MaxCompletionTokens > 0 {
 		completionBudget = *chatReq.MaxCompletionTokens
@@ -1001,61 +948,11 @@ func (s *Service) estimateChatTokens(req *llmcore.UnifiedRequest, chatReq *llm.C
 		completionBudget = chatReq.MaxTokens
 	}
 
-	total := promptTokens + toolsTokens + completionBudget
+	total := promptTokens + completionBudget
 	if total < 0 {
-		return 0
+		return 0, nil
 	}
-	return total
-}
-
-func (s *Service) countTextsTokens(model string, texts []string) int {
-	if len(texts) == 0 {
-		return 0
-	}
-	tokenizer := s.resolveTokenizer(model)
-	if tokenizer == nil {
-		return 0
-	}
-	total := 0
-	for _, text := range texts {
-		trimmed := strings.TrimSpace(text)
-		if trimmed == "" {
-			continue
-		}
-		count, err := tokenizer.CountTokens(trimmed)
-		if err != nil || count < 0 {
-			continue
-		}
-		total += count
-	}
-	return total
-}
-
-func (s *Service) resolveTokenizer(model string) llmtokenizer.Tokenizer {
-	resolver := s.tokenizerResolver
-	if resolver == nil {
-		resolver = llmtokenizer.GetTokenizerOrEstimator
-	}
-	return resolver(firstNonEmpty(model, "gpt-4o-mini"))
-}
-
-func toTokenizerMessages(messages []types.Message) []llmtokenizer.Message {
-	out := make([]llmtokenizer.Message, 0, len(messages))
-	for _, msg := range messages {
-		out = append(out, llmtokenizer.Message{
-			Role:    string(msg.Role),
-			Content: msg.Content,
-		})
-	}
-	return out
-}
-
-func messageContents(messages []types.Message) []string {
-	out := make([]string, 0, len(messages))
-	for _, msg := range messages {
-		out = append(out, msg.Content)
-	}
-	return out
+	return total, nil
 }
 
 func (s *Service) recordResponseUsage(req *llmcore.UnifiedRequest, resp *llmcore.UnifiedResponse) {

@@ -8,6 +8,7 @@
 - Handler：HTTP 入参校验、JSON 解码、SSE 写出、统一响应格式。
 - Service：执行领域用例（Agent/RAG/Workflow/APIKey/Multimodal）。
 - Bootstrap：构建 Provider/Store/Facade/Registry，并注入 Handler。
+- Chat budget 预检：统一下沉到 `llm/gateway`；当前仅允许依赖 provider 原生 `llm.TokenCountProvider`，不再回退到本地 tokenizer 估算。
 
 ## 路由前缀（真实链路）
 
@@ -53,6 +54,8 @@ http.HandleFunc("/api/v1/chat/completions/stream", chatHandler.HandleStream)
 ```
 
 说明：`ChatHandler` 通过 `ChatService` 统一路由参数并调用 `llm/gateway` `Invoke/Stream`，不在 handler 层拼装 provider 细节。
+
+补充：若启用了 chat budget admission，对应 chat provider 必须实现原生 token counting；未实现时，请求会在 gateway 预检阶段直接失败，而不是走本地估算兜底。
 
 ### Agent Handler
 

@@ -9,15 +9,14 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
-	llmtokenizer "github.com/BaSui01/agentflow/llm/tokenizer"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
 func TestPreflightPolicy_EstimatesChatTokens(t *testing.T) {
-	service := newPolicyTestService(t, 30, &stubTokenizer{
-		tokenCountPerText: 2,
-		messageTokens:     16,
+	service := newPolicyTestService(t, 30, &policyNativeTokenProvider{
+		tokenResp: &llm.TokenCountResponse{InputTokens: 16},
 	})
 
 	req := &llmcore.UnifiedRequest{
@@ -38,9 +37,8 @@ func TestPreflightPolicy_EstimatesChatTokens(t *testing.T) {
 }
 
 func TestPreflightPolicy_UsesMetadataEstimatedTokens(t *testing.T) {
-	service := newPolicyTestService(t, 5, &stubTokenizer{
-		tokenCountPerText: 50,
-		messageTokens:     100,
+	service := newPolicyTestService(t, 5, &policyNativeTokenProvider{
+		tokenResp: &llm.TokenCountResponse{InputTokens: 100},
 	})
 
 	req := &llmcore.UnifiedRequest{
@@ -62,10 +60,25 @@ func TestPreflightPolicy_UsesMetadataEstimatedTokens(t *testing.T) {
 	require.Equal(t, "1", req.Metadata["estimated_tokens"])
 }
 
-func TestPreflightPolicy_EstimatesEmbeddingTokens(t *testing.T) {
-	service := newPolicyTestService(t, 3, &stubTokenizer{
-		tokenCountPerText: 2,
-		messageTokens:     0,
+func TestPreflightPolicy_ChatRequiresNativeTokenCounter(t *testing.T) {
+	service := newPolicyTestService(t, 30, &policyNativeTokenProvider{})
+
+	req := &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		Payload: &llm.ChatRequest{
+			Model:    "test-model",
+			Messages: []llm.Message{{Role: llm.RoleUser, Content: "hello world"}},
+		},
+	}
+
+	err := service.preflightPolicy(context.Background(), req)
+	require.Error(t, err)
+	require.Contains(t, strings.ToLower(err.Error()), "native token counting")
+}
+
+func TestPreflightPolicy_EmbeddingNoLongerEstimatesViaTokenizer(t *testing.T) {
+	service := newPolicyTestService(t, 3, &policyNativeTokenProvider{
+		tokenResp: &llm.TokenCountResponse{InputTokens: 10},
 	})
 
 	req := &llmcore.UnifiedRequest{
@@ -79,11 +92,11 @@ func TestPreflightPolicy_EstimatesEmbeddingTokens(t *testing.T) {
 	}
 
 	err := service.preflightPolicy(context.Background(), req)
-	require.Error(t, err)
-	require.Equal(t, "4", req.Metadata["estimated_tokens"])
+	require.NoError(t, err)
+	require.Empty(t, req.Metadata["estimated_tokens"])
 }
 
-func newPolicyTestService(t *testing.T, maxTokensPerRequest int, tok llmtokenizer.Tokenizer) *Service {
+func newPolicyTestService(t *testing.T, maxTokensPerRequest int, provider llm.Provider) *Service {
 	t.Helper()
 
 	cfg := llmpolicy.DefaultBudgetConfig()
@@ -98,44 +111,38 @@ func newPolicyTestService(t *testing.T, maxTokensPerRequest int, tok llmtokenize
 	manager := llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: budget})
 
 	return New(Config{
+		ChatProvider:  provider,
 		PolicyManager: manager,
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return tok
-		},
+		Logger:        zap.NewNop(),
 	})
 }
 
-type stubTokenizer struct {
-	tokenCountPerText int
-	messageTokens     int
+type policyNativeTokenProvider struct {
+	tokenResp *llm.TokenCountResponse
+	tokenErr  error
 }
 
-func (s *stubTokenizer) CountTokens(text string) (int, error) {
-	if strings.TrimSpace(text) == "" {
-		return 0, nil
-	}
-	return s.tokenCountPerText, nil
-}
-
-func (s *stubTokenizer) CountMessages(messages []llmtokenizer.Message) (int, error) {
-	if len(messages) == 0 {
-		return 0, nil
-	}
-	return s.messageTokens, nil
-}
-
-func (s *stubTokenizer) Encode(text string) ([]int, error) {
+func (p *policyNativeTokenProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
 	return nil, nil
 }
-
-func (s *stubTokenizer) Decode(tokens []int) (string, error) {
-	return "", nil
+func (p *policyNativeTokenProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	return nil, nil
 }
-
-func (s *stubTokenizer) MaxTokens() int {
-	return 128000
+func (p *policyNativeTokenProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
 }
-
-func (s *stubTokenizer) Name() string {
-	return "stub-tokenizer"
+func (p *policyNativeTokenProvider) Name() string                        { return "native-token-provider" }
+func (p *policyNativeTokenProvider) SupportsNativeFunctionCalling() bool { return true }
+func (p *policyNativeTokenProvider) ListModels(context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+func (p *policyNativeTokenProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *policyNativeTokenProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	if p.tokenErr != nil {
+		return nil, p.tokenErr
+	}
+	if p.tokenResp == nil {
+		return nil, types.NewInternalError("native token counting unavailable")
+	}
+	return p.tokenResp, nil
 }

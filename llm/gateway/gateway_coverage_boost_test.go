@@ -19,7 +19,6 @@ import (
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
-	llmtokenizer "github.com/BaSui01/agentflow/llm/tokenizer"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -270,22 +269,6 @@ func TestCostAmount_EmptyCurrency(t *testing.T) {
 	assert.Equal(t, 2.0, costAmount(&llmcore.Cost{AmountUSD: 2.0, Currency: ""}))
 }
 
-// ═══ messageContents ═══
-
-func TestMessageContents(t *testing.T) {
-	msgs := []types.Message{
-		{Role: "user", Content: "hello"},
-		{Role: "assistant", Content: "world"},
-	}
-	contents := messageContents(msgs)
-	assert.Equal(t, []string{"hello", "world"}, contents)
-}
-
-func TestMessageContents_Empty(t *testing.T) {
-	contents := messageContents(nil)
-	assert.Empty(t, contents)
-}
-
 // ═══ mergeChatRoutingMetadata ═══
 
 func TestMergeChatRoutingMetadata_NilInputs(t *testing.T) {
@@ -387,27 +370,30 @@ func TestRecordLedger_ErrorFromLedger(t *testing.T) {
 
 func TestEstimateRequestTokens_NilPayload(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
-	assert.Equal(t, 0, svc.estimateRequestTokens(nil))
-	assert.Equal(t, 0, svc.estimateRequestTokens(&llmcore.UnifiedRequest{}))
+	tokens, err := svc.estimateRequestTokens(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, tokens)
+	tokens, err = svc.estimateRequestTokens(context.Background(), &llmcore.UnifiedRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, tokens)
 }
 
 func TestEstimateRequestTokens_UnknownCapability(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
-	assert.Equal(t, 0, svc.estimateRequestTokens(&llmcore.UnifiedRequest{
+	tokens, err := svc.estimateRequestTokens(context.Background(), &llmcore.UnifiedRequest{
 		Capability: "unknown",
 		Payload:    "something",
-	}))
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, tokens)
 }
 
 func TestEstimateRequestTokens_ToolsCapability(t *testing.T) {
 	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 3, messageTokens: 0}
-		},
 		Logger: zap.NewNop(),
 	})
 
-	tokens := svc.estimateRequestTokens(&llmcore.UnifiedRequest{
+	tokens, err := svc.estimateRequestTokens(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityTools,
 		Payload: &ToolsInput{
 			Calls: []types.ToolCall{
@@ -415,18 +401,16 @@ func TestEstimateRequestTokens_ToolsCapability(t *testing.T) {
 			},
 		},
 	})
-	assert.Greater(t, tokens, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, tokens)
 }
 
 func TestEstimateRequestTokens_ModerationCapability(t *testing.T) {
 	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 5, messageTokens: 0}
-		},
 		Logger: zap.NewNop(),
 	})
 
-	tokens := svc.estimateRequestTokens(&llmcore.UnifiedRequest{
+	tokens, err := svc.estimateRequestTokens(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityModeration,
 		Payload: &ModerationInput{
 			Request: &moderation.ModerationRequest{
@@ -434,18 +418,16 @@ func TestEstimateRequestTokens_ModerationCapability(t *testing.T) {
 			},
 		},
 	})
-	assert.Greater(t, tokens, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, tokens)
 }
 
 func TestEstimateRequestTokens_RerankCapability(t *testing.T) {
 	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 4, messageTokens: 0}
-		},
 		Logger: zap.NewNop(),
 	})
 
-	tokens := svc.estimateRequestTokens(&llmcore.UnifiedRequest{
+	tokens, err := svc.estimateRequestTokens(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityRerank,
 		Payload: &RerankInput{
 			Request: &rerank.RerankRequest{
@@ -456,78 +438,48 @@ func TestEstimateRequestTokens_RerankCapability(t *testing.T) {
 			},
 		},
 	})
-	assert.Greater(t, tokens, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, tokens)
 }
 
 // ═══ estimateChatTokens ═══
 
 func TestEstimateChatTokens_WithMaxCompletionTokens(t *testing.T) {
 	maxTokens := 500
-	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 2, messageTokens: 10}
-		},
-		Logger: zap.NewNop(),
-	})
+	svc := New(Config{ChatProvider: &boostNativeTokenCountProvider{resp: &llm.TokenCountResponse{InputTokens: 10}}, Logger: zap.NewNop()})
 
 	chatReq := &llm.ChatRequest{
 		Model:               "test",
 		Messages:            []types.Message{{Role: "user", Content: "hi"}},
 		MaxCompletionTokens: &maxTokens,
 	}
-	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	tokens, err := svc.estimateChatTokens(context.Background(), &llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	require.NoError(t, err)
 	assert.Equal(t, 510, tokens)
 }
 
-func TestEstimateChatTokens_NilTokenizer(t *testing.T) {
-	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return nil
-		},
-		Logger: zap.NewNop(),
-	})
+func TestEstimateChatTokens_RequiresNativeProvider(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
 
 	chatReq := &llm.ChatRequest{
 		Model:    "test",
 		Messages: []types.Message{{Role: "user", Content: "hi"}},
 	}
-	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
-	assert.Equal(t, 0, tokens)
+	_, err := svc.estimateChatTokens(context.Background(), &llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	require.Error(t, err)
 }
 
 func TestEstimateChatTokens_WithMaxTokensFallback(t *testing.T) {
-	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 2, messageTokens: 10}
-		},
-		Logger: zap.NewNop(),
-	})
+	svc := New(Config{ChatProvider: &boostNativeTokenCountProvider{resp: &llm.TokenCountResponse{InputTokens: 10}}, Logger: zap.NewNop()})
 
 	chatReq := &llm.ChatRequest{
 		Model:     "test",
 		Messages:  []types.Message{{Role: "user", Content: "hi"}},
 		MaxTokens: 200,
 	}
-	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	tokens, err := svc.estimateChatTokens(context.Background(), &llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	require.NoError(t, err)
 	assert.Equal(t, 210, tokens)
-}
-
-// ═══ countTextsTokens ═══
-
-func TestCountTextsTokens_EmptyTexts(t *testing.T) {
-	svc := New(Config{Logger: zap.NewNop()})
-	assert.Equal(t, 0, svc.countTextsTokens("model", nil))
-	assert.Equal(t, 0, svc.countTextsTokens("model", []string{}))
-}
-
-func TestCountTextsTokens_WhitespaceOnly(t *testing.T) {
-	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 5}
-		},
-		Logger: zap.NewNop(),
-	})
-	assert.Equal(t, 0, svc.countTextsTokens("model", []string{"  ", "\t", "\n"}))
 }
 
 // ═══ SupportsStructuredOutput ═══
@@ -551,7 +503,7 @@ func TestBuildUnifiedChatRequest_WithMetadata(t *testing.T) {
 		TraceID: "trace-123",
 		Metadata: map[string]string{
 			llmcore.MetadataKeyChatProvider: "openai",
-			"route_policy":                 "cost",
+			"route_policy":                  "cost",
 		},
 		Tags: []string{"prod"},
 	}
@@ -588,9 +540,9 @@ func (p *boostSlowStreamProvider) Stream(_ context.Context, _ *llm.ChatRequest) 
 func (p *boostSlowStreamProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
-func (p *boostSlowStreamProvider) SupportsNativeFunctionCalling() bool                { return false }
-func (p *boostSlowStreamProvider) ListModels(_ context.Context) ([]llm.Model, error)  { return nil, nil }
-func (p *boostSlowStreamProvider) Endpoints() llm.ProviderEndpoints                   { return llm.ProviderEndpoints{} }
+func (p *boostSlowStreamProvider) SupportsNativeFunctionCalling() bool               { return false }
+func (p *boostSlowStreamProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *boostSlowStreamProvider) Endpoints() llm.ProviderEndpoints                  { return llm.ProviderEndpoints{} }
 
 type boostNoUsageStreamProvider struct{}
 
@@ -608,9 +560,13 @@ func (p *boostNoUsageStreamProvider) Stream(_ context.Context, _ *llm.ChatReques
 func (p *boostNoUsageStreamProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
-func (p *boostNoUsageStreamProvider) SupportsNativeFunctionCalling() bool                { return false }
-func (p *boostNoUsageStreamProvider) ListModels(_ context.Context) ([]llm.Model, error)  { return nil, nil }
-func (p *boostNoUsageStreamProvider) Endpoints() llm.ProviderEndpoints                   { return llm.ProviderEndpoints{} }
+func (p *boostNoUsageStreamProvider) SupportsNativeFunctionCalling() bool { return false }
+func (p *boostNoUsageStreamProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+func (p *boostNoUsageStreamProvider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{}
+}
 
 type boostErrorChunkStreamProvider struct{}
 
@@ -627,9 +583,13 @@ func (p *boostErrorChunkStreamProvider) Stream(_ context.Context, _ *llm.ChatReq
 func (p *boostErrorChunkStreamProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
-func (p *boostErrorChunkStreamProvider) SupportsNativeFunctionCalling() bool                { return false }
-func (p *boostErrorChunkStreamProvider) ListModels(_ context.Context) ([]llm.Model, error)  { return nil, nil }
-func (p *boostErrorChunkStreamProvider) Endpoints() llm.ProviderEndpoints                   { return llm.ProviderEndpoints{} }
+func (p *boostErrorChunkStreamProvider) SupportsNativeFunctionCalling() bool { return false }
+func (p *boostErrorChunkStreamProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+func (p *boostErrorChunkStreamProvider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{}
+}
 
 type boostErrorLedger struct{}
 
@@ -877,29 +837,24 @@ func TestInvokeAvatar_NilCapabilities(t *testing.T) {
 
 // ═══ estimateChatTokens: CountMessages error fallback / tools marshal error / negative total ═══
 
-func TestEstimateChatTokens_CountMessagesErrorFallback(t *testing.T) {
+func TestEstimateChatTokens_NativeProviderError(t *testing.T) {
 	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &boostErrCountMessagesTokenizer{tokenCountPerText: 3}
-		},
-		Logger: zap.NewNop(),
+		ChatProvider: &boostNativeTokenCountProvider{err: errors.New("native token count failed")},
+		Logger:       zap.NewNop(),
 	})
 
 	chatReq := &llm.ChatRequest{
 		Model:    "test",
 		Messages: []types.Message{{Role: "user", Content: "hello world"}},
 	}
-	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
-	// CountMessages fails, falls back to countTextsTokens which returns 3
-	assert.Equal(t, 3, tokens)
+	_, err := svc.estimateChatTokens(context.Background(), &llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	require.Error(t, err)
 }
 
-func TestEstimateChatTokens_WithToolsTokenCounting(t *testing.T) {
+func TestEstimateChatTokens_UsesNativeCountOnly(t *testing.T) {
 	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &stubTokenizer{tokenCountPerText: 5, messageTokens: 10}
-		},
-		Logger: zap.NewNop(),
+		ChatProvider: &boostNativeTokenCountProvider{resp: &llm.TokenCountResponse{InputTokens: 10}},
+		Logger:       zap.NewNop(),
 	})
 
 	chatReq := &llm.ChatRequest{
@@ -907,26 +862,8 @@ func TestEstimateChatTokens_WithToolsTokenCounting(t *testing.T) {
 		Messages: []types.Message{{Role: "user", Content: "hi"}},
 		Tools:    []types.ToolSchema{{Name: "search", Description: "search tool"}},
 	}
-	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
-	// 10 (messages) + 5 (tool schema) + 0 (no completion budget) = 15
-	assert.Equal(t, 15, tokens)
-}
-
-func TestEstimateChatTokens_ToolsCountTokensError(t *testing.T) {
-	svc := New(Config{
-		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
-			return &boostErrCountTokensTokenizer{messageTokens: 10}
-		},
-		Logger: zap.NewNop(),
-	})
-
-	chatReq := &llm.ChatRequest{
-		Model:    "test",
-		Messages: []types.Message{{Role: "user", Content: "hi"}},
-		Tools:    []types.ToolSchema{{Name: "search"}},
-	}
-	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
-	// 10 (messages) + 0 (tool count error, skipped) = 10
+	tokens, err := svc.estimateChatTokens(context.Background(), &llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	require.NoError(t, err)
 	assert.Equal(t, 10, tokens)
 }
 
@@ -1093,55 +1030,31 @@ func TestValidateRequest_AudioTTSValid(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-// ═══ resolveTokenizer: nil resolver fallback ═══
-
-func TestResolveTokenizer_NilResolver(t *testing.T) {
-	svc := New(Config{Logger: zap.NewNop()})
-	tok := svc.resolveTokenizer("gpt-4o-mini")
-	// Should use default GetTokenizerOrEstimator, not panic
-	assert.NotNil(t, tok)
+type boostNativeTokenCountProvider struct {
+	resp *llm.TokenCountResponse
+	err  error
 }
 
-func TestResolveTokenizer_EmptyModel(t *testing.T) {
-	svc := New(Config{Logger: zap.NewNop()})
-	tok := svc.resolveTokenizer("")
-	assert.NotNil(t, tok)
+func (p *boostNativeTokenCountProvider) Name() string { return "native-token-provider" }
+func (p *boostNativeTokenCountProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return nil, nil
 }
-
-// ═══ Boost mock: errCountMessages tokenizer ═══
-
-type boostErrCountMessagesTokenizer struct {
-	tokenCountPerText int
+func (p *boostNativeTokenCountProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	return nil, nil
 }
-
-func (t *boostErrCountMessagesTokenizer) CountTokens(text string) (int, error) {
-	return t.tokenCountPerText, nil
+func (p *boostNativeTokenCountProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
 }
-func (t *boostErrCountMessagesTokenizer) CountMessages(_ []llmtokenizer.Message) (int, error) {
-	return 0, errors.New("count messages not supported")
+func (p *boostNativeTokenCountProvider) SupportsNativeFunctionCalling() bool { return true }
+func (p *boostNativeTokenCountProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+	return nil, nil
 }
-func (t *boostErrCountMessagesTokenizer) Encode(text string) ([]int, error) { return nil, nil }
-func (t *boostErrCountMessagesTokenizer) Decode(tokens []int) (string, error) {
-	return "", nil
+func (p *boostNativeTokenCountProvider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{}
 }
-func (t *boostErrCountMessagesTokenizer) MaxTokens() int { return 128000 }
-func (t *boostErrCountMessagesTokenizer) Name() string   { return "err-count-messages" }
-
-// ═══ Boost mock: errCountTokens tokenizer ═══
-
-type boostErrCountTokensTokenizer struct {
-	messageTokens int
+func (p *boostNativeTokenCountProvider) CountTokens(_ context.Context, _ *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	return p.resp, nil
 }
-
-func (t *boostErrCountTokensTokenizer) CountTokens(_ string) (int, error) {
-	return 0, errors.New("count tokens not supported")
-}
-func (t *boostErrCountTokensTokenizer) CountMessages(msgs []llmtokenizer.Message) (int, error) {
-	return t.messageTokens, nil
-}
-func (t *boostErrCountTokensTokenizer) Encode(text string) ([]int, error) { return nil, nil }
-func (t *boostErrCountTokensTokenizer) Decode(tokens []int) (string, error) {
-	return "", nil
-}
-func (t *boostErrCountTokensTokenizer) MaxTokens() int { return 128000 }
-func (t *boostErrCountTokensTokenizer) Name() string   { return "err-count-tokens" }

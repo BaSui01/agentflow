@@ -120,6 +120,8 @@ paths:
       description: |
         Send a chat completion request to the configured LLM provider.
         Note: This endpoint is only available when an LLM API key is configured.
+        Budget admission for chat requests depends on provider-native token counting.
+        If the selected chat provider does not implement native token counting, the request is rejected during gateway precheck.
       x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
       operationId: chatCompletion
       security:
@@ -164,6 +166,8 @@ paths:
       description: |
         Send a streaming chat completion request via Server-Sent Events.
         Note: This endpoint is only available when an LLM API key is configured.
+        Budget admission for chat requests depends on provider-native token counting.
+        If the selected chat provider does not implement native token counting, the request is rejected during gateway precheck.
       x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
       operationId: chatCompletionStream
       security:
@@ -194,6 +198,7 @@ paths:
         OpenAI protocol adapter endpoint.
         Internally routed to the same ChatService/gateway chain as `/api/v1/chat/completions`.
         Supports both non-stream and `stream=true` SSE mode.
+        When budget admission is enabled, the routed native chat provider must implement native token counting.
       operationId: openAICompatChatCompletions
       security:
         - ApiKeyAuth: []
@@ -227,6 +232,7 @@ paths:
       description: |
         OpenAI Responses protocol adapter endpoint.
         Internally routed to the same ChatService/gateway chain as `/api/v1/chat/completions`.
+        When budget admission is enabled, the routed native chat provider must implement native token counting.
       operationId: openAICompatResponses
       security:
         - ApiKeyAuth: []
@@ -1393,6 +1399,9 @@ components:
 
     ChatRequest:
       type: object
+      description: |
+        Unified chat request payload.
+        If chat budget admission is enabled, the routed provider must support native token counting through `llm.TokenCountProvider`.
       required: [model, messages]
       properties:
         trace_id:
