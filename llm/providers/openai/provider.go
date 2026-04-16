@@ -1267,30 +1267,6 @@ func stringPtr(s string) *string {
 	return &out
 }
 
-func responsesOutputItemFromAny(v any) (responsesOutputItem, bool) {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return responsesOutputItem{}, false
-	}
-	var item responsesOutputItem
-	if err := json.Unmarshal(raw, &item); err != nil {
-		return responsesOutputItem{}, false
-	}
-	return item, true
-}
-
-func responsesResponseFromAny(v any) (openAIResponsesResponse, bool) {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return openAIResponsesResponse{}, false
-	}
-	var resp openAIResponsesResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return openAIResponsesResponse{}, false
-	}
-	return resp, true
-}
-
 func emitResponsesReasoningChunk(
 	ctx context.Context,
 	ch chan<- llm.StreamChunk,
