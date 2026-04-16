@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // mockHandoffAgent implements HandoffAgent with function callbacks.
@@ -189,6 +191,107 @@ func TestHandoffManager_Handoff_ContextCancelled(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestHandoffManager_Handoff_OnHandoffHookAndInputFilter(t *testing.T) {
+	mgr := NewHandoffManager(zap.NewNop())
+
+	var hookCalled atomic.Bool
+	var seenMessages []types.Message
+	target := &mockHandoffAgent{
+		id: "target-agent",
+		executeFn: func(_ context.Context, h *Handoff) (*HandoffResult, error) {
+			seenMessages = append([]types.Message(nil), h.Context.Messages...)
+			return &HandoffResult{Output: "filtered"}, nil
+		},
+	}
+	mgr.RegisterAgent(target)
+
+	handoff, err := mgr.Handoff(context.Background(), HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "target-agent",
+		Task:        Task{Type: "code", Description: "filtered task", Input: "fresh input"},
+		Context: HandoffContext{
+			ConversationID: "conv_1",
+			Messages: []types.Message{
+				{Role: types.RoleSystem, Content: "system prompt"},
+				{Role: types.RoleUser, Content: "old question"},
+			},
+		},
+		OnHandoff: func(_ context.Context, h *Handoff) error {
+			hookCalled.Store(true)
+			assert.Equal(t, "transfer_to_target_agent", h.ToolName)
+			assert.Equal(t, `{"assistant":"target-agent"}`, h.TransferMessage)
+			return nil
+		},
+		InputFilter: func(_ context.Context, data HandoffInputData) (HandoffInputData, error) {
+			cloned := data.Clone()
+			cloned.InputHistory = []types.Message{{Role: types.RoleAssistant, Content: "handoff summary"}}
+			cloned.InputMessages = []types.Message{{Role: types.RoleUser, Content: "only latest"}}
+			return cloned, nil
+		},
+		Wait: true,
+	})
+
+	require.NoError(t, err)
+	require.True(t, hookCalled.Load())
+	require.NotNil(t, handoff)
+	require.Len(t, seenMessages, 2)
+	assert.Equal(t, "handoff summary", seenMessages[0].Content)
+	assert.Equal(t, "only latest", seenMessages[1].Content)
+}
+
+func TestHandoffManager_Handoff_NestHistory(t *testing.T) {
+	mgr := NewHandoffManager(zap.NewNop())
+
+	var seenMessages []types.Message
+	target := &mockHandoffAgent{
+		id: "target-agent",
+		executeFn: func(_ context.Context, h *Handoff) (*HandoffResult, error) {
+			seenMessages = append([]types.Message(nil), h.Context.Messages...)
+			return &HandoffResult{Output: "nested"}, nil
+		},
+	}
+	mgr.RegisterAgent(target)
+	enableNest := true
+
+	_, err := mgr.Handoff(context.Background(), HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "target-agent",
+		Task:        Task{Type: "code", Description: "nested task", Input: "new input"},
+		Context: HandoffContext{
+			Messages: []types.Message{
+				{Role: types.RoleUser, Content: "question 1"},
+				{Role: types.RoleAssistant, Content: "answer 1"},
+			},
+		},
+		NestHistory: &enableNest,
+		Wait:        true,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, seenMessages, 2)
+	assert.Equal(t, types.RoleAssistant, seenMessages[0].Role)
+	assert.Contains(t, seenMessages[0].Content, "<CONVERSATION HISTORY>")
+	assert.Contains(t, seenMessages[0].Content, "user: question 1")
+	assert.Equal(t, "new input", seenMessages[1].Content)
+}
+
+func TestHandoffManager_Handoff_Disabled(t *testing.T) {
+	mgr := NewHandoffManager(zap.NewNop())
+	mgr.RegisterAgent(&mockHandoffAgent{id: "target-agent"})
+	enabled := false
+
+	handoff, err := mgr.Handoff(context.Background(), HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "target-agent",
+		Task:        Task{Type: "code", Description: "disabled"},
+		Enabled:     &enabled,
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, handoff)
+	assert.Contains(t, err.Error(), "handoff disabled")
 }
 
 func TestHandoffManager_FindAgent(t *testing.T) {

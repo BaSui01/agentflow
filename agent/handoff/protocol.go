@@ -2,7 +2,9 @@ package handoff
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,19 +26,22 @@ const (
 
 // Handoff代表着从一个代理人到另一个代理人的任务代表团.
 type Handoff struct {
-	ID          string         `json:"id"`
-	FromAgentID string         `json:"from_agent_id"`
-	ToAgentID   string         `json:"to_agent_id"`
-	Task        Task           `json:"task"`
-	Status      HandoffStatus  `json:"status"`
-	Context     HandoffContext `json:"context"`
-	Result      *HandoffResult `json:"result,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	AcceptedAt  *time.Time     `json:"accepted_at,omitempty"`
-	CompletedAt *time.Time     `json:"completed_at,omitempty"`
-	Timeout     time.Duration  `json:"timeout"`
-	RetryCount  int            `json:"retry_count"`
-	MaxRetries  int            `json:"max_retries"`
+	ID              string         `json:"id"`
+	FromAgentID     string         `json:"from_agent_id"`
+	ToAgentID       string         `json:"to_agent_id"`
+	ToolName        string         `json:"tool_name,omitempty"`
+	ToolDescription string         `json:"tool_description,omitempty"`
+	TransferMessage string         `json:"transfer_message,omitempty"`
+	Task            Task           `json:"task"`
+	Status          HandoffStatus  `json:"status"`
+	Context         HandoffContext `json:"context"`
+	Result          *HandoffResult `json:"result,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+	AcceptedAt      *time.Time     `json:"accepted_at,omitempty"`
+	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
+	Timeout         time.Duration  `json:"timeout"`
+	RetryCount      int            `json:"retry_count"`
+	MaxRetries      int            `json:"max_retries"`
 
 	mu sync.Mutex `json:"-"`
 }
@@ -57,6 +62,37 @@ type HandoffContext struct {
 	Variables      map[string]any  `json:"variables,omitempty"`
 	ParentHandoff  string          `json:"parent_handoff,omitempty"`
 }
+
+// HandoffInputData 对齐官方 Agents SDK 的 handoff input filter 语义，
+// 用于在交接发生时重写下一位 agent 看到的历史和新增消息。
+type HandoffInputData struct {
+	InputHistory  []types.Message `json:"input_history,omitempty"`
+	PreHandoff    []types.Message `json:"pre_handoff,omitempty"`
+	NewMessages   []types.Message `json:"new_messages,omitempty"`
+	InputMessages []types.Message `json:"input_messages,omitempty"`
+	Context       HandoffContext  `json:"context"`
+}
+
+// Clone returns a shallow-cloned HandoffInputData with deep-copied slices/maps.
+func (d HandoffInputData) Clone() HandoffInputData {
+	return HandoffInputData{
+		InputHistory:  cloneMessages(d.InputHistory),
+		PreHandoff:    cloneMessages(d.PreHandoff),
+		NewMessages:   cloneMessages(d.NewMessages),
+		InputMessages: cloneMessages(d.InputMessages),
+		Context: HandoffContext{
+			ConversationID: d.Context.ConversationID,
+			Messages:       cloneMessages(d.Context.Messages),
+			Variables:      cloneMap(d.Context.Variables),
+			ParentHandoff:  d.Context.ParentHandoff,
+		},
+	}
+}
+
+type HandoffInputFilter func(ctx context.Context, data HandoffInputData) (HandoffInputData, error)
+type HandoffHook func(ctx context.Context, handoff *Handoff) error
+type HandoffEnabledFunc func(ctx context.Context, opts HandoffOptions) (bool, error)
+type HandoffHistoryMapper func(history []types.Message) []types.Message
 
 // HandoffResult包含完成交接的结果.
 type HandoffResult struct {
@@ -164,16 +200,40 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 		}
 	}
 
+	if opts.EnableFunc != nil {
+		enabled, enableErr := opts.EnableFunc(ctx, opts)
+		if enableErr != nil {
+			return nil, enableErr
+		}
+		if !enabled {
+			return nil, fmt.Errorf("handoff disabled for target agent: %s", targetAgent.ID())
+		}
+	} else if opts.Enabled != nil && !*opts.Enabled {
+		return nil, fmt.Errorf("handoff disabled for target agent: %s", targetAgent.ID())
+	}
+
+	toolName := strings.TrimSpace(opts.ToolNameOverride)
+	if toolName == "" {
+		toolName = defaultToolName(targetAgent.ID())
+	}
+	toolDescription := strings.TrimSpace(opts.ToolDescriptionOverride)
+	if toolDescription == "" {
+		toolDescription = defaultToolDescription(targetAgent.ID())
+	}
+
 	handoff := &Handoff{
-		ID:          generateHandoffID(),
-		FromAgentID: opts.FromAgentID,
-		ToAgentID:   targetAgent.ID(),
-		Task:        opts.Task,
-		Status:      StatusPending,
-		Context:     opts.Context,
-		CreatedAt:   time.Now(),
-		Timeout:     opts.Timeout,
-		MaxRetries:  opts.MaxRetries,
+		ID:              generateHandoffID(),
+		FromAgentID:     opts.FromAgentID,
+		ToAgentID:       targetAgent.ID(),
+		ToolName:        toolName,
+		ToolDescription: toolDescription,
+		TransferMessage: defaultTransferMessage(targetAgent.ID()),
+		Task:            opts.Task,
+		Status:          StatusPending,
+		Context:         opts.Context,
+		CreatedAt:       time.Now(),
+		Timeout:         opts.Timeout,
+		MaxRetries:      opts.MaxRetries,
 	}
 
 	if handoff.Timeout == 0 {
@@ -203,6 +263,55 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 	now := time.Now()
 	handoff.AcceptedAt = &now
 	handoff.Status = StatusAccepted
+
+	if opts.OnHandoff != nil {
+		if err := opts.OnHandoff(ctx, handoff); err != nil {
+			handoff.Status = StatusFailed
+			handoff.Result = &HandoffResult{Error: err.Error()}
+			m.finalizePending(handoff.ID, handoff.Result)
+			return handoff, fmt.Errorf("handoff hook failed: %w", err)
+		}
+	}
+
+	inputData := HandoffInputData{
+		InputHistory: cloneMessages(handoff.Context.Messages),
+		Context: HandoffContext{
+			ConversationID: handoff.Context.ConversationID,
+			Messages:       cloneMessages(handoff.Context.Messages),
+			Variables:      cloneMap(handoff.Context.Variables),
+			ParentHandoff:  handoff.Context.ParentHandoff,
+		},
+	}
+	if prompt, ok := handoff.Task.Input.(string); ok && strings.TrimSpace(prompt) != "" {
+		inputData.NewMessages = []types.Message{{
+			Role:    types.RoleUser,
+			Content: prompt,
+			Metadata: map[string]any{
+				"handoff_id":   handoff.ID,
+				"handoff_tool": handoff.ToolName,
+			},
+			Timestamp: time.Now(),
+		}}
+	}
+	if opts.InputFilter != nil {
+		filtered, err := opts.InputFilter(ctx, inputData.Clone())
+		if err != nil {
+			handoff.Status = StatusFailed
+			handoff.Result = &HandoffResult{Error: err.Error()}
+			m.finalizePending(handoff.ID, handoff.Result)
+			return handoff, fmt.Errorf("handoff input filter failed: %w", err)
+		}
+		handoff.Context.Messages = composeNextMessages(filtered)
+	} else if defaultNestHistoryValue(opts.NestHistory) {
+		mapper := opts.HistoryMapper
+		if mapper == nil {
+			mapper = defaultHistoryMapper
+		}
+		inputData.InputHistory = mapper(inputData.InputHistory)
+		handoff.Context.Messages = composeNextMessages(inputData)
+	} else {
+		handoff.Context.Messages = composeNextMessages(inputData)
+	}
 
 	// 不等待则执行同步
 	if !opts.Wait {
@@ -279,17 +388,103 @@ func (m *HandoffManager) GetHandoff(handoffID string) (*Handoff, error) {
 
 // 交接选项配置交接。
 type HandoffOptions struct {
-	FromAgentID string
-	ToAgentID   string
-	Task        Task
-	Context     HandoffContext
-	Timeout     time.Duration
-	MaxRetries  int
-	Wait        bool
+	FromAgentID             string
+	ToAgentID               string
+	Task                    Task
+	Context                 HandoffContext
+	Timeout                 time.Duration
+	MaxRetries              int
+	Wait                    bool
+	OnHandoff               HandoffHook
+	InputFilter             HandoffInputFilter
+	Enabled                 *bool
+	EnableFunc              HandoffEnabledFunc
+	ToolNameOverride        string
+	ToolDescriptionOverride string
+	NestHistory             *bool
+	HistoryMapper           HandoffHistoryMapper
 }
 
 func generateHandoffID() string {
 	return fmt.Sprintf("hoff_%d", time.Now().UnixNano())
+}
+
+func defaultToolName(agentID string) string {
+	s := strings.ToLower(strings.TrimSpace(agentID))
+	s = strings.ReplaceAll(s, " ", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	if s == "" {
+		s = "agent"
+	}
+	return "transfer_to_" + s
+}
+
+func defaultToolDescription(agentID string) string {
+	if strings.TrimSpace(agentID) == "" {
+		return "Handoff to another agent to handle the request."
+	}
+	return fmt.Sprintf("Handoff to the %s agent to handle the request.", agentID)
+}
+
+func defaultTransferMessage(agentID string) string {
+	payload := map[string]string{"assistant": agentID}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Sprintf(`{"assistant":"%s"}`, agentID)
+	}
+	return string(raw)
+}
+
+func defaultNestHistoryValue(v *bool) bool {
+	return v != nil && *v
+}
+
+func defaultHistoryMapper(history []types.Message) []types.Message {
+	if len(history) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("<CONVERSATION HISTORY>\n")
+	for _, msg := range history {
+		b.WriteString(string(msg.Role))
+		b.WriteString(": ")
+		b.WriteString(msg.Content)
+		b.WriteString("\n")
+	}
+	b.WriteString("</CONVERSATION HISTORY>")
+	return []types.Message{{
+		Role:    types.RoleAssistant,
+		Content: b.String(),
+	}}
+}
+
+func composeNextMessages(data HandoffInputData) []types.Message {
+	base := cloneMessages(data.InputHistory)
+	next := data.InputMessages
+	if len(next) == 0 {
+		next = data.NewMessages
+	}
+	return append(base, cloneMessages(next)...)
+}
+
+func cloneMessages(messages []types.Message) []types.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]types.Message, len(messages))
+	copy(out, messages)
+	return out
+}
+
+func cloneMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
 }
 
 func (m *HandoffManager) finalizePending(handoffID string, result *HandoffResult) {

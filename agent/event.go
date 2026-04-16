@@ -47,15 +47,15 @@ type EventBus interface {
 
 // SimpleEventBus 简单的事件总线实现
 type SimpleEventBus struct {
-	mu            sync.RWMutex
-	handlers      map[EventType]map[string]EventHandler
-	eventChannel  chan Event
-	done          chan struct{}
-	loopDone      chan struct{} // closed when processEvents goroutine exits
-	stopOnce      sync.Once
-	handlerWg     sync.WaitGroup // 跟踪正在运行的 handler goroutine，Stop() 时等待完成
-	logger        *zap.Logger
-	panicErrChan  chan<- error // 可选，handler panic 时写入
+	mu             sync.RWMutex
+	handlers       map[EventType]map[string]EventHandler
+	eventChannel   chan Event
+	done           chan struct{}
+	loopDone       chan struct{} // closed when processEvents goroutine exits
+	stopOnce       sync.Once
+	handlerWg      sync.WaitGroup // 跟踪正在运行的 handler goroutine，Stop() 时等待完成
+	logger         *zap.Logger
+	panicErrChan   chan<- error // 可选，handler panic 时写入
 	panicErrChanMu sync.RWMutex
 }
 
@@ -145,7 +145,6 @@ func (b *SimpleEventBus) processEvents() {
 					return
 				}
 			}
-			return
 		}
 	}
 }
