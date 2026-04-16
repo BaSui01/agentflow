@@ -9,6 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/core"
 )
 
@@ -75,8 +76,8 @@ func (r *testAgentResolver) ResolveAgent(ctx context.Context, agentID string) (a
 
 type stepIntegrationHybridRetriever struct{}
 
-func (r *stepIntegrationHybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]rag.RetrievalResult, error) {
-	return []rag.RetrievalResult{{Document: rag.Document{ID: "d1"}, FinalScore: 0.8}}, nil
+func (r *stepIntegrationHybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]types.RetrievalRecord, error) {
+	return []types.RetrievalRecord{{DocID: "d1", Score: 0.8}}, nil
 }
 
 type stepIntegrationMultiHopReasoner struct{}
@@ -91,7 +92,7 @@ func (r *stepIntegrationMultiHopReasoner) Reason(ctx context.Context, query stri
 
 type stepIntegrationReranker struct{}
 
-func (r *stepIntegrationReranker) Rerank(ctx context.Context, query string, results []rag.RetrievalResult) ([]rag.RetrievalResult, error) {
+func (r *stepIntegrationReranker) Rerank(ctx context.Context, query string, results []types.RetrievalRecord) ([]types.RetrievalRecord, error) {
 	return results, nil
 }
 
@@ -131,7 +132,7 @@ func TestBuildExecutionNode_AllStepTypes(t *testing.T) {
 		{ID: "orch-1", Type: core.StepTypeOrchestration, OrchestrationMode: "reasoning", OrchestrationAgents: []string{"a1"}},
 		{ID: "hybrid-1", Type: core.StepTypeHybridRetrieve, Query: "q"},
 		{ID: "mh-1", Type: core.StepTypeMultiHopRetrieve, Query: "q"},
-		{ID: "rerank-1", Type: core.StepTypeRerank, Query: "q", Input: core.StepInput{Data: map[string]any{"results": []rag.RetrievalResult{{Document: rag.Document{ID: "d1"}, FinalScore: 0.8}}}}},
+		{ID: "rerank-1", Type: core.StepTypeRerank, Query: "q", Input: core.StepInput{Data: map[string]any{"results": []types.RetrievalRecord{{DocID: "d1", Score: 0.8}}}}},
 		{ID: "chain-1", Type: core.StepTypeChain, ChainSteps: []tools.ChainStep{{ToolName: "t1", Args: map[string]any{"x": 1}}}},
 	}
 
