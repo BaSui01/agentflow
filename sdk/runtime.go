@@ -1,0 +1,255 @@
+package sdk
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
+	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
+	"github.com/BaSui01/agentflow/types"
+	"github.com/BaSui01/agentflow/workflow"
+	"github.com/BaSui01/agentflow/workflow/dsl"
+	"go.uber.org/zap"
+)
+
+// Runtime is the assembled library runtime for external consumers.
+// It exposes small, stable entrypoints to construct and execute capabilities.
+type Runtime struct {
+	logger *zap.Logger
+
+	// Provider is the primary chat provider (may be nil if not configured).
+	Provider llm.Provider
+
+	agentBuilder *runtime.Builder
+
+	Workflow *WorkflowRuntime
+	RAG      *RAGRuntime
+}
+
+type WorkflowRuntime struct {
+	Facade *workflow.Facade
+	Parser *dsl.Parser // optional
+}
+
+type RAGRuntime struct {
+	Store             core.VectorStore
+	EmbeddingProvider core.EmbeddingProvider
+	RerankProvider    core.RerankProvider
+
+	EnhancedRetriever *rag.EnhancedRetriever
+	HybridRetriever   *rag.HybridRetriever
+}
+
+// Logger returns the runtime logger.
+func (r *Runtime) Logger() *zap.Logger {
+	if r == nil || r.logger == nil {
+		return zap.NewNop()
+	}
+	return r.logger
+}
+
+// NewAgent constructs an agent using the unified runtime builder.
+// It requires Provider to be configured (either through SDK Options or a later override).
+func (r *Runtime) NewAgent(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error) {
+	if r == nil || r.agentBuilder == nil {
+		return nil, fmt.Errorf("sdk runtime agent builder is not configured")
+	}
+	return r.agentBuilder.Build(ctx, cfg)
+}
+
+// Builder is the SDK unified builder.
+type Builder struct {
+	opts Options
+}
+
+// New creates a unified SDK builder.
+func New(opts Options) *Builder {
+	return &Builder{opts: opts}
+}
+
+// Build assembles the library runtime according to Options.
+func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
+	if b == nil {
+		return nil, fmt.Errorf("sdk builder is nil")
+	}
+
+	logger := b.opts.Logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	rt := &Runtime{
+		logger:   logger.With(zap.String("component", "sdk_runtime")),
+		Provider: b.opts.Provider,
+	}
+
+	// ------------------------
+	// Agent runtime assembly
+	// ------------------------
+	agentOpts := b.opts.Agent
+	if agentOpts != nil {
+		if rt.Provider == nil {
+			return nil, fmt.Errorf("sdk agent runtime requires Options.Provider")
+		}
+		buildOpts := agentOpts.BuildOptions
+		if isZeroAgentBuildOptions(buildOpts) {
+			buildOpts = runtime.DefaultBuildOptions()
+			// Normalize to explicit toggles so SDK can disable individual subsystems
+			// without being overridden by EnableAll.
+			//
+			// This keeps the default behavior ("all enabled") but makes the options
+			// composable for library usage where some subsystems depend on local
+			// filesystem presence (e.g. skills directory).
+			buildOpts.EnableAll = false
+		}
+		// If the caller uses EnableAll, expand it into explicit flags so we can
+		// still apply library-safe guards (e.g. missing skills directory) while
+		// preserving the "all enabled" intent.
+		if buildOpts.EnableAll {
+			buildOpts.EnableAll = false
+			buildOpts.EnableReflection = true
+			buildOpts.EnableToolSelection = true
+			buildOpts.EnablePromptEnhancer = true
+			buildOpts.EnableSkills = true
+			buildOpts.EnableMCP = true
+			buildOpts.EnableLSP = true
+			buildOpts.EnableEnhancedMemory = true
+			buildOpts.EnableObservability = true
+		}
+
+		// Library-safe defaults: if skills are enabled but the directory is missing,
+		// disable skills to avoid failing Build() for consumers who don't ship skills.
+		// Consumers can re-enable by setting a valid SkillsDirectory.
+		if buildOpts.EnableSkills && buildOpts.SkillsDirectory != "" {
+			if st, err := os.Stat(buildOpts.SkillsDirectory); err != nil || !st.IsDir() {
+				logger.Warn("skills directory missing; disabling skills",
+					zap.String("skills_dir", buildOpts.SkillsDirectory),
+					zap.Error(err),
+				)
+				buildOpts.EnableSkills = false
+			}
+		}
+
+		ab := runtime.NewBuilder(rt.Provider, logger).WithOptions(buildOpts)
+		if b.opts.ToolProvider != nil {
+			ab = ab.WithToolProvider(b.opts.ToolProvider)
+		}
+		if b.opts.Ledger != nil {
+			ab = ab.WithLedger(b.opts.Ledger)
+		}
+		if len(agentOpts.ToolScope) > 0 {
+			ab = ab.WithToolScope(agentOpts.ToolScope)
+		}
+		rt.agentBuilder = ab
+	}
+
+	// ------------------------
+	// Workflow runtime assembly
+	// ------------------------
+	if b.opts.Workflow != nil {
+		wopts := *b.opts.Workflow
+		if !wopts.Enable && !wopts.EnableDSL {
+			// If explicitly disabled, keep nil.
+		} else {
+			executor := workflow.NewDAGExecutor(nil, logger)
+			wrt := &WorkflowRuntime{
+				Facade: workflow.NewFacade(executor),
+			}
+			if wopts.EnableDSL {
+				parser := dsl.NewParser()
+				// Keep parity with bootstrap defaults: always_true condition.
+				parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
+					return true, nil
+				})
+				wrt.Parser = parser
+			}
+			rt.Workflow = wrt
+		}
+	}
+
+	// ------------------------
+	// RAG runtime assembly
+	// ------------------------
+	if b.opts.RAG != nil {
+		ropts := *b.opts.RAG
+		if !ropts.Enable {
+			// keep nil
+		} else {
+			rb := ragruntime.NewBuilder(ropts.Config, logger)
+
+			// Apply overrides
+			if ropts.VectorStoreType != "" {
+				rb = rb.WithVectorStoreType(ropts.VectorStoreType)
+			} else {
+				rb = rb.WithVectorStoreType(core.VectorStoreMemory)
+			}
+
+			if ropts.EmbeddingType != "" {
+				rb = rb.WithEmbeddingType(ropts.EmbeddingType)
+			} else if ropts.Config != nil {
+				rb = rb.WithEmbeddingType(core.EmbeddingProviderType(ropts.Config.LLM.DefaultProvider))
+			}
+			if ropts.RerankType != "" {
+				rb = rb.WithRerankType(ropts.RerankType)
+			} else if ropts.Config != nil {
+				rb = rb.WithRerankType(core.RerankProviderType(ropts.Config.LLM.DefaultProvider))
+			}
+
+			if ropts.APIKey != "" {
+				rb = rb.WithAPIKey(ropts.APIKey)
+			}
+			if ropts.VectorStore != nil {
+				rb = rb.WithVectorStore(ropts.VectorStore)
+			}
+			if ropts.EmbeddingProvider != nil {
+				rb = rb.WithEmbeddingProvider(ropts.EmbeddingProvider)
+			}
+			if ropts.RerankProvider != nil {
+				rb = rb.WithRerankProvider(ropts.RerankProvider)
+			}
+			if ropts.HybridConfig != nil {
+				rb = rb.WithHybridConfig(*ropts.HybridConfig)
+			}
+
+			providers, err := rb.BuildProviders()
+			if err != nil {
+				return nil, fmt.Errorf("build rag providers: %w", err)
+			}
+			store, err := rb.BuildVectorStore()
+			if err != nil {
+				return nil, fmt.Errorf("build rag vector store: %w", err)
+			}
+
+			enhanced, err := rb.BuildEnhancedRetriever()
+			if err != nil {
+				return nil, fmt.Errorf("build rag enhanced retriever: %w", err)
+			}
+			hybrid, err := rb.BuildHybridRetrieverWithVectorStore()
+			if err != nil {
+				return nil, fmt.Errorf("build rag hybrid retriever: %w", err)
+			}
+
+			rt.RAG = &RAGRuntime{
+				Store:             store,
+				EmbeddingProvider: providers.Embedding,
+				RerankProvider:    providers.Rerank,
+				EnhancedRetriever: enhanced,
+				HybridRetriever:   hybrid,
+			}
+		}
+	}
+
+	_ = ctx
+	return rt, nil
+}
+
+func isZeroAgentBuildOptions(o runtime.BuildOptions) bool {
+	// Treat the struct zero value as "not set".
+	// DefaultBuildOptions() sets EnableAll=true etc.
+	return o == (runtime.BuildOptions{})
+}
