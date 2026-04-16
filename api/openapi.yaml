@@ -1553,6 +1553,9 @@ components:
           description: Gemini toolConfig.includeServerSideToolInvocations.
         previous_response_id:
           type: string
+        conversation_id:
+          type: string
+          description: OpenAI Responses server-managed conversation ID (mapped to upstream `conversation`).
         include:
           type: array
           items:

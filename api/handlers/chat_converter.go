@@ -110,6 +110,7 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 		IncludeServerSideToolInvocations: req.IncludeServerSideToolInvocations,
 		ReasoningMode:                    req.Metadata["reasoning_mode"],
 		PreviousResponseID:               req.PreviousResponseID,
+		ConversationID:                   req.ConversationID,
 		Timeout:                          timeout,
 		Metadata:                         req.Metadata,
 		Tags:                             req.Tags,

@@ -465,6 +465,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 		CachedContent:                    "cachedContents/session-1",
 		IncludeServerSideToolInvocations: &includeServerSide,
 		PreviousResponseID:               "resp_prev_1",
+		ConversationID:                   "conv_req_1",
 		Include:                          []string{"output_text"},
 		Truncation:                       "auto",
 		Timeout:                          "30s",
@@ -527,6 +528,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	require.NotNil(t, llmReq.IncludeServerSideToolInvocations)
 	assert.True(t, *llmReq.IncludeServerSideToolInvocations)
 	assert.Equal(t, "resp_prev_1", llmReq.PreviousResponseID)
+	assert.Equal(t, "conv_req_1", llmReq.ConversationID)
 	assert.Equal(t, []string{"output_text"}, llmReq.Include)
 	assert.Equal(t, "auto", llmReq.Truncation)
 	assert.Equal(t, 30*time.Second, llmReq.Timeout)

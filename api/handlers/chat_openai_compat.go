@@ -52,6 +52,7 @@ type openAICompatChatCompletionsRequest struct {
 	PromptCacheKey       string                        `json:"prompt_cache_key,omitempty"`
 	PromptCacheRetention string                        `json:"prompt_cache_retention,omitempty"`
 	PreviousResponseID   string                        `json:"previous_response_id,omitempty"`
+	ConversationID       string                        `json:"conversation_id,omitempty"`
 	Include              []string                      `json:"include,omitempty"`
 	Truncation           string                        `json:"truncation,omitempty"`
 	Provider             string                        `json:"provider,omitempty"`
@@ -81,6 +82,8 @@ type openAICompatResponsesRequest struct {
 	PromptCacheKey       string                          `json:"prompt_cache_key,omitempty"`
 	PromptCacheRetention string                          `json:"prompt_cache_retention,omitempty"`
 	PreviousResponseID   string                          `json:"previous_response_id,omitempty"`
+	Conversation         string                          `json:"conversation,omitempty"`
+	ConversationID       string                          `json:"conversation_id,omitempty"`
 	Include              []string                        `json:"include,omitempty"`
 	Truncation           string                          `json:"truncation,omitempty"`
 	Stream               bool                            `json:"stream,omitempty"`
@@ -614,6 +617,7 @@ func buildAPIChatRequestFromCompatCompletions(req openAICompatChatCompletionsReq
 		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
 		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
 		PreviousResponseID:   strings.TrimSpace(req.PreviousResponseID),
+		ConversationID:       strings.TrimSpace(req.ConversationID),
 		Include:              req.Include,
 		Truncation:           strings.TrimSpace(req.Truncation),
 		Provider:             req.Provider,
@@ -672,6 +676,10 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 		reasoningSummary = strings.TrimSpace(req.Reasoning.Summary)
 	}
 	wsOptions := mergeOpenAICompatWebSearchOptions(req.WebSearchOptions, wsOptionsFromTools)
+	conversationID := strings.TrimSpace(req.Conversation)
+	if conversationID == "" {
+		conversationID = strings.TrimSpace(req.ConversationID)
+	}
 
 	apiReq := &api.ChatRequest{
 		Model:                req.Model,
@@ -692,6 +700,7 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
 		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
 		PreviousResponseID:   strings.TrimSpace(req.PreviousResponseID),
+		ConversationID:       conversationID,
 		Include:              req.Include,
 		Truncation:           strings.TrimSpace(req.Truncation),
 		Provider:             req.Provider,
