@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -14,7 +15,7 @@ import (
 // RAGService defines the use-case boundary for RAG handler.
 type RAGService interface {
 	Query(ctx context.Context, query string, topK int, opts RAGQueryOptions) (*RAGQueryResponse, error)
-	Index(ctx context.Context, docs []rag.Document) error
+	Index(ctx context.Context, docs []core.Document) error
 	SupportedStrategies() []string
 }
 
@@ -23,16 +24,16 @@ type RAGQueryOptions struct {
 }
 
 type RAGQueryResponse struct {
-	Results           []rag.VectorSearchResult
+	Results           []core.VectorSearchResult
 	RequestedStrategy string
 	EffectiveStrategy string
 }
 
-type ragStrategyExecutor func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error)
+type ragStrategyExecutor func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error)
 
 type DefaultRAGService struct {
-	store     rag.VectorStore
-	embedding rag.EmbeddingProvider
+	store     core.VectorStore
+	embedding core.EmbeddingProvider
 
 	autoRouter *rag.QueryRouter
 	executors  map[string]ragStrategyExecutor
@@ -43,7 +44,7 @@ type DefaultRAGService struct {
 	contextualRetriever *rag.ContextualRetrieval
 }
 
-func NewDefaultRAGService(store rag.VectorStore, embedding rag.EmbeddingProvider) *DefaultRAGService {
+func NewDefaultRAGService(store core.VectorStore, embedding core.EmbeddingProvider) *DefaultRAGService {
 	service := &DefaultRAGService{
 		store:     store,
 		embedding: embedding,
@@ -83,7 +84,7 @@ func (s *DefaultRAGService) Query(ctx context.Context, query string, topK int, o
 	}, nil
 }
 
-func (s *DefaultRAGService) Index(ctx context.Context, docs []rag.Document) error {
+func (s *DefaultRAGService) Index(ctx context.Context, docs []core.Document) error {
 	if len(docs) == 0 {
 		return nil
 	}
@@ -141,7 +142,7 @@ const (
 
 func (s *DefaultRAGService) bootstrapExecutors() {
 	if s.store != nil {
-		s.executors[ragStrategyVector] = func(ctx context.Context, _ string, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error) {
+		s.executors[ragStrategyVector] = func(ctx context.Context, _ string, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error) {
 			return s.store.Search(ctx, queryEmbedding, topK)
 		}
 	}
@@ -168,21 +169,21 @@ func (s *DefaultRAGService) bootstrapExecutors() {
 		zap.NewNop(),
 	)
 
-	s.executors[ragStrategyHybrid] = func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error) {
+	s.executors[ragStrategyHybrid] = func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error) {
 		results, err := s.hybridRetriever.Retrieve(ctx, query, queryEmbedding)
 		if err != nil {
 			return nil, err
 		}
 		return convertRetrievalResults(results, topK), nil
 	}
-	s.executors[ragStrategyBM25] = func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error) {
+	s.executors[ragStrategyBM25] = func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error) {
 		results, err := s.bm25Retriever.Retrieve(ctx, query, queryEmbedding)
 		if err != nil {
 			return nil, err
 		}
 		return convertRetrievalResults(results, topK), nil
 	}
-	s.executors[ragStrategyContextual] = func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error) {
+	s.executors[ragStrategyContextual] = func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error) {
 		results, err := s.contextualRetriever.Retrieve(ctx, query, queryEmbedding)
 		if err != nil {
 			return nil, err
@@ -249,7 +250,7 @@ func normalizeRAGStrategy(strategy string) string {
 	}
 }
 
-func convertRetrievalResults(results []rag.RetrievalResult, topK int) []rag.VectorSearchResult {
+func convertRetrievalResults(results []core.RetrievalResult, topK int) []core.VectorSearchResult {
 	if topK <= 0 {
 		topK = 5
 	}
@@ -257,7 +258,7 @@ func convertRetrievalResults(results []rag.RetrievalResult, topK int) []rag.Vect
 		results = results[:topK]
 	}
 
-	out := make([]rag.VectorSearchResult, 0, len(results))
+	out := make([]core.VectorSearchResult, 0, len(results))
 	for i := range results {
 		score := results[i].FinalScore
 		if score == 0 {
@@ -266,7 +267,7 @@ func convertRetrievalResults(results []rag.RetrievalResult, topK int) []rag.Vect
 		if score == 0 {
 			score = results[i].VectorScore
 		}
-		out = append(out, rag.VectorSearchResult{
+		out = append(out, core.VectorSearchResult{
 			Document: results[i].Document,
 			Score:    score,
 		})

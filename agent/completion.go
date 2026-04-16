@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
@@ -20,7 +19,7 @@ import (
 const DefaultStreamInactivityTimeout = 5 * time.Minute
 
 // ChatCompletion 调用 LLM 完成对话
-func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message) (*llm.ChatResponse, error) {
+func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message) (*types.ChatResponse, error) {
 	pr, err := b.prepareChatRequest(ctx, messages)
 	if err != nil {
 		return nil, err
@@ -40,7 +39,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 
 // chatCompletionStreaming handles the streaming execution path of ChatCompletion.
 // 支持 Steering：通过 context 中的 SteeringChannel 接收实时引导/停止后发送指令。
-func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter) (*llm.ChatResponse, error) {
+func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter) (*types.ChatResponse, error) {
 	steerCh, _ := SteeringChannelFromContext(ctx)
 	reactIterationBudget := reactToolLoopBudget(pr)
 	ctx = WithRuntimeConversationMessages(ctx, pr.req.Messages)
@@ -52,12 +51,12 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 }
 
 type reactStreamingState struct {
-	final            *llm.ChatResponse
+	final            *types.ChatResponse
 	currentIteration int
 	selectedMode     string
 }
 
-func (b *BaseAgent) chatCompletionStreamingWithTools(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter, steerCh *SteeringChannel, reactIterationBudget int) (*llm.ChatResponse, error) {
+func (b *BaseAgent) chatCompletionStreamingWithTools(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter, steerCh *SteeringChannel, reactIterationBudget int) (*types.ChatResponse, error) {
 	state, eventCh, err := b.startReactStreaming(ctx, pr, steerCh, reactIterationBudget, emit)
 	if err != nil {
 		return nil, err
@@ -270,15 +269,15 @@ type directStreamingAttemptResult struct {
 	lastID           string
 	lastProvider     string
 	lastModel        string
-	lastUsage        *llm.ChatUsage
+	lastUsage        *types.ChatUsage
 	lastFinishReason string
 	reasoning        string
 	steering         *SteeringMessage
 }
 
-func (b *BaseAgent) chatCompletionStreamingDirect(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter, steerCh *SteeringChannel) (*llm.ChatResponse, error) {
+func (b *BaseAgent) chatCompletionStreamingDirect(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter, steerCh *SteeringChannel) (*types.ChatResponse, error) {
 	messages := append([]types.Message(nil), pr.req.Messages...)
-	var cumulativeUsage llm.ChatUsage
+	var cumulativeUsage types.ChatUsage
 	emitRuntimeStatus(emit, "reasoning_mode_selected", RuntimeStreamEvent{
 		Timestamp:      time.Now(),
 		CurrentStage:   "responding",
@@ -295,7 +294,7 @@ func (b *BaseAgent) chatCompletionStreamingDirect(ctx context.Context, pr *prepa
 			return finalizeDirectStreamingResponse(emit, attempt, cumulativeUsage), nil
 		}
 		emitDirectSteeringEvent(emit, attempt.steering)
-		messages = types.ApplySteeringToMessages(*attempt.steering, messages, attempt.assembled.Content, attempt.reasoning, llm.RoleAssistant)
+		messages = types.ApplySteeringToMessages(*attempt.steering, messages, attempt.assembled.Content, attempt.reasoning, types.RoleAssistant)
 	}
 }
 
@@ -355,7 +354,7 @@ chunkLoop:
 	return result, nil
 }
 
-func consumeDirectStreamChunk(emit RuntimeStreamEmitter, result *directStreamingAttemptResult, reasoningBuf *strings.Builder, chunk llm.StreamChunk) {
+func consumeDirectStreamChunk(emit RuntimeStreamEmitter, result *directStreamingAttemptResult, reasoningBuf *strings.Builder, chunk types.StreamChunk) {
 	if chunk.ID != "" {
 		result.lastID = chunk.ID
 	}
@@ -405,7 +404,7 @@ func consumeDirectStreamChunk(emit RuntimeStreamEmitter, result *directStreaming
 	}
 }
 
-func accumulateChatUsage(total, usage *llm.ChatUsage) {
+func accumulateChatUsage(total, usage *types.ChatUsage) {
 	if usage == nil || total == nil {
 		return
 	}
@@ -414,17 +413,17 @@ func accumulateChatUsage(total, usage *llm.ChatUsage) {
 	total.TotalTokens += usage.TotalTokens
 }
 
-func finalizeDirectStreamingResponse(emit RuntimeStreamEmitter, attempt *directStreamingAttemptResult, cumulativeUsage llm.ChatUsage) *llm.ChatResponse {
+func finalizeDirectStreamingResponse(emit RuntimeStreamEmitter, attempt *directStreamingAttemptResult, cumulativeUsage types.ChatUsage) *types.ChatResponse {
 	if attempt.reasoning != "" {
 		rc := attempt.reasoning
 		attempt.assembled.ReasoningContent = &rc
 	}
-	attempt.assembled.Role = llm.RoleAssistant
-	resp := &llm.ChatResponse{
+	attempt.assembled.Role = types.RoleAssistant
+	resp := &types.ChatResponse{
 		ID:       attempt.lastID,
 		Provider: attempt.lastProvider,
 		Model:    attempt.lastModel,
-		Choices: []llm.ChatChoice{{
+		Choices: []types.ChatChoice{{
 			Index:        0,
 			FinishReason: attempt.lastFinishReason,
 			Message:      attempt.assembled,
@@ -469,7 +468,7 @@ func emitDirectSteeringEvent(emit RuntimeStreamEmitter, steering *SteeringMessag
 }
 
 // chatCompletionWithTools executes a non-streaming ReAct loop with tools.
-func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedRequest) (*llm.ChatResponse, error) {
+func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedRequest) (*types.ChatResponse, error) {
 	ctx = WithRuntimeConversationMessages(ctx, pr.req.Messages)
 	reactReq := *pr.req
 	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
@@ -500,7 +499,7 @@ func reactToolLoopBudget(pr *preparedRequest) int {
 }
 
 // StreamCompletion 流式调用 LLM
-func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Message) (<-chan llm.StreamChunk, error) {
+func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Message) (<-chan types.StreamChunk, error) {
 	pr, err := b.prepareChatRequest(ctx, messages)
 	if err != nil {
 		return nil, err
@@ -508,7 +507,7 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 	return pr.chatProvider.Stream(ctx, pr.req)
 }
 
-func applyContextRouteHints(req *llm.ChatRequest, ctx context.Context) {
+func applyContextRouteHints(req *types.ChatRequest, ctx context.Context) {
 	if req == nil {
 		return
 	}
@@ -685,7 +684,7 @@ func emitCompletionLoopStatus(emit RuntimeStreamEmitter, iteration int, selected
 	})
 }
 
-func normalizeRuntimeStopReasonFromResponse(resp *llm.ChatResponse) string {
+func normalizeRuntimeStopReasonFromResponse(resp *types.ChatResponse) string {
 	if resp == nil || len(resp.Choices) == 0 {
 		return normalizeRuntimeStopReason("")
 	}

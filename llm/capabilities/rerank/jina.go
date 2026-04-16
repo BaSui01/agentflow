@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
+
 type JinaProvider struct {
 	cfg    JinaConfig
 	client *http.Client
@@ -147,4 +148,3 @@ func (p *JinaProvider) RerankSimple(ctx context.Context, query string, documents
 	}
 	return resp.Results, nil
 }
-

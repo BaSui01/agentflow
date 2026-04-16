@@ -21,6 +21,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -821,7 +822,7 @@ func runRAGEmbedding(ctx context.Context, logger *zap.Logger, embeddingBaseURL s
 		Dimensions: embeddingDimensions,
 	})
 
-	docs := []rag.Document{
+	docs := []core.Document{
 		{ID: "doc-1", Content: "AgentFlow supports tool calling loops through ReAct execution."},
 		{ID: "doc-2", Content: "RAG combines BM25 retrieval with vector similarity search for grounding."},
 		{ID: "doc-3", Content: "Embedding converts text into dense vectors used by vector stores."},

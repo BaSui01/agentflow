@@ -2,6 +2,12 @@
 
 > 完成时间：2026年2月20日
 > 作者：BaSui (八岁)
+>
+> 2026-04 更新：本文是历史实现报告。当前真实架构已调整为：
+> - OpenAI / Anthropic / Gemini 保持原生 provider 主路径
+> - compat 厂商的 chat 主链统一走 `llm/providers/vendor.NewChatProviderFromConfig(...)`
+> - `llm/providers/<vendor>/multimodal.go` 仅表示厂商能力实现位置，不再表示公共 chat 构造入口
+> - `deepseek / kimi / llama / hunyuan` 的独立 compat chat 目录已删除
 
 ---
 
@@ -48,16 +54,16 @@
 | 1 | OpenAI | `openai/multimodal.go` | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 2 | Claude | `anthropic/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 3 | Gemini | `gemini/multimodal.go` | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ |
-| 4 | DeepSeek | `deepseek/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 4 | DeepSeek | `vendor + openaicompat`（chat 已收口） | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 5 | Qwen | `qwen/multimodal.go` | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ |
 | 6 | GLM | `glm/multimodal.go` | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ |
 | 7 | Grok | `grok/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 8 | Doubao | `doubao/multimodal.go` | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ | ✅ |
-| 9 | Kimi | `kimi/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 9 | Kimi | `vendor + openaicompat`（chat 已收口） | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 10 | Mistral | `mistral/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
-| 11 | Hunyuan | `hunyuan/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 11 | Hunyuan | `vendor + openaicompat`（chat 已收口） | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 12 | MiniMax | `minimax/multimodal.go` | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ |
-| 13 | Llama | `llama/multimodal.go` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 13 | Llama | `vendor + openaicompat`（chat 已收口） | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 **总计**：
 - ✅ 13/13 Provider 接口覆盖实现完成

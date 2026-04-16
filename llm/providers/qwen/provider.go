@@ -14,8 +14,9 @@ type QwenProvider struct {
 	*openaicompat.Provider
 }
 
-// NewQwenProvider 创建新的 Qwen 提供者实例.
-func NewQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider {
+// newQwenCapabilityHost 创建 Qwen capability host。
+// 它承载 image/video/audio/embedding 等厂商能力实现，但不是公共 chat 主链入口。
+func newQwenCapabilityHost(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://dashscope.aliyuncs.com"
 	}
@@ -33,6 +34,11 @@ func NewQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider
 			RequestHook:   qwenRequestHook,
 		}, logger),
 	}
+}
+
+// newQwenProvider 仅供本包测试与能力承载复用；公共 chat 入口统一走 vendor factory。
+func newQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider {
+	return newQwenCapabilityHost(cfg, logger)
 }
 
 // qwenRequestHook handles Qwen-specific request modifications.

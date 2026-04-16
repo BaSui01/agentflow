@@ -39,7 +39,7 @@ func TestDoubaoProvider_CreateContextCache(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewDoubaoProvider(providers.DoubaoConfig{
+	p := newDoubaoProvider(providers.DoubaoConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,
@@ -84,7 +84,7 @@ func TestDoubaoProvider_CompletionWithContext(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewDoubaoProvider(providers.DoubaoConfig{
+	p := newDoubaoProvider(providers.DoubaoConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,
@@ -112,7 +112,7 @@ func TestDoubaoProvider_CreateContextCache_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewDoubaoProvider(providers.DoubaoConfig{
+	p := newDoubaoProvider(providers.DoubaoConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,

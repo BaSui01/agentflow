@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -152,14 +153,14 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	docs := make([]rag.Document, len(req.Documents))
+	docs := make([]core.Document, len(req.Documents))
 	for i, doc := range req.Documents {
 		if doc.Content == "" {
 			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
 				"document content is required", h.logger)
 			return
 		}
-		docs[i] = rag.Document{
+		docs[i] = core.Document{
 			ID:       doc.ID,
 			Content:  doc.Content,
 			Metadata: doc.Metadata,

@@ -16,8 +16,9 @@ type GrokProvider struct {
 	*openaicompat.Provider
 }
 
-// NewGrokProvider 创建新的 Grok 提供者实例.
-func NewGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider {
+// newGrokCapabilityHost 创建 Grok capability host。
+// 它承载 image/video/embedding 等厂商能力实现，但不是公共 chat 主链入口。
+func newGrokCapabilityHost(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = defaultGrokBaseURL
 	}
@@ -34,6 +35,11 @@ func NewGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider
 			RequestHook:   grokRequestHook,
 		}, logger),
 	}
+}
+
+// newGrokProvider 仅供本包测试与能力承载复用；公共 chat 入口统一走 vendor factory。
+func newGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider {
+	return newGrokCapabilityHost(cfg, logger)
 }
 
 // grokRequestHook handles Grok-specific request modifications.

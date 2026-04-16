@@ -17,9 +17,10 @@ type MiniMaxProvider struct {
 	*openaicompat.Provider
 }
 
-// NewMiniMaxProvider 创建新的 MiniMax 提供者实例.
-// 旧模型（abab 系列）通过 SupportsTools=false 触发框架级 XML 降级。
-func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMaxProvider {
+// newMiniMaxCapabilityHost 创建 MiniMax capability host。
+// 它承载 audio 等厂商能力实现，同时复用 compat transport 基础设施。
+// 注意：这不是对外 chat 主链入口；chat 主链统一走 vendor.NewChatProviderFromConfig。
+func newMiniMaxCapabilityHost(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMaxProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.minimax.io"
 	}
@@ -39,6 +40,12 @@ func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMa
 			SupportsTools: &supportsTools,
 		}, logger),
 	}
+}
+
+// newMiniMaxProvider 创建新的 MiniMax 提供者实例。
+// 仅供本包测试与能力承载复用；公共 chat 入口已收敛到 vendor factory。
+func newMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMaxProvider {
+	return newMiniMaxCapabilityHost(cfg, logger)
 }
 
 // isLegacyModel returns true for old MiniMax models (abab series) that use XML tool call format.

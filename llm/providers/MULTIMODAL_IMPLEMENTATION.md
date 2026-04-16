@@ -2,6 +2,7 @@
 
 > 完成时间：2026年2月20日
 > 说明：本文“实现完成”指接口/方法已覆盖实现；能力可用性以支持矩阵为准，不支持能力统一返回 `NotSupportedError`。
+> 2026-04 更新：compat 厂商的 **chat 主链** 已统一收敛到 `llm/providers/vendor.NewChatProviderFromConfig(...)`；本文中提到的 `llm/providers/<vendor>/multimodal.go` 仅代表厂商能力实现位置，不再意味着这些目录同时也是公共 chat 构造入口。
 
 ## ✅ 已完成的工作
 
@@ -50,16 +51,16 @@
 |----------|---------|------|
 | OpenAI | `llm/providers/openai/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
 | Gemini | `llm/providers/gemini/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Qwen | `llm/providers/qwen/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| GLM | `llm/providers/glm/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Doubao | `llm/providers/doubao/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| MiniMax | `llm/providers/minimax/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Mistral | `llm/providers/mistral/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| DeepSeek | `llm/providers/deepseek/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Grok | `llm/providers/grok/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Kimi | `llm/providers/kimi/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Llama | `llm/providers/llama/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
-| Hunyuan | `llm/providers/hunyuan/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Qwen | `llm/providers/qwen/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵；chat 入口已收敛到 vendor factory） |
+| GLM | `llm/providers/glm/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵；chat 入口已收敛到 vendor factory） |
+| Doubao | `llm/providers/doubao/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵；chat 入口已收敛到 vendor factory） |
+| MiniMax | `llm/providers/minimax/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵；chat 入口已收敛到 vendor factory） |
+| Mistral | `llm/providers/mistral/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵；chat 入口已收敛到 vendor factory） |
+| DeepSeek | 已删除独立 compat chat 目录 | ❌ 无厂商能力实现保留（chat 已迁入 vendor/openaicompat） |
+| Grok | `llm/providers/grok/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵；chat 入口已收敛到 vendor factory） |
+| Kimi | 已删除独立 compat chat 目录 | ❌ 无厂商能力实现保留（chat 已迁入 vendor/openaicompat） |
+| Llama | 已删除独立 compat chat 目录 | ❌ 无厂商能力实现保留（chat 已迁入 vendor/openaicompat） |
+| Hunyuan | 已删除独立 compat chat 目录 | ❌ 无厂商能力实现保留（chat 已迁入 vendor/openaicompat） |
 | Claude | `llm/providers/anthropic/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
 
 ---

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -36,13 +37,13 @@ func (f *fakeRAGEmbedding) EmbedDocuments(ctx context.Context, docs []string) ([
 func (f *fakeRAGEmbedding) Name() string { return "fake" }
 
 type fakeRAGStore struct {
-	searchResults []rag.VectorSearchResult
+	searchResults []core.VectorSearchResult
 	searchErr     error
 	addErr        error
-	addDocs       []rag.Document
+	addDocs       []core.Document
 }
 
-func (f *fakeRAGStore) AddDocuments(ctx context.Context, docs []rag.Document) error {
+func (f *fakeRAGStore) AddDocuments(ctx context.Context, docs []core.Document) error {
 	_ = ctx
 	if f.addErr != nil {
 		return f.addErr
@@ -51,7 +52,7 @@ func (f *fakeRAGStore) AddDocuments(ctx context.Context, docs []rag.Document) er
 	return nil
 }
 
-func (f *fakeRAGStore) Search(ctx context.Context, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error) {
+func (f *fakeRAGStore) Search(ctx context.Context, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error) {
 	_ = ctx
 	_ = queryEmbedding
 	_ = topK
@@ -67,7 +68,7 @@ func (f *fakeRAGStore) DeleteDocuments(ctx context.Context, ids []string) error 
 	return nil
 }
 
-func (f *fakeRAGStore) UpdateDocument(ctx context.Context, doc rag.Document) error {
+func (f *fakeRAGStore) UpdateDocument(ctx context.Context, doc core.Document) error {
 	_ = ctx
 	_ = doc
 	return nil
@@ -81,7 +82,7 @@ func (f *fakeRAGStore) Count(ctx context.Context) (int, error) {
 func TestDefaultRAGService_Query(t *testing.T) {
 	svc := NewDefaultRAGService(
 		&fakeRAGStore{
-			searchResults: []rag.VectorSearchResult{{Score: 0.9}},
+			searchResults: []core.VectorSearchResult{{Score: 0.9}},
 		},
 		&fakeRAGEmbedding{queryVec: []float64{1, 2, 3}},
 	)
@@ -135,7 +136,7 @@ func TestDefaultRAGService_Index(t *testing.T) {
 		store,
 		&fakeRAGEmbedding{docVecs: [][]float64{{0.1, 0.2}}},
 	)
-	err := svc.Index(context.Background(), []rag.Document{
+	err := svc.Index(context.Background(), []core.Document{
 		{ID: "1", Content: "doc"},
 	})
 	if err != nil {
@@ -155,7 +156,7 @@ func TestDefaultRAGService_Query_BM25(t *testing.T) {
 			docVecs:  [][]float64{{1, 0}},
 		},
 	)
-	if err := svc.Index(context.Background(), []rag.Document{
+	if err := svc.Index(context.Background(), []core.Document{
 		{ID: "doc-1", Content: "agentflow rag strategy routing"},
 	}); err != nil {
 		t.Fatalf("Index error: %v", err)

@@ -17,7 +17,7 @@ import (
 )
 
 func TestGLMProvider_MultimodalNotSupported(t *testing.T) {
-	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	p := newGLMCapabilityHost(providers.GLMConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -50,7 +50,7 @@ func TestGLMProvider_GenerateImage_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMCapabilityHost(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -69,7 +69,7 @@ func TestGLMProvider_GenerateAudio_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMCapabilityHost(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -92,7 +92,7 @@ func TestGLMProvider_CreateFineTuningJob_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMCapabilityHost(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -118,7 +118,7 @@ func TestGLMProvider_ListFineTuningJobs_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMCapabilityHost(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -141,7 +141,7 @@ func TestGLMProvider_GetFineTuningJob_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMCapabilityHost(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -160,7 +160,7 @@ func TestGLMProvider_CancelFineTuningJob_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMCapabilityHost(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 

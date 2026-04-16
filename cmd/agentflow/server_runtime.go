@@ -24,6 +24,7 @@ import (
 	pkgservice "github.com/BaSui01/agentflow/pkg/service"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	workflowpkg "github.com/BaSui01/agentflow/workflow"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -88,8 +89,8 @@ type Server struct {
 	checkpointStore         agent.CheckpointStore
 	checkpointManager       *agent.CheckpointManager
 	workflowCheckpointStore workflowpkg.CheckpointStore
-	ragStore                rag.VectorStore
-	ragEmbedding            rag.EmbeddingProvider
+	ragStore                core.VectorStore
+	ragEmbedding            core.EmbeddingProvider
 
 	auditLogger *tools.DefaultAuditLogger
 	abTester    *evaluation.ABTester

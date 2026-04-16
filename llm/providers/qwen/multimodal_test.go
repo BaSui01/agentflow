@@ -17,7 +17,7 @@ import (
 )
 
 func TestQwenProvider_MultimodalNotSupported(t *testing.T) {
-	p := NewQwenProvider(providers.QwenConfig{}, zap.NewNop())
+	p := newQwenCapabilityHost(providers.QwenConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -54,7 +54,7 @@ func TestQwenProvider_GenerateImage_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenCapabilityHost(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -73,7 +73,7 @@ func TestQwenProvider_GenerateAudio_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenCapabilityHost(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -94,7 +94,7 @@ func TestQwenProvider_CreateEmbedding_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenCapabilityHost(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 

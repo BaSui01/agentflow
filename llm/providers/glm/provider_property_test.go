@@ -134,7 +134,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 					BaseURL: server.URL,
 				},
 			}
-			provider := NewGLMProvider(cfg, zap.NewNop())
+			provider := newGLMProvider(cfg, zap.NewNop())
 
 			// 提出完成请求
 			ctx := context.Background()
@@ -201,7 +201,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 				BaseURL: server.URL,
 			},
 		}
-		provider := NewGLMProvider(cfg, zap.NewNop())
+		provider := newGLMProvider(cfg, zap.NewNop())
 
 		ctx := context.Background()
 		req := &llm.ChatRequest{

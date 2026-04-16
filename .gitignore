@@ -40,3 +40,6 @@ docs/claude-code/
 
 # Benchmark (latest is regenerated locally; baselines are committed)
 benchmarks/latest.txt
+
+# Temporary files
+.tmp/

@@ -19,8 +19,9 @@ type DoubaoProvider struct {
 	*openaicompat.Provider
 }
 
-// NewDoubaoProvider 创建新的 Doubao 提供者实例.
-func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider {
+// newDoubaoCapabilityHost 创建 Doubao capability host。
+// 它承载 image/audio/embedding/context-cache 等能力实现，但不是公共 chat 主链入口。
+func newDoubaoCapabilityHost(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://ark.cn-beijing.volces.com"
 	}
@@ -58,6 +59,11 @@ func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoPr
 			BuildHeaders:  buildHeaders,
 		}, logger),
 	}
+}
+
+// newDoubaoProvider 仅供本包测试与能力承载复用；公共 chat 入口统一走 vendor factory。
+func newDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider {
+	return newDoubaoCapabilityHost(cfg, logger)
 }
 
 // doubaoRequestHook 处理豆包特有的请求参数。

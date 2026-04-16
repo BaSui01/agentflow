@@ -56,7 +56,7 @@ func TestProperty1_DefaultBaseURLConfiguration(t *testing.T) {
 					BaseURL: tc.inputBaseURL,
 				},
 			}
-			provider := NewGrokProvider(cfg, zap.NewNop())
+			provider := newGrokProvider(cfg, zap.NewNop())
 
 			assert.Equal(t, tc.expectedBaseURL, provider.Cfg.BaseURL,
 				"BaseURL should match expected value")
@@ -117,7 +117,7 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 					BaseURL: server.URL,
 				},
 			}
-			provider := NewGrokProvider(cfg, zap.NewNop())
+			provider := newGrokProvider(cfg, zap.NewNop())
 
 			ctx := context.Background()
 			req := &llm.ChatRequest{
@@ -169,7 +169,7 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 				BaseURL: server.URL,
 			},
 		}
-		provider := NewGrokProvider(cfg, zap.NewNop())
+		provider := newGrokProvider(cfg, zap.NewNop())
 
 		ctx := llm.WithCredentialOverride(context.Background(), llm.CredentialOverride{
 			APIKey: overriddenKey,
@@ -214,7 +214,7 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 				BaseURL: server.URL,
 			},
 		}
-		provider := NewGrokProvider(cfg, zap.NewNop())
+		provider := newGrokProvider(cfg, zap.NewNop())
 
 		ctx := context.Background()
 		status, err := provider.HealthCheck(ctx)
@@ -294,7 +294,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 					Model:   tc.configModel,
 				},
 			}
-			provider := NewGrokProvider(cfg, zap.NewNop())
+			provider := newGrokProvider(cfg, zap.NewNop())
 
 			ctx := context.Background()
 			req := &llm.ChatRequest{
@@ -351,7 +351,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 				Model:   "config-model",
 			},
 		}
-		provider := NewGrokProvider(cfg, zap.NewNop())
+		provider := newGrokProvider(cfg, zap.NewNop())
 
 		ctx := context.Background()
 		req := &llm.ChatRequest{

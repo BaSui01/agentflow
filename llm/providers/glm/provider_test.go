@@ -42,7 +42,7 @@ func TestNewGLMProvider_Defaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewGLMProvider(tt.cfg, zap.NewNop())
+			p := newGLMProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, "glm", p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
@@ -51,23 +51,23 @@ func TestNewGLMProvider_Defaults(t *testing.T) {
 }
 
 func TestGLMProvider_FallbackModel(t *testing.T) {
-	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	p := newGLMProvider(providers.GLMConfig{}, zap.NewNop())
 	assert.Equal(t, "glm-4-plus", p.Cfg.FallbackModel)
 }
 
 func TestGLMProvider_EndpointPath(t *testing.T) {
-	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	p := newGLMProvider(providers.GLMConfig{}, zap.NewNop())
 	assert.Equal(t, "/api/paas/v4/chat/completions", p.Cfg.EndpointPath)
 }
 
 func TestGLMProvider_NilLogger(t *testing.T) {
-	p := NewGLMProvider(providers.GLMConfig{}, nil)
+	p := newGLMProvider(providers.GLMConfig{}, nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "glm", p.Name())
 }
 
 func TestGLMProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	p := newGLMProvider(providers.GLMConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
@@ -93,7 +93,7 @@ func TestGLMProvider_Completion(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -118,7 +118,7 @@ func TestGLMProvider_Completion_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -139,7 +139,7 @@ func TestGLMProvider_Completion_RateLimited(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -176,7 +176,7 @@ func TestGLMProvider_Stream(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -202,7 +202,7 @@ func TestGLMProvider_Stream_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -218,7 +218,7 @@ func TestGLMProvider_Stream_Error(t *testing.T) {
 // --- Multimodal not-supported methods ---
 
 func TestGLMProvider_NotSupported(t *testing.T) {
-	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	p := newGLMProvider(providers.GLMConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -252,7 +252,7 @@ func TestGLMProvider_HealthCheck(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGLMProvider(providers.GLMConfig{
+	p := newGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 

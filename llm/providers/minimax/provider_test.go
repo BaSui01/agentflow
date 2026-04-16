@@ -44,7 +44,7 @@ func TestNewMiniMaxProvider_Defaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewMiniMaxProvider(tt.cfg, zap.NewNop())
+			p := newMiniMaxProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, "minimax", p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
@@ -53,12 +53,12 @@ func TestNewMiniMaxProvider_Defaults(t *testing.T) {
 }
 
 func TestMiniMaxProvider_FallbackModel(t *testing.T) {
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
+	p := newMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
 	assert.Equal(t, "MiniMax-Text-01", p.Cfg.FallbackModel)
 }
 
 func TestMiniMaxProvider_NilLogger(t *testing.T) {
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{}, nil)
+	p := newMiniMaxProvider(providers.MiniMaxConfig{}, nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "minimax", p.Name())
 }
@@ -66,7 +66,7 @@ func TestMiniMaxProvider_NilLogger(t *testing.T) {
 // --- SupportsNativeFunctionCalling ---
 
 func TestMiniMaxProvider_LegacyModel_NoNativeFunctionCalling(t *testing.T) {
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			Model: "abab6.5s-chat",
 		},
@@ -77,7 +77,7 @@ func TestMiniMaxProvider_LegacyModel_NoNativeFunctionCalling(t *testing.T) {
 }
 
 func TestMiniMaxProvider_NewModel_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			Model: "MiniMax-Text-01",
 		},
@@ -88,7 +88,7 @@ func TestMiniMaxProvider_NewModel_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestMiniMaxProvider_EmptyModel_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
+	p := newMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
 
 	assert.True(t, p.SupportsNativeFunctionCalling(),
 		"未指定模型时应默认支持原生函数调用")
@@ -127,7 +127,7 @@ func TestMiniMaxProvider_Completion(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,
@@ -155,7 +155,7 @@ func TestMiniMaxProvider_Completion_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "bad-key",
 			BaseURL: server.URL,
@@ -198,7 +198,7 @@ func TestMiniMaxProvider_Stream(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,
@@ -249,7 +249,7 @@ func TestMiniMaxProvider_Stream_LegacyModel_NoProviderLevelXMLParsing(t *testing
 	t.Cleanup(func() { server.Close() })
 
 	// 旧模型 → SupportsNativeFunctionCalling() == false
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,
@@ -283,7 +283,7 @@ func TestMiniMaxProvider_Stream_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,

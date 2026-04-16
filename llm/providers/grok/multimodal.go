@@ -19,7 +19,7 @@ import (
 
 // Grok 视频生成端点（BaseURL 默认 defaultGrokBaseURL，在 provider.go 设置）
 const (
-	grokVideoSubmitPath    = "/v1/videos/generations"
+	grokVideoSubmitPath     = "/v1/videos/generations"
 	grokVideoPollPathPrefix = "/v1/videos/generations/"
 )
 

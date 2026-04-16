@@ -10,7 +10,6 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/observability"
 
 	"go.uber.org/zap"
@@ -45,11 +44,11 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	// 构建消息
 	messages := []types.Message{
 		{
-			Role:    llm.RoleSystem,
+			Role:    types.RoleSystem,
 			Content: b.promptBundle.RenderSystemPromptWithVars(input.Variables),
 		},
 		{
-			Role:    llm.RoleUser,
+			Role:    types.RoleUser,
 			Content: planPrompt,
 		},
 	}
@@ -61,7 +60,7 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	}
 
 	// 解析计划
-	choice, err := llm.FirstChoice(resp)
+	choice, err := types.FirstChoice(resp)
 	if err != nil {
 		return nil, NewErrorWithCause(types.ErrLLMResponseEmpty, "plan generation returned no choices", err)
 	}
@@ -244,7 +243,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 			// 将最近的记忆转换为消息
 			for _, mem := range b.recentMemory {
 				if mem.Kind == MemoryShortTerm {
-					role := llm.RoleAssistant
+					role := types.RoleAssistant
 					if r, ok := mem.Metadata["role"].(string); ok && r != "" {
 						role = types.Role(r)
 					}
@@ -271,7 +270,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 	}
 	messages = append(messages, types.Message{
-		Role:    llm.RoleSystem,
+		Role:    types.RoleSystem,
 		Content: systemContent,
 	})
 
@@ -288,7 +287,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 
 	// 添加用户输入
 	messages = append(messages, types.Message{
-		Role:    llm.RoleUser,
+		Role:    types.RoleUser,
 		Content: input.Content,
 	})
 
@@ -302,10 +301,10 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	runtimeGuardrailsCfgForOutput := runtimeGuardrailsFromPolicy(policy, b.runtimeGuardrailsCfg)
 	b.configMu.RUnlock()
 
-	var resp *llm.ChatResponse
+	var resp *types.ChatResponse
 	var outputContent string
 	var lastValidationResult *guardrails.ValidationResult
-	var choice llm.ChatChoice
+	var choice types.ChatChoice
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -318,7 +317,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 			if lastValidationResult != nil {
 				feedbackMsg := b.buildValidationFeedbackMessage(lastValidationResult)
 				messages = append(messages, types.Message{
-					Role:    llm.RoleUser,
+					Role:    types.RoleUser,
 					Content: feedbackMsg,
 				})
 			}
@@ -336,7 +335,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 
 		var choiceErr error
-		choice, choiceErr = llm.FirstChoice(resp)
+		choice, choiceErr = types.FirstChoice(resp)
 		if choiceErr != nil {
 			return nil, NewErrorWithCause(types.ErrLLMResponseEmpty, "execution returned no choices", choiceErr)
 		}
