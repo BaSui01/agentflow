@@ -48,9 +48,18 @@ func (p *ClaudeProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 		CacheControl: cacheControl,
 	}
 
+	params, err := overrideAnthropicCountTokensParams(body)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
+
 	client := p.sdkClient(p.resolveAPIKey(ctx))
+	tokenRespSDK, err := client.Messages.CountTokens(ctx, params, p.sdkRequestOptions(reasoning.Speed)...)
+	if err != nil {
+		return nil, p.mapSDKError(err)
+	}
 	var tokenResp claudeTokenCountResponse
-	if err := client.Post(ctx, "/v1/messages/count_tokens", body, &tokenResp, p.sdkRequestOptions(reasoning.Speed)...); err != nil {
+	if err := decodeAnthropicSDKRawJSON(tokenRespSDK.RawJSON(), &tokenResp); err != nil {
 		return nil, p.mapSDKError(err)
 	}
 	return &llm.TokenCountResponse{

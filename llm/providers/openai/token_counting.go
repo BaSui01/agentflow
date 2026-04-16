@@ -2,8 +2,11 @@ package openai
 
 import (
 	"context"
+	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
@@ -41,7 +44,7 @@ func (p *OpenAIProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 		}
 	}
 	if body.ToolChoice != nil {
-		params.ToolChoice = decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](body.ToolChoice)
+		params.ToolChoice = buildSDKInputTokenToolChoice(body.ToolChoice, body.Tools)
 	}
 	if body.ParallelToolCalls != nil {
 		params.ParallelToolCalls = param.NewOpt(*body.ParallelToolCalls)
@@ -82,4 +85,50 @@ func (p *OpenAIProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 		InputTokens: int(tokenResp.InputTokens),
 		TotalTokens: int(tokenResp.InputTokens),
 	}, nil
+}
+
+func buildSDKInputTokenToolChoice(choice any, tools []any) responses.InputTokenCountParamsToolChoiceUnion {
+	if choice == nil {
+		return responses.InputTokenCountParamsToolChoiceUnion{}
+	}
+	if _, ok := choice.(map[string]any); !ok {
+		return decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](choice)
+	}
+	normalized := providerbase.NormalizeToolChoice(choice)
+	switch normalized.Mode {
+	case "tool":
+		name := strings.TrimSpace(normalized.SpecificName)
+		if name == "" {
+			return decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](choice)
+		}
+		if toolType := findResponseToolTypeByName(tools, name); toolType == types.ToolTypeCustom {
+			return responses.InputTokenCountParamsToolChoiceUnion{
+				OfCustomTool: &responses.ToolChoiceCustomParam{Name: name},
+			}
+		}
+		return responses.InputTokenCountParamsToolChoiceUnion{
+			OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: name},
+		}
+	case "any":
+		allowedTools := buildAllowedToolsChoice(tools)
+		if len(allowedTools) == 0 {
+			return decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](choice)
+		}
+		return responses.InputTokenCountParamsToolChoiceUnion{
+			OfAllowedTools: &responses.ToolChoiceAllowedParam{
+				Mode:  responses.ToolChoiceAllowedModeRequired,
+				Tools: allowedTools,
+			},
+		}
+	case "auto":
+		return responses.InputTokenCountParamsToolChoiceUnion{
+			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsAuto),
+		}
+	case "none":
+		return responses.InputTokenCountParamsToolChoiceUnion{
+			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsNone),
+		}
+	default:
+		return decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](choice)
+	}
 }

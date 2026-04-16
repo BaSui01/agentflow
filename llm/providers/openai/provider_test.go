@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/types"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -1042,6 +1043,227 @@ func TestOpenAIProvider_Completion_ResponsesAPI_AutoAddsWebSearchToolFromOptions
 	assert.Equal(t, []any{"openai.com"}, allowedDomains)
 }
 
+func TestOpenAIProvider_Completion_ResponsesAPI_RequiredToolChoiceWithWebSearchInjection(t *testing.T) {
+	tests := []struct {
+		name  string
+		tools []types.ToolSchema
+	}{
+		{
+			name: "auto_add_from_options",
+			tools: []types.ToolSchema{
+				{
+					Name:       "get_weather",
+					Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`),
+				},
+			},
+		},
+		{
+			name: "placeholder_tool_rewritten_to_native_web_search",
+			tools: []types.ToolSchema{
+				{Name: "web_search_preview"},
+				{
+					Name:       "get_weather",
+					Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var raw map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+				w.Header().Set("Content-Type", "application/json")
+				require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+					ID:     "resp_required_ws",
+					Model:  "gpt-5.2",
+					Status: "completed",
+					Output: []responsesOutputItem{
+						{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+					},
+				}))
+			}))
+			t.Cleanup(server.Close)
+
+			p := NewOpenAIProvider(providers.OpenAIConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+				UseResponsesAPI:    true,
+			}, zap.NewNop())
+
+			_, err := p.Completion(context.Background(), &llm.ChatRequest{
+				Messages:   []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+				Tools:      tt.tools,
+				ToolChoice: "required",
+				WebSearchOptions: &llm.WebSearchOptions{
+					SearchContextSize: "high",
+				},
+			})
+			require.NoError(t, err)
+
+			assert.Equal(t, "required", raw["tool_choice"])
+			webSearchTool := findResponsesWebSearchTool(t, raw)
+			assert.Equal(t, "high", webSearchTool["search_context_size"])
+			functionTool := findResponsesToolByTypeAndName(t, raw, "function", "get_weather")
+			assert.Equal(t, "get_weather", functionTool["name"])
+			assert.Nil(t, findResponsesToolByTypeAndNameIfPresent(raw, "function", "web_search_preview"))
+		})
+	}
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_SpecificToolChoiceCoexistsWithWebSearch(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:     "resp_specific_ws",
+			Model:  "gpt-5.2",
+			Status: "completed",
+			Output: []responsesOutputItem{
+				{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+			},
+		}))
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages:   []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		ToolChoice: "get_weather",
+		Tools: []types.ToolSchema{
+			{Name: "web_search"},
+			{
+				Name:       "get_weather",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`),
+			},
+		},
+		WebSearchOptions: &llm.WebSearchOptions{
+			SearchContextSize: "medium",
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "get_weather", raw["tool_choice"])
+	assert.Equal(t, "medium", findResponsesWebSearchTool(t, raw)["search_context_size"])
+	assert.Equal(t, "get_weather", findResponsesToolByTypeAndName(t, raw, "function", "get_weather")["name"])
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_MapsParallelToolCalls(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    bool
+		expected bool
+	}{
+		{name: "true", value: true, expected: true},
+		{name: "false", value: false, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var raw map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+				w.Header().Set("Content-Type", "application/json")
+				require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+					ID:     "resp_parallel_tools",
+					Model:  "gpt-5.2",
+					Status: "completed",
+					Output: []responsesOutputItem{
+						{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+					},
+				}))
+			}))
+			t.Cleanup(server.Close)
+
+			p := NewOpenAIProvider(providers.OpenAIConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+				UseResponsesAPI:    true,
+			}, zap.NewNop())
+
+			_, err := p.Completion(context.Background(), &llm.ChatRequest{
+				Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+				Tools: []types.ToolSchema{
+					{Name: "first_tool", Parameters: json.RawMessage(`{"type":"object"}`)},
+					{Name: "second_tool", Parameters: json.RawMessage(`{"type":"object"}`)},
+				},
+				ParallelToolCalls: &tt.value,
+			})
+			require.NoError(t, err)
+
+			require.Contains(t, raw, "parallel_tool_calls")
+			assert.Equal(t, tt.expected, raw["parallel_tool_calls"])
+		})
+	}
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_MixedCustomAndFunctionTools_PreservesSpecificToolChoice(t *testing.T) {
+	tests := []struct {
+		name       string
+		toolChoice string
+		toolType   string
+		toolName   string
+	}{
+		{name: "function_tool_choice", toolChoice: "get_weather", toolType: "function", toolName: "get_weather"},
+		{name: "custom_tool_choice", toolChoice: "code_exec", toolType: "custom", toolName: "code_exec"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var raw map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+				w.Header().Set("Content-Type", "application/json")
+				require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+					ID:     "resp_mixed_tools",
+					Model:  "gpt-5.2",
+					Status: "completed",
+					Output: []responsesOutputItem{
+						{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+					},
+				}))
+			}))
+			t.Cleanup(server.Close)
+
+			p := NewOpenAIProvider(providers.OpenAIConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+				UseResponsesAPI:    true,
+			}, zap.NewNop())
+
+			_, err := p.Completion(context.Background(), &llm.ChatRequest{
+				Messages:   []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+				ToolChoice: tt.toolChoice,
+				Tools: []types.ToolSchema{
+					{
+						Name:       "get_weather",
+						Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`),
+					},
+					{
+						Type:        types.ToolTypeCustom,
+						Name:        "code_exec",
+						Description: "Execute code",
+						Format: &types.ToolFormat{
+							Type:       "grammar",
+							Syntax:     "lark",
+							Definition: "start: WORD",
+						},
+					},
+				},
+			})
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.toolChoice, raw["tool_choice"])
+			assert.Equal(t, "get_weather", findResponsesToolByTypeAndName(t, raw, "function", "get_weather")["name"])
+			assert.Equal(t, "code_exec", findResponsesToolByTypeAndName(t, raw, "custom", "code_exec")["name"])
+			assert.Equal(t, tt.toolName, findResponsesToolByTypeAndName(t, raw, tt.toolType, tt.toolName)["name"])
+		})
+	}
+}
+
 func TestOpenAIProvider_Completion_ResponsesAPI_MapsIncludeAndTruncation(t *testing.T) {
 	var raw map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1141,23 +1363,45 @@ func TestBuildResponsesTools_CustomTool(t *testing.T) {
 func findResponsesWebSearchTool(t *testing.T, raw map[string]any) map[string]any {
 	t.Helper()
 
+	tool := findResponsesToolByTypeAndNameIfPresent(raw, "web_search", "")
+	require.NotNil(t, tool, "web_search tool not found in responses request")
+	return tool
+}
+
+func findResponsesToolByTypeAndName(t *testing.T, raw map[string]any, toolType, name string) map[string]any {
+	t.Helper()
+
+	tool := findResponsesToolByTypeAndNameIfPresent(raw, toolType, name)
+	require.NotNil(t, tool, "responses tool %q/%q not found", toolType, name)
+	return tool
+}
+
+func findResponsesToolByTypeAndNameIfPresent(raw map[string]any, toolType, name string) map[string]any {
 	toolsAny, ok := raw["tools"]
-	require.True(t, ok, "responses request should contain tools field")
+	if !ok {
+		return nil
+	}
 
 	tools, ok := toolsAny.([]any)
-	require.True(t, ok, "responses tools should be array")
-	require.NotEmpty(t, tools, "responses tools should not be empty")
+	if !ok || len(tools) == 0 {
+		return nil
+	}
 
 	for _, item := range tools {
 		tool, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		if toolType, _ := tool["type"].(string); toolType == "web_search" {
-			return tool
+		currentType, _ := tool["type"].(string)
+		currentName, _ := tool["name"].(string)
+		if currentType != toolType {
+			continue
 		}
+		if name != "" && currentName != name {
+			continue
+		}
+		return tool
 	}
-	require.Fail(t, "web_search tool not found in responses request")
 	return nil
 }
 
@@ -1228,7 +1472,11 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 		Usage: &responsesUsage{InputTokens: 5, OutputTokens: 3, TotalTokens: 8},
 	}
 
-	result := toResponsesAPIChatResponse(resp, "openai")
+	raw, err := json.Marshal(resp)
+	require.NoError(t, err)
+	var sdkResp responses.Response
+	require.NoError(t, json.Unmarshal(raw, &sdkResp))
+	result := toResponsesAPIChatResponse(&sdkResp, "openai")
 	assert.Equal(t, "resp_test", result.ID)
 	assert.Equal(t, "openai", result.Provider)
 	// message + function_call merged into one choice
