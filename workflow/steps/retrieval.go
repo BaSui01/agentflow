@@ -8,22 +8,26 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/core"
 )
 
 // HybridRetriever abstracts hybrid retrieval execution.
+// Uses types.RetrievalRecord to avoid coupling to rag layer implementation.
 type HybridRetriever interface {
-	Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]rag.RetrievalResult, error)
+	Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]types.RetrievalRecord, error)
 }
 
 // MultiHopReasoner abstracts multi-hop retrieval reasoning.
+// Note: ReasoningChain is rag-layer specific and kept as-is.
 type MultiHopReasoner interface {
 	Reason(ctx context.Context, query string) (*rag.ReasoningChain, error)
 }
 
 // RetrievalReranker abstracts retrieval rerank behavior.
+// Uses types.RetrievalRecord to avoid coupling to rag layer implementation.
 type RetrievalReranker interface {
-	Rerank(ctx context.Context, query string, results []rag.RetrievalResult) ([]rag.RetrievalResult, error)
+	Rerank(ctx context.Context, query string, results []types.RetrievalRecord) ([]types.RetrievalRecord, error)
 }
 
 // HybridRetrieveStep executes a hybrid retrieval node in DAG.
@@ -145,9 +149,9 @@ func (s *RerankStep) Execute(ctx context.Context, input core.StepInput) (core.St
 	if query == "" {
 		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeRerank, fmt.Errorf("%w: query is empty", core.ErrStepValidation))
 	}
-	rawResults, ok := input.Data["results"].([]rag.RetrievalResult)
+	rawResults, ok := input.Data["results"].([]types.RetrievalRecord)
 	if !ok {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeRerank, fmt.Errorf("%w: results is not []rag.RetrievalResult", core.ErrStepValidation))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeRerank, fmt.Errorf("%w: results is not []types.RetrievalRecord", core.ErrStepValidation))
 	}
 
 	start := time.Now()
@@ -177,11 +181,11 @@ func resolveQuery(defaultQuery string, data map[string]any) string {
 	return ""
 }
 
-func flattenReasoningChain(chain *rag.ReasoningChain) []rag.RetrievalResult {
+func flattenReasoningChain(chain *rag.ReasoningChain) []types.RetrievalRecord {
 	if chain == nil {
 		return nil
 	}
-	merged := make(map[string]rag.RetrievalResult)
+	merged := make(map[string]types.RetrievalRecord)
 	for _, hop := range chain.Hops {
 		for _, item := range hop.Results {
 			key := strings.TrimSpace(item.Document.ID)
@@ -191,21 +195,39 @@ func flattenReasoningChain(chain *rag.ReasoningChain) []rag.RetrievalResult {
 			if key == "" {
 				continue
 			}
+			// Convert rag.RetrievalResult to types.RetrievalRecord
+			record := convertRetrievalResultToRecord(item)
 			if current, ok := merged[key]; ok {
-				if item.FinalScore > current.FinalScore {
-					merged[key] = item
+				if record.Score > current.Score {
+					merged[key] = record
 				}
 				continue
 			}
-			merged[key] = item
+			merged[key] = record
 		}
 	}
-	out := make([]rag.RetrievalResult, 0, len(merged))
+	out := make([]types.RetrievalRecord, 0, len(merged))
 	for _, v := range merged {
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].FinalScore > out[j].FinalScore
+		return out[i].Score > out[j].Score
 	})
 	return out
+}
+
+// convertRetrievalResultToRecord converts rag.RetrievalResult to types.RetrievalRecord.
+func convertRetrievalResultToRecord(r rag.RetrievalResult) types.RetrievalRecord {
+	source := ""
+	if r.Document.Metadata != nil {
+		if v, ok := r.Document.Metadata["source"].(string); ok {
+			source = v
+		}
+	}
+	return types.RetrievalRecord{
+		DocID:   r.Document.ID,
+		Content: r.Document.Content,
+		Source:  source,
+		Score:   r.FinalScore,
+	}
 }

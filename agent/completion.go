@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,7 +12,12 @@ import (
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
+	"go.uber.org/zap"
 )
+
+// DefaultStreamInactivityTimeout 是流式响应的默认空闲超时时间.
+// 只要还在收到数据，就不会超时；只有在超过此时间没有新数据时才触发超时.
+const DefaultStreamInactivityTimeout = 5 * time.Minute
 
 // ChatCompletion 调用 LLM 完成对话
 func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message) (*llm.ChatResponse, error) {
@@ -304,6 +310,10 @@ func (b *BaseAgent) runDirectStreamingAttempt(ctx context.Context, pr *preparedR
 	result := &directStreamingAttemptResult{}
 	var reasoningBuf strings.Builder
 
+	// 空闲超时机制：只要还在收到数据，就重置计时器
+	inactivityTimer := time.NewTimer(DefaultStreamInactivityTimeout)
+	defer inactivityTimer.Stop()
+
 chunkLoop:
 	for {
 		select {
@@ -311,6 +321,15 @@ chunkLoop:
 			if !ok {
 				break chunkLoop
 			}
+			// 收到数据，重置空闲超时计时器
+			if !inactivityTimer.Stop() {
+				select {
+				case <-inactivityTimer.C:
+				default:
+				}
+			}
+			inactivityTimer.Reset(DefaultStreamInactivityTimeout)
+
 			if chunk.Err != nil {
 				return nil, chunk.Err
 			}
@@ -321,6 +340,13 @@ chunkLoop:
 			for range streamCh {
 			}
 			break chunkLoop
+		case <-inactivityTimer.C:
+			// 空闲超时：超过 DefaultStreamInactivityTimeout 没有收到新数据
+			cancelStream()
+			b.logger.Warn("stream inactivity timeout",
+				zap.Duration("timeout", DefaultStreamInactivityTimeout),
+			)
+			return nil, fmt.Errorf("stream inactivity timeout after %v (no data received)", DefaultStreamInactivityTimeout)
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

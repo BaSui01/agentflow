@@ -219,3 +219,29 @@ func TestNewChatProviderFromConfig_GenericOpenAICompatExtraConfig(t *testing.T) 
 	assert.Equal(t, "sk-test", req.Header.Get("X-API-Key"))
 	assert.Empty(t, req.Header.Get("Authorization"))
 }
+
+func TestNewChatProviderFromConfig_BuiltInCompatProvidersUseCompatBase(t *testing.T) {
+	tests := []string{"deepseek", "qwen", "glm", "grok", "kimi", "mistral", "minimax", "hunyuan", "doubao", "llama"}
+	for _, providerName := range tests {
+		t.Run(providerName, func(t *testing.T) {
+			p, err := NewChatProviderFromConfig(providerName, ChatProviderConfig{APIKey: "sk-test"}, zap.NewNop())
+			require.NoError(t, err)
+			_, ok := p.(*openaicompat.Provider)
+			require.True(t, ok, "expected %s to be served by openaicompat base", providerName)
+		})
+	}
+}
+
+func TestLookupChatCapabilityMatrix(t *testing.T) {
+	matrix, ok := LookupChatCapabilityMatrix("openai")
+	require.True(t, ok)
+	assert.True(t, matrix.NativeSDK)
+	assert.True(t, matrix.NativeToolCalling)
+	assert.True(t, matrix.StructuredOutput)
+
+	matrix, ok = LookupChatCapabilityMatrix("minimax")
+	require.True(t, ok)
+	assert.False(t, matrix.NativeSDK)
+	assert.True(t, matrix.NativeToolCalling)
+	assert.True(t, matrix.StructuredOutput)
+}

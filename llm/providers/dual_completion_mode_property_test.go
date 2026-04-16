@@ -11,12 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/providers"
-	"github.com/BaSui01/agentflow/llm/providers/deepseek"
-	"github.com/BaSui01/agentflow/llm/providers/glm"
-	"github.com/BaSui01/agentflow/llm/providers/grok"
-	"github.com/BaSui01/agentflow/llm/providers/minimax"
-	"github.com/BaSui01/agentflow/llm/providers/qwen"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -56,43 +51,15 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 				ctx := context.Background()
 				req := &llm.ChatRequest{Messages: mv.messages}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-					assert.NotEmpty(t, resp.Choices)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-					assert.NotEmpty(t, resp.Choices)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-					assert.NotEmpty(t, resp.Choices)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-					assert.NotEmpty(t, resp.Choices)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-					assert.NotEmpty(t, resp.Choices)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				resp, err := p.Completion(ctx, req)
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.NotEmpty(t, resp.Choices)
 			})
 		}
 	}
@@ -122,47 +89,15 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 				ctx := context.Background()
 				req := &llm.ChatRequest{Messages: mv.messages}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, ch)
-					for range ch {
-					}
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, ch)
-					for range ch {
-					}
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, ch)
-					for range ch {
-					}
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, ch)
-					for range ch {
-					}
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, ch)
-					for range ch {
-					}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				ch, err := p.Stream(ctx, req)
+				assert.NoError(t, err)
+				assert.NotNil(t, ch)
+				for range ch {
 				}
 			})
 		}
@@ -195,38 +130,14 @@ func TestProperty4_CompletionWithTools(t *testing.T) {
 				ctx := context.Background()
 				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Test"}}, Tools: tv.tools}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					resp, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-					assert.NotNil(t, resp)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				resp, err := p.Completion(ctx, req)
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
 			})
 		}
 	}
@@ -263,33 +174,13 @@ func TestProperty4_CompletionParameters(t *testing.T) {
 				ctx := context.Background()
 				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Test"}}, MaxTokens: pv.maxTokens, Temperature: pv.temperature}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, err := p.Completion(ctx, req)
-					assert.NoError(t, err)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				_, err := p.Completion(ctx, req)
+				assert.NoError(t, err)
 			})
 		}
 	}
@@ -325,42 +216,14 @@ func TestProperty4_StreamWithTools(t *testing.T) {
 				ctx := context.Background()
 				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Test"}}, Tools: tv.tools}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					for range ch {
-					}
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					for range ch {
-					}
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					for range ch {
-					}
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					for range ch {
-					}
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					assert.NoError(t, err)
-					for range ch {
-					}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				ch, err := p.Stream(ctx, req)
+				assert.NoError(t, err)
+				for range ch {
 				}
 			})
 		}

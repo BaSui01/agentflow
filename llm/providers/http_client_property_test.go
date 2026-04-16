@@ -7,12 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm/providers"
-	"github.com/BaSui01/agentflow/llm/providers/deepseek"
-	"github.com/BaSui01/agentflow/llm/providers/glm"
-	"github.com/BaSui01/agentflow/llm/providers/grok"
-	"github.com/BaSui01/agentflow/llm/providers/minimax"
-	"github.com/BaSui01/agentflow/llm/providers/qwen"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -41,28 +36,12 @@ func TestProperty7_DefaultTimeoutConfiguration(t *testing.T) {
 	for _, provider := range providerNames {
 		for _, tc := range timeoutTestCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.x.ai", Timeout: tc.configTimeout}}
-					p := grok.NewGrokProvider(cfg, logger)
-					assert.NotNil(t, p, "Provider should be created")
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Timeout: tc.configTimeout}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					assert.NotNil(t, p, "Provider should be created")
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.deepseek.com", Timeout: tc.configTimeout}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					assert.NotNil(t, p, "Provider should be created")
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Timeout: tc.configTimeout}}
-					p := glm.NewGLMProvider(cfg, logger)
-					assert.NotNil(t, p, "Provider should be created")
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.minimax.chat/v1", Timeout: tc.configTimeout}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					assert.NotNil(t, p, "Provider should be created")
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test-key",
+					BaseURL: compatTestBaseURL(provider),
+					Timeout: tc.configTimeout,
+				}, logger)
+				assert.NotNil(t, p, "Provider should be created")
 			})
 		}
 	}
@@ -84,34 +63,13 @@ func TestProperty7_TimeoutBehavior(t *testing.T) {
 	for _, provider := range providerNames {
 		t.Run(provider+"_timeout_triggers", func(t *testing.T) {
 			ctx := context.Background()
-
-			switch provider {
-			case "grok":
-				cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
-				p := grok.NewGrokProvider(cfg, logger)
-				_, err := p.HealthCheck(ctx)
-				assert.Error(t, err, "Should timeout for %s", provider)
-			case "qwen":
-				cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
-				p := qwen.NewQwenProvider(cfg, logger)
-				_, err := p.HealthCheck(ctx)
-				assert.Error(t, err, "Should timeout for %s", provider)
-			case "deepseek":
-				cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
-				p := deepseek.NewDeepSeekProvider(cfg, logger)
-				_, err := p.HealthCheck(ctx)
-				assert.Error(t, err, "Should timeout for %s", provider)
-			case "glm":
-				cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
-				p := glm.NewGLMProvider(cfg, logger)
-				_, err := p.HealthCheck(ctx)
-				assert.Error(t, err, "Should timeout for %s", provider)
-			case "minimax":
-				cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
-				p := minimax.NewMiniMaxProvider(cfg, logger)
-				_, err := p.HealthCheck(ctx)
-				assert.Error(t, err, "Should timeout for %s", provider)
-			}
+			p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+				APIKey:  "test-key",
+				BaseURL: slowServer.URL,
+				Timeout: 100 * time.Millisecond,
+			}, logger)
+			_, err := p.HealthCheck(ctx)
+			assert.Error(t, err, "Should timeout for %s", provider)
 		})
 	}
 }
@@ -146,30 +104,31 @@ func TestProperty7_DefaultTimeoutVariations(t *testing.T) {
 	for _, provider := range providerNames {
 		for _, v := range variations {
 			t.Run(provider+"_timeout_"+v.name, func(t *testing.T) {
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
-					p := grok.NewGrokProvider(cfg, logger)
-					assert.NotNil(t, p)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					assert.NotNil(t, p)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					assert.NotNil(t, p)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
-					p := glm.NewGLMProvider(cfg, logger)
-					assert.NotNil(t, p)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					assert.NotNil(t, p)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: compatTestBaseURL(provider),
+					Timeout: v.timeout,
+				}, logger)
+				assert.NotNil(t, p)
 			})
 		}
+	}
+}
+
+func compatTestBaseURL(provider string) string {
+	switch provider {
+	case "grok":
+		return "https://api.x.ai"
+	case "qwen":
+		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	case "deepseek":
+		return "https://api.deepseek.com"
+	case "glm":
+		return "https://open.bigmodel.cn/api/paas/v4"
+	case "minimax":
+		return "https://api.minimax.chat/v1"
+	default:
+		return ""
 	}
 }
 

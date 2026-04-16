@@ -33,7 +33,6 @@ import (
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/coder/websocket"
 	"go.uber.org/zap"
@@ -1565,21 +1564,17 @@ func (d *demoQueryDecomposer) Decompose(ctx context.Context, query string) ([]st
 
 type demoRetrievalWorker struct{}
 
-func (w *demoRetrievalWorker) Retrieve(ctx context.Context, query string) ([]rag.RetrievalResult, error) {
-	return []rag.RetrievalResult{
+func (w *demoRetrievalWorker) Retrieve(ctx context.Context, query string) ([]types.RetrievalRecord, error) {
+	return []types.RetrievalRecord{
 		{
-			Document: rag.Document{
-				ID:      "doc-" + query,
-				Content: "content for " + query,
-			},
-			FinalScore: 0.8,
+			DocID:   "doc-" + query,
+			Content: "content for " + query,
+			Score:   0.8,
 		},
 		{
-			Document: rag.Document{
-				ID:      "doc-shared",
-				Content: "shared content",
-			},
-			FinalScore: 0.9,
+			DocID:   "doc-shared",
+			Content: "shared content",
+			Score:   0.9,
 		},
 	}, nil
 }

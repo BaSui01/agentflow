@@ -5,7 +5,6 @@
 package rag
 
 import (
-	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	"github.com/BaSui01/agentflow/rag/core"
 )
 
@@ -58,13 +57,13 @@ const (
 	VectorStorePinecone = core.VectorStorePinecone
 )
 
-// Embedding Provider 常量。
+// Embedding Provider 常量（独立定义，避免依赖 llm 层）。
 const (
-	EmbeddingOpenAI EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderOpenAI)
-	EmbeddingCohere EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderCohere)
-	EmbeddingVoyage EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderVoyage)
-	EmbeddingJina   EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderJina)
-	EmbeddingGemini EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderGemini)
+	EmbeddingOpenAI EmbeddingProviderType = "openai"
+	EmbeddingCohere EmbeddingProviderType = "cohere"
+	EmbeddingVoyage EmbeddingProviderType = "voyage"
+	EmbeddingJina   EmbeddingProviderType = "jina"
+	EmbeddingGemini EmbeddingProviderType = "gemini"
 )
 
 // Rerank Provider 常量。

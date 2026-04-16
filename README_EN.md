@@ -334,6 +334,67 @@ result, _ := wf.Execute(ctx, input)
 
 ## 🏗️ Project Structure
 
+### Full layer map
+
+```text
+                        ┌──────────────────────────────┐
+                        │ cmd/                        │
+                        │ composition root / startup   │
+                        └──────────────┬───────────────┘
+                                       │
+                        ┌──────────────▼───────────────┐
+                        │ api/                        │
+                        │ protocol adapters            │
+                        └──────────────┬───────────────┘
+                                       │
+                        ┌──────────────▼───────────────┐
+                        │ workflow/  (Layer 3)        │
+                        │ orchestration: DAG / DSL     │
+                        │ may call agent/rag/llm       │
+                        └───────┬─────────────┬────────┘
+                                │             │
+                 ┌──────────────▼───┐   ┌────▼─────────────┐
+                 │ agent/ (Layer 2) │   │ rag/ (Layer 2)   │
+                 │ execution/tool use │   │ retrieval/index  │
+                 └──────────────┬───┘   └────┬─────────────┘
+                                │            │
+                                └──────┬─────┘
+                                       │
+                             ┌─────────▼─────────┐
+                             │ llm/ (Layer 1)    │
+                             │ providers/gateway │
+                             └─────────┬─────────┘
+                                       │
+                             ┌─────────▼─────────┐
+                             │ types/ (Layer 0)  │
+                             │ zero-dependency   │
+                             └───────────────────┘
+
+pkg/ = horizontal infrastructure layer reusable by multiple layers; must not depend back on api/ or cmd/
+internal/app/bootstrap/ = startup builders and bridges; composition support, not domain decision logic
+```
+
+Dependency shorthand:
+
+- `types` is dependency-only
+- `llm` must not depend on `agent/workflow/api/cmd`
+- `agent` and `rag` are peer Layer 2 capabilities; a single agent may use rag directly
+- `workflow` sits above `agent/rag`; it is an orchestrator, not an agent subtype
+- `api` adapts protocols; `cmd` assembles runtime
+
+### Allowed / forbidden dependency matrix
+
+| Source | Allowed to depend on | Forbidden to depend on |
+| --- | --- | --- |
+| `types/` | none | `llm/`, `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/`, `config/`, `pkg/` |
+| `llm/` | `types/`, `pkg/`, `config/` | `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/` |
+| `agent/` | `types/`, `llm/`, `rag/`, `pkg/`, `config/` | `workflow/`, `api/`, `cmd/`, `internal/` |
+| `rag/` | `types/`, `llm/`, `pkg/`, `config/` | `agent/`, `workflow/`, `api/`, `cmd/`, `internal/` |
+| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |
+| `api/` | `types/`, `llm/`, `agent/`, `rag/`, `workflow/`, `config/` | provider implementation details, composition-root logic |
+| `cmd/` | all runtime assembly through `internal/app/bootstrap` | hidden business implementation, bypassing bootstrap wiring |
+| `pkg/` | `types/` and necessary `pkg/*` | `api/`, `cmd/` |
+
 ```
 agentflow/
 ├── types/                    # Layer 0: Zero-dependency core types
@@ -414,7 +475,7 @@ agentflow/
 │   ├── execution/            # Execution engine
 │   └── context/              # Context management
 │
-├── rag/                      # Layer 2: RAG system
+├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)
 │   ├── chunking.go           # Document chunking
 │   ├── hybrid_retrieval.go   # Hybrid retrieval
 │   ├── contextual_retrieval.go # BM25 contextual retrieval
@@ -440,7 +501,7 @@ agentflow/
 │       ├── arxiv.go          # arXiv paper retrieval
 │       └── github_source.go  # GitHub repository search
 │
-├── workflow/                 # Layer 3: Workflow engine
+├── workflow/                 # Layer 3: Workflow orchestration (above agent/rag)
 │   ├── workflow.go
 │   ├── dag.go                # DAG workflow
 │   ├── dag_executor.go       # DAG executor
@@ -453,6 +514,13 @@ agentflow/
 │       ├── parser.go         # YAML parser + variable interpolation + DAG builder
 │       └── validator.go      # DSL validator
 │
+├── api/                      # Adapter layer: HTTP/MCP/A2A handlers + routes
+│   ├── handlers/             # Request parsing, response writing, service/usecase entry
+│   └── routes/               # Route registration
+│
+├── internal/                 # Composition-root support: startup builders / bridges
+│   └── app/bootstrap/        # Runtime assembly, dependency wiring, handler construction
+│
 ├── config/                   # Configuration management
 │   ├── loader.go             # Configuration loader
 │   ├── defaults.go           # Default values
@@ -460,7 +528,9 @@ agentflow/
 │   ├── hotreload.go          # Hot-reload & rollback
 │   └── api.go                # Configuration API
 │
-├── pkg/openapi/              # OpenAPI tool generator
+├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)
+│   ├── service/              # Lifecycle registry and service bus
+│   └── openapi/              # OpenAPI tool generator
 │
 ├── cmd/agentflow/            # Application entry and runtime wiring
 │   ├── main.go               # CLI entry (serve/migrate/health/version)

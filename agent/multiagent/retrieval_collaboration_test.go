@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 )
 
 type stubDecomposer struct {
@@ -18,11 +18,11 @@ func (s stubDecomposer) Decompose(context.Context, string) ([]string, error) {
 }
 
 type stubRetrievalWorker struct {
-	data map[string][]rag.RetrievalResult
+	data map[string][]types.RetrievalRecord
 	err  error
 }
 
-func (s stubRetrievalWorker) Retrieve(_ context.Context, query string) ([]rag.RetrievalResult, error) {
+func (s stubRetrievalWorker) Retrieve(_ context.Context, query string) ([]types.RetrievalRecord, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -31,9 +31,9 @@ func (s stubRetrievalWorker) Retrieve(_ context.Context, query string) ([]rag.Re
 
 func TestRetrievalSupervisor_Retrieve(t *testing.T) {
 	workers := []RetrievalWorker{
-		stubRetrievalWorker{data: map[string][]rag.RetrievalResult{
-			"golang concurrency": {{Document: rag.Document{ID: "d1"}, FinalScore: 0.7}},
-			"goroutine sync":     {{Document: rag.Document{ID: "d2"}, FinalScore: 0.8}},
+		stubRetrievalWorker{data: map[string][]types.RetrievalRecord{
+			"golang concurrency": {{DocID: "d1", Score: 0.7}},
+			"goroutine sync":     {{DocID: "d2", Score: 0.8}},
 		}},
 	}
 	sup := NewRetrievalSupervisor(
@@ -50,15 +50,15 @@ func TestRetrievalSupervisor_Retrieve(t *testing.T) {
 	if len(out) != 2 {
 		t.Fatalf("expected 2 merged results, got %d", len(out))
 	}
-	if out[0].Document.ID != "d2" {
-		t.Fatalf("expected highest score first, got %s", out[0].Document.ID)
+	if out[0].DocID != "d2" {
+		t.Fatalf("expected highest score first, got %s", out[0].DocID)
 	}
 }
 
 func TestRetrievalSupervisor_Dedup(t *testing.T) {
-	worker := stubRetrievalWorker{data: map[string][]rag.RetrievalResult{
-		"q1": {{Document: rag.Document{ID: "dup"}, FinalScore: 0.4}},
-		"q2": {{Document: rag.Document{ID: "dup"}, FinalScore: 0.9}},
+	worker := stubRetrievalWorker{data: map[string][]types.RetrievalRecord{
+		"q1": {{DocID: "dup", Score: 0.4}},
+		"q2": {{DocID: "dup", Score: 0.9}},
 	}}
 	sup := NewRetrievalSupervisor(
 		stubDecomposer{parts: []string{"q1", "q2"}},
@@ -70,7 +70,7 @@ func TestRetrievalSupervisor_Dedup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retrieve failed: %v", err)
 	}
-	if len(out) != 1 || out[0].FinalScore != 0.9 {
+	if len(out) != 1 || out[0].Score != 0.9 {
 		t.Fatalf("expected dedup highest score result, got %#v", out)
 	}
 }

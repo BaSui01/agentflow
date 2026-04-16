@@ -16,8 +16,9 @@ import (
 // LongTermRetriever provides a higher-quality retrieval path for long-term
 // memory search. When set, it replaces the raw LowLevelVectorStore.Search
 // with a RAG pipeline (e.g. BM25+Vector+Rerank fusion).
+// Uses types.RetrievalRecord to avoid coupling to rag layer implementation.
 type LongTermRetriever interface {
-	Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]rag.RetrievalResult, error)
+	Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]types.RetrievalRecord, error)
 }
 
 // EnhancedMemorySystem 增强的多层记忆系统
@@ -439,9 +440,12 @@ func (m *EnhancedMemorySystem) searchViaRetriever(ctx context.Context, agentID s
 			break
 		}
 		out = append(out, rag.LowLevelSearchResult{
-			ID:       r.Document.ID,
-			Score:    r.FinalScore,
-			Metadata: r.Document.Metadata,
+			ID:    r.DocID,
+			Score: r.Score,
+			Metadata: map[string]any{
+				"source":  r.Source,
+				"content": r.Content,
+			},
 		})
 	}
 	return out, nil

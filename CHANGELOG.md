@@ -5,6 +5,12 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.1] - 2026-04-17
+
+### Fixed
+- 修复 hot reload 回归测试中的 chat provider 测试桩缺少 native token counting，恢复 `TestServerHotReload_UpdatesChatHandlerInPlace` 与 `TestServerHotReload_RollsBackOnRuntimeRebuildFailure`
+- 修复 `ResilientProvider` 与 middleware provider wrapper 未透传 `TokenCountProvider` 扩展接口的问题，避免 gateway 预检错误地返回 `chat provider does not implement native token counting`
+
 ## [1.9.1] - 2026-04-08
 
 ### Changed

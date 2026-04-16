@@ -9,12 +9,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/providers"
-	"github.com/BaSui01/agentflow/llm/providers/deepseek"
-	"github.com/BaSui01/agentflow/llm/providers/glm"
-	"github.com/BaSui01/agentflow/llm/providers/grok"
-	"github.com/BaSui01/agentflow/llm/providers/minimax"
-	"github.com/BaSui01/agentflow/llm/providers/qwen"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -54,28 +49,12 @@ func TestProperty26_ContextPropagation(t *testing.T) {
 				type ctxKey string
 				ctx := context.WithValue(context.Background(), ctxKey(cv.key), cv.value)
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				_, _ = p.HealthCheck(ctx)
 
 				assert.Equal(t, int32(1), atomic.LoadInt32(&requestReceived),
 					"Request should be made with context for %s (Requirement 16.1)", provider)
@@ -111,42 +90,14 @@ func TestProperty26_ContextWithDeadline(t *testing.T) {
 				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(dl.deadline))
 				defer cancel()
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					status, err := p.HealthCheck(ctx)
-					if err == nil {
-						assert.True(t, status.Healthy, "Should be healthy")
-					}
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					status, err := p.HealthCheck(ctx)
-					if err == nil {
-						assert.True(t, status.Healthy, "Should be healthy")
-					}
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					status, err := p.HealthCheck(ctx)
-					if err == nil {
-						assert.True(t, status.Healthy, "Should be healthy")
-					}
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					status, err := p.HealthCheck(ctx)
-					if err == nil {
-						assert.True(t, status.Healthy, "Should be healthy")
-					}
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					status, err := p.HealthCheck(ctx)
-					if err == nil {
-						assert.True(t, status.Healthy, "Should be healthy")
-					}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 30 * time.Second,
+				}, logger)
+				status, err := p.HealthCheck(ctx)
+				if err == nil {
+					assert.True(t, status.Healthy, "Should be healthy")
 				}
 			})
 		}
@@ -185,28 +136,12 @@ func TestProperty26_ContextWithCredentialOverride(t *testing.T) {
 					APIKey: ok.overrideKey,
 				})
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: ok.configKey, BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: ok.configKey, BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: ok.configKey, BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: ok.configKey, BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: ok.configKey, BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  ok.configKey,
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				_, _ = p.HealthCheck(ctx)
 
 				assert.NotEmpty(t, capturedAuth, "Authorization header should be set")
 			})
@@ -242,28 +177,12 @@ func TestProperty26_ContextValueTypes(t *testing.T) {
 				}))
 				defer server.Close()
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, _ = p.HealthCheck(vt.ctx)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, _ = p.HealthCheck(vt.ctx)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, _ = p.HealthCheck(vt.ctx)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, _ = p.HealthCheck(vt.ctx)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, _ = p.HealthCheck(vt.ctx)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				_, _ = p.HealthCheck(vt.ctx)
 			})
 		}
 	}
@@ -291,28 +210,12 @@ func TestProperty26_ContextChaining(t *testing.T) {
 					ctx = context.WithValue(ctx, ctxKey("key-"+string(rune('0'+i))), "value-"+string(rune('0'+i)))
 				}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 5 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, _ = p.HealthCheck(ctx)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 5 * time.Second,
+				}, logger)
+				_, _ = p.HealthCheck(ctx)
 			})
 		}
 	}

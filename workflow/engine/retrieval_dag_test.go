@@ -5,15 +5,16 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/core"
 	workflowsteps "github.com/BaSui01/agentflow/workflow/steps"
 )
 
 type testHybridRetriever struct {
-	results []rag.RetrievalResult
+	results []types.RetrievalRecord
 }
 
-func (r testHybridRetriever) Retrieve(context.Context, string, []float64) ([]rag.RetrievalResult, error) {
+func (r testHybridRetriever) Retrieve(context.Context, string, []float64) ([]types.RetrievalRecord, error) {
 	return r.results, nil
 }
 
@@ -26,10 +27,10 @@ func (r testMultiHopReasoner) Reason(context.Context, string) (*rag.ReasoningCha
 }
 
 type testReranker struct {
-	results []rag.RetrievalResult
+	results []types.RetrievalRecord
 }
 
-func (r testReranker) Rerank(context.Context, string, []rag.RetrievalResult) ([]rag.RetrievalResult, error) {
+func (r testReranker) Rerank(context.Context, string, []types.RetrievalRecord) ([]types.RetrievalRecord, error) {
 	return r.results, nil
 }
 
@@ -37,10 +38,10 @@ func TestExecutor_Sequential_WithRetrievalSteps(t *testing.T) {
 	exec := NewExecutor()
 
 	hybrid := workflowsteps.NewHybridRetrieveStep("hybrid-1", testHybridRetriever{
-		results: []rag.RetrievalResult{{Document: rag.Document{ID: "d1"}, FinalScore: 0.7}},
+		results: []types.RetrievalRecord{{DocID: "d1", Score: 0.7}},
 	})
 	rerank := workflowsteps.NewRerankStep("rerank-1", testReranker{
-		results: []rag.RetrievalResult{{Document: rag.Document{ID: "d1"}, FinalScore: 0.9}},
+		results: []types.RetrievalRecord{{DocID: "d1", Score: 0.9}},
 	})
 
 	nodes := []*ExecutionNode{
@@ -71,8 +72,8 @@ func TestExecutor_Sequential_WithRetrievalSteps(t *testing.T) {
 	if !ok {
 		t.Fatal("missing rerank output")
 	}
-	items, ok := out.Data["results"].([]rag.RetrievalResult)
-	if !ok || len(items) != 1 || items[0].FinalScore != 0.9 {
+	items, ok := out.Data["results"].([]types.RetrievalRecord)
+	if !ok || len(items) != 1 || items[0].Score != 0.9 {
 		t.Fatalf("unexpected rerank output: %#v", out.Data)
 	}
 }
@@ -106,8 +107,8 @@ func TestExecutor_Sequential_WithMultiHopRetrieveStep(t *testing.T) {
 	if !ok {
 		t.Fatal("missing multi-hop output")
 	}
-	items, ok := out.Data["results"].([]rag.RetrievalResult)
-	if !ok || len(items) != 1 || items[0].FinalScore != 0.8 {
+	items, ok := out.Data["results"].([]types.RetrievalRecord)
+	if !ok || len(items) != 1 || items[0].Score != 0.8 {
 		t.Fatalf("unexpected multi-hop output: %#v", out.Data)
 	}
 }

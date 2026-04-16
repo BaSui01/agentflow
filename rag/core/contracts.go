@@ -6,7 +6,7 @@ package core
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // ---- 向量存储类型 ----
@@ -67,7 +67,7 @@ type EmbeddingProvider interface {
 
 // RerankProvider 重排提供者接口。
 type RerankProvider interface {
-	RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]rerank.RerankResult, error)
+	RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]types.RerankResult, error)
 	Name() string
 }
 

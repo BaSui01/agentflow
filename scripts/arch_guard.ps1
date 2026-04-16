@@ -126,6 +126,13 @@ foreach ($path in $providerRoutingDocs) {
     }
 }
 
+# Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
+Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
+& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
+if ($LASTEXITCODE -ne 0) {
+    $errors += "[TEST] focused architecture guard tests failed"
+}
+
 if ($warnings.Count -gt 0) {
     Write-Host "Architecture warnings:" -ForegroundColor Yellow
     $warnings | Sort-Object | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }

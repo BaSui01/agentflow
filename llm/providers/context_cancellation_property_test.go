@@ -11,12 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/providers"
-	"github.com/BaSui01/agentflow/llm/providers/deepseek"
-	"github.com/BaSui01/agentflow/llm/providers/glm"
-	"github.com/BaSui01/agentflow/llm/providers/grok"
-	"github.com/BaSui01/agentflow/llm/providers/minimax"
-	"github.com/BaSui01/agentflow/llm/providers/qwen"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -60,28 +55,12 @@ func TestProperty27_ContextCancellation(t *testing.T) {
 				}()
 
 				var err error
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 30 * time.Second,
+				}, logger)
+				_, err = p.HealthCheck(ctx)
 
 				assert.Error(t, err, "Should return error when context is cancelled for %s (Requirement 16.2)", provider)
 			})
@@ -107,33 +86,13 @@ func TestProperty27_PreCancelledContext(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, err := p.HealthCheck(ctx)
-					assert.Error(t, err, "Should fail with pre-cancelled context")
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, err := p.HealthCheck(ctx)
-					assert.Error(t, err, "Should fail with pre-cancelled context")
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, err := p.HealthCheck(ctx)
-					assert.Error(t, err, "Should fail with pre-cancelled context")
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, err := p.HealthCheck(ctx)
-					assert.Error(t, err, "Should fail with pre-cancelled context")
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, err := p.HealthCheck(ctx)
-					assert.Error(t, err, "Should fail with pre-cancelled context")
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 30 * time.Second,
+				}, logger)
+				_, err := p.HealthCheck(ctx)
+				assert.Error(t, err, "Should fail with pre-cancelled context")
 			})
 		}
 	}
@@ -170,28 +129,12 @@ func TestProperty27_ContextTimeout(t *testing.T) {
 				start := time.Now()
 				var err error
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					_, err = p.HealthCheck(ctx)
-				}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 30 * time.Second,
+				}, logger)
+				_, err = p.HealthCheck(ctx)
 
 				elapsed := time.Since(start)
 				assert.Error(t, err, "Should timeout for %s (Requirement 16.3)", provider)
@@ -249,46 +192,14 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 
 				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "test"}}}
 
-				switch provider {
-				case "grok":
-					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := grok.NewGrokProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					if err == nil && ch != nil {
-						for range ch {
-						}
-					}
-				case "qwen":
-					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := qwen.NewQwenProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					if err == nil && ch != nil {
-						for range ch {
-						}
-					}
-				case "deepseek":
-					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := deepseek.NewDeepSeekProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					if err == nil && ch != nil {
-						for range ch {
-						}
-					}
-				case "glm":
-					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := glm.NewGLMProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					if err == nil && ch != nil {
-						for range ch {
-						}
-					}
-				case "minimax":
-					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-					p := minimax.NewMiniMaxProvider(cfg, logger)
-					ch, err := p.Stream(ctx, req)
-					if err == nil && ch != nil {
-						for range ch {
-						}
+				p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+					APIKey:  "test",
+					BaseURL: server.URL,
+					Timeout: 30 * time.Second,
+				}, logger)
+				ch, err := p.Stream(ctx, req)
+				if err == nil && ch != nil {
+					for range ch {
 					}
 				}
 			})
@@ -321,28 +232,12 @@ func TestProperty27_CancellationCleanup(t *testing.T) {
 						cancel()
 					}()
 
-					switch provider {
-					case "grok":
-						cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-						p := grok.NewGrokProvider(cfg, logger)
-						_, _ = p.HealthCheck(ctx)
-					case "qwen":
-						cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-						p := qwen.NewQwenProvider(cfg, logger)
-						_, _ = p.HealthCheck(ctx)
-					case "deepseek":
-						cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-						p := deepseek.NewDeepSeekProvider(cfg, logger)
-						_, _ = p.HealthCheck(ctx)
-					case "glm":
-						cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-						p := glm.NewGLMProvider(cfg, logger)
-						_, _ = p.HealthCheck(ctx)
-					case "minimax":
-						cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
-						p := minimax.NewMiniMaxProvider(cfg, logger)
-						_, _ = p.HealthCheck(ctx)
-					}
+					p := newCompatTestProvider(t, provider, vendor.ChatProviderConfig{
+						APIKey:  "test",
+						BaseURL: server.URL,
+						Timeout: 30 * time.Second,
+					}, logger)
+					_, _ = p.HealthCheck(ctx)
 				}
 			})
 		}

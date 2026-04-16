@@ -114,12 +114,7 @@ func (p *VoyageProvider) Rerank(ctx context.Context, req *RerankRequest) (*Reran
 			Index:          r.Index,
 			RelevanceScore: r.RelevanceScore,
 		}
-		if r.Document != "" {
-			results[i].Document = Document{Text: r.Document}
-		}
-		if r.Index < len(req.Documents) {
-			results[i].Document.ID = req.Documents[r.Index].ID
-		}
+		results[i].Document = r.Document
 	}
 
 	return &RerankResponse{
