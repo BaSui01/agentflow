@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by ADR 006
+Superseded in part by ADR 006 and updated by subsequent provider transport changes.
 
 ## Context
 
@@ -22,11 +22,18 @@ At this stage, the main architectural risk is not "missing SDKs". The risk is fr
 
 AgentFlow keeps the `llm` provider baseline on:
 
-- self-managed HTTP adapters
 - the unified `llm.Provider` abstraction
 - config-driven construction through `llm/providers/vendor`
+- provider-internal transport boundaries that do not leak SDK types upward
 
-Official vendor SDKs for OpenAI, Gemini, and Anthropic are **not** adopted as foundational dependencies for the core provider architecture.
+Current runtime baseline:
+
+- `llm/providers/openai` uses the official OpenAI Go SDK as the client construction and request-sending base for OpenAI-native paths
+- `llm/providers/anthropic` uses the official Anthropic Go SDK as the client construction and request-sending base for Claude-native paths
+- `llm/providers/gemini` uses `google.golang.org/genai` per ADR 006
+- `llm/providers/openaicompat` remains a self-managed HTTP base for OpenAI-compatible vendors
+
+Official SDKs are therefore allowed inside the provider boundary, but they do not replace the unified `llm.Provider` contract or the vendor factory entry.
 
 ### 2. Standard Chat Construction Entry
 
@@ -49,43 +56,43 @@ The goal is to keep provider credentials, defaults, and capability wiring aligne
 
 ### 4. Official SDK Admission Criteria
 
-An official SDK may be evaluated only as a **single-provider pilot**, and only if all of the following are true:
+An official SDK may be adopted only if all of the following are true:
 
 1. It materially reduces protocol-adaptation code.
 2. It covers the required AgentFlow surface for that provider, especially streaming, tools, structured output, base URL overrides, multi-key support, timeouts, and error mapping.
 3. SDK-specific types do not leak outside the provider implementation boundary into `agent`, `workflow`, `api`, `cmd`, or shared runtime composition.
 4. The migration removes the old implementation; it must not leave dual implementations in place.
 
-### 5. Pilot Scope Default
+### 5. Stable Boundary
 
-If a future pilot is approved, the default first candidate is OpenAI only.
-
-The pilot boundary must stay inside:
+The SDK-backed transport boundary must stay inside:
 
 - `llm/providers/openai`
+- `llm/providers/anthropic`
+- `llm/providers/gemini`
 
-The following contracts must remain stable during the pilot:
+The following contracts must remain stable:
 
 - `llm.Provider`
 - `llm/runtime/router`
 - `llm/providers/vendor`
 - startup and handler composition paths
 
-Anthropic, Gemini, and the shared OpenAI-compatible base are out of scope for that first pilot.
+The shared OpenAI-compatible base remains intentionally outside the official-SDK path.
 
 ## Consequences
 
 ### Positive
 
 - preserves one stable provider abstraction across all vendors
-- avoids three different SDK dependency models entering the core at once
 - keeps routing and startup composition vendor-agnostic
-- makes vendor-specific capability aggregation easier to evolve and test
+- reduces protocol drift for OpenAI / Anthropic / Gemini native providers
+- keeps vendor-specific capability aggregation easier to evolve and test
 
 ### Negative
 
-- AgentFlow continues owning low-level HTTP protocol adaptation
-- new upstream API changes still require manual adapter maintenance
+- AgentFlow still owns response mapping and cross-provider normalization above the SDK boundary
+- upstream SDK changes can now affect provider-internal transport behavior and test baselines
 
 ## Guardrails
 

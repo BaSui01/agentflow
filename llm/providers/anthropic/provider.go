@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	anthropicofficial "github.com/BaSui01/agentflow/llm/internal/anthropicofficial"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -20,6 +22,8 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
+	anthropicsdk "github.com/anthropics/anthropic-sdk-go"
+	anthropicsdkoption "github.com/anthropics/anthropic-sdk-go/option"
 	"go.uber.org/zap"
 )
 
@@ -66,22 +70,55 @@ func NewClaudeProvider(cfg providers.ClaudeConfig, logger *zap.Logger) *ClaudePr
 
 func (p *ClaudeProvider) Name() string { return "claude" }
 
+func (p *ClaudeProvider) sdkClient(apiKey string) anthropicsdk.Client {
+	return anthropicofficial.NewClient(p.cfg, apiKey, p.client)
+}
+
+func (p *ClaudeProvider) sdkRequestOptions(speed string) []anthropicsdkoption.RequestOption {
+	options := make([]anthropicsdkoption.RequestOption, 0, 3)
+	version := p.cfg.AnthropicVersion
+	if version == "" {
+		version = "2025-04-14"
+	}
+	options = append(options, anthropicsdkoption.WithHeader("anthropic-version", version))
+	if strings.EqualFold(strings.TrimSpace(speed), "fast") {
+		options = append(options, anthropicsdkoption.WithHeader("anthropic-beta", "fast-mode-2026-02-01"))
+	}
+	return options
+}
+
+func (p *ClaudeProvider) mapSDKError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr *anthropicsdk.Error
+	if errors.As(err, &apiErr) {
+		return providerbase.MapHTTPError(apiErr.StatusCode, apiErr.RawJSON(), p.Name())
+	}
+	return &types.Error{
+		Code:       llm.ErrUpstreamError,
+		Message:    err.Error(),
+		Cause:      err,
+		HTTPStatus: http.StatusBadGateway,
+		Retryable:  true,
+		Provider:   p.Name(),
+	}
+}
+
 func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	latency := time.Duration(0)
+	client := p.sdkClient(p.resolveAPIKey(ctx))
+	var resp *http.Response
+	err := client.Get(ctx, "/v1/models", nil, &resp, p.sdkRequestOptions("")...)
+	latency = time.Since(start)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, p.mapSDKError(err)
 	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
-	latency := time.Since(start)
-	if err != nil {
-		return &llm.HealthStatus{Healthy: false, Latency: latency}, err
+	if resp == nil {
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("claude health check returned empty response")
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		msg := providerbase.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("claude health check failed: status=%d msg=%s", resp.StatusCode, msg)
@@ -103,29 +140,6 @@ func (p *ClaudeProvider) Endpoints() llm.ProviderEndpoints {
 
 // ListModels 获取 Claude 支持的模型列表
 func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	type claudeModelPayload struct {
 		ID          string `json:"id"`
 		Name        string `json:"name"`
@@ -140,13 +154,27 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		Data   []claudeModelPayload `json:"data"`
 		Models []claudeModelPayload `json:"models"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+	client := p.sdkClient(p.resolveAPIKey(ctx))
+	var resp *http.Response
+	if err := client.Get(ctx, "/v1/models", nil, &resp, p.sdkRequestOptions("")...); err != nil {
+		return nil, p.mapSDKError(err)
+	}
+	if resp == nil || resp.Body == nil {
 		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
+			Code:       llm.ErrUpstreamError,
+			Message:    "claude models list returned empty response body",
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
 		}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	source := modelsResp.Data
@@ -412,24 +440,6 @@ type claudeErrorResp struct {
 	} `json:"error"`
 }
 
-func (p *ClaudeProvider) buildHeaders(req *http.Request, apiKey string) {
-	req.Header.Set("x-api-key", apiKey)
-	// API 版本：可配置，默认 2025-04-14（支持 web_search 服务端工具）
-	version := p.cfg.AnthropicVersion
-	if version == "" {
-		version = "2025-04-14"
-	}
-	req.Header.Set("anthropic-version", version)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-}
-
-func applyClaudeFastModeHeader(req *http.Request, speed string) {
-	if strings.EqualFold(strings.TrimSpace(speed), "fast") {
-		req.Header.Set("anthropic-beta", "fast-mode-2026-02-01")
-	}
-}
-
 // resolveAPIKey 解析 API Key，支持上下文覆盖和多 Key 轮询
 func (p *ClaudeProvider) resolveAPIKey(ctx context.Context) string {
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
@@ -464,16 +474,15 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 
 		// 处理 tool 角色（Claude 将其作为 assistant 的 tool_result）
 		if m.Role == llm.RoleTool {
-			// Tool 结果需要包装成 user 消息
-			tr := claudeContent{
-				Type:      "tool_result",
-				ToolUseID: m.ToolCallID,
-				Content:   m.Content,
+			writeback, ok := providerbase.ToolOutputFromMessage(m, nil)
+			if !ok {
+				continue
 			}
-			// 问题 4: 传递 is_error 标记，让模型知道工具执行失败
-			if m.IsToolError {
-				isErr := true
-				tr.IsError = &isErr
+			rawBlock := providerbase.BuildAnthropicToolResultBlock(writeback)
+			var tr claudeContent
+			raw, err := json.Marshal(rawBlock)
+			if err != nil || json.Unmarshal(raw, &tr) != nil {
+				continue
 			}
 			claudeMsgs = append(claudeMsgs, claudeMessage{
 				Role:    "user",
@@ -489,7 +498,7 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 		}
 		cm := claudeMessage{Role: role}
 
-		// 问题 1: assistant 消息的 ThinkingBlocks 需要回传为 thinking content blocks
+		// Assistant thinking blocks must round-trip as Claude thinking content blocks.
 		if m.Role == llm.RoleAssistant && len(m.ThinkingBlocks) > 0 {
 			for _, tb := range m.ThinkingBlocks {
 				cm.Content = append(cm.Content, claudeContent{
@@ -603,7 +612,7 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 
 	for _, t := range tools {
 		// 跳过客户端传入的 web_search 占位工具（避免双重注入）
-		if t.Name == "web_search" || t.Name == "google_search" {
+		if providerbase.IsSearchToolPlaceholder(t.Name) {
 			hasWebSearch = true
 			continue
 		}
@@ -670,33 +679,16 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 // convertClaudeToolChoice 将 llm.ChatRequest.ToolChoice (any) 转换为 Claude 格式。
 // 支持 string ("auto"/"any"/"none") 和 map/struct 形式。
 func convertClaudeToolChoice(tc any, parallelToolCalls *bool, hasTools bool) *claudeToolChoice {
+	spec := providerbase.NormalizeToolChoice(tc)
 	var result *claudeToolChoice
-	switch v := tc.(type) {
-	case string:
-		switch v {
-		case "auto":
-			result = &claudeToolChoice{Type: "auto"}
-		case "any", "required":
-			result = &claudeToolChoice{Type: "any"}
-		case "none":
-			result = &claudeToolChoice{Type: "none"}
-		case "":
-			result = nil
-		default:
-			// 假设是具体工具名
-			result = &claudeToolChoice{Type: "tool", Name: v}
-		}
-	case map[string]any:
-		result = &claudeToolChoice{}
-		if t, ok := v["type"].(string); ok {
-			result.Type = t
-		}
-		if n, ok := v["name"].(string); ok {
-			result.Name = n
-		}
-		if disable, ok := v["disable_parallel_tool_use"].(bool); ok {
-			result.DisableParallelToolUse = &disable
-		}
+	switch spec.Mode {
+	case "auto", "any", "none":
+		result = &claudeToolChoice{Type: spec.Mode}
+	case "tool":
+		result = &claudeToolChoice{Type: "tool", Name: spec.SpecificName}
+	}
+	if result != nil && spec.DisableParallelToolUse != nil {
+		result.DisableParallelToolUse = spec.DisableParallelToolUse
 	}
 	if parallelToolCalls != nil && !*parallelToolCalls && hasTools {
 		if result == nil {
@@ -746,74 +738,25 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		CacheControl: cacheControl,
 	}
 
-	// 问题 3: thinking + tool_choice 冲突校验
+	// Claude thinking mode only supports compatible tool_choice combinations.
 	if err := validateThinkingConstraints(&body); err != nil {
 		return nil, err
 	}
 
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	endpoint := claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, apiKey)
-	applyClaudeFastModeHeader(httpReq, body.Speed)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		if shouldRetryClaudeWithoutFastMode(resp.StatusCode, body.Speed) {
-			resp.Body.Close()
-			body.Speed = ""
-			payload, err = json.Marshal(body)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal request after speed fallback: %w", err)
-			}
-			endpoint = claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
-			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-			if err != nil {
-				return nil, fmt.Errorf("failed to create fallback request: %w", err)
-			}
-			p.buildHeaders(httpReq, apiKey)
-			resp, err = p.client.Do(httpReq)
-			if err != nil {
-				return nil, &types.Error{
-					Code:    llm.ErrUpstreamError,
-					Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-					Retryable: true,
-					Provider:  p.Name(),
-				}
-			}
-			defer resp.Body.Close()
-		}
-	}
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var claudeResp claudeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
+	client := p.sdkClient(apiKey)
+	path := "/v1/messages"
+	if strings.TrimSpace(body.Speed) != "" {
+		path += "?beta=true"
+	}
+	if err := client.Post(ctx, path, body, &claudeResp, p.sdkRequestOptions(body.Speed)...); err != nil {
+		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), body.Speed) {
+			body.Speed = ""
+			if retryErr := client.Post(ctx, "/v1/messages", body, &claudeResp, p.sdkRequestOptions(body.Speed)...); retryErr != nil {
+				return nil, p.mapSDKError(retryErr)
+			}
+		} else {
+			return nil, p.mapSDKError(err)
 		}
 	}
 
@@ -859,74 +802,35 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		CacheControl: cacheControl,
 	}
 
-	// 问题 3: thinking + tool_choice 冲突校验
+	// Claude thinking mode only supports compatible tool_choice combinations.
 	if err := validateThinkingConstraints(&body); err != nil {
 		return nil, err
 	}
 
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("failed to marshal request: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-			Cause:      err,
-		}
+	client := p.sdkClient(apiKey)
+	var resp *http.Response
+	path := "/v1/messages"
+	if strings.TrimSpace(body.Speed) != "" {
+		path += "?beta=true"
 	}
-	endpoint := claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInternalError,
-			Message:    fmt.Sprintf("failed to create request: %v", err),
-			HTTPStatus: http.StatusInternalServerError,
-			Provider:   p.Name(),
-			Cause:      err,
-		}
-	}
-	p.buildHeaders(httpReq, apiKey)
-	applyClaudeFastModeHeader(httpReq, body.Speed)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	if resp.StatusCode >= 400 {
-		if shouldRetryClaudeWithoutFastMode(resp.StatusCode, body.Speed) {
-			resp.Body.Close()
+	if err := client.Post(ctx, path, body, &resp, append(p.sdkRequestOptions(body.Speed), anthropicsdkoption.WithHeader("Accept", "text/event-stream"))...); err != nil {
+		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), body.Speed) {
 			body.Speed = ""
-			payload, err = json.Marshal(body)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal fallback request: %w", err)
+			if retryErr := client.Post(ctx, "/v1/messages", body, &resp, append(p.sdkRequestOptions(body.Speed), anthropicsdkoption.WithHeader("Accept", "text/event-stream"))...); retryErr != nil {
+				return nil, p.mapSDKError(retryErr)
 			}
-			endpoint = claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
-			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-			if err != nil {
-				return nil, fmt.Errorf("failed to create fallback request: %w", err)
-			}
-			p.buildHeaders(httpReq, apiKey)
-			resp, err = p.client.Do(httpReq)
-			if err != nil {
-				return nil, &types.Error{
-					Code:    llm.ErrUpstreamError,
-					Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-					Retryable: true,
-					Provider:  p.Name(),
-				}
-			}
+		} else {
+			return nil, p.mapSDKError(err)
 		}
 	}
-	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	if resp == nil || resp.Body == nil {
+		return nil, &types.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    "claude stream returned empty response body",
+			HTTPStatus: http.StatusBadGateway,
+			Provider:   p.Name(),
+			Retryable:  true,
+		}
 	}
 
 	ch := make(chan llm.StreamChunk)
@@ -1019,11 +923,9 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				if event.ContentBlock != nil {
 					switch event.ContentBlock.Type {
 					case "tool_use":
-						// Bug1 fix: 初始化 Arguments 为 nil，由 input_json_delta 逐步构建
-						toolCallAccumulator[event.Index] = &types.ToolCall{
-							ID:   event.ContentBlock.ID,
-							Name: event.ContentBlock.Name,
-						}
+						// Start an empty tool-call accumulator and build arguments through input_json_delta.
+						call := providerbase.NewFunctionToolCall(event.ContentBlock.ID, event.ContentBlock.Name, nil)
+						toolCallAccumulator[event.Index] = &call
 					case "server_tool_use", "web_search_tool_result":
 						// 标记为搜索相关块，静默跳过其增量
 						webSearchBlockIndices[event.Index] = true
@@ -1062,7 +964,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					case "input_json_delta":
 						// 累积工具调用参数，不发送空 chunk
 						if tc, ok := toolCallAccumulator[event.Index]; ok {
-							tc.Arguments = append(tc.Arguments, []byte(event.Delta.PartialJSON)...)
+							tc.Arguments = providerbase.AppendToolJSONDelta(tc.Arguments, event.Delta.PartialJSON)
 						}
 					case "thinking_delta":
 						thinking := event.Delta.Thinking
@@ -1105,7 +1007,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						Index:    event.Index,
 						Delta: types.Message{
 							Role:      llm.RoleAssistant,
-							ToolCalls: []types.ToolCall{*tc},
+							ToolCalls: providerbase.ToolCallChunk(*tc),
 						},
 					}:
 					}
@@ -1283,11 +1185,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 				})
 			}
 		case "tool_use":
-			msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
-				ID:        content.ID,
-				Name:      content.Name,
-				Arguments: content.Input,
-			})
+			msg.ToolCalls = append(msg.ToolCalls, providerbase.NewFunctionToolCall(content.ID, content.Name, content.Input))
 		case "thinking":
 			// Extended Thinking: 收集所有推理内容和签名（interleaved thinking 可能有多个）
 			if content.Thinking != "" {
@@ -1350,7 +1248,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 			CompletionTokens: cr.Usage.OutputTokens,
 			TotalTokens:      cr.Usage.InputTokens + cr.Usage.OutputTokens,
 		}
-		// Bug7 fix: 映射 cache token 用量
+		// Preserve Anthropic cache token usage when present.
 		if cr.Usage.CacheCreationInputTokens > 0 || cr.Usage.CacheReadInputTokens > 0 {
 			resp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
 				CachedTokens:        cr.Usage.CacheReadInputTokens,
@@ -1413,6 +1311,14 @@ type claudeReasoningControls struct {
 	Speed        string
 }
 
+func sdkStatusCode(err error) int {
+	var apiErr *anthropicsdk.Error
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode
+	}
+	return 0
+}
+
 func normalizeClaudeCacheControl(in *llm.CacheControl) (*llm.CacheControl, *types.Error) {
 	if in == nil {
 		return nil, nil
@@ -1444,14 +1350,6 @@ func normalizeClaudeCacheControl(in *llm.CacheControl) (*llm.CacheControl, *type
 	}
 
 	return &llm.CacheControl{Type: kind, TTL: ttl}, nil
-}
-
-func claudeMessagesEndpoint(baseURL, speed string) string {
-	path := "/v1/messages"
-	if strings.TrimSpace(speed) != "" {
-		path += "?beta=true"
-	}
-	return fmt.Sprintf("%s%s", strings.TrimRight(baseURL, "/"), path)
 }
 
 // buildClaudeReasoningControls maps unified reasoning options into the current Claude protocol.

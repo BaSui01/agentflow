@@ -23,9 +23,13 @@ func TestNewChatProviderFromConfig_BuiltInProviders(t *testing.T) {
 		wantName     string
 	}{
 		{name: "openai", providerName: "openai", wantName: "openai"},
+		{name: "openai responses alias", providerName: "openai-responses", wantName: "openai"},
 		{name: "anthropic", providerName: "anthropic", wantName: "claude"},
 		{name: "claude alias", providerName: "claude", wantName: "claude"},
+		{name: "anthropic sdk alias", providerName: "anthropic-sdk-go", wantName: "claude"},
 		{name: "gemini", providerName: "gemini", wantName: "gemini"},
+		{name: "google genai alias", providerName: "google-genai", wantName: "gemini"},
+		{name: "vertex ai alias", providerName: "vertex-ai", wantName: "gemini"},
 		{name: "deepseek", providerName: "deepseek", wantName: "deepseek"},
 		{name: "qwen", providerName: "qwen", wantName: "qwen"},
 		{name: "glm", providerName: "glm", wantName: "glm"},
@@ -46,6 +50,18 @@ func TestNewChatProviderFromConfig_BuiltInProviders(t *testing.T) {
 			assert.Equal(t, tt.wantName, p.Name())
 		})
 	}
+}
+
+func TestNewChatProviderFromConfig_OpenAIResponsesAlias(t *testing.T) {
+	p, err := NewChatProviderFromConfig("openai-responses", ChatProviderConfig{
+		APIKey:  "sk-test",
+		BaseURL: "https://api.example.com",
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	openAIProvider, ok := p.(*openai.OpenAIProvider)
+	require.True(t, ok)
+	assert.Equal(t, "https://api.example.com/v1/responses", openAIProvider.Endpoints().Completion)
 }
 
 func TestNewChatProviderFromConfig_GenericOpenAICompat(t *testing.T) {
@@ -92,6 +108,19 @@ func TestNewChatProviderFromConfig_GeminiVertexAlias(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "gemini", p.Name())
 	assert.Contains(t, p.Endpoints().Completion, "/v1/projects/demo-project/locations/asia-east1/publishers/google/models/")
+}
+
+func TestNewChatProviderFromConfig_VertexAIAlias(t *testing.T) {
+	p, err := NewChatProviderFromConfig("vertex-ai", ChatProviderConfig{
+		APIKey: "oauth-token",
+		Extra: map[string]any{
+			"project_id": "demo-project",
+			"region":     "us-central1",
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+	assert.Equal(t, "gemini", p.Name())
+	assert.Contains(t, p.Endpoints().Completion, "/v1/projects/demo-project/locations/us-central1/publishers/google/models/")
 }
 
 func TestNewChatProviderFromConfig_OpenAIExtras(t *testing.T) {

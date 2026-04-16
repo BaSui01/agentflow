@@ -1327,3 +1327,56 @@ func TestOpenAIProvider_Completion_ResponsesAPI_ConvertsToolCallIDs(t *testing.T
 	}
 	assert.True(t, foundFunctionCall, "expected to find a function_call in the input")
 }
+
+func TestOpenAIProvider_Completion_ResponsesAPI_CustomToolOutputWriteback(t *testing.T) {
+	var capturedBody openAIResponsesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:    "resp_custom_out",
+			Model: "gpt-5.2",
+			Output: []responsesOutputItem{{
+				Type: "message",
+				ID:   "msg_1",
+				Role: "assistant",
+				Content: []responsesContent{{
+					Type: "output_text",
+					Text: "done",
+				}},
+			}},
+		}))
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{
+			{Role: llm.RoleAssistant, ToolCalls: []types.ToolCall{
+				{ID: "call_custom_1", Type: types.ToolTypeCustom, Name: "code_exec", Input: "print('hi')"},
+			}},
+			{Role: llm.RoleTool, ToolCallID: "call_custom_1", Name: "code_exec", Content: "ok"},
+		},
+	})
+	require.NoError(t, err)
+
+	inputItems, ok := capturedBody.Input.([]any)
+	require.True(t, ok)
+	var found bool
+	for _, item := range inputItems {
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if typ, _ := itemMap["type"].(string); typ == "custom_tool_call_output" {
+			found = true
+			assert.Equal(t, "fc_custom_1", itemMap["call_id"])
+			assert.Equal(t, "ok", itemMap["output"])
+		}
+	}
+	assert.True(t, found, "expected custom_tool_call_output writeback item")
+}

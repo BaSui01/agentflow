@@ -723,6 +723,22 @@ func TestClaudeProvider_Headers_FastModeBeta(t *testing.T) {
 	assert.Equal(t, "beta=true", capturedQuery)
 }
 
+func TestConvertToClaudeMessages_ToolErrorWriteback(t *testing.T) {
+	msgs := []types.Message{
+		{Role: llm.RoleTool, ToolCallID: "tc_err", Name: "search", Content: "boom", IsToolError: true},
+	}
+
+	system, claudeMsgs := convertToClaudeMessages(msgs)
+	assert.Equal(t, "", system)
+	require.Len(t, claudeMsgs, 1)
+	require.Len(t, claudeMsgs[0].Content, 1)
+	assert.Equal(t, "tool_result", claudeMsgs[0].Content[0].Type)
+	assert.Equal(t, "tc_err", claudeMsgs[0].Content[0].ToolUseID)
+	if assert.NotNil(t, claudeMsgs[0].Content[0].IsError) {
+		assert.True(t, *claudeMsgs[0].Content[0].IsError)
+	}
+}
+
 func TestClaudeProvider_Completion_FastMode429Fallback(t *testing.T) {
 	callCount := 0
 	var betas []string

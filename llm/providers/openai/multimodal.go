@@ -3,16 +3,14 @@ package openai
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm/providers"
-	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+	openaisdkoption "github.com/openai/openai-go/v3/option"
 
 	"github.com/BaSui01/agentflow/types"
 
@@ -28,8 +26,9 @@ import (
 // Models: dall-e-3, dall-e-2, gpt-image-1
 func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
 	var imageResp llm.ImageGenerationResponse
-	if err := p.doJSON(ctx, http.MethodPost, "/v1/images/generations", req, &imageResp); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Post(ctx, "/images/generations", req, &imageResp); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 	return &imageResp, nil
 }
@@ -40,15 +39,12 @@ func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenera
 func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
 	// 1. 提交视频生成任务
 	var submitResp openaiVideoSubmitResponse
-	if err := p.doJSON(ctx, http.MethodPost, "/v1/videos/generations", req, &submitResp); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Post(ctx, "/videos/generations", req, &submitResp); err != nil {
+		return nil, p.mapSDKError(err)
 	}
-
-	if submitResp.ID == "" {
-		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: "empty video generation id",
-			HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
-		}
+	if err := videoSubmitResponseStatusError(submitResp.ID); err != nil {
+		return nil, err
 	}
 
 	// 2. 异步轮询等待完成
@@ -57,8 +53,9 @@ func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 		MaxAttempts: 120,
 	}, func(ctx context.Context) providers.PollResult[llm.VideoGenerationResponse] {
 		var statusResp openaiVideoStatusResponse
-		if err := p.doJSON(ctx, http.MethodGet, "/v1/videos/generations/"+submitResp.ID, nil, &statusResp); err != nil {
-			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: err}
+		client := p.sdkClient(ctx)
+		if err := client.Get(ctx, "/videos/generations/"+submitResp.ID, nil, &statusResp); err != nil {
+			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: p.mapSDKError(err)}
 		}
 		switch statusResp.Status {
 		case "completed":
@@ -116,9 +113,10 @@ type openaiVideoStatusResponse struct {
 // Endpoint: POST /v1/audio/speech
 // Models: tts-1, tts-1-hd, gpt-4o-mini-tts
 func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	audioData, err := p.doBytes(ctx, http.MethodPost, "/v1/audio/speech", req)
-	if err != nil {
-		return nil, err
+	var audioData []byte
+	client := p.sdkClient(ctx)
+	if err := client.Post(ctx, "/audio/speech", req, &audioData); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return &llm.AudioGenerationResponse{
@@ -173,8 +171,15 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 	}
 
 	var transcriptionResp llm.AudioTranscriptionResponse
-	if err := p.doMultipartJSON(ctx, "/v1/audio/transcriptions", body, writer.FormDataContentType(), &transcriptionResp); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Post(
+		ctx,
+		"/audio/transcriptions",
+		nil,
+		&transcriptionResp,
+		openaisdkoption.WithRequestBody(writer.FormDataContentType(), body),
+	); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return &transcriptionResp, nil
@@ -189,8 +194,9 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 // Models: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
 func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
 	var embeddingResp llm.EmbeddingResponse
-	if err := p.doJSON(ctx, http.MethodPost, "/v1/embeddings", req, &embeddingResp); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Post(ctx, "/embeddings", req, &embeddingResp); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return &embeddingResp, nil
@@ -204,8 +210,9 @@ func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 // Endpoint: POST /v1/fine_tuning/jobs
 func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
 	var job llm.FineTuningJob
-	if err := p.doJSON(ctx, http.MethodPost, "/v1/fine_tuning/jobs", req, &job); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Post(ctx, "/fine_tuning/jobs", req, &job); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return &job, nil
@@ -217,8 +224,9 @@ func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 	var jobsResp struct {
 		Data []llm.FineTuningJob `json:"data"`
 	}
-	if err := p.doJSON(ctx, http.MethodGet, "/v1/fine_tuning/jobs", nil, &jobsResp); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Get(ctx, "/fine_tuning/jobs", nil, &jobsResp); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return jobsResp.Data, nil
@@ -228,8 +236,9 @@ func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 // Endpoint: GET /v1/fine_tuning/jobs/{job_id}
 func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
 	var job llm.FineTuningJob
-	if err := p.doJSON(ctx, http.MethodGet, "/v1/fine_tuning/jobs/"+jobID, nil, &job); err != nil {
-		return nil, err
+	client := p.sdkClient(ctx)
+	if err := client.Get(ctx, "/fine_tuning/jobs/"+jobID, nil, &job); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return &job, nil
@@ -238,151 +247,22 @@ func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 // CancelFineTuningJob 取消微调任务.
 // Endpoint: POST /v1/fine_tuning/jobs/{job_id}/cancel
 func (p *OpenAIProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	httpReq, err := p.newRequest(ctx, http.MethodPost, "/v1/fine_tuning/jobs/"+jobID+"/cancel", nil)
-	if err != nil {
-		return err
-	}
-	resp, err := p.do(httpReq)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	var respBody []byte
+	client := p.sdkClient(ctx)
+	if err := client.Post(ctx, "/fine_tuning/jobs/"+jobID+"/cancel", nil, &respBody); err != nil {
+		return p.mapSDKError(err)
 	}
 
 	return nil
 }
 
-func (p *OpenAIProvider) endpoint(path string) string {
-	return fmt.Sprintf("%s%s", strings.TrimRight(p.openaiCfg.BaseURL, "/"), path)
-}
-
-func (p *OpenAIProvider) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, p.endpoint(path), body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.ApplyHeaders(req, p.Provider.ResolveAPIKey(ctx))
-	return req, nil
-}
-
-func (p *OpenAIProvider) do(req *http.Request) (*http.Response, error) {
-	resp, err := p.Provider.Client.Do(req)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	return resp, nil
-}
-
-func (p *OpenAIProvider) doJSON(ctx context.Context, method, path string, payload any, out any) error {
-	var reqBody io.Reader
-	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return fmt.Errorf("failed to marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(data)
-	}
-
-	req, err := p.newRequest(ctx, method, path, reqBody)
-	if err != nil {
-		return err
-	}
-
-	resp, err := p.do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	if out == nil {
-		return nil
-	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+func videoSubmitResponseStatusError(jobID string) error {
+	if strings.TrimSpace(jobID) == "" {
 		return &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	return nil
-}
-
-func (p *OpenAIProvider) doBytes(ctx context.Context, method, path string, payload any) ([]byte, error) {
-	var reqBody io.Reader
-	if payload != nil {
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(data)
-	}
-
-	req, err := p.newRequest(ctx, method, path, reqBody)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := p.do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
-		}
-	}
-	return data, nil
-}
-
-func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body io.Reader, contentType string, out any) error {
-	req, err := p.newRequest(ctx, http.MethodPost, path, body)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", contentType)
-
-	resp, err := p.do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return &types.Error{
-			Code:    llm.ErrUpstreamError,
-			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-			Retryable: true,
-			Provider:  p.Name(),
+			Code:       llm.ErrUpstreamError,
+			Message:    "empty video generation id",
+			HTTPStatus: http.StatusBadGateway,
+			Provider:   "openai",
 		}
 	}
 	return nil

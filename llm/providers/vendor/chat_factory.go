@@ -40,7 +40,7 @@ func NewChatProviderFromConfig(name string, cfg ChatProviderConfig, logger *zap.
 		logger = zap.NewNop()
 	}
 
-	providerCode := strings.ToLower(strings.TrimSpace(name))
+	providerCode, cfg := canonicalizeChatProviderConfig(name, cfg)
 	switch providerCode {
 	case "openai":
 		return newOpenAIChatProvider(cfg, logger), nil
@@ -70,6 +70,29 @@ func NewChatProviderFromConfig(name string, cfg ChatProviderConfig, logger *zap.
 		return newLlamaChatProvider(cfg, logger), nil
 	default:
 		return newOpenAICompatChatProvider(providerCode, cfg, logger)
+	}
+}
+
+func canonicalizeChatProviderConfig(name string, cfg ChatProviderConfig) (string, ChatProviderConfig) {
+	providerCode := strings.ToLower(strings.TrimSpace(name))
+	if cfg.Extra == nil {
+		cfg.Extra = map[string]any{}
+	}
+	switch providerCode {
+	case "openai-responses", "openai-responses-api":
+		cfg.Extra["use_responses_api"] = true
+		return "openai", cfg
+	case "anthropic-sdk", "anthropic-sdk-go", "claude-sdk":
+		return "anthropic", cfg
+	case "google", "google-genai":
+		return "gemini", cfg
+	case "vertex-ai", "vertexai":
+		if _, exists := cfg.Extra["auth_type"]; !exists {
+			cfg.Extra["auth_type"] = "oauth"
+		}
+		return "gemini-vertex", cfg
+	default:
+		return providerCode, cfg
 	}
 }
 

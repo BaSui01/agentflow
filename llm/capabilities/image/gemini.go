@@ -637,6 +637,9 @@ func (p *GeminiProvider) GenerateStream(ctx context.Context, req *GenerateReques
 	config, prompt := buildGenerateContentConfigFromImageRequest(req, true)
 	for result, err := range client.Models.GenerateContentStream(ctx, model, genai.Text(prompt), config) {
 		if err != nil {
+			if isBenignGenAIStreamDone(err) {
+				break
+			}
 			emit(StreamChunk{Err: err})
 			return err
 		}
@@ -664,6 +667,14 @@ func (p *GeminiProvider) GenerateStream(ctx context.Context, req *GenerateReques
 
 	emit(StreamChunk{Done: true})
 	return nil
+}
+
+func isBenignGenAIStreamDone(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "iterateResponseStream") && strings.Contains(msg, "[DONE]")
 }
 
 // parseSSE 解析 Gemini SSE 响应流，通过 emit 推送 StreamChunk.

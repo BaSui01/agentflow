@@ -476,6 +476,92 @@ func TestPublicProviderRoutingDocsUseVendorFactory(t *testing.T) {
 	}
 }
 
+func TestNativeProviderSDKTransportAndToolMappingGuards(t *testing.T) {
+	type sourceExpectation struct {
+		path              string
+		requiredSnippets  []string
+		forbiddenSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path: "llm/providers/openai/provider.go",
+			requiredSnippets: []string{
+				"openaiofficial.NewClient(",
+				"providerbase.NewToolCallDeltaAccumulator()",
+				"providerbase.BuildOpenAIResponsesToolOutputItem(",
+			},
+			forbiddenSnippets: []string{
+				"http.NewRequest(",
+				"http.NewRequestWithContext(",
+				"client.Do(",
+				"func convertCustomToolFormat(",
+				"func normalizeToolType(",
+				"func buildToolCallTypeIndex(",
+			},
+		},
+		{
+			path: "llm/providers/anthropic/provider.go",
+			requiredSnippets: []string{
+				"anthropicofficial.NewClient(",
+				"providerbase.BuildAnthropicToolResultBlock(",
+				"providerbase.NormalizeToolChoice(",
+			},
+			forbiddenSnippets: []string{
+				"http.NewRequest(",
+				"http.NewRequestWithContext(",
+				"client.Do(",
+			},
+		},
+		{
+			path: "llm/providers/gemini/provider.go",
+			requiredSnippets: []string{
+				"googlegenai.NewClient(",
+				"providerbase.BuildGeminiFunctionResponse(",
+				"providerbase.NormalizeToolChoice(",
+			},
+			forbiddenSnippets: []string{
+				"func geminiAllowedFunctionNames(",
+			},
+		},
+		{
+			path: "llm/providers/gemini/multimodal.go",
+			requiredSnippets: []string{
+				"client.Tunings.Tune(",
+				"client.Tunings.All(",
+				"client.Tunings.Get(",
+				"client.Tunings.Cancel(",
+			},
+			forbiddenSnippets: []string{
+				"http.NewRequest(",
+				"http.NewRequestWithContext(",
+				"client.Do(",
+				"func postGeminiJSON(",
+				"func parseGeminiImageResponse(",
+				"func parseGeminiVideoResponse(",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain %q", tt.path, snippet)
+			}
+		}
+	}
+}
+
 func listProductionGoFiles(dir string) (map[string]struct{}, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

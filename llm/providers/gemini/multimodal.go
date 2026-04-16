@@ -1,23 +1,17 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"google.golang.org/genai"
 
-	"github.com/BaSui01/agentflow/types"
-
 	"github.com/BaSui01/agentflow/llm"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 )
 
 // =============================================================================
@@ -200,189 +194,6 @@ func gcd(a, b int) int {
 	return a
 }
 
-func (p *GeminiProvider) postGeminiJSON(ctx context.Context, endpoint string, body any) ([]byte, error) {
-	fullURL := fmt.Sprintf("%s%s", strings.TrimRight(p.cfg.BaseURL, "/"), endpoint)
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			Cause:      err,
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			Cause:      err,
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	return data, nil
-}
-
-func parseGeminiImageResponse(raw []byte) (*llm.ImageGenerationResponse, error) {
-	var openAIResp llm.ImageGenerationResponse
-	if err := json.Unmarshal(raw, &openAIResp); err == nil && len(openAIResp.Data) > 0 {
-		if openAIResp.Created == 0 {
-			openAIResp.Created = time.Now().Unix()
-		}
-		return &openAIResp, nil
-	}
-
-	var generic map[string]any
-	if err := json.Unmarshal(raw, &generic); err != nil {
-		return nil, fmt.Errorf("failed to decode gemini image response: %w", err)
-	}
-
-	var images []llm.Image
-	appendImage := func(img llm.Image) {
-		if img.URL == "" && img.B64JSON == "" {
-			return
-		}
-		images = append(images, img)
-	}
-
-	if preds, ok := generic["predictions"].([]any); ok {
-		for _, item := range preds {
-			if m, ok := item.(map[string]any); ok {
-				appendImage(extractImageFromMap(m))
-			}
-		}
-	}
-
-	if cands, ok := generic["candidates"].([]any); ok {
-		for _, c := range cands {
-			cm, ok := c.(map[string]any)
-			if !ok {
-				continue
-			}
-			content, ok := cm["content"].(map[string]any)
-			if !ok {
-				continue
-			}
-			parts, ok := content["parts"].([]any)
-			if !ok {
-				continue
-			}
-			for _, p := range parts {
-				pm, ok := p.(map[string]any)
-				if !ok {
-					continue
-				}
-				appendImage(extractImageFromMap(pm))
-			}
-		}
-	}
-
-	if len(images) == 0 {
-		return nil, fmt.Errorf("gemini image response does not contain image data")
-	}
-
-	return &llm.ImageGenerationResponse{
-		Created: time.Now().Unix(),
-		Data:    images,
-	}, nil
-}
-
-func parseGeminiVideoResponse(raw []byte) (*llm.VideoGenerationResponse, error) {
-	var openAIResp llm.VideoGenerationResponse
-	if err := json.Unmarshal(raw, &openAIResp); err == nil && (openAIResp.ID != "" || len(openAIResp.Data) > 0) {
-		if openAIResp.Created == 0 {
-			openAIResp.Created = time.Now().Unix()
-		}
-		return &openAIResp, nil
-	}
-
-	var generic map[string]any
-	if err := json.Unmarshal(raw, &generic); err != nil {
-		return nil, fmt.Errorf("failed to decode gemini video response: %w", err)
-	}
-
-	resp := &llm.VideoGenerationResponse{
-		Created: time.Now().Unix(),
-	}
-
-	if id, _ := generic["id"].(string); id != "" {
-		resp.ID = id
-	}
-	if name, _ := generic["name"].(string); name != "" {
-		resp.ID = name
-	}
-
-	collectVideos := func(items []any) {
-		for _, item := range items {
-			m, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			v := llm.Video{}
-			if s, _ := m["url"].(string); s != "" {
-				v.URL = s
-			}
-			if s, _ := m["uri"].(string); s != "" && v.URL == "" {
-				v.URL = s
-			}
-			if s, _ := m["videoUri"].(string); s != "" && v.URL == "" {
-				v.URL = s
-			}
-			if s, _ := m["b64_json"].(string); s != "" {
-				v.B64JSON = s
-			}
-			if s, _ := m["bytesBase64Encoded"].(string); s != "" && v.B64JSON == "" {
-				v.B64JSON = s
-			}
-			if v.URL != "" || v.B64JSON != "" {
-				resp.Data = append(resp.Data, v)
-			}
-		}
-	}
-
-	if videos, ok := generic["videos"].([]any); ok {
-		collectVideos(videos)
-	}
-	if result, ok := generic["response"].(map[string]any); ok {
-		if videos, ok := result["videos"].([]any); ok {
-			collectVideos(videos)
-		}
-		if generated, ok := result["generatedVideos"].([]any); ok {
-			collectVideos(generated)
-		}
-	}
-
-	if resp.ID == "" && len(resp.Data) > 0 {
-		resp.ID = "gemini-video-response"
-	}
-	if resp.ID == "" && len(resp.Data) == 0 {
-		return nil, fmt.Errorf("gemini video response does not contain operation id or videos")
-	}
-	return resp, nil
-}
-
 func imageGenerationResponseFromGenAI(resp *genai.GenerateImagesResponse) *llm.ImageGenerationResponse {
 	out := &llm.ImageGenerationResponse{
 		Created: time.Now().Unix(),
@@ -498,50 +309,6 @@ func llmEmbeddingResponseFromGenAI(resp *genai.EmbedContentResponse, model strin
 		})
 	}
 	return out
-}
-
-func extractImageFromMap(m map[string]any) llm.Image {
-	img := llm.Image{}
-
-	if s, _ := m["url"].(string); s != "" {
-		img.URL = s
-	}
-	if s, _ := m["b64_json"].(string); s != "" {
-		img.B64JSON = s
-	}
-	if s, _ := m["bytesBase64Encoded"].(string); s != "" && img.B64JSON == "" {
-		img.B64JSON = s
-	}
-
-	for _, key := range []string{"image", "inlineData", "inline_data"} {
-		nested, ok := m[key].(map[string]any)
-		if !ok {
-			continue
-		}
-		if s, _ := nested["url"].(string); s != "" && img.URL == "" {
-			img.URL = s
-		}
-		if s, _ := nested["uri"].(string); s != "" && img.URL == "" {
-			img.URL = s
-		}
-		if s, _ := nested["imageUri"].(string); s != "" && img.URL == "" {
-			img.URL = s
-		}
-		if s, _ := nested["b64_json"].(string); s != "" && img.B64JSON == "" {
-			img.B64JSON = s
-		}
-		if s, _ := nested["bytesBase64Encoded"].(string); s != "" && img.B64JSON == "" {
-			img.B64JSON = s
-		}
-		if s, _ := nested["imageBytes"].(string); s != "" && img.B64JSON == "" {
-			img.B64JSON = s
-		}
-		if s, _ := nested["data"].(string); s != "" && img.B64JSON == "" {
-			img.B64JSON = s
-		}
-	}
-
-	return img
 }
 
 // =============================================================================
@@ -671,96 +438,38 @@ func (p *GeminiProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 // CreateFineTuningJob 使用 Gemini 创建微调任务.
 // Endpoint: POST /v1beta/tunedModels
 func (p *GeminiProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1beta/tunedModels", strings.TrimRight(p.cfg.BaseURL, "/"))
-
-	geminiReq := map[string]any{
-		"baseModel":        req.Model,
-		"displayName":      req.Suffix,
-		"tuningTask":       map[string]any{"hyperparameters": req.Hyperparameters},
-		"trainingDatasets": req.TrainingFile,
-	}
-
-	payload, err := json.Marshal(geminiReq)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	dataset := &genai.TuningDataset{}
+	if trimmed := strings.TrimSpace(req.TrainingFile); trimmed != "" {
+		dataset.GCSURI = trimmed
+	}
+	config := buildGeminiTuningConfig(req)
+	job, err := client.Tunings.Tune(ctx, req.Model, dataset, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	var geminiResp struct {
-		Name     string `json:"name"`
-		Metadata struct {
-			TotalSteps int    `json:"totalSteps"`
-			TunedModel string `json:"tunedModel"`
-		} `json:"metadata"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
-	}
-
-	return &llm.FineTuningJob{
-		ID:     geminiResp.Name,
-		Model:  req.Model,
-		Status: "queued",
-	}, nil
+	return fineTuningJobFromGenAI(job), nil
 }
 
 // ListFineTuningJobs 列出 Gemini 微调任务.
 // Endpoint: GET /v1beta/tunedModels
 func (p *GeminiProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1beta/tunedModels", strings.TrimRight(p.cfg.BaseURL, "/"))
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	var listResp struct {
-		TunedModels []struct {
-			Name        string `json:"name"`
-			BaseModel   string `json:"baseModel"`
-			DisplayName string `json:"displayName"`
-			State       string `json:"state"`
-		} `json:"tunedModels"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
-	}
-
-	jobs := make([]llm.FineTuningJob, len(listResp.TunedModels))
-	for i, m := range listResp.TunedModels {
-		jobs[i] = llm.FineTuningJob{
-			ID:     m.Name,
-			Model:  m.BaseModel,
-			Status: strings.ToLower(m.State),
+	jobs := make([]llm.FineTuningJob, 0)
+	for job, iterErr := range client.Tunings.All(ctx) {
+		if iterErr != nil {
+			return nil, p.mapSDKError(iterErr)
 		}
+		if job == nil {
+			continue
+		}
+		jobs = append(jobs, *fineTuningJobFromGenAI(job))
 	}
 	return jobs, nil
 }
@@ -768,61 +477,113 @@ func (p *GeminiProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 // GetFineTuningJob 获取 Gemini 微调任务.
 // Endpoint: GET /v1beta/{name}
 func (p *GeminiProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1beta/%s", strings.TrimRight(p.cfg.BaseURL, "/"), jobID)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, p.mapSDKError(err)
 	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
+	job, err := client.Tunings.Get(ctx, jobID, nil)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, p.mapSDKError(err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	var tunedModel struct {
-		Name      string `json:"name"`
-		BaseModel string `json:"baseModel"`
-		State     string `json:"state"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tunedModel); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
-	}
-
-	return &llm.FineTuningJob{
-		ID:     tunedModel.Name,
-		Model:  tunedModel.BaseModel,
-		Status: strings.ToLower(tunedModel.State),
-	}, nil
+	return fineTuningJobFromGenAI(job), nil
 }
 
 // CancelFineTuningJob 取消 Gemini 微调任务.
 // Endpoint: DELETE /v1beta/{name}
 func (p *GeminiProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	endpoint := fmt.Sprintf("%s/v1beta/%s", strings.TrimRight(p.cfg.BaseURL, "/"), jobID)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	client, err := p.sdkClient(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return p.mapSDKError(err)
 	}
-	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
-
-	resp, err := p.client.Do(httpReq)
+	_, err = client.Tunings.Cancel(ctx, jobID, nil)
 	if err != nil {
-		return &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+		return p.mapSDKError(err)
 	}
 	return nil
+}
+
+func buildGeminiTuningConfig(req *llm.FineTuningJobRequest) *genai.CreateTuningJobConfig {
+	if req == nil {
+		return nil
+	}
+	cfg := &genai.CreateTuningJobConfig{
+		TunedModelDisplayName: strings.TrimSpace(req.Suffix),
+	}
+	if req.ValidationFile != "" {
+		cfg.ValidationDataset = &genai.TuningValidationDataset{GCSURI: strings.TrimSpace(req.ValidationFile)}
+	}
+	if hp := req.Hyperparameters; len(hp) > 0 {
+		if epochs, ok := hyperparamInt32(hp["epoch_count"], hp["epochs"], hp["n_epochs"]); ok {
+			cfg.EpochCount = &epochs
+		}
+		if batchSize, ok := hyperparamInt32(hp["batch_size"]); ok {
+			cfg.BatchSize = &batchSize
+		}
+		if lrMult, ok := hyperparamFloat32(hp["learning_rate_multiplier"]); ok {
+			cfg.LearningRateMultiplier = &lrMult
+		}
+		if lr, ok := hyperparamFloat32(hp["learning_rate"]); ok {
+			cfg.LearningRate = &lr
+		}
+	}
+	if cfg.ValidationDataset == nil && cfg.TunedModelDisplayName == "" && cfg.EpochCount == nil && cfg.BatchSize == nil && cfg.LearningRateMultiplier == nil && cfg.LearningRate == nil {
+		return nil
+	}
+	return cfg
+}
+
+func fineTuningJobFromGenAI(job *genai.TuningJob) *llm.FineTuningJob {
+	if job == nil {
+		return &llm.FineTuningJob{}
+	}
+	out := &llm.FineTuningJob{
+		ID:         strings.TrimSpace(job.Name),
+		Model:      strings.TrimSpace(job.BaseModel),
+		Status:     strings.ToLower(strings.TrimPrefix(string(job.State), "JOB_STATE_")),
+		CreatedAt:  job.CreateTime.Unix(),
+		FinishedAt: job.EndTime.Unix(),
+	}
+	if job.TunedModel != nil {
+		out.FineTunedModel = strings.TrimSpace(job.TunedModel.Model)
+	}
+	if out.FineTunedModel == "" && job.TunedModelDisplayName != "" {
+		out.FineTunedModel = strings.TrimSpace(job.TunedModelDisplayName)
+	}
+	if job.Error != nil {
+		out.Error = &llm.FineTuningError{
+			Code:    fmt.Sprintf("%d", job.Error.Code),
+			Message: strings.TrimSpace(job.Error.Message),
+		}
+	}
+	return out
+}
+
+func hyperparamInt32(values ...any) (int32, bool) {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case int:
+			return int32(typed), true
+		case int32:
+			return typed, true
+		case int64:
+			return int32(typed), true
+		case float64:
+			return int32(typed), true
+		}
+	}
+	return 0, false
+}
+
+func hyperparamFloat32(values ...any) (float32, bool) {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case float32:
+			return typed, true
+		case float64:
+			return float32(typed), true
+		case int:
+			return float32(typed), true
+		}
+	}
+	return 0, false
 }

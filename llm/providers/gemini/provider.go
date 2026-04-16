@@ -244,13 +244,6 @@ func resolveGeminiCapabilities(modelID, displayName, description string, methods
 	return caps
 }
 
-func firstNonEmptyMethods(primary, fallback []string) []string {
-	if len(primary) > 0 {
-		return primary
-	}
-	return fallback
-}
-
 func hasGeminiGenerateContent(methods []string) bool {
 	for _, method := range methods {
 		if strings.EqualFold(strings.TrimSpace(method), "generateContent") {
@@ -844,15 +837,15 @@ func convertToGenAIContents(msgs []types.Message) (*genai.Content, []*genai.Cont
 		}
 
 		if m.Role == llm.RoleTool && m.ToolCallID != "" {
-			var response map[string]any
-			if err := json.Unmarshal([]byte(m.Content), &response); err != nil {
-				response = map[string]any{"result": m.Content}
+			writeback, ok := providerbase.ToolOutputFromMessage(m, nil)
+			if !ok {
+				continue
 			}
 			parts = append(parts, &genai.Part{
 				FunctionResponse: &genai.FunctionResponse{
-					ID:       m.ToolCallID,
-					Name:     m.Name,
-					Response: response,
+					ID:       writeback.CallID,
+					Name:     writeback.Name,
+					Response: providerbase.BuildGeminiFunctionResponse(writeback),
 				},
 			})
 		}
@@ -869,12 +862,12 @@ func convertToGenAITools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions)
 	needGoogleSearch := wsOpts != nil
 	declarations := make([]*genai.FunctionDeclaration, 0, len(tools))
 	for _, t := range tools {
-		if t.Name == "web_search" || t.Name == "google_search" {
+		if providerbase.IsSearchToolPlaceholder(t.Name) {
 			needGoogleSearch = true
 			continue
 		}
-		var params any
-		if err := json.Unmarshal(t.Parameters, &params); err != nil {
+		params := providerbase.ToolParametersSchemaMap(t.Parameters)
+		if len(params) == 0 {
 			continue
 		}
 		declarations = append(declarations, &genai.FunctionDeclaration{
@@ -915,50 +908,21 @@ func convertToolChoiceToGenAI(toolChoice any, includeServerSide *bool) *genai.To
 		return out
 	}
 
-	switch v := toolChoice.(type) {
-	case string:
-		switch strings.TrimSpace(strings.ToLower(v)) {
-		case "auto":
-			cfg = buildMode(genai.FunctionCallingConfigModeAuto, nil)
-		case "required", "any":
-			cfg = buildMode(genai.FunctionCallingConfigModeAny, nil)
-		case "none":
-			cfg = buildMode(genai.FunctionCallingConfigModeNone, nil)
-		case "validated":
-			cfg = buildMode(genai.FunctionCallingConfigModeValidated, nil)
-		}
-	case map[string]any:
-		if fn, ok := v["function"].(map[string]any); ok {
-			if name, ok := fn["name"].(string); ok && strings.TrimSpace(name) != "" {
-				cfg = buildMode(genai.FunctionCallingConfigModeAny, []string{strings.TrimSpace(name)})
-				break
-			}
-		}
-		mode, _ := v["mode"].(string)
-		if mode == "" {
-			mode, _ = v["Mode"].(string)
-		}
-		switch strings.ToUpper(strings.TrimSpace(mode)) {
-		case "AUTO":
-			cfg = buildMode(genai.FunctionCallingConfigModeAuto, nil)
-		case "ANY":
-			cfg = buildMode(genai.FunctionCallingConfigModeAny, geminiAllowedFunctionNames(v["allowed_function_names"]))
-			if cfg.FunctionCallingConfig != nil && len(cfg.FunctionCallingConfig.AllowedFunctionNames) == 0 {
-				cfg.FunctionCallingConfig.AllowedFunctionNames = geminiAllowedFunctionNames(v["allowedFunctionNames"])
-			}
-		case "NONE":
-			cfg = buildMode(genai.FunctionCallingConfigModeNone, nil)
-		case "VALIDATED":
-			cfg = buildMode(genai.FunctionCallingConfigModeValidated, geminiAllowedFunctionNames(v["allowed_function_names"]))
-			if cfg.FunctionCallingConfig != nil && len(cfg.FunctionCallingConfig.AllowedFunctionNames) == 0 {
-				cfg.FunctionCallingConfig.AllowedFunctionNames = geminiAllowedFunctionNames(v["allowedFunctionNames"])
-			}
-		}
-		if include, ok := v["include_server_side_tool_invocations"].(bool); ok {
-			includeServerSide = &include
-		} else if include, ok := v["includeServerSideToolInvocations"].(bool); ok {
-			includeServerSide = &include
-		}
+	spec := providerbase.NormalizeToolChoice(toolChoice)
+	switch spec.Mode {
+	case "auto":
+		cfg = buildMode(genai.FunctionCallingConfigModeAuto, nil)
+	case "any":
+		cfg = buildMode(genai.FunctionCallingConfigModeAny, spec.AllowedFunctionNames)
+	case "none":
+		cfg = buildMode(genai.FunctionCallingConfigModeNone, nil)
+	case "validated":
+		cfg = buildMode(genai.FunctionCallingConfigModeValidated, spec.AllowedFunctionNames)
+	case "tool":
+		cfg = buildMode(genai.FunctionCallingConfigModeAny, providerbase.NormalizeUniqueStrings([]string{spec.SpecificName}))
+	}
+	if spec.IncludeServerSideToolUse != nil {
+		includeServerSide = spec.IncludeServerSideToolUse
 	}
 
 	if includeServerSide != nil {
@@ -1175,6 +1139,9 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		defer close(ch)
 		for result, err := range client.Models.GenerateContentStream(ctx, model, contents, config) {
 			if err != nil {
+				if isBenignGenAIStreamDone(err) {
+					return
+				}
 				mapped := p.mapSDKError(err)
 				if te, ok := mapped.(*types.Error); ok {
 					select {
@@ -1209,6 +1176,14 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}()
 
 	return ch, nil
+}
+
+func isBenignGenAIStreamDone(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "iterateResponseStream") && strings.Contains(msg, "[DONE]")
 }
 
 func toChatResponseFromGenAI(gr *genai.GenerateContentResponse, provider, model string) *llm.ChatResponse {
@@ -1311,11 +1286,7 @@ func messageFromGenAICandidate(responseID string, candidate *genai.Candidate, pr
 					toolCallID = fmt.Sprintf("call_%s_%s_%d", responseID, part.FunctionCall.Name, toolCallIndex)
 				}
 			}
-			msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
-				ID:        toolCallID,
-				Name:      part.FunctionCall.Name,
-				Arguments: argsJSON,
-			})
+			msg.ToolCalls = append(msg.ToolCalls, providerbase.NewFunctionToolCall(toolCallID, part.FunctionCall.Name, argsJSON))
 			toolCallIndex++
 		}
 	}
@@ -1447,76 +1418,6 @@ func extractGroundingAnnotationsFromGenAI(gm *genai.GroundingMetadata) []types.A
 	return annotations
 }
 
-func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatResponse {
-	choices := make([]llm.ChatChoice, 0, len(gr.Candidates))
-
-	for _, candidate := range gr.Candidates {
-		msg := types.Message{
-			Role: llm.RoleAssistant,
-		}
-
-		toolCallIndex := 0
-		for partIndex, part := range candidate.Content.Parts {
-			// Thinking content
-			if part.Thought != nil && *part.Thought {
-				appendGeminiThoughtPart(&msg, part, partIndex, provider)
-				continue
-			}
-			if strings.TrimSpace(part.ThoughtSignature) != "" {
-				msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
-					Provider:  provider,
-					Kind:      "thought_signature",
-					State:     part.ThoughtSignature,
-					PartIndex: partIndex,
-				})
-			}
-			if part.Text != "" {
-				msg.Content += part.Text
-			}
-			if part.FunctionCall != nil {
-				argsJSON, err := json.Marshal(part.FunctionCall.Args)
-				if err != nil {
-					continue
-				}
-				toolCallID := fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, toolCallIndex)
-				if gr.ResponseID != "" {
-					toolCallID = fmt.Sprintf("call_%s_%s_%d", gr.ResponseID, part.FunctionCall.Name, toolCallIndex)
-				}
-				msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
-					ID:        toolCallID,
-					Name:      part.FunctionCall.Name,
-					Arguments: argsJSON,
-				})
-				toolCallIndex++
-			}
-		}
-
-		// 提取 grounding annotations
-		if candidate.GroundingMetadata != nil {
-			msg.Annotations = append(msg.Annotations, extractGroundingAnnotations(candidate.GroundingMetadata)...)
-		}
-
-		choices = append(choices, llm.ChatChoice{
-			Index:        candidate.Index,
-			FinishReason: normalizeFinishReason(candidate.FinishReason),
-			Message:      msg,
-		})
-	}
-
-	resp := &llm.ChatResponse{
-		ID:       gr.ResponseID,
-		Provider: provider,
-		Model:    model,
-		Choices:  choices,
-	}
-
-	if gr.UsageMetadata != nil {
-		resp.Usage = *convertUsageMetadata(gr.UsageMetadata)
-	}
-
-	return resp
-}
-
 func appendGeminiThoughtPart(msg *types.Message, part geminiPart, partIndex int, provider string) {
 	if msg == nil {
 		return
@@ -1608,53 +1509,29 @@ func checkPromptFeedback(resp geminiResponse, provider string) error {
 // convertToolChoice maps ChatRequest.ToolChoice to Gemini's ToolConfig.
 func convertToolChoice(toolChoice any, includeServerSide *bool) *geminiToolConfig {
 	var cfg *geminiToolConfig
-	switch v := toolChoice.(type) {
-	case string:
-		switch v {
-		case "auto":
-			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "AUTO"}}
-		case "required", "any":
-			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "ANY"}}
-		case "none":
-			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "NONE"}}
-		case "validated":
-			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "VALIDATED"}}
+	spec := providerbase.NormalizeToolChoice(toolChoice)
+	if _, ok := toolChoice.(string); ok && spec.Mode == "tool" {
+		return nil
+	}
+	switch spec.Mode {
+	case "auto":
+		cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "AUTO"}}
+	case "any":
+		cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "ANY", AllowedFunctionNames: spec.AllowedFunctionNames}}
+	case "none":
+		cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "NONE"}}
+	case "validated":
+		cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "VALIDATED", AllowedFunctionNames: spec.AllowedFunctionNames}}
+	case "tool":
+		cfg = &geminiToolConfig{
+			FunctionCallingConfig: &geminiFunctionCallingConfig{
+				Mode:                 "ANY",
+				AllowedFunctionNames: providerbase.NormalizeUniqueStrings([]string{spec.SpecificName}),
+			},
 		}
-	case map[string]any:
-		// OpenAI-style {"type":"function","function":{"name":"fn"}}
-		if fn, ok := v["function"].(map[string]any); ok {
-			if name, ok := fn["name"].(string); ok {
-				cfg = &geminiToolConfig{
-					FunctionCallingConfig: &geminiFunctionCallingConfig{
-						Mode:                 "ANY",
-						AllowedFunctionNames: []string{name},
-					},
-				}
-				break
-			}
-		}
-		mode, _ := v["mode"].(string)
-		if mode == "" {
-			mode, _ = v["Mode"].(string)
-		}
-		mode = strings.ToUpper(strings.TrimSpace(mode))
-		if mode != "" {
-			cfg = &geminiToolConfig{
-				FunctionCallingConfig: &geminiFunctionCallingConfig{
-					Mode: mode,
-				},
-			}
-			if allowed := geminiAllowedFunctionNames(v["allowed_function_names"]); len(allowed) > 0 {
-				cfg.FunctionCallingConfig.AllowedFunctionNames = allowed
-			} else if allowed := geminiAllowedFunctionNames(v["allowedFunctionNames"]); len(allowed) > 0 {
-				cfg.FunctionCallingConfig.AllowedFunctionNames = allowed
-			}
-		}
-		if include, ok := v["include_server_side_tool_invocations"].(bool); ok {
-			includeServerSide = &include
-		} else if include, ok := v["includeServerSideToolInvocations"].(bool); ok {
-			includeServerSide = &include
-		}
+	}
+	if spec.IncludeServerSideToolUse != nil {
+		includeServerSide = spec.IncludeServerSideToolUse
 	}
 	if cfg != nil && cfg.FunctionCallingConfig != nil {
 		switch cfg.FunctionCallingConfig.Mode {
@@ -1670,35 +1547,6 @@ func convertToolChoice(toolChoice any, includeServerSide *bool) *geminiToolConfi
 		cfg.IncludeServerSideToolInvocations = includeServerSide
 	}
 	return cfg
-}
-
-func geminiAllowedFunctionNames(raw any) []string {
-	switch v := raw.(type) {
-	case []string:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			item = strings.TrimSpace(item)
-			if item != "" {
-				out = append(out, item)
-			}
-		}
-		return out
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			name, ok := item.(string)
-			if !ok {
-				continue
-			}
-			name = strings.TrimSpace(name)
-			if name != "" {
-				out = append(out, name)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
 }
 
 // buildGenerationConfig constructs geminiGenerationConfig from ChatRequest.

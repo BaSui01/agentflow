@@ -2,21 +2,24 @@ package openai
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	openaiofficial "github.com/BaSui01/agentflow/llm/internal/openaiofficial"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"
+	openaisdk "github.com/openai/openai-go/v3"
+	openaisdkoption "github.com/openai/openai-go/v3/option"
 	"go.uber.org/zap"
 )
 
@@ -84,6 +87,53 @@ func (p *OpenAIProvider) Endpoints() llm.ProviderEndpoints {
 		ep.Completion = base + "/v1/responses"
 	}
 	return ep
+}
+
+func (p *OpenAIProvider) sdkClient(ctx context.Context) openaisdk.Client {
+	return openaiofficial.NewClient(p.openaiCfg, p.Provider.ResolveAPIKey(ctx), p.Provider.Client)
+}
+
+func (p *OpenAIProvider) mapSDKError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr *openaisdk.Error
+	if errors.As(err, &apiErr) {
+		return providerbase.MapHTTPError(apiErr.StatusCode, apiErr.RawJSON(), p.Name())
+	}
+	return &types.Error{
+		Code:       llm.ErrUpstreamError,
+		Message:    err.Error(),
+		Cause:      err,
+		HTTPStatus: http.StatusBadGateway,
+		Retryable:  true,
+		Provider:   p.Name(),
+	}
+}
+
+func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
+	start := time.Now()
+	client := p.sdkClient(ctx)
+	var modelsResp struct {
+		Data []any `json:"data"`
+	}
+	err := client.Get(ctx, "/models", nil, &modelsResp)
+	latency := time.Since(start)
+	if err != nil {
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, p.mapSDKError(err)
+	}
+	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
+}
+
+func (p *OpenAIProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	client := p.sdkClient(ctx)
+	var modelsResp struct {
+		Data []llm.Model `json:"data"`
+	}
+	if err := client.Get(ctx, "/models", nil, &modelsResp); err != nil {
+		return nil, p.mapSDKError(err)
+	}
+	return modelsResp.Data, nil
 }
 
 // Completion 覆写基类方法，支持 Responses API 路由.
@@ -305,14 +355,10 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 		PromptTokens: countResponsesPromptTokens(body),
 	})
 
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal responses api request: %w", err)
-	}
-
 	var responsesResp openAIResponsesResponse
-	if err := p.Provider.DoJSON(ctx, http.MethodPost, "/v1/responses", json.RawMessage(payload), apiKey, &responsesResp); err != nil {
-		return nil, err
+	client := openaiofficial.NewClient(p.openaiCfg, apiKey, p.Provider.Client)
+	if err := client.Post(ctx, "/responses", body, &responsesResp); err != nil {
+		return nil, p.mapSDKError(err)
 	}
 
 	return toResponsesAPIChatResponse(responsesResp, p.Name()), nil
@@ -397,7 +443,7 @@ func buildResponsesTools(req *llm.ChatRequest) []any {
 	hasNativeWebSearch := false
 
 	for _, t := range req.Tools {
-		if isNativeResponsesWebSearchTool(t.Name) {
+		if providerbase.IsSearchToolPlaceholder(t.Name) {
 			if !hasNativeWebSearch {
 				tools = append(tools, buildResponsesWebSearchTool(req.WebSearchOptions))
 				hasNativeWebSearch = true
@@ -424,10 +470,7 @@ func buildResponsesTools(req *llm.ChatRequest) []any {
 }
 
 func buildResponsesToolDefinition(t types.ToolSchema) map[string]any {
-	toolType := strings.TrimSpace(t.Type)
-	if toolType == "" {
-		toolType = types.ToolTypeFunction
-	}
+	toolType := providerbase.NormalizeToolType(t.Type)
 	switch toolType {
 	case types.ToolTypeCustom:
 		tool := map[string]any{
@@ -437,7 +480,7 @@ func buildResponsesToolDefinition(t types.ToolSchema) map[string]any {
 		if t.Description != "" {
 			tool["description"] = t.Description
 		}
-		if format := convertCustomToolFormat(t.Format); len(format) > 0 {
+		if format := providerbase.ConvertCustomToolFormat(t.Format); len(format) > 0 {
 			tool["format"] = format
 		}
 		return tool
@@ -449,45 +492,13 @@ func buildResponsesToolDefinition(t types.ToolSchema) map[string]any {
 		if t.Description != "" {
 			tool["description"] = t.Description
 		}
-		if len(t.Parameters) > 0 {
-			var params any
-			if err := json.Unmarshal(t.Parameters, &params); err == nil {
-				tool["parameters"] = params
-			}
+		if params := providerbase.ToolParametersSchemaMap(t.Parameters); len(params) > 0 {
+			tool["parameters"] = params
 		}
 		if t.Strict != nil {
 			tool["strict"] = *t.Strict
 		}
 		return tool
-	}
-}
-
-func convertCustomToolFormat(format *types.ToolFormat) map[string]any {
-	if format == nil {
-		return nil
-	}
-	out := map[string]any{}
-	if v := strings.TrimSpace(format.Type); v != "" {
-		out["type"] = v
-	}
-	if v := strings.TrimSpace(format.Syntax); v != "" {
-		out["syntax"] = v
-	}
-	if v := strings.TrimSpace(format.Definition); v != "" {
-		out["definition"] = v
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func isNativeResponsesWebSearchTool(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "web_search", "web_search_preview":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -592,7 +603,7 @@ func extractInstructionsFromMessages(msgs []types.Message) (string, []types.Mess
 // is called, so they should be skipped here to avoid API errors.
 func convertMessagesToResponsesInput(msgs []types.Message) []any {
 	items := make([]any, 0, len(msgs))
-	toolCallTypes := buildToolCallTypeIndex(msgs)
+	toolCallTypes := providerbase.BuildToolCallTypeIndex(msgs)
 	for _, m := range msgs {
 		switch m.Role {
 		case llm.RoleSystem, llm.RoleDeveloper:
@@ -618,7 +629,7 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 				}
 				for _, tc := range m.ToolCalls {
 					responsesID := convertToResponsesToolCallID(tc.ID)
-					switch normalizeToolType(tc.Type) {
+					switch providerbase.NormalizeToolType(tc.Type) {
 					case types.ToolTypeCustom:
 						items = append(items, customToolCallInputItem{
 							Type:   "custom_tool_call",
@@ -644,24 +655,11 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 			}
 		case llm.RoleTool:
 			// Skip tool outputs with empty ToolCallID to avoid API errors
-			if strings.TrimSpace(m.ToolCallID) == "" {
+			writeback, ok := providerbase.ToolOutputFromMessage(m, toolCallTypes)
+			if !ok {
 				continue
 			}
-			responsesID := convertToResponsesToolCallID(m.ToolCallID)
-			switch toolCallTypes[m.ToolCallID] {
-			case types.ToolTypeCustom:
-				items = append(items, customToolCallOutputItem{
-					Type:   "custom_tool_call_output",
-					CallID: responsesID,
-					Output: m.Content,
-				})
-			default:
-				items = append(items, functionCallOutputItem{
-					Type:   "function_call_output",
-					CallID: responsesID,
-					Output: m.Content,
-				})
-			}
+			items = append(items, providerbase.BuildOpenAIResponsesToolOutputItem(writeback, convertToResponsesToolCallID))
 		default:
 			items = append(items, responsesInputItem{
 				Role:    string(m.Role),
@@ -690,30 +688,6 @@ func convertToResponsesToolCallID(id string) string {
 	}
 	// For any other format, prefix with "fc_"
 	return "fc_" + id
-}
-
-func buildToolCallTypeIndex(msgs []types.Message) map[string]string {
-	out := make(map[string]string)
-	for _, m := range msgs {
-		for _, tc := range m.ToolCalls {
-			if strings.TrimSpace(tc.ID) == "" {
-				continue
-			}
-			out[tc.ID] = normalizeToolType(tc.Type)
-		}
-	}
-	return out
-}
-
-func normalizeToolType(toolType string) string {
-	switch strings.ToLower(strings.TrimSpace(toolType)) {
-	case "", types.ToolTypeFunction:
-		return types.ToolTypeFunction
-	case types.ToolTypeCustom:
-		return types.ToolTypeCustom
-	default:
-		return types.ToolTypeFunction
-	}
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -941,22 +915,16 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 
 		case "function_call":
 			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
-			choice.Message.ToolCalls = append(choice.Message.ToolCalls, types.ToolCall{
-				ID:        firstNonEmptyString(output.CallID, output.ID),
-				Type:      types.ToolTypeFunction,
-				Name:      output.Name,
-				Arguments: output.Arguments,
-			})
+			choice.Message.ToolCalls = append(choice.Message.ToolCalls,
+				providerbase.NewFunctionToolCall(firstNonEmptyString(output.CallID, output.ID), output.Name, output.Arguments),
+			)
 			choice.FinishReason = "tool_calls"
 
 		case "custom_tool_call":
 			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
-			choice.Message.ToolCalls = append(choice.Message.ToolCalls, types.ToolCall{
-				ID:    firstNonEmptyString(output.CallID, output.ID),
-				Type:  types.ToolTypeCustom,
-				Name:  output.Name,
-				Input: output.Input,
-			})
+			choice.Message.ToolCalls = append(choice.Message.ToolCalls,
+				providerbase.NewCustomToolCall(firstNonEmptyString(output.CallID, output.ID), output.Name, output.Input),
+			)
 			choice.FinishReason = "tool_calls"
 		}
 	}
@@ -1232,27 +1200,22 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		PromptTokens: countResponsesPromptTokens(body),
 	})
 
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal responses api stream request: %w", err)
+	client := openaiofficial.NewClient(p.openaiCfg, apiKey, p.Provider.Client)
+	var rawResp *http.Response
+	if err := client.Post(ctx, "/responses", body, &rawResp, openaisdkoption.WithHeader("Accept", "text/event-stream")); err != nil {
+		return nil, p.mapSDKError(err)
+	}
+	if rawResp == nil || rawResp.Body == nil {
+		return nil, &types.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    "openai responses stream returned empty response body",
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
 	}
 
-	httpReq, err := p.Provider.NewRequest(ctx, http.MethodPost, "/v1/responses", bytes.NewReader(payload), apiKey)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := p.Provider.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	return streamResponsesSSE(ctx, resp.Body, p.Name()), nil
+	return streamResponsesSSE(ctx, rawResp.Body, p.Name()), nil
 }
 
 // streamResponsesSSE parses SSE events from the Responses API.
@@ -1265,10 +1228,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 
 		var currentID string
 		var currentModel string
-		toolCallName := map[string]string{}
-		toolCallType := map[string]string{}
-		toolCallID := map[string]string{}
-		toolCallArgs := map[string][]byte{}
+		accumulator := providerbase.NewToolCallDeltaAccumulator()
 		seenReasoning := map[string]bool{}
 		seenToolCalls := map[string]bool{} // track tool calls emitted via .done events
 		finishSent := false
@@ -1332,22 +1292,14 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					name, _ := item["name"].(string)
 					callID, _ := item["call_id"].(string)
 					if itemID != "" && name != "" {
-						toolCallName[itemID] = name
-						toolCallType[itemID] = types.ToolTypeFunction
-						if callID != "" {
-							toolCallID[itemID] = callID
-						}
+						accumulator.Register(itemID, types.ToolTypeFunction, name, callID)
 					}
 				case "custom_tool_call":
 					itemID, _ := item["id"].(string)
 					name, _ := item["name"].(string)
 					callID, _ := item["call_id"].(string)
 					if itemID != "" && name != "" {
-						toolCallName[itemID] = name
-						toolCallType[itemID] = types.ToolTypeCustom
-						if callID != "" {
-							toolCallID[itemID] = callID
-						}
+						accumulator.Register(itemID, types.ToolTypeCustom, name, callID)
 					}
 				}
 
@@ -1393,7 +1345,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				if itemID == "" {
 					continue
 				}
-				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
+				accumulator.Append(itemID, delta)
 
 			case "response.custom_tool_call_input.delta":
 				delta, _ := event["delta"].(string)
@@ -1401,7 +1353,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				if itemID == "" {
 					continue
 				}
-				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
+				accumulator.Append(itemID, delta)
 
 			case "response.output_item.done":
 				item, _ := event["item"].(map[string]any)
@@ -1430,13 +1382,8 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					case ch <- llm.StreamChunk{
 						ID: currentID, Provider: providerName, Model: currentModel,
 						Delta: types.Message{
-							Role: llm.RoleAssistant,
-							ToolCalls: []types.ToolCall{{
-								ID:    callID,
-								Type:  types.ToolTypeCustom,
-								Name:  output.Name,
-								Input: output.Input,
-							}},
+							Role:      llm.RoleAssistant,
+							ToolCalls: providerbase.ToolCallChunk(providerbase.NewCustomToolCall(callID, output.Name, output.Input)),
 						},
 						FinishReason: "tool_calls",
 					}:
@@ -1509,13 +1456,11 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				if itemID == "" {
 					continue
 				}
-				arguments := toolCallArgs[itemID]
-				name := toolCallName[itemID]
-				callID := firstNonEmptyString(toolCallID[itemID], itemID)
-				delete(toolCallArgs, itemID)
-				delete(toolCallName, itemID)
-				delete(toolCallType, itemID)
-				delete(toolCallID, itemID)
+				toolCall, ok := accumulator.CompleteFunction(itemID)
+				if !ok {
+					continue
+				}
+				callID := toolCall.ID
 				seenToolCalls[callID] = true // mark as emitted
 				// Always emit tool call chunk; FinishReason only on first one
 				select {
@@ -1524,13 +1469,8 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				case ch <- llm.StreamChunk{
 					ID: currentID, Provider: providerName, Model: currentModel,
 					Delta: types.Message{
-						Role: llm.RoleAssistant,
-						ToolCalls: []types.ToolCall{{
-							ID:        callID,
-							Type:      types.ToolTypeFunction,
-							Name:      name,
-							Arguments: json.RawMessage(arguments),
-						}},
+						Role:      llm.RoleAssistant,
+						ToolCalls: providerbase.ToolCallChunk(toolCall),
 					},
 					FinishReason: func() string {
 						if finishSent {
@@ -1547,13 +1487,11 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				if itemID == "" {
 					continue
 				}
-				input := string(toolCallArgs[itemID])
-				name := toolCallName[itemID]
-				callID := firstNonEmptyString(toolCallID[itemID], itemID)
-				delete(toolCallArgs, itemID)
-				delete(toolCallName, itemID)
-				delete(toolCallType, itemID)
-				delete(toolCallID, itemID)
+				toolCall, ok := accumulator.CompleteCustom(itemID)
+				if !ok {
+					continue
+				}
+				callID := toolCall.ID
 				seenToolCalls[callID] = true // mark as emitted
 				// Always emit tool call chunk; FinishReason only on first one
 				select {
@@ -1562,13 +1500,8 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				case ch <- llm.StreamChunk{
 					ID: currentID, Provider: providerName, Model: currentModel,
 					Delta: types.Message{
-						Role: llm.RoleAssistant,
-						ToolCalls: []types.ToolCall{{
-							ID:    callID,
-							Type:  types.ToolTypeCustom,
-							Name:  name,
-							Input: input,
-						}},
+						Role:      llm.RoleAssistant,
+						ToolCalls: providerbase.ToolCallChunk(toolCall),
 					},
 					FinishReason: func() string {
 						if finishSent {
