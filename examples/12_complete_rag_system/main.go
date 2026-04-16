@@ -9,6 +9,7 @@ import (
 	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	llmrerank "github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -28,7 +29,7 @@ func main() {
 	vectorStore := rag.NewInMemoryVectorStore(logger)
 
 	// 2. 准备文档
-	docs := []rag.Document{
+	docs := []core.Document{
 		{
 			ID:        "doc1",
 			Content:   "Go is a statically typed, compiled programming language designed at Google.",
@@ -81,7 +82,7 @@ func main() {
 	cache := rag.NewSemanticCache(vectorStore, cacheConfig, logger)
 
 	// 设置缓存
-	cacheDoc := rag.Document{
+	cacheDoc := core.Document{
 		ID:        "cache1",
 		Content:   "Cached response for programming language query",
 		Embedding: queryEmbedding,
@@ -168,7 +169,7 @@ func demoRuntimeBuilder(logger *zap.Logger) {
 	if err != nil {
 		log.Fatalf("NewSemanticCache failed: %v", err)
 	}
-	if err := runtimeCache.Set(ctx, rag.Document{
+	if err := runtimeCache.Set(ctx, core.Document{
 		ID:        "runtime-cache-doc",
 		Content:   "runtime semantic cache demo",
 		Embedding: []float64{0.1, 0.2, 0.3},
