@@ -266,7 +266,7 @@ func main() {
 - legacy 默认文本链路仍是 `Gateway -> RoutedChatProvider -> MultiProviderRouter`；channel-based 新链路是 `Gateway -> ChannelRoutedProvider`
 - `MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥的 routed provider 入口；一次请求只选一条单链路，不要把前者包进后者形成双重路由
 - 外部项目现在可通过 `llm/runtime/compose.Build(...)` 复用同一套 resilience/cache/policy/tool-provider runtime 装配；仓库自身组合根继续通过 `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)` 复用这层公共装配；`image/video` 仍延后到 `gateway + capabilities`
-- 仓库内置 `llm.main_provider_mode` 启动切换位；外部项目可以通过 `llm/runtime/compose.RegisterMainProviderBuilder(...)` 注册 `channel_routed` builder，并直接复用 server 启动链；如需通用适配器，可使用 `channelstore.NewMainProviderBuilder(...)`
+- 仓库内置 `llm.main_provider_mode` 启动切换位；仓库自身通过 `internal/app/bootstrap.RegisterMainProviderBuilder(...)` 注册 `channel_routed` builder 并复用 server 启动链；外部项目若需要相同模式，应在自己的组合根直接调用 `channelstore.NewMainProviderBuilder(...)` 或自行装配 routed provider
 - `llm/runtime/router/extensions/runtimepolicy` 提供可复用的 `UsageRecorder` / `CooldownController` / `QuotaPolicy` 参考实现，便于先把 usage、cooldown、daily limit、concurrency limit 链路跑通
 - 第一阶段不把 `image/video` 接进 `ChannelRoutedProvider`，因为 image/video 当前走的是 capability 路由面：`gateway + capabilities + vendor.Profile`；若硬塞进 `llm.Provider`，会把文本 routed provider 与多模态 capability 入口过早耦合
 - 外部项目的 adapter-only 接入模板与配置切换示例见 `docs/architecture/channel-routing-adapter-template.zh-CN.md`
@@ -602,3 +602,5 @@ agentflow/
 ## 📄 License
 
 MIT License - 详见 [LICENSE](LICENSE)
+
+

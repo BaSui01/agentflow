@@ -111,7 +111,7 @@ foreach ($name in $allowOneFilePkg) {
 # Rule 3: config-driven chat provider entry must stay on vendor factory path.
 $vendorEntryFiles = @(
     "agentflow.go",
-    "llm/runtime/compose/main_provider_registry.go",
+    "internal/app/bootstrap/main_provider_registry.go",
     "llm/runtime/compose/runtime.go",
     "llm/runtime/router/chat_provider_factory.go"
 )
@@ -139,6 +139,17 @@ foreach ($path in $vendorEntryFiles) {
     }
 }
 
+# Rule 3.5: llm/runtime/compose must stay free of startup config / gorm coupling.
+$composeFiles = Get-ChildItem "llm/runtime/compose" -File -Filter "*.go" |
+    Where-Object { $_.Name -notmatch "_test\.go$" }
+foreach ($file in $composeFiles) {
+    $content = Get-Content -Path $file.FullName -Raw
+    $rel = Resolve-Path -Relative $file.FullName
+    if ($content -match 'github.com/BaSui01/agentflow/config' -or $content -match 'gorm.io/gorm') {
+        $errors += "[LLM] $rel must not import startup config or gorm; move main-provider assembly to bootstrap"
+    }
+}
+
 # Rule 4: public multi-provider docs must demonstrate the vendor factory path.
 $providerRoutingDocs = @(
     "README.md",
@@ -158,7 +169,7 @@ foreach ($path in $providerRoutingDocs) {
 
 # Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
 Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
-& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
+& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
 if ($LASTEXITCODE -ne 0) {
     $errors += "[TEST] focused architecture guard tests failed"
 }

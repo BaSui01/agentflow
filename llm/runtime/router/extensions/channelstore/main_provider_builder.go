@@ -5,7 +5,6 @@ import (
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
-	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -31,8 +30,8 @@ type MainProviderBuilderOptions struct {
 }
 
 // NewMainProviderBuilder returns a public startup builder that external
-// projects can register into `llm/runtime/compose`.
-func NewMainProviderBuilder(opts MainProviderBuilderOptions) llmcompose.MainProviderBuilder {
+// projects can register into their own startup composition registry.
+func NewMainProviderBuilder(opts MainProviderBuilderOptions) func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 	return func(_ context.Context, cfg *config.Config, _ *gorm.DB, logger *zap.Logger) (llm.Provider, error) {
 		providerTimeout := config.DefaultLLMConfig().Timeout
 		if cfg != nil {

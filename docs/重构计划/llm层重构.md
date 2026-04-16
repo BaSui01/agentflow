@@ -477,3 +477,6 @@ type Gateway interface {
 - [x] 2026-03-02：回填 Phase-0 流程状态：已执行重构冻结窗口、分支策略与“本文档作为唯一状态源”的日更机制，后续阶段均按该状态源推进与验收。
 - [x] 2026-03-02：补充双模型路由语义：在 Gateway 单入口下区分 `primary/tool` 调用阶段，并定义缺省回退与观测维度。
 - [x] 2026-03-02：修复 2.3 能力矩阵与代码实现不一致项（Qwen 图像、Grok 图像、Grok Embedding、Doubao 图像、Mistral 音频转录）；新增 `llm/providers/capability_matrix.go` 作为矩阵声明源，并新增 `scripts/gen_llm_matrix.ps1` 自动生成 `docs/generated/llm-implemented-matrix.md`，用于防止后续文档漂移。
+- [x] 2026-04-17：完成边界收口补丁第 1 项：删除 `llm -> rag` 反向依赖，移除 `llm/capabilities/embedding/rag_adapter.go`、`llm/capabilities/rerank/rag_adapter.go`、`llm/tokenizer/rag_adapter.go`，并在 `rag/` 根包新增 `LLMEmbeddingProviderAdapter`、`LLMRerankProviderAdapter`、`LLMTokenizerAdapter` 单向桥接实现。
+- [x] 2026-04-17：完成边界收口补丁第 2 项：将 main provider 启动注册/装配从 `llm/runtime/compose` 迁移到 `internal/app/bootstrap/main_provider_registry.go`；`llm/runtime/compose` 仅保留纯 runtime 组装，不再依赖 `config` / `gorm`。
+- [x] 2026-04-17：完成边界守卫补强：`architecture_guard_test.go` 新增 `llm -> rag` 禁止依赖规则与 `TestLLMComposeImportGuards`；`scripts/arch_guard.ps1` 同步校验 `llm/runtime/compose` 不得引入 `config/gorm`，并将 vendor-factory 入口守卫切换到 `internal/app/bootstrap/main_provider_registry.go`。

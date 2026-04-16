@@ -239,7 +239,7 @@ provider, err := llmrouter.BuildChannelRoutedProvider(llmrouter.ChannelRoutedPro
 
 - `BuildChannelRoutedProvider(...)`
 - `llm/runtime/compose.Build(...)`
-- `llm/runtime/compose.RegisterMainProviderBuilder(...)`
+- `channelstore.NewMainProviderBuilder(...)`
 - 内置配置字段 `llm.main_provider_mode`
 
 也就是说，外部项目现在可以直接复用 agentflow 的内置 server 切换位：
@@ -249,30 +249,30 @@ llm:
   main_provider_mode: channel_routed # legacy | channel_routed
 ```
 
-然后在自己的组合根里注册 channel builder：
+然后在自己的组合根里构造 channel builder：
 
 ```go
 import (
+    "context"
     "github.com/BaSui01/agentflow/config"
-    llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
+    "github.com/BaSui01/agentflow/llm"
     "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
+    "go.uber.org/zap"
+    "gorm.io/gorm"
 )
 
-func registerMainProviderBuilders(store channelstore.Store) error {
-    return llmcompose.RegisterMainProviderBuilder(
-        config.LLMMainProviderModeChannelRouted,
-        channelstore.NewMainProviderBuilder(channelstore.MainProviderBuilderOptions{
-            Name:  "acme-channel-router",
-            Store: store,
-        }),
-    )
+func buildMainProviderBuilder(store channelstore.Store) func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+    return channelstore.NewMainProviderBuilder(channelstore.MainProviderBuilderOptions{
+        Name:  "acme-channel-router",
+        Store: store,
+    })
 }
 ```
 
 如果你不想复用 agentflow 的内置 `config.Config`，也可以继续使用自己的应用级配置，然后在应用代码里映射到：
 
 - `cfg.LLM.MainProviderMode`
-- `llmcompose.RegisterMainProviderBuilder(...)`
+- 你自己的启动/组合根注册表
 
 这样做的好处是：
 
