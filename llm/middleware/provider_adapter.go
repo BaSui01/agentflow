@@ -7,6 +7,7 @@ import (
 	llmpkg "github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
 	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // MiddlewareProvider 将中间件链包装为 Provider 接口。
@@ -50,6 +51,14 @@ func (p *MiddlewareProvider) ListModels(ctx context.Context) ([]llmpkg.Model, er
 
 func (p *MiddlewareProvider) Endpoints() llmpkg.ProviderEndpoints {
 	return p.inner.Endpoints()
+}
+
+func (p *MiddlewareProvider) CountTokens(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.TokenCountResponse, error) {
+	tokenCounter, ok := p.inner.(llmpkg.TokenCountProvider)
+	if !ok {
+		return nil, types.NewServiceUnavailableError("wrapped provider does not implement native token counting")
+	}
+	return tokenCounter.CountTokens(ctx, req)
 }
 
 // OtelMetricsAdapter 适配 observability.Metrics → middleware.MetricsCollector 接口。

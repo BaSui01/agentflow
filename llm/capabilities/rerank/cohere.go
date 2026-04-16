@@ -118,10 +118,7 @@ func (p *CohereProvider) Rerank(ctx context.Context, req *RerankRequest) (*Reran
 			RelevanceScore: r.RelevanceScore,
 		}
 		if r.Document != nil {
-			results[i].Document = Document{Text: r.Document.Text}
-		}
-		if r.Index < len(req.Documents) {
-			results[i].Document.ID = req.Documents[r.Index].ID
+			results[i].Document = r.Document.Text
 		}
 	}
 

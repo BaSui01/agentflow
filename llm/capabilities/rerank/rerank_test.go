@@ -254,7 +254,7 @@ func TestVoyageProvider_Rerank(t *testing.T) {
 	assert.Equal(t, "voyage-rerank", result.Provider)
 	assert.Equal(t, 55, result.Usage.TotalTokens)
 	assert.Len(t, result.Results, 1)
-	assert.Equal(t, "doc text", result.Results[0].Document.Text)
+	assert.Equal(t, "doc text", result.Results[0].Document)
 }
 
 func TestVoyageProvider_Rerank_Error(t *testing.T) {

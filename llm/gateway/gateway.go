@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/threed"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/types"
@@ -210,9 +211,10 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llm.ChatRequest")
 	}
 	mergeChatRoutingMetadata(req, chatReq)
+	provider := s.prepareChatExecutionProvider(chatReq)
 
 	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
-	source, err := s.chatProvider.Stream(ctx, chatReq)
+	source, err := provider.Stream(ctx, chatReq)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +237,7 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 		for chunk := range source {
 			resolvedCall, _ := resolvedCallRecorder.Load()
 			decision := llmcore.ProviderDecision{
-				Provider: firstNonEmpty(resolvedCall.Provider, chunk.Provider, s.chatProvider.Name()),
+				Provider: firstNonEmpty(resolvedCall.Provider, chunk.Provider, provider.Name()),
 				Model:    firstNonEmpty(resolvedCall.Model, chunk.Model, chatReq.Model, req.ModelHint),
 				BaseURL:  firstNonEmpty(resolvedCall.BaseURL),
 				Strategy: string(req.RoutePolicy),
@@ -311,16 +313,17 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llm.ChatRequest")
 	}
 	mergeChatRoutingMetadata(req, chatReq)
+	provider := s.prepareChatExecutionProvider(chatReq)
 
 	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
-	resp, err := s.chatProvider.Completion(ctx, chatReq)
+	resp, err := provider.Completion(ctx, chatReq)
 	if err != nil {
 		return nil, err
 	}
 
 	usage := fromChatUsage(resp.Usage)
 	resolvedCall, _ := resolvedCallRecorder.Load()
-	provider := firstNonEmpty(resolvedCall.Provider, resp.Provider, s.chatProvider.Name())
+	providerName := firstNonEmpty(resolvedCall.Provider, resp.Provider, provider.Name())
 	model := firstNonEmpty(resolvedCall.Model, resp.Model, chatReq.Model, req.ModelHint)
 
 	return &llmcore.UnifiedResponse{
@@ -329,7 +332,7 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 		Cost:    llmcore.Cost{},
 		TraceID: firstNonEmpty(req.TraceID, chatReq.TraceID),
 		ProviderDecision: llmcore.ProviderDecision{
-			Provider: provider,
+			Provider: providerName,
 			Model:    model,
 			BaseURL:  firstNonEmpty(resolvedCall.BaseURL),
 			Strategy: string(req.RoutePolicy),
@@ -928,6 +931,7 @@ func (s *Service) estimateRequestTokens(ctx context.Context, req *llmcore.Unifie
 }
 
 func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) (int, error) {
+	s.normalizeChatToolCallMode(chatReq)
 	tokenCounter, ok := s.chatProvider.(llm.TokenCountProvider)
 	if !ok {
 		return 0, llmcore.GatewayUnavailableError("chat provider does not implement native token counting")
@@ -953,6 +957,32 @@ func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRe
 		return 0, nil
 	}
 	return total, nil
+}
+
+func (s *Service) normalizeChatToolCallMode(req *llm.ChatRequest) {
+	if req == nil || s == nil || s.chatProvider == nil {
+		return
+	}
+	if req.ToolCallMode == llm.ToolCallModeXML || len(req.Tools) == 0 {
+		return
+	}
+	if s.chatProvider.SupportsNativeFunctionCalling() {
+		return
+	}
+	req.ToolCallMode = llm.ToolCallModeXML
+	s.logger.Info("provider does not support native function calling, enabling XML tool call mode in gateway",
+		zap.String("provider", s.chatProvider.Name()))
+}
+
+func (s *Service) prepareChatExecutionProvider(req *llm.ChatRequest) llm.Provider {
+	if s == nil || s.chatProvider == nil {
+		return nil
+	}
+	s.normalizeChatToolCallMode(req)
+	if req == nil || req.ToolCallMode != llm.ToolCallModeXML {
+		return s.chatProvider
+	}
+	return middleware.NewXMLToolCallProvider(s.chatProvider, s.logger)
 }
 
 func (s *Service) recordResponseUsage(req *llmcore.UnifiedRequest, resp *llmcore.UnifiedResponse) {

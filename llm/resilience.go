@@ -300,6 +300,15 @@ func (rp *ResilientProvider) Endpoints() ProviderEndpoints {
 	return rp.provider.Endpoints()
 }
 
+// CountTokens 委托给支持原生 token 统计的底层 provider。
+func (rp *ResilientProvider) CountTokens(ctx context.Context, req *ChatRequest) (*TokenCountResponse, error) {
+	tokenCounter, ok := rp.provider.(TokenCountProvider)
+	if !ok {
+		return nil, types.NewServiceUnavailableError("wrapped provider does not implement native token counting")
+	}
+	return tokenCounter.CountTokens(ctx, req)
+}
+
 func (rp *ResilientProvider) generateIdempotencyKey(req *ChatRequest) string {
 	data, _ := json.Marshal(struct {
 		Model    string    `json:"model"`

@@ -4,17 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"strings"
+	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
+// DefaultInactivityTimeout 是流式响应的默认空闲超时时间.
+// 只要还在收到数据，就不会超时；只有在超过此时间没有新数据时才触发超时.
+const DefaultInactivityTimeout = 5 * time.Minute
+
 // ReActConfig 定义了 ReAct 循环配置.
 type ReActConfig struct {
-	MaxIterations int  // Maximum iterations (prevents infinite loops)
-	StopOnError   bool // Stop on tool execution error
+	MaxIterations     int           // Maximum iterations (prevents infinite loops)
+	StopOnError       bool          // Stop on tool execution error
+	InactivityTimeout time.Duration // 流式响应空闲超时（从上一次收到数据开始计算），0 表示使用默认值 5 分钟
 }
 
 // SteeringMessage 类型别名，统一使用 types 包定义
@@ -253,6 +260,14 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				steering                                               *SteeringMessage
 			)
 
+			// 空闲超时机制：只要还在收到数据，就重置计时器；只有在超过 InactivityTimeout 没有新数据时才触发超时
+			inactivityTimeout := r.config.InactivityTimeout
+			if inactivityTimeout <= 0 {
+				inactivityTimeout = DefaultInactivityTimeout
+			}
+			inactivityTimer := time.NewTimer(inactivityTimeout)
+			defer inactivityTimer.Stop()
+
 		chunkLoop:
 			for {
 				select {
@@ -260,6 +275,15 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 					if !ok {
 						break chunkLoop
 					}
+
+					// 收到数据，重置空闲超时计时器
+					if !inactivityTimer.Stop() {
+						select {
+						case <-inactivityTimer.C:
+						default:
+						}
+					}
+					inactivityTimer.Reset(inactivityTimeout)
 
 					eventCh <- ReActStreamEvent{Type: ReActEventLLMChunk, Chunk: &chunk}
 
@@ -363,7 +387,18 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 					}
 					break chunkLoop
 
+				case <-inactivityTimer.C:
+					// 空闲超时：超过 InactivityTimeout 没有收到新数据
+					cancelStream()
+					r.logger.Warn("stream inactivity timeout",
+						zap.Duration("timeout", inactivityTimeout),
+						zap.Int("iteration", i+1),
+					)
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("stream inactivity timeout after %v (no data received)", inactivityTimeout)}
+					return
+
 				case <-ctx.Done():
+					// 用户主动取消或父 context 超时
 					cancelStream()
 					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
 					return

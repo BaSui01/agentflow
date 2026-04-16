@@ -47,6 +47,18 @@ func (p *testProvider) ListModels(ctx context.Context) ([]Model, error) {
 }
 func (p *testProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
 
+type testTokenCountProvider struct {
+	testProvider
+	countTokensFn func(ctx context.Context, req *ChatRequest) (*TokenCountResponse, error)
+}
+
+func (p *testTokenCountProvider) CountTokens(ctx context.Context, req *ChatRequest) (*TokenCountResponse, error) {
+	if p.countTokensFn != nil {
+		return p.countTokensFn(ctx, req)
+	}
+	return &TokenCountResponse{}, nil
+}
+
 // 测试响应性提供器  Name 名称方法
 func TestResilientProvider_Name(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
@@ -72,5 +84,22 @@ func TestResilientProvider_SupportsNativeFunctionCalling(t *testing.T) {
 	supports := rp.SupportsNativeFunctionCalling()
 
 	assert.True(t, supports)
+}
+
+func TestResilientProvider_CountTokens(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := &testTokenCountProvider{
+		testProvider: testProvider{name: "test-provider"},
+		countTokensFn: func(ctx context.Context, req *ChatRequest) (*TokenCountResponse, error) {
+			return &TokenCountResponse{InputTokens: 12, TotalTokens: 34}, nil
+		},
+	}
+
+	rp := NewResilientProvider(provider, nil, logger)
+	resp, err := rp.CountTokens(context.Background(), &ChatRequest{Model: "test-model"})
+
+	assert.NoError(t, err)
+	assert.Equal(t, 12, resp.InputTokens)
+	assert.Equal(t, 34, resp.TotalTokens)
 }
 

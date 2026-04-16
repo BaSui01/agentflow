@@ -3,7 +3,12 @@ package rerank
 import (
 	"context"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
+
+// RerankResult 类型别名，指向 types 层定义
+type RerankResult = types.RerankResult
 
 // RerankRequest 表示重排序请求.
 type RerankRequest struct {
@@ -33,13 +38,6 @@ type RerankResponse struct {
 	CreatedAt time.Time      `json:"created_at,omitempty"`
 }
 
-// RerankResult 表示单个重排序结果.
-type RerankResult struct {
-	Index          int      `json:"index"`           // Original index in input
-	RelevanceScore float64  `json:"relevance_score"` // 0-1 normalized score
-	Document       Document `json:"document,omitempty"`
-}
-
 // RerankUsage 表示使用统计.
 type RerankUsage struct {
 	SearchUnits int     `json:"search_units,omitempty"`
@@ -61,4 +59,3 @@ type Provider interface {
 	// MaxDocuments 返回支持的最大文档数量.
 	MaxDocuments() int
 }
-

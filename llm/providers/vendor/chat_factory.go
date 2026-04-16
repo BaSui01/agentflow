@@ -8,19 +8,9 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	claude "github.com/BaSui01/agentflow/llm/providers/anthropic"
-	"github.com/BaSui01/agentflow/llm/providers/deepseek"
-	"github.com/BaSui01/agentflow/llm/providers/doubao"
 	"github.com/BaSui01/agentflow/llm/providers/gemini"
-	"github.com/BaSui01/agentflow/llm/providers/glm"
-	"github.com/BaSui01/agentflow/llm/providers/grok"
-	"github.com/BaSui01/agentflow/llm/providers/hunyuan"
-	"github.com/BaSui01/agentflow/llm/providers/kimi"
-	"github.com/BaSui01/agentflow/llm/providers/llama"
-	"github.com/BaSui01/agentflow/llm/providers/minimax"
-	"github.com/BaSui01/agentflow/llm/providers/mistral"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
-	"github.com/BaSui01/agentflow/llm/providers/qwen"
 	"go.uber.org/zap"
 )
 
@@ -48,26 +38,10 @@ func NewChatProviderFromConfig(name string, cfg ChatProviderConfig, logger *zap.
 		return newAnthropicChatProvider(cfg, logger), nil
 	case "gemini", "gemini-vertex":
 		return newGeminiChatProvider(providerCode, cfg, logger), nil
-	case "deepseek":
-		return deepseek.NewDeepSeekProvider(providers.DeepSeekConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
 	case "qwen":
-		return qwen.NewQwenProvider(providers.QwenConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "glm":
-		return glm.NewGLMProvider(providers.GLMConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "grok":
-		return grok.NewGrokProvider(providers.GrokConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "kimi":
-		return kimi.NewKimiProvider(providers.KimiConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "mistral":
-		return mistral.NewMistralProvider(providers.MistralConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "minimax":
-		return minimax.NewMiniMaxProvider(providers.MiniMaxConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "hunyuan":
-		return hunyuan.NewHunyuanProvider(providers.HunyuanConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "doubao":
-		return doubao.NewDoubaoProvider(providers.DoubaoConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}, logger), nil
-	case "llama":
-		return newLlamaChatProvider(cfg, logger), nil
+		return newCompatBuiltInChatProvider(providerCode, cfg, logger)
+	case "deepseek", "glm", "grok", "kimi", "mistral", "minimax", "hunyuan", "doubao", "llama":
+		return newCompatBuiltInChatProvider(providerCode, cfg, logger)
 	default:
 		return newOpenAICompatChatProvider(providerCode, cfg, logger)
 	}
@@ -146,16 +120,6 @@ func newGeminiChatProvider(providerCode string, cfg ChatProviderConfig, logger *
 		geminiCfg.AuthType = "oauth"
 	}
 	return gemini.NewGeminiProvider(geminiCfg, logger)
-}
-
-func newLlamaChatProvider(cfg ChatProviderConfig, logger *zap.Logger) llm.Provider {
-	llamaCfg := providers.LlamaConfig{BaseProviderConfig: toBaseProviderConfig(cfg)}
-	if cfg.Extra != nil {
-		if v, ok := cfg.Extra["provider"].(string); ok {
-			llamaCfg.Provider = v
-		}
-	}
-	return llama.NewLlamaProvider(llamaCfg, logger)
 }
 
 func newOpenAICompatChatProvider(providerCode string, cfg ChatProviderConfig, logger *zap.Logger) (llm.Provider, error) {
