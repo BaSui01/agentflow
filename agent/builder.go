@@ -129,6 +129,12 @@ func (b *AgentBuilder) WithMemory(memory MemoryManager) *AgentBuilder {
 	return b
 }
 
+// WithContextManager sets a custom context manager implementation.
+func (b *AgentBuilder) WithContextManager(manager ContextManager) *AgentBuilder {
+	b.contextMgr = manager
+	return b
+}
+
 // WithToolManager 设置工具管理器
 func (b *AgentBuilder) WithToolManager(toolManager ToolManager) *AgentBuilder {
 	b.toolManager = toolManager
@@ -354,6 +360,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	}
 
 	b.configurePersistence(agent)
+	b.configureContext(agent)
 	b.ensureFeatureDefaults()
 	b.enableConfiguredCoreFeatures(agent)
 	b.enableOptionalFeatures(agent)
@@ -396,6 +403,17 @@ func (b *AgentBuilder) configurePersistence(agent *BaseAgent) {
 	agent.persistence.SetPromptStore(b.promptStore)
 	agent.persistence.SetConversationStore(b.conversationStore)
 	agent.persistence.SetRunStore(b.runStore)
+}
+
+func (b *AgentBuilder) configureContext(agent *BaseAgent) {
+	manager := b.contextMgr
+	if manager == nil {
+		cfg := agentcontext.ConfigFromAgentConfig(agent.Config())
+		if cfg.Enabled {
+			manager = agentcontext.NewAgentContextManager(cfg, b.logger)
+		}
+	}
+	agent.SetContextManager(manager)
 }
 
 func (b *AgentBuilder) ensureFeatureDefaults() {
