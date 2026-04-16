@@ -12,7 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/rag/core"
+	ragcore "github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
@@ -28,8 +28,8 @@ type WorkflowRuntimeOptions struct {
 	LLMProvider             llm.Provider
 	DefaultModel            string
 	AgentResolver           WorkflowAgentResolver
-	RetrievalStore          core.VectorStore
-	EmbeddingProvider       core.EmbeddingProvider
+	RetrievalStore          ragcore.VectorStore
+	EmbeddingProvider       ragcore.EmbeddingProvider
 	CheckpointStore         agent.CheckpointStore
 	WorkflowCheckpointStore workflow.CheckpointStore
 	HITLManager             *hitl.InterruptManager
@@ -304,8 +304,8 @@ func (h hostedCodeHandler) Execute(ctx context.Context, input core.StepInput) (m
 }
 
 type ragHostedRetrievalStore struct {
-	store    core.VectorStore
-	embedder core.EmbeddingProvider
+	store    ragcore.VectorStore
+	embedder ragcore.EmbeddingProvider
 }
 
 type workflowCheckpointManagerAdapter struct {

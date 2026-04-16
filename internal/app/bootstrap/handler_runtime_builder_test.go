@@ -141,7 +141,7 @@ func TestBuildLLMHandlerRuntime_ChannelModeRequiresRegisteredBuilder(t *testing.
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = config.LLMMainProviderModeChannelRouted
 
-	llmcompose.UnregisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted)
+	UnregisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted)
 
 	runtime, err := BuildLLMHandlerRuntime(cfg, nil, zap.NewNop())
 	require.Error(t, err)
@@ -154,7 +154,7 @@ func TestBuildLLMHandlerRuntime_ChannelModeUsesRegisteredBuilderWithoutDatabase(
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = config.LLMMainProviderModeChannelRouted
 
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted,
+	require.NoError(t, RegisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted,
 		func(_ context.Context, cfg *config.Config, db *gorm.DB, logger *zap.Logger) (llm.Provider, error) {
 			require.NotNil(t, cfg)
 			require.Nil(t, db)
@@ -163,7 +163,7 @@ func TestBuildLLMHandlerRuntime_ChannelModeUsesRegisteredBuilderWithoutDatabase(
 		}),
 	)
 	t.Cleanup(func() {
-		llmcompose.UnregisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted)
+		UnregisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted)
 	})
 
 	runtime, err := BuildLLMHandlerRuntime(cfg, nil, zap.NewNop())
@@ -220,7 +220,7 @@ func TestBuildLLMHandlerRuntime_ChannelModePropagatesStaticStoreRoutingAndUsage(
 		provider: &bootstrapChannelProvider{content: "hello-channel-store"},
 	}
 
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted,
+	require.NoError(t, RegisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted,
 		func(_ context.Context, cfg *config.Config, db *gorm.DB, logger *zap.Logger) (llm.Provider, error) {
 			require.NotNil(t, cfg)
 			require.Nil(t, db)
@@ -242,7 +242,7 @@ func TestBuildLLMHandlerRuntime_ChannelModePropagatesStaticStoreRoutingAndUsage(
 		}),
 	)
 	t.Cleanup(func() {
-		llmcompose.UnregisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted)
+		UnregisterMainProviderBuilder(config.LLMMainProviderModeChannelRouted)
 	})
 
 	runtime, err := BuildLLMHandlerRuntime(cfg, nil, zap.NewNop())
