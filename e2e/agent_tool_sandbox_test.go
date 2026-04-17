@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/agent/execution"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
@@ -139,12 +140,12 @@ func buildSandboxE2EAgent(t *testing.T, agentID string) agent.Agent {
 	exec := execution.NewSandboxExecutor(execution.DefaultSandboxConfig(), backend, logger)
 	tool := execution.NewSandboxTool(exec, logger)
 
-	ag, err := agent.NewAgentBuilder(cfg).
-		WithProvider(provider).
+	agBuilder := agentruntime.NewBuilder(provider, logger).
 		WithToolProvider(mocks.NewSuccessProvider("tool reasoning")).
-		WithToolManager(&simpleToolManager{tool: tool}).
-		WithLogger(logger).
-		Build()
+		WithOptions(agentruntime.BuildOptions{
+			ToolManager: &simpleToolManager{tool: tool},
+		})
+	ag, err := agBuilder.Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NoError(t, ag.Init(context.Background()))
 	return ag

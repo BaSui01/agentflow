@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -67,14 +68,26 @@ func (r *benchRegistry) ListAgents(_ context.Context) ([]*discovery.AgentInfo, e
 	}
 	return out, nil
 }
-func (r *benchRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error { return nil }
-func (r *benchRegistry) UnregisterCapability(_ context.Context, _, _ string) error                         { return nil }
-func (r *benchRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error   { return nil }
-func (r *benchRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error)  { return nil, nil }
-func (r *benchRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error)  { return nil, nil }
-func (r *benchRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error)  { return nil, nil }
-func (r *benchRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error      { return nil }
-func (r *benchRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error                     { return nil }
+func (r *benchRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+	return nil
+}
+func (r *benchRegistry) UnregisterCapability(_ context.Context, _, _ string) error { return nil }
+func (r *benchRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+	return nil
+}
+func (r *benchRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error) {
+	return nil, nil
+}
+func (r *benchRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+	return nil, nil
+}
+func (r *benchRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+	return nil, nil
+}
+func (r *benchRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error {
+	return nil
+}
+func (r *benchRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error { return nil }
 func (r *benchRegistry) RecordExecution(_ context.Context, _ string, _ string, _ bool, _ time.Duration) error {
 	return nil
 }
@@ -91,11 +104,9 @@ func buildBenchAgent(agentID string, maxConcurrency int) agent.Agent {
 		Core: types.CoreConfig{ID: agentID, Name: "bench-agent"},
 		LLM:  types.LLMConfig{Model: "test-model"},
 	}
-	ag, _ := agent.NewAgentBuilder(cfg).
-		WithProvider(provider).
-		WithLogger(logger).
-		WithMaxConcurrency(maxConcurrency).
-		Build()
+	ag, _ := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+		MaxConcurrency: maxConcurrency,
+	}).Build(context.Background(), cfg)
 	_ = ag.Init(context.Background())
 	return ag
 }

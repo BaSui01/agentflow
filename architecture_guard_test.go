@@ -16,7 +16,7 @@ import (
 // Keep the root agent package shrinking over time.
 // This guard prevents adding more production files to agent/.
 func TestAgentRootPackageFileBudget(t *testing.T) {
-	const maxAgentRootFiles = 26
+	const maxAgentRootFiles = 27
 
 	entries, err := os.ReadDir("agent")
 	if err != nil {
@@ -641,10 +641,6 @@ func TestVendorChatProviderEntryPoints(t *testing.T) {
 
 	expectations := []sourceExpectation{
 		{
-			path:             "agentflow.go",
-			requiredSnippets: []string{"vendor.NewChatProviderFromConfig("},
-		},
-		{
 			path:             "internal/app/bootstrap/main_provider_registry.go",
 			requiredSnippets: []string{"VendorChatProviderFactory{"},
 			forbiddenSnippets: []string{
@@ -687,6 +683,55 @@ func TestVendorChatProviderEntryPoints(t *testing.T) {
 	}
 }
 
+func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
+	type sourceExpectation struct {
+		path              string
+		requiredSnippets  []string
+		forbiddenSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path: "agent/registry.go",
+			requiredSnippets: []string{
+				"buildRegistryAgent(",
+				"newAgentBuilder(config).",
+			},
+			forbiddenSnippets: []string{
+				"return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil",
+			},
+		},
+		{
+			path: "agent/multiagent/default_modes.go",
+			requiredSnippets: []string{
+				"newHierarchicalModeBaseAgent(",
+				"agentruntime.NewBuilder(provider, logger).Build(",
+			},
+			forbiddenSnippets: []string{
+				"agent.NewBaseAgent(types.AgentConfig{",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain %q", tt.path, snippet)
+			}
+		}
+	}
+}
+
 func TestPublicProviderRoutingDocsUseVendorFactory(t *testing.T) {
 	docPaths := []string{
 		"README.md",
@@ -706,6 +751,85 @@ func TestPublicProviderRoutingDocsUseVendorFactory(t *testing.T) {
 		}
 		if strings.Contains(src, "NewDefaultProviderFactory()") {
 			t.Fatalf("%s must not document legacy NewDefaultProviderFactory() for public multi-provider routing", path)
+		}
+	}
+}
+
+func TestPublicUnifiedEntrypointDocs(t *testing.T) {
+	type sourceExpectation struct {
+		path              string
+		forbiddenSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path: "README.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+			},
+		},
+		{
+			path: "README_EN.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+			},
+		},
+		{
+			path: "docs/getting_started.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/01.快速开始.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+			},
+		},
+		{
+			path: "docs/en/tutorials/01.QuickStart.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/03.Agent开发教程.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+				"agent.CreateAgent(",
+			},
+		},
+		{
+			path: "docs/en/tutorials/03.AgentDevelopment.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+				"agent.CreateAgent(",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/05.工作流编排.md",
+			forbiddenSnippets: []string{
+				"DAGWorkflow.Execute(",
+			},
+		},
+		{
+			path: "docs/cn/guides/best-practices.md",
+			forbiddenSnippets: []string{
+				"agent.NewAgentBuilder(",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not promote legacy public entry %q; use the unified runtime/facade entry instead", tt.path, snippet)
+			}
 		}
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
@@ -77,14 +78,26 @@ func (r *e2eRegistry) ListAgents(_ context.Context) ([]*discovery.AgentInfo, err
 	return out, nil
 }
 
-func (r *e2eRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error { return nil }
-func (r *e2eRegistry) UnregisterCapability(_ context.Context, _, _ string) error                         { return nil }
-func (r *e2eRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error   { return nil }
-func (r *e2eRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error)  { return nil, nil }
-func (r *e2eRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error)  { return nil, nil }
-func (r *e2eRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error)  { return nil, nil }
-func (r *e2eRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error      { return nil }
-func (r *e2eRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error                     { return nil }
+func (r *e2eRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+	return nil
+}
+func (r *e2eRegistry) UnregisterCapability(_ context.Context, _, _ string) error { return nil }
+func (r *e2eRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+	return nil
+}
+func (r *e2eRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error) {
+	return nil, nil
+}
+func (r *e2eRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+	return nil, nil
+}
+func (r *e2eRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+	return nil, nil
+}
+func (r *e2eRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error {
+	return nil
+}
+func (r *e2eRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error { return nil }
 func (r *e2eRegistry) RecordExecution(_ context.Context, _ string, _ string, _ bool, _ time.Duration) error {
 	return nil
 }
@@ -109,11 +122,9 @@ func buildE2EAgent(t *testing.T, agentID string, maxConcurrency int) agent.Agent
 			Model: "test-model",
 		},
 	}
-	ag, err := agent.NewAgentBuilder(cfg).
-		WithProvider(provider).
-		WithLogger(logger).
-		WithMaxConcurrency(maxConcurrency).
-		Build()
+	ag, err := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+		MaxConcurrency: maxConcurrency,
+	}).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NoError(t, ag.Init(context.Background()))
 	return ag
