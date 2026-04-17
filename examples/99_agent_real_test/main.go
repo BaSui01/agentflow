@@ -23,6 +23,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
@@ -36,7 +37,12 @@ const (
 	model   = "glm-5"
 )
 
-type R struct{ Name, Status string; D time.Duration; Info string }
+type R struct {
+	Name, Status string
+	D            time.Duration
+	Info         string
+}
+
 var rs []R
 
 func rec(n, s string, d time.Duration, info string) {
@@ -46,14 +52,36 @@ func rec(n, s string, d time.Duration, info string) {
 }
 
 func txt(m types.Message) string {
-	if m.Content != "" { return m.Content }
-	if m.ReasoningContent != nil { return *m.ReasoningContent }
+	if m.Content != "" {
+		return m.Content
+	}
+	if m.ReasoningContent != nil {
+		return *m.ReasoningContent
+	}
 	return ""
 }
 
 func cut(s string, n int) string {
 	s = strings.ReplaceAll(s, "\n", " ")
-	r := []rune(s); if len(r) <= n { return s }; return string(r[:n]) + "..."
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "..."
+}
+
+func buildRuntimeAgent(
+	ctx context.Context,
+	provider llm.Provider,
+	logger *zap.Logger,
+	cfg types.AgentConfig,
+	configure func(*agentruntime.BuildOptions),
+) (*agent.BaseAgent, error) {
+	opts := agentruntime.BuildOptions{}
+	if configure != nil {
+		configure(&opts)
+	}
+	return agentruntime.NewBuilder(provider, logger).WithOptions(opts).Build(ctx, cfg)
 }
 
 // ─── 工具管理器 ────────────────────────────────────
@@ -75,13 +103,19 @@ func newToolManager(lg *zap.Logger) *simpleToolManager {
 	reg := llmtools.NewDefaultRegistry(lg)
 
 	reg.Register("get_weather", func(_ context.Context, a json.RawMessage) (json.RawMessage, error) {
-		var p struct{ City string `json:"city"` }; json.Unmarshal(a, &p)
+		var p struct {
+			City string `json:"city"`
+		}
+		json.Unmarshal(a, &p)
 		return json.Marshal(map[string]any{"city": p.City, "temp": 22, "condition": "晴", "humidity": 65})
 	}, llmtools.ToolMetadata{Schema: types.ToolSchema{Name: "get_weather", Description: "查询城市天气",
 		Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string","description":"城市名"}},"required":["city"]}`)}, Timeout: 10 * time.Second})
 
 	reg.Register("calculate", func(_ context.Context, a json.RawMessage) (json.RawMessage, error) {
-		var p struct{ Expr string `json:"expression"` }; json.Unmarshal(a, &p)
+		var p struct {
+			Expr string `json:"expression"`
+		}
+		json.Unmarshal(a, &p)
 		return json.Marshal(map[string]any{"expression": p.Expr, "result": "42"})
 	}, llmtools.ToolMetadata{Schema: types.ToolSchema{Name: "calculate", Description: "数学计算",
 		Parameters: json.RawMessage(`{"type":"object","properties":{"expression":{"type":"string","description":"表达式"}},"required":["expression"]}`)}, Timeout: 5 * time.Second})
@@ -161,13 +195,13 @@ func main() {
 func d01AgentBasicExecution(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
 	t := time.Now()
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core: types.CoreConfig{ID: "basic-agent", Name: "Basic Agent", Type: "assistant"},
 		LLM:  types.LLMConfig{Model: model, MaxTokens: 512, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{
 			SystemPrompt: "你是一个简洁的助手，回答不超过50字。",
 		},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("Agent构建+执行", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -207,7 +241,7 @@ func d02AgentWithTools(ctx context.Context, provider llm.Provider, lg *zap.Logge
 	t := time.Now()
 	tm := newToolManager(lg)
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core: types.CoreConfig{ID: "tool-agent", Name: "Tool Agent", Type: "assistant"},
 		LLM:  types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{
@@ -215,7 +249,9 @@ func d02AgentWithTools(ctx context.Context, provider llm.Provider, lg *zap.Logge
 			Tools:              []string{"get_weather", "calculate"},
 			MaxReActIterations: 5,
 		},
-	}).WithProvider(provider).WithToolManager(tm).WithLogger(lg).Build()
+	}, func(opts *agentruntime.BuildOptions) {
+		opts.ToolManager = tm
+	})
 
 	if err != nil {
 		rec("Agent+工具调用", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -254,7 +290,7 @@ func d03AgentMultiTools(ctx context.Context, provider llm.Provider, lg *zap.Logg
 	t := time.Now()
 	tm := newToolManager(lg)
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core: types.CoreConfig{ID: "multi-tool-agent", Name: "Multi Tool Agent", Type: "assistant"},
 		LLM:  types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{
@@ -262,7 +298,9 @@ func d03AgentMultiTools(ctx context.Context, provider llm.Provider, lg *zap.Logg
 			Tools:              []string{"get_weather", "calculate"},
 			MaxReActIterations: 5,
 		},
-	}).WithProvider(provider).WithToolManager(tm).WithLogger(lg).Build()
+	}, func(opts *agentruntime.BuildOptions) {
+		opts.ToolManager = tm
+	})
 
 	if err != nil {
 		rec("Agent+多工具", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -295,7 +333,7 @@ func d04AgentErrorRecovery(ctx context.Context, provider llm.Provider, lg *zap.L
 	t := time.Now()
 	tm := newToolManager(lg)
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core: types.CoreConfig{ID: "error-agent", Name: "Error Recovery Agent", Type: "assistant"},
 		LLM:  types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{
@@ -303,7 +341,9 @@ func d04AgentErrorRecovery(ctx context.Context, provider llm.Provider, lg *zap.L
 			Tools:              []string{"broken_tool"},
 			MaxReActIterations: 3,
 		},
-	}).WithProvider(provider).WithToolManager(tm).WithLogger(lg).Build()
+	}, func(opts *agentruntime.BuildOptions) {
+		opts.ToolManager = tm
+	})
 
 	if err != nil {
 		rec("Agent+错误恢复", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -337,13 +377,13 @@ func d05AgentLoopIteration(ctx context.Context, provider llm.Provider, lg *zap.L
 	t := time.Now()
 
 	// 第一轮：生成初始回答
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core: types.CoreConfig{ID: "loop-agent", Name: "Loop Agent", Type: "assistant"},
 		LLM:  types.LLMConfig{Model: model, MaxTokens: 512, Temperature: 0.7},
 		Runtime: types.RuntimeConfig{
 			SystemPrompt: "你是一个迭代优化助手。每次回答不超过100字。",
 		},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("Agent+循环迭代", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -396,11 +436,11 @@ func d06SubAgentParallel(ctx context.Context, provider llm.Provider, lg *zap.Log
 
 	// 构建 3 个不同职责的 SubAgent
 	buildAgent := func(id, name, systemPrompt string) agent.Agent {
-		ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 			Core:    types.CoreConfig{ID: id, Name: name, Type: "assistant"},
 			LLM:     types.LLMConfig{Model: model, MaxTokens: 256, Temperature: 0.1},
 			Runtime: types.RuntimeConfig{SystemPrompt: systemPrompt},
-		}).WithProvider(provider).WithLogger(lg).Build()
+		}, nil)
 		if err != nil {
 			return nil
 		}
@@ -451,11 +491,11 @@ func d07SubAgentManager(ctx context.Context, provider llm.Provider, lg *zap.Logg
 	t := time.Now()
 
 	// 构建一个简单 Agent
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core:    types.CoreConfig{ID: "managed-agent", Name: "Managed Agent", Type: "assistant"},
 		LLM:     types.LLMConfig{Model: model, MaxTokens: 128, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{SystemPrompt: "用一个词回答。"},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("SubAgent管理器", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -518,13 +558,26 @@ func printSummary() {
 	fmt.Println("║  📊 Agent 框架真实测试汇总                                   ║")
 	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
 	ps, fl, wr := 0, 0, 0
-	for _, r := range rs { switch r.Status { case "PASS": ps++; case "FAIL": fl++; case "WARN": wr++ } }
+	for _, r := range rs {
+		switch r.Status {
+		case "PASS":
+			ps++
+		case "FAIL":
+			fl++
+		case "WARN":
+			wr++
+		}
+	}
 	fmt.Printf("\n  总计: %d | ✅ PASS: %d | ❌ FAIL: %d | ⚠️  WARN: %d\n\n", len(rs), ps, fl, wr)
 	for _, r := range rs {
 		i := map[string]string{"PASS": "✅", "FAIL": "❌", "WARN": "⚠️"}[r.Status]
 		fmt.Printf("  %s %-32s %8v  %s\n", i, r.Name, r.D.Round(time.Millisecond), r.Info)
 	}
-	if fl == 0 { fmt.Println("\n  🎉 Agent 框架完整链路全部通过！") } else { fmt.Printf("\n  ⚠️  有 %d 项失败\n", fl) }
+	if fl == 0 {
+		fmt.Println("\n  🎉 Agent 框架完整链路全部通过！")
+	} else {
+		fmt.Printf("\n  ⚠️  有 %d 项失败\n", fl)
+	}
 }
 
 // =============================================================================
@@ -534,11 +587,11 @@ func printSummary() {
 func d08AgentReflection(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
 	t := time.Now()
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core:    types.CoreConfig{ID: "reflect-agent", Name: "Reflect Agent", Type: "assistant"},
 		LLM:     types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.7},
 		Runtime: types.RuntimeConfig{SystemPrompt: "你是一个写作助手，回答简洁。"},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("Reflection反思", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -578,11 +631,11 @@ func d08AgentReflection(ctx context.Context, provider llm.Provider, lg *zap.Logg
 func d09AgentStreaming(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
 	t := time.Now()
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core:    types.CoreConfig{ID: "stream-agent", Name: "Stream Agent", Type: "assistant"},
 		LLM:     types.LLMConfig{Model: model, MaxTokens: 256, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{SystemPrompt: "用一句话回答。"},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("Agent流式执行", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -631,11 +684,11 @@ func d09AgentStreaming(ctx context.Context, provider llm.Provider, lg *zap.Logge
 func d10AgentPlan(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
 	t := time.Now()
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core:    types.CoreConfig{ID: "plan-agent", Name: "Plan Agent", Type: "assistant"},
 		LLM:     types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.3},
 		Runtime: types.RuntimeConfig{SystemPrompt: "你是一个项目规划专家。"},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("Agent Plan规划", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -669,11 +722,11 @@ func d10AgentPlan(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
 func d11AgentObserve(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
 	t := time.Now()
 
-	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+	ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 		Core:    types.CoreConfig{ID: "observe-agent", Name: "Observe Agent", Type: "assistant"},
 		LLM:     types.LLMConfig{Model: model, MaxTokens: 256, Temperature: 0.1},
 		Runtime: types.RuntimeConfig{SystemPrompt: "你是助手。"},
-	}).WithProvider(provider).WithLogger(lg).Build()
+	}, nil)
 
 	if err != nil {
 		rec("Agent Observe", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
@@ -704,11 +757,11 @@ func d12RealtimeCoordinator(ctx context.Context, provider llm.Provider, lg *zap.
 	t := time.Now()
 
 	buildAgent := func(id, prompt string) agent.Agent {
-		ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 			Core:    types.CoreConfig{ID: id, Name: id, Type: "assistant"},
 			LLM:     types.LLMConfig{Model: model, MaxTokens: 128, Temperature: 0.1},
 			Runtime: types.RuntimeConfig{SystemPrompt: prompt},
-		}).WithProvider(provider).WithLogger(lg).Build()
+		}, nil)
 		if err != nil {
 			return nil
 		}
@@ -755,11 +808,11 @@ func d13HierarchicalAgent(ctx context.Context, provider llm.Provider, lg *zap.Lo
 	t := time.Now()
 
 	buildBaseAgent := func(id, name, prompt string) *agent.BaseAgent {
-		ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		ag, err := buildRuntimeAgent(ctx, provider, lg, types.AgentConfig{
 			Core:    types.CoreConfig{ID: id, Name: name, Type: "assistant"},
 			LLM:     types.LLMConfig{Model: model, MaxTokens: 512, Temperature: 0.3},
 			Runtime: types.RuntimeConfig{SystemPrompt: prompt},
-		}).WithProvider(provider).WithLogger(lg).Build()
+		}, nil)
 		if err != nil {
 			return nil
 		}

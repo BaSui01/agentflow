@@ -17,8 +17,8 @@ import (
 	"github.com/BaSui01/agentflow/agent/k8s"
 	"github.com/BaSui01/agentflow/pkg/openapi"
 	"github.com/BaSui01/agentflow/workflow"
-	"github.com/BaSui01/agentflow/workflow/dsl"
 	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
+	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
 )
 
@@ -430,9 +430,11 @@ func demoCheckpoints(ctx context.Context, logger *zap.Logger) {
 		}),
 	})
 	graph.SetEntry("start")
-	executor := workflow.NewDAGExecutor(nil, logger)
+	wfRuntime := workflowruntime.NewBuilder(nil, logger).
+		WithDSLParser(false).
+		Build()
 
-	created, err := manager.CreateCheckpoint(ctx, executor, graph, "thread_demo_rt", map[string]any{"demo": true})
+	created, err := manager.CreateCheckpoint(ctx, wfRuntime.Executor, graph, "thread_demo_rt", map[string]any{"demo": true})
 	if err != nil {
 		fmt.Printf("   CreateCheckpoint error: %v\n\n", err)
 		return
@@ -537,8 +539,10 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 
 	fmt.Printf("   Built DAG workflow: %s (imported=%s)\n", dag.Name(), imported.Name)
 	fmt.Printf("   Nodes: %d, Entry: %s\n", len(dag.Graph().Nodes()), dag.Graph().GetEntry())
-	executor := workflow.NewDAGExecutor(nil, logger)
-	out, execErr := executor.Execute(ctx, dag.Graph(), map[string]any{"message": "demo"})
+	wfRuntime := workflowruntime.NewBuilder(nil, logger).
+		WithDSLParser(false).
+		Build()
+	out, execErr := wfRuntime.Facade.ExecuteDAG(ctx, dag, map[string]any{"message": "demo"})
 	fmt.Printf("   Execute result type: %T, err: %v\n", out, execErr)
 	if execErr == nil {
 		fmt.Printf("   Execute result: %#v\n", out)
@@ -588,7 +592,12 @@ workflow:
 	}
 	_ = tmpFile.Close()
 
-	parser := dsl.NewParser()
+	wfRuntime := workflowruntime.NewBuilder(nil, zap.NewNop()).Build()
+	parser := wfRuntime.Parser
+	if parser == nil {
+		fmt.Println("   Parser unavailable: workflow runtime builder returned nil parser")
+		return
+	}
 	parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
 		return true, nil
 	})
@@ -608,6 +617,6 @@ workflow:
 		nodeEvents++
 	})
 
-	result, err := wf.Execute(obsCtx, map[string]any{"source": "dsl-demo"})
+	result, err := wfRuntime.Facade.ExecuteDAG(obsCtx, wf, map[string]any{"source": "dsl-demo"})
 	fmt.Printf("   Result type: %T, err: %v, stream_events=%d, node_events=%d\n", result, err, streamEvents, nodeEvents)
 }

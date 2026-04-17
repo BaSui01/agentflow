@@ -950,15 +950,19 @@ func demoRegistryReachability(logger *zap.Logger) {
 		bus agent.EventBus,
 		logger *zap.Logger,
 	) (agent.Agent, error) {
-		return agent.NewBaseAgent(cfg, provider, memory, toolManager, bus, logger, nil), nil
+		opts := agentruntime.DefaultBuildOptions()
+		opts.EnableAll = false
+		opts.MemoryManager = memory
+		opts.ToolManager = toolManager
+		opts.EventBus = bus
+		return agentruntime.NewBuilder(provider, logger).WithOptions(opts).Build(context.Background(), cfg)
 	})
 	fmt.Printf("   Custom type registered: %v\n", reg.IsRegistered(customType))
 	reg.Unregister(customType)
 	fmt.Printf("   Custom type unregistered: %v\n", !reg.IsRegistered(customType))
 
 	provider := &demoProvider{}
-	agent.InitGlobalRegistry(logger)
-	created, err := agent.CreateAgent(types.AgentConfig{
+	created, err := reg.Create(types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "registry-demo-agent",
 			Name: "Registry Demo Agent",
@@ -966,10 +970,10 @@ func demoRegistryReachability(logger *zap.Logger) {
 		},
 	}, provider, nil, nil, nil, logger)
 	if err != nil {
-		fmt.Printf("   CreateAgent error: %v\n\n", err)
+		fmt.Printf("   Registry create error: %v\n\n", err)
 		return
 	}
-	fmt.Printf("   CreateAgent success: %s\n", created.ID())
+	fmt.Printf("   Registry create success: %s\n", created.ID())
 
 	resolver := agent.NewCachingResolver(reg, provider, logger).WithMemory(nil)
 	fmt.Printf("   Resolver with memory configured: %v\n", resolver != nil)

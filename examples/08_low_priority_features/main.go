@@ -10,6 +10,8 @@ import (
 	"github.com/BaSui01/agentflow/agent/hierarchical"
 	"github.com/BaSui01/agentflow/agent/observability"
 	"github.com/BaSui01/agentflow/agent/persistence"
+	runtime "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -50,7 +52,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 	}
 
 	// 注意：实际使用时需要提供真实的 LLM provider，此处传 nil 仅演示结构
-	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger, nil)
+	supervisor := mustBuildDemoAgent(context.Background(), supervisorConfig, logger)
 
 	// 2. 创建 Worker Agents
 	fmt.Println("2. 创建 Worker Agents")
@@ -69,7 +71,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 				Temperature: 0.7,
 			},
 		}
-		worker := agent.NewBaseAgent(workerConfig, nil, nil, nil, nil, logger, nil)
+		worker := mustBuildDemoAgent(context.Background(), workerConfig, logger)
 		workers = append(workers, worker)
 	}
 
@@ -129,7 +131,7 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 				Temperature: 0.7,
 			},
 		}
-		a := agent.NewBaseAgent(config, nil, nil, nil, nil, logger, nil)
+		a := mustBuildDemoAgent(context.Background(), config, logger)
 		agents = append(agents, a)
 	}
 
@@ -249,6 +251,55 @@ func demoRolePipeline(logger *zap.Logger) {
 	_, _ = hub.Receive("demo-b", 100*time.Millisecond)
 	_ = hub.Close()
 }
+
+func mustBuildDemoAgent(ctx context.Context, cfg types.AgentConfig, logger *zap.Logger) *agent.BaseAgent {
+	ag, err := runtime.NewBuilder(noopProvider{}, logger).Build(ctx, cfg)
+	if err != nil {
+		panic(fmt.Sprintf("build demo agent %s failed: %v", cfg.Core.ID, err))
+	}
+	return ag
+}
+
+type noopProvider struct{}
+
+func (noopProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return &llm.ChatResponse{
+		Model: req.Model,
+		Choices: []llm.ChatChoice{{
+			Index: 0,
+			Message: types.Message{
+				Role:    llm.RoleAssistant,
+				Content: "[noop provider]",
+			},
+		}},
+	}, nil
+}
+
+func (noopProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk, 1)
+	ch <- llm.StreamChunk{
+		Model: req.Model,
+		Delta: types.Message{
+			Role:    llm.RoleAssistant,
+			Content: "[noop provider]",
+		},
+		FinishReason: "stop",
+	}
+	close(ch)
+	return ch, nil
+}
+
+func (noopProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+
+func (noopProvider) Name() string { return "noop" }
+
+func (noopProvider) SupportsNativeFunctionCalling() bool { return false }
+
+func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+
+func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 func demoObservabilitySystem(logger *zap.Logger) {
 	// 1. 创建可观测性系统的各个组件

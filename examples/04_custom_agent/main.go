@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/BaSui01/agentflow/agent"
+	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
@@ -149,7 +150,7 @@ func createCodeReviewerAgent(ctx context.Context, provider llm.Provider, logger 
 		},
 	}
 
-	return mustInitAgent(ctx, agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil))
+	return mustInitAgent(ctx, mustBuildAgent(ctx, cfg, provider, logger))
 }
 
 // createDataAnalystAgent 创建数据分析 Agent
@@ -189,7 +190,7 @@ func createDataAnalystAgent(ctx context.Context, provider llm.Provider, logger *
 		},
 	}
 
-	return mustInitAgent(ctx, agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil))
+	return mustInitAgent(ctx, mustBuildAgent(ctx, cfg, provider, logger))
 }
 
 // createStoryWriterAgent 创建故事创作 Agent
@@ -228,12 +229,20 @@ func createStoryWriterAgent(ctx context.Context, provider llm.Provider, logger *
 		},
 	}
 
-	return mustInitAgent(ctx, agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil))
+	return mustInitAgent(ctx, mustBuildAgent(ctx, cfg, provider, logger))
 }
 
 func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
 	if err := ag.Init(ctx); err != nil {
 		log.Fatalf("初始化 Agent 失败: %v", err)
+	}
+	return ag
+}
+
+func mustBuildAgent(ctx context.Context, cfg types.AgentConfig, provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
+	ag, err := runtime.NewBuilder(provider, logger).Build(ctx, cfg)
+	if err != nil {
+		log.Fatalf("构建 Agent 失败: %v", err)
 	}
 	return ag
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
+	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
 )
 
@@ -35,12 +36,12 @@ func main() {
 	}, logger)
 
 	ctx := context.Background()
-	if err := runDAGWorkflow(ctx, provider, baseURL, model); err != nil {
+	if err := runDAGWorkflow(ctx, provider, baseURL, model, logger); err != nil {
 		log.Fatalf("workflow execution failed: %v", err)
 	}
 }
 
-func runDAGWorkflow(ctx context.Context, provider llm.Provider, baseURL, model string) error {
+func runDAGWorkflow(ctx context.Context, provider llm.Provider, baseURL, model string, logger *zap.Logger) error {
 	fmt.Println("=== AgentFlow DAG Workflow 示例 ===")
 	fmt.Printf("Base URL: %s\n", baseURL)
 	fmt.Printf("Model: %s\n", model)
@@ -86,11 +87,14 @@ func runDAGWorkflow(ctx context.Context, provider llm.Provider, baseURL, model s
 	graph.SetEntry("translate")
 
 	wf := workflow.NewDAGWorkflow("translate-and-summarize", "翻译并总结文章", graph)
+	wfRuntime := workflowruntime.NewBuilder(nil, logger).
+		WithDSLParser(false).
+		Build()
 
 	input := "Artificial Intelligence is transforming the world. Machine learning algorithms can now recognize patterns, make predictions, and even create art. The future of AI is both exciting and challenging."
 	fmt.Printf("原文：\n%s\n\n", input)
 
-	result, err := wf.Execute(ctx, input)
+	result, err := wfRuntime.Facade.ExecuteDAG(ctx, wf, input)
 	if err != nil {
 		return err
 	}

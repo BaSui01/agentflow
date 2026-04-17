@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/observability"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
+	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -94,7 +95,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		},
 	}
 
-	baseAgent := mustInitAgent(ctx, agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
+	baseAgent := mustInitAgent(ctx, mustBuildAgent(ctx, config, provider, logger))
 
 	// 2. Enable Reflection
 	fmt.Println("2. Enabling Reflection")
@@ -218,7 +219,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 			Model: envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 		},
 	}
-	supervisor := mustInitAgent(ctx, agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger, nil))
+	supervisor := mustInitAgent(ctx, mustBuildAgent(ctx, supervisorConfig, provider, logger))
 
 	// 2. Create Workers
 	workers := []agent.Agent{}
@@ -236,7 +237,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 				Model: envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			},
 		}
-		worker := mustInitAgent(ctx, agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger, nil))
+		worker := mustInitAgent(ctx, mustBuildAgent(ctx, workerConfig, provider, logger))
 		workers = append(workers, worker)
 	}
 
@@ -311,7 +312,7 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 				Model: envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			},
 		}
-		expert := mustInitAgent(ctx, agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
+		expert := mustInitAgent(ctx, mustBuildAgent(ctx, config, provider, logger))
 		experts = append(experts, expert)
 	}
 
@@ -463,6 +464,14 @@ func demoProductionConfig(logger *zap.Logger) {
 func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
 	if err := ag.Init(ctx); err != nil {
 		panic(fmt.Sprintf("init agent %s failed: %v", ag.ID(), err))
+	}
+	return ag
+}
+
+func mustBuildAgent(ctx context.Context, cfg types.AgentConfig, provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
+	ag, err := runtime.NewBuilder(provider, logger).Build(ctx, cfg)
+	if err != nil {
+		panic(fmt.Sprintf("build agent %s failed: %v", cfg.Core.ID, err))
 	}
 	return ag
 }

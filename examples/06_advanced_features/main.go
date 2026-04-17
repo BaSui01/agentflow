@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
@@ -88,7 +89,7 @@ func demoReflection(logger *zap.Logger) {
 		SystemPrompt: promptBundle.RenderSystemPrompt(),
 	}
 
-	baseAgent := mustInitAgent(context.Background(), agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
+	baseAgent := mustInitAgent(context.Background(), mustBuildAgent(context.Background(), config, provider, logger))
 
 	// Configure Reflection
 	reflectionConfig := agent.ReflectionExecutorConfig{
@@ -148,7 +149,7 @@ func demoToolSelection(logger *zap.Logger) {
 		},
 	}
 
-	baseAgent := mustInitAgent(context.Background(), agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
+	baseAgent := mustInitAgent(context.Background(), mustBuildAgent(context.Background(), config, provider, logger))
 
 	// Configure dynamic tool selection
 	selectorConfig := agent.DefaultToolSelectionConfig()
@@ -224,6 +225,14 @@ func demoToolSelection(logger *zap.Logger) {
 func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
 	if err := ag.Init(ctx); err != nil {
 		log.Fatalf("agent init failed: %v", err)
+	}
+	return ag
+}
+
+func mustBuildAgent(ctx context.Context, cfg types.AgentConfig, provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
+	ag, err := runtime.NewBuilder(provider, logger).Build(ctx, cfg)
+	if err != nil {
+		log.Fatalf("agent build failed: %v", err)
 	}
 	return ag
 }
