@@ -2084,7 +2084,7 @@ func TestWithApprovalExplainabilityEmitter_RecordsApprovalStep(t *testing.T) {
 	meta, ok := obs.explainSteps[0]["metadata"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "write_file", meta["tool_name"])
-	assert.Equal(t, "approval_requested", meta["approval_type"])
+	assert.Equal(t, llmtools.PermissionEventRequested, meta["approval_type"])
 }
 
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
