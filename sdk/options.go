@@ -6,7 +6,6 @@ import (
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
-	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
@@ -24,14 +23,8 @@ type Options struct {
 	Logger *zap.Logger
 
 	// LLM configures how the SDK assembles the main provider/tool provider.
-	// When set, it takes precedence over the legacy Provider/ToolProvider/Ledger fields.
+	// This is the single supported top-level entry for SDK LLM wiring.
 	LLM *LLMOptions
-
-	// Provider/ToolProvider/Ledger are legacy direct injection fields kept for
-	// compatibility. Prefer using Options.LLM for future integrations.
-	Provider     llm.Provider
-	ToolProvider llm.Provider
-	Ledger       llmobs.Ledger
 
 	Agent    *AgentOptions
 	Workflow *WorkflowOptions

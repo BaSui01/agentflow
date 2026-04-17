@@ -68,8 +68,10 @@ func TestSDK_Build_BoundaryA(t *testing.T) {
 	opts := runtime.DefaultBuildOptions()
 	opts.EnableSkills = false
 	rt, err := New(Options{
-		Logger:   logger,
-		Provider: provider,
+		Logger: logger,
+		LLM: &LLMOptions{
+			Provider: provider,
+		},
 		Agent: &AgentOptions{
 			BuildOptions: opts,
 		},
@@ -149,4 +151,12 @@ func TestSDK_Build_WithLLMRouterStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, ag)
+}
+
+func TestSDK_Build_RequiresLLMOptions(t *testing.T) {
+	ctx := context.Background()
+
+	_, err := New(Options{}).Build(ctx)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "Options.LLM")
 }

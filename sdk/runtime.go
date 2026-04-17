@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
+	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
 )
 
@@ -104,7 +105,7 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 	agentOpts := b.opts.Agent
 	if agentOpts != nil {
 		if rt.Provider == nil {
-			return nil, fmt.Errorf("sdk agent runtime requires Options.Provider")
+			return nil, fmt.Errorf("sdk agent runtime requires Options.LLM provider")
 		}
 		buildOpts := agentOpts.BuildOptions
 		if isZeroAgentBuildOptions(buildOpts) {
@@ -166,19 +167,13 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 		if !wopts.Enable && !wopts.EnableDSL {
 			// If explicitly disabled, keep nil.
 		} else {
-			executor := workflow.NewDAGExecutor(nil, logger)
-			wrt := &WorkflowRuntime{
-				Facade: workflow.NewFacade(executor),
+			wfRuntime := workflowruntime.NewBuilder(nil, logger).
+				WithDSLParser(wopts.EnableDSL).
+				Build()
+			rt.Workflow = &WorkflowRuntime{
+				Facade: wfRuntime.Facade,
+				Parser: wfRuntime.Parser,
 			}
-			if wopts.EnableDSL {
-				parser := dsl.NewParser()
-				// Keep parity with bootstrap defaults: always_true condition.
-				parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
-					return true, nil
-				})
-				wrt.Parser = parser
-			}
-			rt.Workflow = wrt
 		}
 	}
 
@@ -265,14 +260,11 @@ func isZeroAgentBuildOptions(o runtime.BuildOptions) bool {
 }
 
 func buildSDKProviders(ctx context.Context, opts Options, logger *zap.Logger) (llm.Provider, llm.Provider, llmobs.Ledger, error) {
-	// Priority:
-	// 1) Options.LLM if provided
-	// 2) Legacy fields: Provider/ToolProvider
-	ledger := opts.Ledger
-
 	if opts.LLM == nil {
-		return opts.Provider, opts.ToolProvider, ledger, nil
+		return nil, nil, nil, fmt.Errorf("sdk runtime requires Options.LLM")
 	}
+
+	var ledger llmobs.Ledger
 
 	// Direct injection wins.
 	if opts.LLM.Provider != nil {
