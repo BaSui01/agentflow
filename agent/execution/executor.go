@@ -1,10 +1,12 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -541,23 +543,35 @@ func (c *execCommand) SetStdin(stdin string) {
 }
 
 func (c *execCommand) Run() (stdout, stderr string, err error) {
-	// 运行时导入 os/ exec 以避免进口周期问题
-	// 在生产中,这将使用执行。 直接命令内容
+	cmd := exec.CommandContext(c.ctx, c.cmd, c.args...)
 
-	// 目前模拟执行 -- -- 用于生产:
-	// cmd:=exec.command Context(c.ctx,c.cmd,c.args.) (中文(简体) ).
-	// var stdout Buf, stderr Buf 字节. 缓冲
-	// (原始内容存档于2018-09-29). Cmd. Stdout = &stdout Buf 调制组
-	// (原始内容存档于2018-09-29). Cmd. Stderr = &stderr Buf
-	// 如果 c.stdin != "" { 请检查url=值 (帮助)
-	//     cmd.Stdin = 字符串. NewReader (c.stdin) 互联网档案馆的存檔,存档日期2013-12-21.
-	// }
-	// 错误=cmd. 运行( C)
-	// 返回 stdoutBuf.String (), stderrBuf.String (), 错误
+	var stdoutBuf bytes.Buffer
+	var stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
 
-	c.stdout = ""
-	c.stderr = ""
-	c.exitCode = 0
+	if c.stdin != "" {
+		cmd.Stdin = bytes.NewReader([]byte(c.stdin))
+	}
+
+	runErr := cmd.Run()
+	c.stdout = stdoutBuf.String()
+	c.stderr = stderrBuf.String()
+
+	if cmd.ProcessState != nil {
+		c.exitCode = cmd.ProcessState.ExitCode()
+	} else {
+		c.exitCode = -1
+	}
+
+	if runErr != nil {
+		// 如果命令以非零状态退出, 我们仍然返回 stdout/stderr, 但带上错误
+		if c.exitCode != 0 {
+			return c.stdout, c.stderr, fmt.Errorf("command exited with code %d: %w", c.exitCode, runErr)
+		}
+		return c.stdout, c.stderr, runErr
+	}
+
 	return c.stdout, c.stderr, nil
 }
 

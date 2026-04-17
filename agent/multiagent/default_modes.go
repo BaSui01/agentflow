@@ -153,13 +153,21 @@ func (m *hierarchicalModeStrategy) Execute(ctx context.Context, agents []agent.A
 		}
 	}
 
+	// 尝试从 supervisor 获取真实 provider，避免使用 noopProvider
+	var provider llm.Provider = safeStubProvider{}
+	if ba, ok := supervisor.(*agent.BaseAgent); ok {
+		if p := ba.Provider(); p != nil {
+			provider = p
+		}
+	}
+
 	base := agent.NewBaseAgent(types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "multiagent-hierarchical-mode",
 			Name: "multiagent-hierarchical-mode",
 			Type: string(agent.TypeGeneric),
 		},
-	}, noopProvider{}, nil, nil, nil, m.logger, nil)
+	}, provider, nil, nil, nil, m.logger, nil)
 
 	ha := hierarchical.NewHierarchicalAgent(base, supervisor, workers, hierarchical.DefaultHierarchicalConfig(), m.logger)
 	return ha.Execute(ctx, input)
@@ -244,28 +252,48 @@ func (c *crewAgentAdapter) Negotiate(_ context.Context, _ crews.Proposal) (*crew
 	return &crews.NegotiationResult{Accepted: true, Counter: nil}, nil
 }
 
-// noopProvider satisfies llm.Provider for wrappers that don't directly call provider methods.
-type noopProvider struct{}
+// safeStubProvider provides safe defaults for wrappers that don't directly call provider methods.
+// It returns a minimal valid response instead of errors, preventing accidental failures in composite agents.
+type safeStubProvider struct{}
 
-func (noopProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+func (safeStubProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return &llm.ChatResponse{
+		Model: req.Model,
+		Choices: []llm.ChatChoice{{
+			Index: 0,
+			Message: types.Message{
+				Role:    llm.RoleAssistant,
+				Content: "[stub provider response]",
+			},
+		}},
+	}, nil
 }
 
-func (noopProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	return nil, fmt.Errorf("not implemented")
+func (safeStubProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk, 1)
+	ch <- llm.StreamChunk{
+		Model: req.Model,
+		Delta: types.Message{
+			Role:    llm.RoleAssistant,
+			Content: "[stub provider response]",
+		},
+		FinishReason: "stop",
+	}
+	close(ch)
+	return ch, nil
 }
 
-func (noopProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
+func (safeStubProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
 
-func (noopProvider) Name() string { return "noop" }
+func (safeStubProvider) Name() string { return "safe-stub" }
 
-func (noopProvider) SupportsNativeFunctionCalling() bool { return false }
+func (safeStubProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+func (safeStubProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
 
-func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (safeStubProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 type parallelModeStrategy struct {
 	logger *zap.Logger

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/types"
-
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -18,9 +18,9 @@ import (
 // 使用 LLM 作为评估者来评估 Agent 输出质量
 // 核证:要求10.1、10.2、10.3、10.4、10.5
 type LLMJudge struct {
-	provider llm.Provider
-	config   LLMJudgeConfig
-	logger   *zap.Logger
+	gateway llmcore.Gateway
+	config  LLMJudgeConfig
+	logger  *zap.Logger
 }
 
 // LLMJudgeConfig LLM 评判配置
@@ -151,7 +151,7 @@ func DefaultLLMJudgeConfig() LLMJudgeConfig {
 
 // NewLLMJudge 创建 LLM 评判器
 // 审定:要求10.1
-func NewLLMJudge(provider llm.Provider, config LLMJudgeConfig, logger *zap.Logger) *LLMJudge {
+func NewLLMJudge(gateway llmcore.Gateway, config LLMJudgeConfig, logger *zap.Logger) *LLMJudge {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -174,9 +174,9 @@ func NewLLMJudge(provider llm.Provider, config LLMJudgeConfig, logger *zap.Logge
 	}
 
 	return &LLMJudge{
-		provider: provider,
-		config:   config,
-		logger:   logger,
+		gateway: gateway,
+		config:  config,
+		logger:  logger,
 	}
 }
 
@@ -209,9 +209,9 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 		Temperature: 0.1, // Low temperature for consistent evaluation
 	}
 
-	resp, err := j.provider.Completion(ctx, req)
+	resp, err := j.invokeChat(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("LLM completion failed: %w", err)
+		return nil, fmt.Errorf("LLM invoke failed: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -469,6 +469,26 @@ func (j *LLMJudge) normalizeResult(result *JudgeResult) *JudgeResult {
 // GetConfig 返回当前配置
 func (j *LLMJudge) GetConfig() LLMJudgeConfig {
 	return j.config
+}
+
+func (j *LLMJudge) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if j.gateway == nil {
+		return nil, fmt.Errorf("gateway is not configured")
+	}
+	resp, err := j.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  req.Model,
+		TraceID:    req.TraceID,
+		Payload:    req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	if !ok || chatResp == nil {
+		return nil, fmt.Errorf("invalid chat response from gateway")
+	}
+	return chatResp, nil
 }
 
 // 辅助功能

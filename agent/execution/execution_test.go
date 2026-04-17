@@ -681,7 +681,7 @@ func TestExecCommand(t *testing.T) {
 	cmd.SetStdin("input")
 	stdout, stderr, err := cmd.Run()
 	require.NoError(t, err)
-	assert.Equal(t, "", stdout)
+	assert.Equal(t, "hello\n", stdout)
 	assert.Equal(t, "", stderr)
 	assert.Equal(t, 0, cmd.ExitCode())
 }
