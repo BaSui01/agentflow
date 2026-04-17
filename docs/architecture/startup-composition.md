@@ -115,6 +115,32 @@ Notes:
 - `internal/app/bootstrap/mongo_client_builder.go`
   - MongoDB client creation and startup logging
 
+## Hot Reload Boundaries
+
+Hot reload is intentionally limited to runtime pieces that were already present in the startup chain.
+
+- Text runtime reload reuses the same public runtime seam and can swap `main provider`, `chat`, `agent resolver`, `workflow`, and `cost` wiring in place.
+- Workflow reload reuses the same shared `hitl.InterruptManager`, so pending approval/input interrupts remain valid after parser/runtime rebuilds.
+- Resolver cache reset happens only after the replacement text runtime is live. If rebuild fails, rollback re-applies the restored config through the same seam before stale resolver state is torn down.
+- Hot reload only mutates handlers that were bound to `ServeMux` during startup. If a route was absent at boot because the corresponding runtime was not created, a later config reload does not create that route; exposing it still requires a full process restart.
+- Multimodal and other startup-time capability gaps should be treated as restart-only changes unless the corresponding runtime was already mounted and the code path explicitly supports in-place swap.
+
+Operational rule:
+
+- Use hot reload for bounded runtime tuning and text-chain swaps.
+- Use restart for startup-time dependency recovery, newly exposed routes, and capability classes that were missing during initial composition.
+
+## Environment Defaults
+
+The server config now distinguishes environment intent from transport knobs.
+
+- `server.environment=development` is the default baseline for local runs.
+- `server.environment=production` is the hardened deployment mode; startup validation rejects insecure combinations such as `server.allow_no_auth=true`.
+- `server.metrics_bind_address` defaults to `127.0.0.1`, so metrics stay loopback-only unless a deployment explicitly opens them.
+- `server.enable_pprof` defaults to `false`; profiling endpoints are opt-in and should be enabled only in controlled troubleshooting windows.
+
+This keeps “developer convenience” defaults local while requiring production deployments to opt in explicitly to broader exposure or weaker auth behavior.
+
 ## Routed Provider Paths
 
 - Default legacy startup path

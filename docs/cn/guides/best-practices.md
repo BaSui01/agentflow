@@ -300,7 +300,7 @@ func BenchmarkAgent_Execute(b *testing.B) {
 // 启用 Prometheus 指标
 observability := observability.NewSystem(&observability.Config{
     MetricsEnabled: true,
-    MetricsPort:    9090,
+    MetricsPort:    9091,
 })
 
 agent.EnableObservability(observability)
@@ -346,7 +346,7 @@ logger.Info("agent execution completed",
 更多信息请参考：
 - [API 参考](../api/README.md)
 - [教程](../tutorials/)
-- [故障排查](./troubleshooting.md)
+- [部署与故障排查](../../deployment/README.md)
 
 ---
 
@@ -450,6 +450,32 @@ manager.OnRollback(func(event config.RollbackEvent) {
 3. **敏感字段**：Password、APIKey 等字段在变更日志中自动脱敏
 4. **自动回滚**：回调函数执行失败时自动回滚到上一个有效配置
 5. **环形缓冲**：历史记录使用环形缓冲，默认保留最近 10 个版本
+
+### 热重载边界
+
+- 热重载只会更新启动时已经注册到 `ServeMux` 的 handler。
+- 如果某个文本端点在启动时因为缺少主 runtime 没有注册出来，后续即使通过热重载补齐配置，也仍然需要重启进程才能暴露新路由。
+- workflow 在 reload 时会复用同一个 `hitl.InterruptManager`，因此已有审批/输入中断不会因为 parser/runtime 重建而丢失。
+- resolver cache 只会在新 runtime 成功接管后才清理；如果 reload 失败，回滚会先恢复旧 runtime，再处理旧缓存回收。
+- 多模态与启动时缺失的能力默认按“重启生效”处理，不应假设热重载能补齐启动阶段未挂载的链路。
+
+### 开发默认值与生产默认值
+
+推荐显式区分本地开发和生产部署，而不是依赖同一套隐式默认值：
+
+```yaml
+server:
+  environment: production
+  allow_no_auth: false
+  metrics_bind_address: 127.0.0.1
+  enable_pprof: false
+```
+
+建议：
+
+- 本地开发：可以使用 `server.environment=development`，并在临时调试时按需开启 `allow_no_auth` 或放宽 CORS。
+- 生产部署：固定 `server.environment=production`，显式配置 `server.api_keys` 或 `server.jwt`，不要依赖开发期放宽的认证口径。
+- 观测面：默认保持 `metrics` loopback 绑定、`pprof` 关闭；只有在反向代理、内网抓取或受控排障窗口下才显式放开。
 
 ---
 

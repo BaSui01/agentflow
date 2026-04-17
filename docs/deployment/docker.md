@@ -46,7 +46,7 @@ docker-compose ps
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| agentflow | 8080, 9090, 9091 | 主服务 |
+| agentflow | 8080, 9091 | 主服务 |
 | redis | 6379 | 短期记忆缓存 |
 | postgres | 5432 | 元数据存储 |
 | qdrant | 6333, 6334 | 向量存储 |
@@ -89,8 +89,8 @@ docker-compose up -d --build
 docker run -d \
   --name agentflow \
   -p 8080:8080 \
-  -p 9090:9090 \
   -p 9091:9091 \
+  -e AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0 \
   -e AGENTFLOW_LLM_API_KEY=your_api_key \
   -e AGENTFLOW_REDIS_ADDR=your_redis:6379 \
   agentflow:latest
@@ -112,9 +112,9 @@ vim ./config/config.yaml
 docker run -d \
   --name agentflow \
   -p 8080:8080 \
-  -p 9090:9090 \
   -p 9091:9091 \
   -v $(pwd)/config:/app/config:ro \
+  -e AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0 \
   -e AGENTFLOW_LLM_API_KEY=your_api_key \
   agentflow:latest
 ```
@@ -125,8 +125,8 @@ docker run -d \
 docker run -d \
   --name agentflow \
   -p 8080:8080 \
-  -p 9090:9090 \
   -p 9091:9091 \
+  -e AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0 \
   -e AGENTFLOW_LLM_API_KEY=your_api_key \
   -e AGENTFLOW_REDIS_ADDR=redis.example.com:6379 \
   -e AGENTFLOW_DATABASE_HOST=postgres.example.com \
@@ -176,8 +176,9 @@ docker buildx build \
 ```bash
 # 服务器配置
 AGENTFLOW_SERVER_HTTP_PORT=8080
-AGENTFLOW_SERVER_GRPC_PORT=9090
 AGENTFLOW_SERVER_METRICS_PORT=9091
+AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=127.0.0.1
+AGENTFLOW_SERVER_ENABLE_PPROF=false
 
 # Agent 配置
 AGENTFLOW_AGENT_MODEL=gpt-4
@@ -204,6 +205,11 @@ AGENTFLOW_LLM_DEFAULT_PROVIDER=openai
 AGENTFLOW_LOG_LEVEL=info
 AGENTFLOW_LOG_FORMAT=json
 ```
+
+说明：
+- `metrics` 默认只绑定 `127.0.0.1`
+- 若需要从容器外抓取 `/metrics`，请显式设置 `AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0`
+- `pprof` 默认关闭，只有设置 `AGENTFLOW_SERVER_ENABLE_PPROF=true` 时才会暴露 `/debug/pprof/*`
 
 ### 配置文件挂载
 
