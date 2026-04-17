@@ -52,8 +52,9 @@ type AgentBuilder struct {
 	runStore          RunStoreProvider
 
 	// Orchestration and reasoning (optional)
-	orchestratorInstance OrchestratorRunner
-	reasoningRegistry    *reasoning.PatternRegistry
+	orchestratorInstance  OrchestratorRunner
+	reasoningRegistry     *reasoning.PatternRegistry
+	traceFeedbackSelector TraceFeedbackSelector
 
 	// 并发控制
 	maxConcurrency int
@@ -357,6 +358,13 @@ func (b *AgentBuilder) WithReasoning(registry *reasoning.PatternRegistry) *Agent
 	return b
 }
 
+// WithTraceFeedbackSelector overrides the selector that decides whether
+// trace_synopsis/trace_history should be injected for a given request.
+func (b *AgentBuilder) WithTraceFeedbackSelector(selector TraceFeedbackSelector) *AgentBuilder {
+	b.traceFeedbackSelector = selector
+	return b
+}
+
 // Orchestrator returns the configured orchestrator runner (may be nil).
 func (b *AgentBuilder) Orchestrator() OrchestratorRunner {
 	return b.orchestratorInstance
@@ -480,6 +488,9 @@ func (b *AgentBuilder) enableConfiguredCoreFeatures(agent *BaseAgent) {
 func (b *AgentBuilder) finalizeAgent(agent *BaseAgent) {
 	if b.reasoningRegistry != nil {
 		agent.SetReasoningRegistry(b.reasoningRegistry)
+	}
+	if b.traceFeedbackSelector != nil {
+		agent.SetTraceFeedbackSelector(b.traceFeedbackSelector)
 	}
 	agent.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
 	agent.SetCompletionJudge(NewDefaultCompletionJudge())

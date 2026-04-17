@@ -7,13 +7,11 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
-	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"go.uber.org/zap"
 )
 
@@ -54,7 +52,6 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		llmMetrics    = s.llmMetrics
 		gateway       llmcore.Gateway
 		ledger        observability.Ledger
-		policyManager *llmpolicy.Manager
 	)
 	if llmRuntime != nil {
 		provider = llmRuntime.Provider
@@ -65,7 +62,6 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		llmMetrics = llmRuntime.Metrics
 		gateway = llmRuntime.Gateway
 		ledger = llmRuntime.Ledger
-		policyManager = llmRuntime.PolicyManager
 	}
 
 	resolver, err := s.buildReloadedResolver(cfg, provider)
@@ -83,21 +79,16 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	s.llmMetrics = llmMetrics
 	s.resolver = resolver
 
-	if s.chatHandler != nil {
-		s.chatHandler.UpdateRuntime(provider, policyManager, s.currentChatToolManager(), ledger)
-	} else if provider != nil && s.httpManager == nil {
-		s.chatHandler = handlers.NewChatHandlerWithRuntime(provider, policyManager, s.currentChatToolManager(), ledger, s.logger)
-	} else if provider != nil {
-		s.logger.Warn("LLM hot reload rebuilt chat runtime but chat routes were not bound at startup; restart required to activate chat endpoints")
-	}
-
-	if s.costHandler != nil {
-		s.costHandler.UpdateTracker(costTracker)
-	} else if costTracker != nil && s.httpManager == nil {
-		s.costHandler = handlers.NewCostHandler(costTracker, s.logger)
-	} else if costTracker != nil {
-		s.logger.Warn("LLM hot reload rebuilt cost runtime but cost routes were not bound at startup; restart required to activate cost endpoints")
-	}
+	reloadedBindings := bootstrap.ApplyReloadedTextRuntimeBindings(bootstrap.ReloadedTextRuntimeOptions{
+		Runtime:         llmRuntime,
+		ToolingRuntime:  s.toolingRuntime,
+		ChatHandler:     s.chatHandler,
+		CostHandler:     s.costHandler,
+		HTTPServerBound: s.httpManager != nil,
+		Logger:          s.logger,
+	})
+	s.chatHandler = reloadedBindings.ChatHandler
+	s.costHandler = reloadedBindings.CostHandler
 
 	if s.agentRegistry != nil {
 		if provider != nil {

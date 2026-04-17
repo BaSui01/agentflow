@@ -106,6 +106,18 @@ type ExplainabilitySynopsisReader interface {
 	GetLatestExplainabilitySynopsis(sessionID, agentID, excludeTraceID string) string
 }
 
+type ExplainabilitySynopsisSnapshot struct {
+	Synopsis             string
+	CompressedHistory    string
+	CompressedEventCount int
+}
+
+// ExplainabilitySynopsisSnapshotReader is an optional richer reader that
+// returns both the short synopsis and compressed long-history summary.
+type ExplainabilitySynopsisSnapshotReader interface {
+	GetLatestExplainabilitySynopsisSnapshot(sessionID, agentID, excludeTraceID string) ExplainabilitySynopsisSnapshot
+}
+
 // =============================================================================
 // MongoDB Persistence Store Interfaces (required)
 // =============================================================================

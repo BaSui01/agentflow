@@ -810,9 +810,10 @@ type BaseAgent struct {
 	logger         *zap.Logger
 
 	// 上下文工程相关
-	contextManager       ContextManager // 上下文管理器（可选）
-	contextEngineEnabled bool           // 是否启用上下文工程
-	ephemeralPrompt      *EphemeralPromptLayerBuilder
+	contextManager        ContextManager // 上下文管理器（可选）
+	contextEngineEnabled  bool           // 是否启用上下文工程
+	ephemeralPrompt       *EphemeralPromptLayerBuilder
+	traceFeedbackSelector TraceFeedbackSelector
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
@@ -849,20 +850,21 @@ func NewBaseAgent(
 	agentLogger := logger.With(zap.String("agent_id", cfg.Core.ID), zap.String("agent_type", cfg.Core.Type))
 
 	ba := &BaseAgent{
-		config:               cfg,
-		promptBundle:         promptBundleFromConfig(cfg),
-		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
-		state:                StateInit,
-		provider:             provider,
-		ledger:               ledger,
-		memory:               memory,
-		toolManager:          toolManager,
-		bus:                  bus,
-		logger:               agentLogger,
-		ephemeralPrompt:      NewEphemeralPromptLayerBuilder(),
-		reasoningSelector:    NewDefaultReasoningModeSelector(),
-		completionJudge:      NewDefaultCompletionJudge(),
-		execSem:              semaphore.NewWeighted(1),
+		config:                cfg,
+		promptBundle:          promptBundleFromConfig(cfg),
+		runtimeGuardrailsCfg:  runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
+		state:                 StateInit,
+		provider:              provider,
+		ledger:                ledger,
+		memory:                memory,
+		toolManager:           toolManager,
+		bus:                   bus,
+		logger:                agentLogger,
+		ephemeralPrompt:       NewEphemeralPromptLayerBuilder(),
+		traceFeedbackSelector: NewDefaultTraceFeedbackSelector(),
+		reasoningSelector:     NewDefaultReasoningModeSelector(),
+		completionJudge:       NewDefaultCompletionJudge(),
+		execSem:               semaphore.NewWeighted(1),
 	}
 
 	// Initialize composite sub-managers for pipeline steps
@@ -1336,6 +1338,16 @@ func (b *BaseAgent) ReasoningRegistry() *reasoning.PatternRegistry {
 // SetReasoningModeSelector stores the mode selector used by the default loop executor.
 func (b *BaseAgent) SetReasoningModeSelector(selector ReasoningModeSelector) {
 	b.reasoningSelector = selector
+}
+
+// SetTraceFeedbackSelector stores the selector used to decide whether recent
+// trace synopsis/history should be injected back into runtime prompt layers.
+func (b *BaseAgent) SetTraceFeedbackSelector(selector TraceFeedbackSelector) {
+	if selector == nil {
+		b.traceFeedbackSelector = NewDefaultTraceFeedbackSelector()
+		return
+	}
+	b.traceFeedbackSelector = selector
 }
 
 // SetCompletionJudge stores the completion judge used by the default loop executor.

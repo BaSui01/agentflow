@@ -138,8 +138,8 @@ func LoggerWithTrace(ctx context.Context, logger *zap.Logger) *zap.Logger {
 		return logger
 	}
 	return logger.With(
-		zap.String("trace_id", span.SpanContext().TraceID().String()),
-		zap.String("span_id", span.SpanContext().SpanID().String()),
+		zap.String(LogFieldTraceID, span.SpanContext().TraceID().String()),
+		zap.String(LogFieldSpanID, span.SpanContext().SpanID().String()),
 	)
 }
 
@@ -155,4 +155,3 @@ func buildVersion() string {
 	}
 	return "dev"
 }
-

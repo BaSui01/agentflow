@@ -87,6 +87,9 @@ Notes:
   - previous agent resolver caches are reset only after a successful runtime swap, including rollback-driven restoration of the last good text runtime, so stale cached agents are torn down only after the replacement runtime is live
 - `internal/app/bootstrap/handler_adapters_builder.go`
   - agent registry/handler and api-key/tool-registry/tool-approval handler adapter builders
+  - chat handler builder from shared LLM runtime (`BuildChatHandler`)
+  - hosted-tool runtime + handler bundle assembly (`BuildToolingHandlerBundle`)
+  - hot-reload text binding adapter (`ApplyReloadedTextRuntimeBindings`) used to keep chat/cost handler rewiring out of `cmd`
 - `internal/app/bootstrap/agent_runtime_factory_builder.go`
   - default runtime-backed agent factory registration
 - `internal/app/bootstrap/agent_tool_approval_builder.go`
@@ -124,6 +127,8 @@ Hot reload is intentionally limited to runtime pieces that were already present 
 - Resolver cache reset happens only after the replacement text runtime is live. If rebuild fails, rollback re-applies the restored config through the same seam before stale resolver state is torn down.
 - Hot reload only mutates handlers that were bound to `ServeMux` during startup. If a route was absent at boot because the corresponding runtime was not created, a later config reload does not create that route; exposing it still requires a full process restart.
 - Multimodal and other startup-time capability gaps should be treated as restart-only changes unless the corresponding runtime was already mounted and the code path explicitly supports in-place swap.
+- `cmd/agentflow/server_hotreload.go` now delegates chat/cost handler rebinding to `internal/app/bootstrap.ApplyReloadedTextRuntimeBindings(...)` instead of reconstructing handler wiring inline.
+- `cmd/agentflow/server_handlers_runtime.go` now delegates hosted-tool runtime, tool approval storage, registry/provider handlers, and capability catalog assembly to `internal/app/bootstrap.BuildToolingHandlerBundle(...)`, shrinking composition-root branching.
 
 Operational rule:
 

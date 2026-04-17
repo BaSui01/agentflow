@@ -49,7 +49,6 @@ func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 		"metrics":    "single metrics collector entrypoint",
 		"openapi":    "single OpenAPI helper entrypoint",
 		"server":     "single server manager entrypoint",
-		"telemetry":  "single telemetry setup/shutdown entrypoint",
 		"tlsutil":    "single TLS utility entrypoint",
 	}
 

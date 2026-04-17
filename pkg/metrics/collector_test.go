@@ -36,6 +36,16 @@ func TestNewCollector(t *testing.T) {
 	assert.NotNil(t, collector.llmCost)
 }
 
+func TestCollector_LabelSchema_IsFrozen(t *testing.T) {
+	assert.Equal(t, "provider", labelProvider)
+	assert.Equal(t, "model", labelModel)
+	assert.Equal(t, "status", labelStatus)
+	assert.Equal(t, "type", labelTokenType)
+	assert.Equal(t, "tool_name", labelToolName)
+	assert.Equal(t, "database", labelDatabase)
+	assert.Equal(t, "operation", labelOperation)
+}
+
 func TestCollector_RecordHTTPRequest(t *testing.T) {
 	logger := zap.NewNop()
 	collector := NewCollector(nextTestNamespace(), logger)
@@ -193,4 +203,3 @@ func TestCollector_MetricsRegistration(t *testing.T) {
 	count := testutil.CollectAndCount(collector.httpRequestsTotal)
 	assert.Greater(t, count, 0)
 }
-
