@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func TestNewMultimodalRedisReferenceStore_RejectsNonLoopbackPlainHostPort(t *testing.T) {
@@ -57,7 +60,16 @@ func TestIsLoopbackHost(t *testing.T) {
 }
 
 func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
+	const mode = "test-multimodal-init"
+	bootstrap.UnregisterMainProviderBuilder(mode)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(mode,
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+			return &hotReloadProvider{name: "provider-mm", content: "mm"}, nil
+		}))
+	defer bootstrap.UnregisterMainProviderBuilder(mode)
+
 	cfg := config.DefaultConfig()
+	cfg.LLM.MainProviderMode = mode
 	cfg.Multimodal.Enabled = true
 	cfg.Multimodal.ReferenceStoreBackend = "memory"
 
@@ -65,4 +77,13 @@ func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
 	err := s.initHandlers()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "multimodal.reference_store_backend must be redis")
+}
+
+func TestInitHandlers_RequiresLLMRuntime(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	s := &Server{cfg: cfg, logger: zap.NewNop()}
+	err := s.initHandlers()
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "failed to initialize llm runtime")
 }

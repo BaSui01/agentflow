@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
+	"github.com/BaSui01/agentflow/config"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,4 +178,22 @@ func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
 	compatRespRec := httptest.NewRecorder()
 	mux.ServeHTTP(compatRespRec, compatRespReq)
 	assert.NotEqual(t, http.StatusNotFound, compatRespRec.Code)
+}
+
+func TestBuildMetricsServerConfig_DefaultLoopbackBinding(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+
+	built := BuildMetricsServerConfig(cfg)
+
+	assert.Equal(t, "127.0.0.1:9091", built.Addr)
+}
+
+func TestBuildMetricsServerConfig_ExplicitBindAddress(t *testing.T) {
+	cfg := config.DefaultServerConfig()
+	cfg.MetricsPort = 10091
+	cfg.MetricsBindAddress = "0.0.0.0"
+
+	built := BuildMetricsServerConfig(cfg)
+
+	assert.Equal(t, "0.0.0.0:10091", built.Addr)
 }
