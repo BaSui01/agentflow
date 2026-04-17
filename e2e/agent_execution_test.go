@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -163,10 +164,11 @@ func TestE2E_AgentExecute_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "response body: %s", string(bodyBytes))
 
 	var apiResp api.Response
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&apiResp))
+	require.NoError(t, json.Unmarshal(bodyBytes, &apiResp))
 	assert.True(t, apiResp.Success)
 
 	data, ok := apiResp.Data.(map[string]any)
