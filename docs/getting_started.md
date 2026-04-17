@@ -102,13 +102,16 @@ go run main.go
 
 ```go
 import runtime "github.com/BaSui01/agentflow/agent/runtime"
+import llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 
 opts := runtime.DefaultBuildOptions()
 opts.EnableAll = false
 opts.EnableLSP = true
 opts.MaxLoopIterations = 8
 
-ag, err := runtime.NewBuilder(provider, logger).
+gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+
+ag, err := runtime.NewBuilder(gateway, logger).
     WithOptions(opts).
     Build(ctx, cfg)
 ```

@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/agent/skills"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -317,6 +316,7 @@ var (
 )
 
 // Init Global Registry将全球代理登记初始化。
+// 该入口只服务 registry 扩展流；常规 Agent 构造应优先使用 agent/runtime.Builder。
 // 此函数可以安全多次调用 - 只有第一个调用会初始化 。
 func InitGlobalRegistry(logger *zap.Logger) {
 	globalRegistryOnce.Do(func() {
@@ -324,7 +324,9 @@ func InitGlobalRegistry(logger *zap.Logger) {
 	})
 }
 
-// Create Agent 使用全球登记册创建代理
+// Deprecated: prefer agent/runtime.Builder for regular construction.
+// Use AgentRegistry.Create only when you intentionally rely on the typed
+// global-registry extension flow.
 func CreateAgent(
 	config types.AgentConfig,
 	gateway llmcore.Gateway,
@@ -352,7 +354,7 @@ func CreateAgent(
 // Create+Init cycle.
 type CachingResolver struct {
 	registry       *AgentRegistry
-	provider       llm.Provider
+	gateway        llmcore.Gateway
 	memory         MemoryManager // optional; nil means stateless agents
 	enhancedMemory EnhancedMemoryRunner
 	tools          ToolManager
@@ -369,11 +371,11 @@ type CachingResolver struct {
 }
 
 // NewCachingResolver creates a CachingResolver backed by the given registry
-// and main LLM provider.
-func NewCachingResolver(registry *AgentRegistry, provider llm.Provider, logger *zap.Logger) *CachingResolver {
+// and main LLM gateway.
+func NewCachingResolver(registry *AgentRegistry, gateway llmcore.Gateway, logger *zap.Logger) *CachingResolver {
 	return &CachingResolver{
 		registry: registry,
-		provider: provider,
+		gateway:  gateway,
 		logger:   logger,
 	}
 }
@@ -494,7 +496,7 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 		if len(toolNames) > 0 {
 			cfg.Runtime.Tools = append([]string(nil), toolNames...)
 		}
-		ag, err := r.registry.Create(cfg, wrapProviderWithGateway(r.provider, r.logger, nil), r.memory, r.tools, nil, r.logger)
+		ag, err := r.registry.Create(cfg, r.gateway, r.memory, r.tools, nil, r.logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
 		}
@@ -526,12 +528,7 @@ func (r *CachingResolver) defaultResolverModel() string {
 	if model := strings.TrimSpace(r.modelHint); model != "" {
 		return model
 	}
-	if r.provider != nil {
-		if name := strings.TrimSpace(r.provider.Name()); name != "" {
-			return name
-		}
-	}
-	if provider := compatProviderFromGateway(wrapProviderWithGateway(r.provider, r.logger, nil)); provider != nil {
+	if provider := compatProviderFromGateway(r.gateway); provider != nil {
 		if name := strings.TrimSpace(provider.Name()); name != "" {
 			return name
 		}

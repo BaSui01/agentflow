@@ -10,6 +10,7 @@ import (
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
+	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
 )
 
@@ -36,20 +37,23 @@ type WorkflowRuntime struct {
 // BuildWorkflowRuntime creates workflow parser and DAG executor.
 func BuildWorkflowRuntime(logger *zap.Logger, opts ...WorkflowRuntimeOptions) *WorkflowRuntime {
 	var cfg WorkflowRuntimeOptions
+	hasOpts := len(opts) > 0
 	if len(opts) > 0 {
 		cfg = opts[0]
 	}
-	executor := workflow.NewDAGExecutor(buildWorkflowCheckpointManager(cfg), logger)
-	parser := dsl.NewParser()
-	parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
+
+	builder := workflowruntime.NewBuilder(buildWorkflowCheckpointManager(cfg), logger)
+	if hasOpts {
+		builder = builder.WithStepDependencies(buildStepDependencies(cfg, logger))
+	}
+
+	rt := builder.Build()
+	rt.Parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
 		return true, nil
 	})
-	if len(opts) > 0 {
-		parser.WithStepDependencies(buildStepDependencies(cfg, logger))
-	}
 	return &WorkflowRuntime{
-		Facade: workflow.NewFacade(executor),
-		Parser: parser,
+		Facade: rt.Facade,
+		Parser: rt.Parser,
 	}
 }
 

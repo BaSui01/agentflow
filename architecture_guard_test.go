@@ -564,6 +564,10 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 		{path: "docs/en/tutorials/03.AgentDevelopment.md", forbiddenSnippets: []string{"agent.NewAgentBuilder(", "agent.CreateAgent("}},
 		{path: "docs/cn/tutorials/05.工作流编排.md", forbiddenSnippets: []string{"DAGWorkflow.Execute("}},
 		{path: "docs/cn/guides/best-practices.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "README.md", forbiddenSnippets: []string{"`MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥的 routed provider 入口"}},
+		{path: "README_EN.md", forbiddenSnippets: []string{"`MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive routed-provider entries behind `Gateway`"}},
+		{path: "docs/cn/tutorials/02.Provider配置指南.md", forbiddenSnippets: []string{"`MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥入口"}},
+		{path: "docs/en/tutorials/02.ProviderConfiguration.md", forbiddenSnippets: []string{"`MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive entries behind `Gateway`"}},
 	}
 
 	for _, tt := range expectations {

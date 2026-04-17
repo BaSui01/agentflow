@@ -223,7 +223,7 @@ func TestAgentBuilder_BuildWithoutLogger(t *testing.T) {
 
 func TestAgentBuilder_BuildMinimal(t *testing.T) {
 	b := NewAgentBuilder(testConfig("minimal"))
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -301,7 +301,7 @@ func TestBaseAgent_Logger(t *testing.T) {
 func buildTestAgent(t *testing.T, id string) *BaseAgent {
 	t.Helper()
 	b := NewAgentBuilder(testConfig(id))
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -334,7 +334,7 @@ func TestAgentBuilder_BuildWithMCP(t *testing.T) {
 	cfg := testConfig("mcp-agent")
 	cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -349,7 +349,7 @@ func TestAgentBuilder_BuildWithEnhancedMemory(t *testing.T) {
 	cfg := testConfig("memory-agent")
 	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -364,7 +364,7 @@ func TestAgentBuilder_BuildWithLSP(t *testing.T) {
 	cfg := testConfig("lsp-agent")
 	cfg.Extensions.LSP = &types.LSPConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -378,7 +378,7 @@ func TestAgentBuilder_BuildWithLSP(t *testing.T) {
 func TestAgentBuilder_Validate_Coverage(t *testing.T) {
 	// 有效配置
 	b := NewAgentBuilder(testConfig("valid"))
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	if err := b.Validate(); err != nil {
 		t.Fatalf("valid config should pass: %v", err)
@@ -454,7 +454,7 @@ func TestAgentBuilder_BuildWithSkills(t *testing.T) {
 	cfg := testConfig("skills-agent")
 	cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -778,7 +778,7 @@ func TestExtensionRegistry_AllAccessors(t *testing.T) {
 func TestAgentBuilder_WithMaxReActIterations_Coverage(t *testing.T) {
 	b := NewAgentBuilder(testConfig("react-iter"))
 	b.WithMaxReActIterations(15)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -789,8 +789,8 @@ func TestAgentBuilder_WithMaxReActIterations_Coverage(t *testing.T) {
 
 func TestAgentBuilder_WithToolProvider(t *testing.T) {
 	b := NewAgentBuilder(testConfig("tool-prov"))
-	b.WithProvider(&testMockProvider{})
-	b.WithToolProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
+	b.WithToolGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -801,7 +801,7 @@ func TestAgentBuilder_WithToolProvider(t *testing.T) {
 
 func TestAgentBuilder_WithMemory_Coverage(t *testing.T) {
 	b := NewAgentBuilder(testConfig("mem-test"))
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithMemory(nil)
 	b.WithLogger(zap.NewNop())
 	_, err := b.Build()
@@ -812,7 +812,7 @@ func TestAgentBuilder_WithMemory_Coverage(t *testing.T) {
 
 func TestAgentBuilder_WithEventBus_Coverage(t *testing.T) {
 	b := NewAgentBuilder(testConfig("bus-test"))
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithEventBus(NewEventBus(zap.NewNop()))
 	b.WithLogger(zap.NewNop())
 	_, err := b.Build()
@@ -938,7 +938,7 @@ func (m *mockLedger) Record(_ context.Context, _ observability.LedgerEntry) erro
 func buildTestAgentWithProvider(t *testing.T, id string, prov llm.Provider) *BaseAgent {
 	t.Helper()
 	b := NewAgentBuilder(testConfig(id))
-	b.WithProvider(prov)
+	b.WithGateway(testGatewayFromProvider(prov))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -1340,12 +1340,14 @@ func TestPersistenceStores_UpdateRunStatus_WithStore(t *testing.T) {
 func TestBaseAgent_GatewayProvider_WithLedger(t *testing.T) {
 	prov := &testMockProvider{}
 	ag := NewBaseAgent(
-		testConfig("gw-ledger"),
-		prov,
+		testConfig("gw-ledger"), testGatewayFromProvider(
+
+			prov),
+
 		nil, nil, nil,
 		zap.NewNop(),
-		&mockLedger{},
-	)
+		&mockLedger{})
+
 	gw := ag.gatewayProvider()
 	if gw == nil {
 		t.Fatal("expected non-nil gateway provider")
@@ -1356,13 +1358,15 @@ func TestBaseAgent_GatewayToolProvider_WithLedger(t *testing.T) {
 	prov := &testMockProvider{}
 	toolProv := &testMockProvider{}
 	ag := NewBaseAgent(
-		testConfig("gw-tool-ledger"),
-		prov,
+		testConfig("gw-tool-ledger"), testGatewayFromProvider(
+
+			prov),
+
 		nil, nil, nil,
 		zap.NewNop(),
-		&mockLedger{},
-	)
-	ag.SetToolProvider(toolProv)
+		&mockLedger{})
+
+	setTestToolProvider(ag, toolProv)
 	gtp := ag.gatewayToolProvider()
 	if gtp == nil {
 		t.Fatal("expected non-nil gateway tool provider")
@@ -1372,12 +1376,14 @@ func TestBaseAgent_GatewayToolProvider_WithLedger(t *testing.T) {
 func TestBaseAgent_GatewayToolProvider_NoToolProvider(t *testing.T) {
 	prov := &testMockProvider{}
 	ag := NewBaseAgent(
-		testConfig("gw-no-tool"),
-		prov,
+		testConfig("gw-no-tool"), testGatewayFromProvider(
+
+			prov),
+
 		nil, nil, nil,
 		zap.NewNop(),
-		&mockLedger{},
-	)
+		&mockLedger{})
+
 	gtp := ag.gatewayToolProvider()
 	if gtp == nil {
 		t.Fatal("expected non-nil provider (should fall back to gatewayProvider)")
@@ -2900,7 +2906,7 @@ func TestReplaceTemplateVars_Match(t *testing.T) {
 func TestAgentBuilder_WithLogger_Nil(t *testing.T) {
 	b := NewAgentBuilder(testConfig("nil-logger"))
 	b.WithLogger(nil)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	_, err := b.Build()
 	if err == nil {
 		t.Fatal("expected error when logger is nil")
@@ -2912,7 +2918,7 @@ func TestAgentBuilder_WithLogger_Nil(t *testing.T) {
 func TestAgentBuilder_WithDefaultSkills_BadDir(t *testing.T) {
 	b := NewAgentBuilder(testConfig("skills-bad"))
 	b.WithDefaultSkills("/nonexistent/path/to/skills", nil)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	_, err := b.Build()
 	if err == nil {
@@ -2925,7 +2931,7 @@ func TestAgentBuilder_WithDefaultSkills_BadDir(t *testing.T) {
 func TestAgentBuilder_Build_WithAccumulatedErrors(t *testing.T) {
 	b := NewAgentBuilder(testConfig("err-build"))
 	b.WithLogger(nil) // accumulates error
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	_, err := b.Build()
 	if err == nil {
 		t.Fatal("expected build error")
@@ -2936,7 +2942,7 @@ func TestAgentBuilder_Build_NoModel(t *testing.T) {
 	cfg := testConfig("no-model")
 	cfg.LLM.Model = ""
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	_, err := b.Build()
 	if err == nil {
@@ -2950,7 +2956,7 @@ func TestAgentBuilder_BuildWithMCP_WithInstance(t *testing.T) {
 	cfg := testConfig("mcp-inst")
 	cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	b.WithMCP(&mockMCPServer{})
 	ag, err := b.Build()
@@ -2975,7 +2981,7 @@ func TestAgentBuilder_BuildWithEnhancedMemory_WithInstance(t *testing.T) {
 	cfg := testConfig("mem-inst")
 	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	b.WithEnhancedMemory(&mockEnhancedMemory{})
 	ag, err := b.Build()
@@ -2993,7 +2999,7 @@ func TestAgentBuilder_BuildWithSkills_WithInstance(t *testing.T) {
 	cfg := testConfig("skills-inst")
 	cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	b.WithSkills(&mockSkillDiscoverer{})
 	ag, err := b.Build()
@@ -3240,7 +3246,7 @@ func TestCreateAgent_NoRegistry(t *testing.T) {
 
 func TestCachingResolver_StoreSetters(t *testing.T) {
 	reg := NewAgentRegistry(zap.NewNop())
-	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+	resolver := NewCachingResolver(reg, testGatewayFromProvider(&testMockProvider{}), zap.NewNop())
 
 	resolver.WithPromptStore(&mockPromptStore{})
 	resolver.WithConversationStore(&mockConversationStore{})
@@ -3498,7 +3504,7 @@ func strContains(s, substr string) bool {
 
 func TestCachingResolver_TeardownAll_WithCachedAgents(t *testing.T) {
 	reg := NewAgentRegistry(zap.NewNop())
-	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+	resolver := NewCachingResolver(reg, testGatewayFromProvider(&testMockProvider{}), zap.NewNop())
 
 	// Manually store a mock agent in the cache
 	ag := &testSimpleAgent{id: "cached1"}
@@ -3509,7 +3515,7 @@ func TestCachingResolver_TeardownAll_WithCachedAgents(t *testing.T) {
 
 func TestCachingResolver_ResetCache_WithCachedAgents(t *testing.T) {
 	reg := NewAgentRegistry(zap.NewNop())
-	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+	resolver := NewCachingResolver(reg, testGatewayFromProvider(&testMockProvider{}), zap.NewNop())
 
 	ag := &testSimpleAgent{id: "cached2"}
 	resolver.agents.Store("cached2", ag)
@@ -3527,7 +3533,7 @@ func TestCachingResolver_ResetCache_WithCachedAgents(t *testing.T) {
 
 func TestCachingResolver_WithRuntimeTools(t *testing.T) {
 	reg := NewAgentRegistry(zap.NewNop())
-	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+	resolver := NewCachingResolver(reg, testGatewayFromProvider(&testMockProvider{}), zap.NewNop())
 
 	// Empty list
 	resolver.WithRuntimeTools(nil)
@@ -3553,7 +3559,7 @@ func TestAgentBuilder_Build_WithAllFeatures(t *testing.T) {
 	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
 
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	b.WithSkills(&mockSkillDiscoverer{})
 	b.WithMCP(&mockMCPServer{})
@@ -3571,14 +3577,14 @@ func TestAgentBuilder_Build_WithAllFeatures(t *testing.T) {
 func TestAgentBuilder_Build_WithToolProvider(t *testing.T) {
 	cfg := testConfig("tool-prov-build")
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
-	b.WithToolProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
+	b.WithToolGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
 		t.Fatalf("Build with tool provider failed: %v", err)
 	}
-	if ag.ToolProvider() == nil {
+	if testToolProvider(ag) == nil {
 		t.Fatal("expected non-nil tool provider")
 	}
 }
@@ -3995,7 +4001,7 @@ func TestAgentBuilder_Build_WithReflectionFromConfig(t *testing.T) {
 	cfg := testConfig("ref-cfg")
 	cfg.Features.Reflection = &types.ReflectionConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -4010,7 +4016,7 @@ func TestAgentBuilder_Build_WithToolSelectionFromConfig(t *testing.T) {
 	cfg := testConfig("ts-cfg")
 	cfg.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {
@@ -4025,7 +4031,7 @@ func TestAgentBuilder_Build_WithPromptEnhancerFromConfig(t *testing.T) {
 	cfg := testConfig("pe-cfg")
 	cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
 	b := NewAgentBuilder(cfg)
-	b.WithProvider(&testMockProvider{})
+	b.WithGateway(testGatewayFromProvider(&testMockProvider{}))
 	b.WithLogger(zap.NewNop())
 	ag, err := b.Build()
 	if err != nil {

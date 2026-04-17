@@ -129,7 +129,7 @@ go get github.com/BaSui01/agentflow
 
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
 - `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景，不再作为同级正式入口宣传
+- `agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景；其中 builder/registry 已切换到 gateway 注入语义，不再推荐 provider 直入
 
 ### 基础对话
 
@@ -289,6 +289,9 @@ func main() {
 
 推荐把 `llm/runtime/router.VendorChatProviderFactory` 视为配置驱动 chat provider 的标准构造入口；只有在你明确需要 provider 包级低级 API 时，才直接使用 `llm/providers/openai`、`llm/providers/anthropic`、`llm/providers/gemini` 构造器。
 
+上面的 `MultiProviderRouter` 示例只用于维护框架内置的 legacy DB-backed `provider + api_key pool` 部署。
+如果你是在做新的 routed-provider 集成，不要把它当作仓库级推荐主入口，直接从 `BuildChannelRoutedProvider(...)` 开始。
+
 如果你的底层路由语义不是 `provider + api_key pool`，而是业务侧自定义的 `channel / key / model mapping`：
 
 - 推荐主链路是：`Handler/Service -> Gateway -> ChannelRoutedProvider -> resolvers/selectors -> provider factory -> provider API`
@@ -297,9 +300,9 @@ func main() {
 - 仓库内置 `llm/runtime/router/extensions/channelstore` 作为通用 extension 起点，提供 `StoreModelMappingResolver`、`PriorityWeightedSelector`、`StoreSecretResolver`、`StoreProviderConfigSource`、`StaticStore`
 - 上层业务保持 `Handler/Service -> Gateway` 不变，迁移时只替换 `Gateway` 后面的 routed provider 链路
 - 通过 `ChannelSelector`、`ModelMappingResolver`、`SecretResolver`、`UsageRecorder` 等接口注入自定义实现
-- `MultiProviderRouter` 继续保留，但定位为框架内置的 legacy DB-backed provider routing
-- legacy 默认文本链路仍是 `Gateway -> RoutedChatProvider -> MultiProviderRouter`；channel-based 新链路是 `Gateway -> ChannelRoutedProvider`
-- `MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥的 routed provider 入口；一次请求只选一条单链路，不要把前者包进后者形成双重路由
+- `BuildChannelRoutedProvider(...)` 是新接入唯一推荐的 routed-provider 装配入口
+- `MultiProviderRouter` 仅为旧部署兼容与维护保留；如果你仍在使用它，请把它视为 legacy DB-backed 实现，而不是与 `ChannelRoutedProvider` 并列的同级推荐入口
+- 旧部署若还依赖 DB-backed provider catalog + API key pool，可继续停留在 `Gateway -> RoutedChatProvider -> MultiProviderRouter`，但不要在新的公共接入链路里再引入它
 - 外部项目现在可通过 `llm/runtime/compose.Build(...)` 复用同一套 resilience/cache/policy/tool-provider runtime 装配；仓库自身组合根继续通过 `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)` 复用这层公共装配；`image/video` 仍延后到 `gateway + capabilities`
 - 仓库内置 `llm.main_provider_mode` 启动切换位；仓库自身通过 `internal/app/bootstrap.RegisterMainProviderBuilder(...)` 注册 `channel_routed` builder 并复用 server 启动链；外部项目若需要相同模式，应在自己的组合根直接调用 `channelstore.NewMainProviderBuilder(...)` 或自行装配 routed provider
 - `llm/runtime/router/extensions/runtimepolicy` 提供可复用的 `UsageRecorder` / `CooldownController` / `QuotaPolicy` 参考实现，便于先把 usage、cooldown、daily limit、concurrency limit 链路跑通
@@ -669,5 +672,3 @@ agentflow/
 ## 📄 License
 
 MIT License - 详见 [LICENSE](LICENSE)
-
-

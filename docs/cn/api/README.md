@@ -159,9 +159,9 @@ const (
 
 ```go
 func DefaultBuildOptions() BuildOptions
-func NewBuilder(provider llm.Provider, logger *zap.Logger) *Builder
+func NewBuilder(gateway llmcore.Gateway, logger *zap.Logger) *Builder
 func (b *Builder) WithOptions(opts BuildOptions) *Builder
-func (b *Builder) WithToolProvider(provider llm.Provider) *Builder
+func (b *Builder) WithToolGateway(gateway llmcore.Gateway) *Builder
 func (b *Builder) WithLedger(ledger llmobs.Ledger) *Builder
 func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error)
 
@@ -176,13 +176,14 @@ func (b *BaseAgent) Teardown(ctx context.Context) error
 高级扩展入口：
 
 - `agent.NewAgentBuilder(...)`：细粒度高级 builder，适合逐项注入底层依赖
-- `agent.AgentRegistry.Register(...)` / `agent.InitGlobalRegistry(...)`：typed factory 扩展入口，适合按类型分发构造逻辑
+- `agent.AgentRegistry.Register(...)` / `agent.AgentRegistry.Create(...)` / `agent.InitGlobalRegistry(...)`：typed factory 扩展入口，适合按类型分发构造逻辑
 - `agent.NewBaseAgent(...)`：最低层 primitive 构件，仅建议用于底层封装或高级扩展
 
 说明：
 
 - `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`。
 - `agent.NewAgentBuilder(...)`、`agent.CreateAgent(...)`、`agent.NewBaseAgent(...)` 不再作为 `agent` 子模块的正式主入口；它们保留为高级扩展或底层封装面，不应与 `agent/runtime.Builder` 同级推荐。
+- 包级 `agent.CreateAgent(...)` 只是全局 registry 的便捷包装；如果你明确在做 registry 扩展，优先直接调用 `AgentRegistry.Create(...)`，不要把它当作通用构造入口。
 - 默认单 Agent 请求不会经 `multiagent` 模式分发；`multiagent` 仅用于 `agent_ids` 多目标协作请求。
 - `Output` 中的 `current_stage / iteration_count / selected_reasoning_mode / stop_reason / checkpoint_id / resumable` 是默认闭环执行和恢复链路的统一可观测字段。
 - `Observe(...)` 写入的反馈在启用 enhanced memory 时会回流到后续 `Execute(...)` 的上下文注入链路中，不再停留为“仅存储不消费”。

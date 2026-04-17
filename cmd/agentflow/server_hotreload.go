@@ -64,7 +64,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		ledger = llmRuntime.Ledger
 	}
 
-	resolver, err := s.buildReloadedResolver(cfg, provider)
+	resolver, err := s.buildReloadedResolver(cfg, gateway)
 	if err != nil {
 		return err
 	}
@@ -128,12 +128,12 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	return nil
 }
 
-func (s *Server) buildReloadedResolver(cfg *config.Config, provider llm.Provider) (*agent.CachingResolver, error) {
-	if provider == nil || s.agentRegistry == nil {
+func (s *Server) buildReloadedResolver(cfg *config.Config, gateway llmcore.Gateway) (*agent.CachingResolver, error) {
+	if gateway == nil || s.agentRegistry == nil {
 		return nil, nil
 	}
 
-	resolver := agent.NewCachingResolver(s.agentRegistry, provider, s.logger).
+	resolver := agent.NewCachingResolver(s.agentRegistry, gateway, s.logger).
 		WithDefaultModel(cfg.Agent.Model)
 	if tooling := s.toolingRuntime; tooling != nil && tooling.ToolManager != nil {
 		resolver = resolver.WithToolManager(tooling.ToolManager)

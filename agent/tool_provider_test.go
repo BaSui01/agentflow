@@ -41,11 +41,11 @@ func TestToolProvider_NilFallback(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, mainProvider, nil, nil, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, bus, logger, nil)
 
 	// toolProvider 应该为 nil
-	assert.Nil(t, agent.ToolProvider(), "toolProvider 未设置时应为 nil")
-	assert.Equal(t, mainProvider, agent.Provider(), "主 provider 应正确返回")
+	assert.Nil(t, testToolProvider(agent), "toolProvider 未设置时应为 nil")
+	assert.Equal(t, mainProvider, testMainProvider(agent), "主 provider 应正确返回")
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "Hi"},
@@ -64,18 +64,18 @@ func TestToolProvider_SetAndGet(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, nil, logger, nil)
 
 	// 初始为 nil
-	assert.Nil(t, agent.ToolProvider())
+	assert.Nil(t, testToolProvider(agent))
 
 	// 设置 toolProvider
-	agent.SetToolProvider(toolProvider)
-	assert.Equal(t, toolProvider, agent.ToolProvider(), "SetToolProvider 后应能正确获取")
+	setTestToolProvider(agent, toolProvider)
+	assert.Equal(t, toolProvider, testToolProvider(agent), "SetToolProvider 后应能正确获取")
 
 	// 清除 toolProvider
-	agent.SetToolProvider(nil)
-	assert.Nil(t, agent.ToolProvider(), "设置为 nil 后应恢复")
+	setTestToolProvider(agent, nil)
+	assert.Nil(t, testToolProvider(agent), "设置为 nil 后应恢复")
 }
 
 // TestToolProvider_NoToolsUsesMainProvider 无工具时，即使设置了 toolProvider，也走主 provider
@@ -111,8 +111,8 @@ func TestToolProvider_NoToolsUsesMainProvider(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger, nil)
-	agent.SetToolProvider(toolProvider)
+	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, nil, logger, nil)
+	setTestToolProvider(agent, toolProvider)
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "Write a poem"},
@@ -133,16 +133,18 @@ func TestToolProvider_Builder(t *testing.T) {
 
 	config := testAgentConfig("test-builder-dual", "Builder Dual Agent", "claude-sonnet-4-6")
 
-	agent, err := NewAgentBuilder(config).
-		WithProvider(mainProvider).
-		WithToolProvider(toolProvider).
+	agent, err := NewAgentBuilder(config).WithGateway(testGatewayFromProvider(
+		mainProvider)).
+		WithToolGateway(testGatewayFromProvider(
+
+			toolProvider)).
 		WithLogger(logger).
 		Build()
 
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
-	assert.Equal(t, mainProvider, agent.Provider(), "主 provider 应正确设置")
-	assert.Equal(t, toolProvider, agent.ToolProvider(), "toolProvider 应通过 Builder 正确注入")
+	assert.Equal(t, mainProvider, testMainProvider(agent), "主 provider 应正确设置")
+	assert.Equal(t, toolProvider, testToolProvider(agent), "toolProvider 应通过 Builder 正确注入")
 }
 
 // TestToolProvider_XMLFallback_ChatCompletion 不支持原生 FC 时自动降级到 XML 模式
@@ -179,8 +181,8 @@ func TestToolProvider_XMLFallback_ChatCompletion(t *testing.T) {
 	config := testAgentConfig("test-dual-fc", "Dual FC Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
-	agent.SetToolProvider(toolProvider)
+	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
+	setTestToolProvider(agent, toolProvider)
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "search something"},
@@ -239,7 +241,7 @@ func TestToolProvider_XMLFallback_StreamCompletion(t *testing.T) {
 	config := testAgentConfig("test-dual-fc-stream", "Dual FC Stream Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
 	// 不设置 toolProvider → chatProvider = mainProvider → 降级到 XML
 
 	ch, err := agent.StreamCompletion(context.Background(), []types.Message{
@@ -290,7 +292,7 @@ func TestToolProvider_XMLFallback_NilToolProvider(t *testing.T) {
 	config := testAgentConfig("test-fc-nil-tp", "FC Nil ToolProvider Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
 	// 不设置 toolProvider → 退化到 mainProvider
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
@@ -312,13 +314,13 @@ func TestToolProvider_BuilderWithoutToolProvider(t *testing.T) {
 
 	config := testAgentConfig("test-builder-single", "Builder Single Agent", "claude-sonnet-4-6")
 
-	agent, err := NewAgentBuilder(config).
-		WithProvider(mainProvider).
+	agent, err := NewAgentBuilder(config).WithGateway(testGatewayFromProvider(
+		mainProvider)).
 		WithLogger(logger).
 		Build()
 
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
-	assert.Equal(t, mainProvider, agent.Provider())
-	assert.Nil(t, agent.ToolProvider(), "不设置 toolProvider 时应为 nil")
+	assert.Equal(t, mainProvider, testMainProvider(agent))
+	assert.Nil(t, testToolProvider(agent), "不设置 toolProvider 时应为 nil")
 }

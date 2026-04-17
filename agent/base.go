@@ -833,29 +833,7 @@ type BaseAgent struct {
 // NewBaseAgent 创建基础 Agent
 func NewBaseAgent(
 	cfg types.AgentConfig,
-	provider llm.Provider,
-	memory MemoryManager,
-	toolManager ToolManager,
-	bus EventBus,
-	logger *zap.Logger,
-	ledger observability.Ledger,
-) *BaseAgent {
-	return newBaseAgentWithExecutionSurface(
-		cfg,
-		wrapProviderWithGateway(provider, logger, ledger),
-		provider,
-		memory,
-		toolManager,
-		bus,
-		logger,
-		ledger,
-	)
-}
-
-func newBaseAgentWithExecutionSurface(
-	cfg types.AgentConfig,
 	gateway llmcore.Gateway,
-	compatProvider llm.Provider,
 	memory MemoryManager,
 	toolManager ToolManager,
 	bus EventBus,
@@ -874,7 +852,7 @@ func newBaseAgentWithExecutionSurface(
 		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
 		state:                StateInit,
 		mainGateway:          gateway,
-		mainProviderCompat:   compatProvider,
+		mainProviderCompat:   compatProviderFromGateway(gateway),
 		ledger:               ledger,
 		memory:               memory,
 		toolManager:          toolManager,

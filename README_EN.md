@@ -278,6 +278,9 @@ func main() {
 
 Treat `llm/runtime/router.VendorChatProviderFactory` as the standard config-driven chat-provider entry. Reach for the low-level `llm/providers/openai`, `llm/providers/anthropic`, or `llm/providers/gemini` constructors only when you intentionally need provider-specific APIs.
 
+The `MultiProviderRouter` example above is only for maintaining the framework's legacy DB-backed `provider + api_key pool` deployments.
+If you are building a new routed-provider integration, do not treat it as a peer recommended entrypoint; start directly from `BuildChannelRoutedProvider(...)`.
+
 If your routing semantics are not `provider + api_key pool`, but a custom business-side `channel / key / model mapping` system:
 
 - The recommended main chain is `Handler/Service -> Gateway -> ChannelRoutedProvider -> resolvers/selectors -> provider factory -> provider API`
@@ -285,9 +288,9 @@ If your routing semantics are not `provider + api_key pool`, but a custom busine
 - External projects should prefer `BuildChannelRoutedProvider(...)` to assemble this chain once, instead of wiring the adapters by hand across multiple call sites
 - The repository now includes `llm/runtime/router/extensions/channelstore` as a reusable extension starting point with `StoreModelMappingResolver`, `PriorityWeightedSelector`, `StoreSecretResolver`, `StoreProviderConfigSource`, and `StaticStore`
 - Inject custom implementations through `ChannelSelector`, `ModelMappingResolver`, `SecretResolver`, `UsageRecorder`, and related interfaces
-- `MultiProviderRouter` remains available, but its role is the legacy built-in DB-backed provider routing path
-- The legacy text path remains `Gateway -> RoutedChatProvider -> MultiProviderRouter`, while the new channel-based path is `Gateway -> ChannelRoutedProvider`
-- `MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive routed-provider entries behind `Gateway`; pick one single chain per request and do not stack them
+- `BuildChannelRoutedProvider(...)` is the only recommended routed-provider assembly entry for new integrations
+- `MultiProviderRouter` is retained only for legacy deployment maintenance; do not present it as a peer recommendation alongside `ChannelRoutedProvider`
+- Existing DB-backed `provider + api_key pool` deployments may remain on `Gateway -> RoutedChatProvider -> MultiProviderRouter`, but new public integration paths should not reintroduce it
 - The phased migration path keeps `Handler/Service -> Gateway` stable and replaces the routed provider path behind `Gateway`
 - External projects can now reuse the same resilience/cache/policy/tool-provider runtime assembly through `llm/runtime/compose.Build(...)`, while the framework's own composition root continues to reuse it via `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)`; image/video still remain deferred to `gateway + capabilities`
 - The repository now exposes the built-in startup switch `llm.main_provider_mode`; external projects can register a `channel_routed` builder through `llm/runtime/compose.RegisterMainProviderBuilder(...)` and stay on the same server startup chain. For a reusable adapter, use `channelstore.NewMainProviderBuilder(...)`

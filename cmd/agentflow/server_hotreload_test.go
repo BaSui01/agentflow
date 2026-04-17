@@ -20,6 +20,7 @@ import (
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	pkgserver "github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
@@ -257,7 +258,10 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 		return &hotReloadTestAgent{id: config.Core.ID, teardowns: &teardowns}, nil
 	})
 
-	oldResolver := agent.NewCachingResolver(oldRegistry, s.provider, zap.NewNop())
+	oldResolver := agent.NewCachingResolver(oldRegistry, llmgateway.New(llmgateway.Config{
+		ChatProvider: s.provider,
+		Logger:       zap.NewNop(),
+	}), zap.NewNop())
 	_, err := oldResolver.Resolve(context.Background(), "agent-before-reload")
 	require.NoError(t, err)
 

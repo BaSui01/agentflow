@@ -136,9 +136,9 @@ func TestInitHandlers_MongoDependencySurfacesInReadinessProbe(t *testing.T) {
 	}()
 
 	s := &Server{
-		cfg:         cfg,
-		logger:      zap.NewNop(),
-		mongoClient: client,
+		cfg:           cfg,
+		logger:        zap.NewNop(),
+		mongoClient:   client,
 		healthHandler: handlers.NewHealthHandler(zap.NewNop()),
 	}
 	s.healthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("mongodb", func(ctx context.Context) error {

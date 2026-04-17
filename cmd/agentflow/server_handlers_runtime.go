@@ -190,8 +190,8 @@ func (s *Server) initHandlers() error {
 	s.checkpointStore = checkpointStore
 	s.checkpointManager = checkpointManager
 
-	if s.provider != nil {
-		resolver := agent.NewCachingResolver(agentRegistry, s.provider, s.logger).
+	if llmRuntime != nil && llmRuntime.Gateway != nil {
+		resolver := agent.NewCachingResolver(agentRegistry, llmRuntime.Gateway, s.logger).
 			WithDefaultModel(s.cfg.Agent.Model)
 		if s.toolingRuntime != nil && s.toolingRuntime.ToolManager != nil {
 			resolver = resolver.WithToolManager(s.toolingRuntime.ToolManager)

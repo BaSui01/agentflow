@@ -435,10 +435,9 @@ func (b *AgentBuilder) ensureBuildLogger() {
 }
 
 func (b *AgentBuilder) newBaseAgent() *BaseAgent {
-	return newBaseAgentWithExecutionSurface(
+	return NewBaseAgent(
 		b.config,
 		b.gateway,
-		compatProviderFromGateway(b.gateway),
 		b.memory,
 		b.toolManager,
 		b.bus,

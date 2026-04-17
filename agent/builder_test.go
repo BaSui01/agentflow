@@ -19,33 +19,36 @@ func TestAgentBuilder_Validate(t *testing.T) {
 		{
 			name: "missing ID",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(testAgentConfig("", "test", "gpt-4")).
-					WithProvider(&testProvider{name: "test"})
+				return NewAgentBuilder(testAgentConfig("", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+					&testProvider{name: "test"}))
+
 			},
 			wantErr: "config.ID is required",
 		},
 		{
 			name: "missing name",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(testAgentConfig("a1", "", "gpt-4")).
-					WithProvider(&testProvider{name: "test"})
+				return NewAgentBuilder(testAgentConfig("a1", "", "gpt-4")).WithGateway(testGatewayFromProvider(
+					&testProvider{name: "test"}))
+
 			},
 			wantErr: "config.Name is required",
 		},
 		{
 			name: "missing model",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(testAgentConfig("a1", "test", "")).
-					WithProvider(&testProvider{name: "test"})
+				return NewAgentBuilder(testAgentConfig("a1", "test", "")).WithGateway(testGatewayFromProvider(
+					&testProvider{name: "test"}))
+
 			},
 			wantErr: "model is required",
 		},
-			{
-				name: "missing provider",
-				setup: func() *AgentBuilder {
-					return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4"))
-				},
-				wantErr: "gateway is required",
+		{
+			name: "missing provider",
+			setup: func() *AgentBuilder {
+				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4"))
+			},
+			wantErr: "gateway is required",
 		},
 		{
 			name: "gateway only",
@@ -60,8 +63,9 @@ func TestAgentBuilder_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
-					WithProvider(&testProvider{name: "test"})
+				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+					&testProvider{name: "test"}))
+
 			},
 		},
 	}
@@ -92,12 +96,12 @@ func TestAgentBuilder_Build_WithGatewayOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, agent)
 	assert.Same(t, gateway, agent.MainGateway())
-	assert.Same(t, compatProviderFromGateway(gateway), agent.Provider())
+	assert.Same(t, compatProviderFromGateway(gateway), testMainProvider(agent))
 }
 
 func TestAgentBuilder_WithMaxReActIterations(t *testing.T) {
-	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
-		WithProvider(&testProvider{name: "test"}).
+	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+		&testProvider{name: "test"})).
 		WithMaxReActIterations(5)
 	assert.Equal(t, 5, b.config.Runtime.MaxReActIterations)
 
@@ -112,8 +116,8 @@ func TestAgentBuilder_WithMaxReActIterations(t *testing.T) {
 }
 
 func TestAgentBuilder_WithMaxLoopIterations(t *testing.T) {
-	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
-		WithProvider(&testProvider{name: "test"}).
+	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+		&testProvider{name: "test"})).
 		WithMaxLoopIterations(4)
 	assert.Equal(t, 4, b.config.Runtime.MaxLoopIterations)
 
@@ -186,15 +190,15 @@ func TestAgentBuilder_Build_NilProvider(t *testing.T) {
 }
 
 func TestAgentBuilder_Build_WithErrors(t *testing.T) {
-	b := NewAgentBuilder(types.AgentConfig{}).WithProvider(nil)
+	b := NewAgentBuilder(types.AgentConfig{}).WithGateway(testGatewayFromProvider(nil))
 	_, err := b.Build()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "builder validation failed")
 }
 
 func TestAgentBuilder_Build_Success(t *testing.T) {
-	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
-		WithProvider(&testProvider{name: "test"}).
+	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+		&testProvider{name: "test"})).
 		WithLogger(zap.NewNop()).
 		Build()
 	require.NoError(t, err)
@@ -206,8 +210,8 @@ func TestAgentBuilder_Build_Success(t *testing.T) {
 
 func TestAgentBuilder_WithContextManager(t *testing.T) {
 	manager := &testContextManager{}
-	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
-		WithProvider(&testProvider{name: "test"}).
+	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+		&testProvider{name: "test"})).
 		WithLogger(zap.NewNop()).
 		WithContextManager(manager).
 		Build()
@@ -228,8 +232,9 @@ func TestAgentBuilder_WithDefaultEnhancedMemory(t *testing.T) {
 }
 
 func TestAgentBuilder_Validate_WithBuilderErrors(t *testing.T) {
-	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
-		WithProvider(nil) // This adds an error
+	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).WithGateway(testGatewayFromProvider(
+		nil))
+	// This adds an error
 	err := b.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "builder has")

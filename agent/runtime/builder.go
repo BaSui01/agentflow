@@ -14,7 +14,6 @@ import (
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
-	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -180,14 +179,13 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 
 	ag := agent.NewBaseAgent(
 		cfg2,
-		llmgateway.NewChatProviderAdapter(b.gateway, nil),
+		b.gateway,
 		opts.MemoryManager,
 		opts.ToolManager,
 		opts.EventBus,
 		b.logger,
 		b.ledger,
 	)
-	ag.SetGateway(b.gateway)
 	if b.toolGateway != nil {
 		ag.SetToolGateway(b.toolGateway)
 	}

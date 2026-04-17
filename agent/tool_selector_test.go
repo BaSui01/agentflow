@@ -22,7 +22,7 @@ func TestNewDynamicToolSelector(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
@@ -42,7 +42,7 @@ func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 	selectorConfig.Enabled = false
 
@@ -70,7 +70,7 @@ func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 	selectorConfig.MaxTools = 2
 	selectorConfig.UseLLMRanking = false
@@ -104,7 +104,7 @@ func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
@@ -133,7 +133,7 @@ func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
@@ -183,7 +183,7 @@ func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
@@ -219,7 +219,7 @@ func TestDynamicToolSelector_getReliability(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
@@ -346,7 +346,7 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 	selectorConfig.MaxTools = 2
 	selectorConfig.UseLLMRanking = true
@@ -380,7 +380,7 @@ func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 	selectorConfig := defaultToolSelectionConfigValue()
 	selectorConfig.UseLLMRanking = false
 

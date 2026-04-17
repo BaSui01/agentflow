@@ -13,8 +13,8 @@ func TestAgentBuilder_WithDefaultLSPServer(t *testing.T) {
 
 	cfg := testAgentConfig("lsp-builder-test", "LSP Builder Test", "test-model")
 
-	ag, err := NewAgentBuilder(cfg).
-		WithProvider(provider).
+	ag, err := NewAgentBuilder(cfg).WithGateway(testGatewayFromProvider(
+		provider)).
 		WithLogger(logger).
 		WithDefaultLSPServer("", "").
 		Build()

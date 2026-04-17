@@ -46,4 +46,3 @@ func TestSecurityHeaders_ChainedWithOtherMiddleware(t *testing.T) {
 	// RequestID should also be present
 	assert.NotEmpty(t, w.Header().Get("X-Request-ID"))
 }
-

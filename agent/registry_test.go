@@ -38,7 +38,7 @@ func TestAgentRegistry_RegisterAndUnregister(t *testing.T) {
 	assert.False(t, r.IsRegistered(customType))
 
 	r.Register(customType, func(config types.AgentConfig, gateway llmcore.Gateway, memory MemoryManager, toolManager ToolManager, bus EventBus, logger *zap.Logger) (Agent, error) {
-		return NewBaseAgent(config, compatProviderFromGateway(gateway), memory, toolManager, bus, logger, nil), nil
+		return NewBaseAgent(config, testGatewayFromProvider(compatProviderFromGateway(gateway)), memory, toolManager, bus, logger, nil), nil
 	})
 	assert.True(t, r.IsRegistered(customType))
 
@@ -93,7 +93,7 @@ func TestAgentRegistry_Create_PreservesUnifiedBuildCoreWiring(t *testing.T) {
 
 	baseAgent, ok := created.(*BaseAgent)
 	require.True(t, ok)
-	assert.Same(t, provider, baseAgent.Provider())
+	assert.Same(t, provider, testMainProvider(baseAgent))
 	assert.Same(t, mem, baseAgent.memory)
 	assert.Same(t, tools, baseAgent.toolManager)
 	assert.Same(t, bus, baseAgent.bus)
@@ -118,7 +118,7 @@ func TestAgentRegistry_CreateWithGateway(t *testing.T) {
 	baseAgent, ok := created.(*BaseAgent)
 	require.True(t, ok)
 	assert.Same(t, gateway, baseAgent.MainGateway())
-	assert.Same(t, compatProviderFromGateway(gateway), baseAgent.Provider())
+	assert.Same(t, compatProviderFromGateway(gateway), testMainProvider(baseAgent))
 }
 
 func TestAgentRegistry_Create_UnknownType(t *testing.T) {
@@ -181,7 +181,7 @@ func TestCachingResolver_WithMemory(t *testing.T) {
 		},
 	}
 
-	resolver := NewCachingResolver(registry, provider, logger).WithMemory(mem)
+	resolver := NewCachingResolver(registry, testGatewayFromProvider(provider), logger).WithMemory(mem)
 
 	// Resolve should create an agent with memory capabilities.
 	ctx := context.Background()
@@ -200,7 +200,7 @@ func TestCachingResolver_WithoutMemory(t *testing.T) {
 	registry := NewAgentRegistry(logger)
 	provider := &testProvider{name: "mock"}
 
-	resolver := NewCachingResolver(registry, provider, logger)
+	resolver := NewCachingResolver(registry, testGatewayFromProvider(provider), logger)
 
 	ctx := context.Background()
 	ag, err := resolver.Resolve(ctx, "test-no-mem")
@@ -217,7 +217,7 @@ func TestCachingResolver_WithEnhancedMemory(t *testing.T) {
 	provider := &testProvider{name: "mock"}
 	enhanced := &mockEnhancedMemory{}
 
-	resolver := NewCachingResolver(registry, provider, logger).WithEnhancedMemory(enhanced)
+	resolver := NewCachingResolver(registry, testGatewayFromProvider(provider), logger).WithEnhancedMemory(enhanced)
 
 	ag, err := resolver.Resolve(context.Background(), "test-with-enhanced-mem")
 	require.NoError(t, err)
@@ -243,7 +243,7 @@ func TestCachingResolver_WithToolManagerAndDerivedTools(t *testing.T) {
 		},
 	}
 
-	resolver := NewCachingResolver(registry, provider, logger).WithToolManager(toolManager)
+	resolver := NewCachingResolver(registry, testGatewayFromProvider(provider), logger).WithToolManager(toolManager)
 	ag, err := resolver.Resolve(context.Background(), "agent-tools")
 	require.NoError(t, err)
 
@@ -266,7 +266,7 @@ func TestCachingResolver_WithRuntimeToolsOverride(t *testing.T) {
 		},
 	}
 
-	resolver := NewCachingResolver(registry, provider, logger).
+	resolver := NewCachingResolver(registry, testGatewayFromProvider(provider), logger).
 		WithToolManager(toolManager).
 		WithRuntimeTools([]string{"retrieval", "retrieval", "  web_search  ", ""})
 	ag, err := resolver.Resolve(context.Background(), "agent-tools-override")
@@ -282,7 +282,7 @@ func TestCachingResolver_WithDefaultModel(t *testing.T) {
 	registry := NewAgentRegistry(logger)
 	provider := &testProvider{name: "mock"}
 
-	resolver := NewCachingResolver(registry, provider, logger).WithDefaultModel("gpt-4o-mini")
+	resolver := NewCachingResolver(registry, testGatewayFromProvider(provider), logger).WithDefaultModel("gpt-4o-mini")
 	ag, err := resolver.Resolve(context.Background(), "agent-model-default")
 	require.NoError(t, err)
 
