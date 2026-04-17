@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	llmroot "github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
@@ -44,6 +45,7 @@ func (f *builderLegacyFactory) CreateProvider(providerCode string, apiKey string
 
 type builderProvider struct {
 	lastCompletionModel string
+	lastCountModel      string
 }
 
 func (p *builderProvider) Completion(_ context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -77,6 +79,11 @@ func (*builderProvider) SupportsNativeFunctionCalling() bool { return true }
 func (*builderProvider) ListModels(context.Context) ([]Model, error) { return nil, nil }
 
 func (*builderProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
+
+func (p *builderProvider) CountTokens(_ context.Context, req *ChatRequest) (*llmroot.TokenCountResponse, error) {
+	p.lastCountModel = req.Model
+	return &llmroot.TokenCountResponse{InputTokens: len(req.Messages) + 1}, nil
+}
 
 type builderSecretResolver struct{}
 
@@ -243,5 +250,41 @@ func TestBuildChannelRoutedProvider_PropagatesRetryPolicy(t *testing.T) {
 	}
 	if !provider.retryPolicy.ExcludeFailedChannel {
 		t.Fatalf("expected retry policy to exclude failed channel")
+	}
+}
+
+func TestBuildChannelRoutedProvider_CountTokensRoutesUpstreamModel(t *testing.T) {
+	t.Parallel()
+
+	inner := &builderProvider{}
+	provider, err := BuildChannelRoutedProvider(ChannelRoutedProviderConfig{
+		Name:                 "channel-chain",
+		ModelResolver:        PassthroughModelResolver{},
+		ModelMappingResolver: builderMappingResolver{},
+		ChannelSelector: builderSelector{selection: ChannelSelection{
+			Provider:    "openai",
+			BaseURL:     "https://example.com/v1",
+			RemoteModel: "gpt-upstream",
+		}},
+		SecretResolver:       builderSecretResolver{},
+		ProviderConfigSource: StaticProviderConfigSource{},
+		ChatProviderFactory:  &builderChatFactory{provider: inner},
+		Logger:               zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Build error: %v", err)
+	}
+
+	resp, err := provider.CountTokens(context.Background(), &ChatRequest{
+		Model: "gpt-public",
+	})
+	if err != nil {
+		t.Fatalf("CountTokens error: %v", err)
+	}
+	if resp == nil || resp.InputTokens != 1 {
+		t.Fatalf("expected token count response, got %+v", resp)
+	}
+	if inner.lastCountModel != "gpt-upstream" {
+		t.Fatalf("expected routed upstream model gpt-upstream, got %s", inner.lastCountModel)
 	}
 }

@@ -148,6 +148,29 @@ func (b *Builder) WithToolScope(toolNames []string) *Builder {
 	return b
 }
 
+type gatewayBackedProvider interface {
+	Gateway() llmcore.Gateway
+	FallbackProvider() llm.Provider
+}
+
+func unwrapGatewayBackedProvider(provider llm.Provider) (llm.Provider, llmcore.Gateway) {
+	if provider == nil {
+		return nil, nil
+	}
+	adapter, ok := provider.(gatewayBackedProvider)
+	if !ok {
+		return provider, nil
+	}
+	gateway := adapter.Gateway()
+	if gateway == nil {
+		return provider, nil
+	}
+	if fallback := adapter.FallbackProvider(); fallback != nil {
+		return fallback, gateway
+	}
+	return provider, gateway
+}
+
 // Build 构造一个 BaseAgent 并按选项接线可选子系统。
 func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error) {
 	opts := b.options
@@ -178,17 +201,26 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
 
+	mainProvider, mainGateway := unwrapGatewayBackedProvider(b.provider)
+	toolProvider, toolGateway := unwrapGatewayBackedProvider(b.toolProvider)
+
 	ag := agent.NewBaseAgent(
 		cfg2,
-		b.provider,
+		mainProvider,
 		opts.MemoryManager,
 		opts.ToolManager,
 		opts.EventBus,
 		b.logger,
 		b.ledger,
 	)
+	if mainGateway != nil {
+		ag.SetGateway(mainGateway)
+	}
 	if b.toolProvider != nil {
-		ag.SetToolProvider(b.toolProvider)
+		ag.SetToolProvider(toolProvider)
+		if toolGateway != nil {
+			ag.SetToolGateway(toolGateway)
+		}
 	}
 	if opts.MaxConcurrency > 0 {
 		ag.SetMaxConcurrency(opts.MaxConcurrency)

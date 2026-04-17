@@ -108,16 +108,34 @@ func (g *mockGateway) Stream(_ context.Context, _ *llmcore.UnifiedRequest) (<-ch
 }
 
 type mockFallbackProvider struct {
-	name string
+	name      string
+	tokenResp *llm.TokenCountResponse
+	tokenErr  error
 }
 
-func (p *mockFallbackProvider) Name() string                                                          { return p.name }
-func (p *mockFallbackProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) { return nil, nil }
-func (p *mockFallbackProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) { return nil, nil }
-func (p *mockFallbackProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) { return &llm.HealthStatus{Healthy: true}, nil }
+func (p *mockFallbackProvider) Name() string { return p.name }
+func (p *mockFallbackProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return nil, nil
+}
+func (p *mockFallbackProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	return nil, nil
+}
+func (p *mockFallbackProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
 func (p *mockFallbackProvider) SupportsNativeFunctionCalling() bool { return true }
-func (p *mockFallbackProvider) ListModels(_ context.Context) ([]llm.Model, error) { return []llm.Model{{ID: "test"}}, nil }
-func (p *mockFallbackProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{BaseURL: "http://test"} }
+func (p *mockFallbackProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+	return []llm.Model{{ID: "test"}}, nil
+}
+func (p *mockFallbackProvider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{BaseURL: "http://test"}
+}
+func (p *mockFallbackProvider) CountTokens(_ context.Context, _ *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	if p.tokenErr != nil {
+		return nil, p.tokenErr
+	}
+	return p.tokenResp, nil
+}
 
 func TestChatProviderAdapter_NilGateway(t *testing.T) {
 	adapter := NewChatProviderAdapter(nil, nil)
@@ -245,7 +263,7 @@ func TestChatProviderAdapter_Stream_InvalidChunkType(t *testing.T) {
 }
 
 func TestChatProviderAdapter_WithFallback(t *testing.T) {
-	fb := &mockFallbackProvider{name: "test-provider"}
+	fb := &mockFallbackProvider{name: "test-provider", tokenResp: &llm.TokenCountResponse{InputTokens: 42}}
 	adapter := NewChatProviderAdapter(nil, fb)
 
 	if adapter.Name() != "test-provider" {
@@ -265,6 +283,13 @@ func TestChatProviderAdapter_WithFallback(t *testing.T) {
 	health, _ := adapter.HealthCheck(context.Background())
 	if !health.Healthy {
 		t.Fatal("expected healthy from fallback")
+	}
+	countResp, err := adapter.CountTokens(context.Background(), &llm.ChatRequest{Model: "test"})
+	if err != nil {
+		t.Fatalf("expected CountTokens from fallback, got error: %v", err)
+	}
+	if countResp == nil || countResp.InputTokens != 42 {
+		t.Fatalf("expected token response from fallback, got %+v", countResp)
 	}
 }
 
@@ -291,6 +316,9 @@ func TestChatProviderAdapter_WithoutFallback(t *testing.T) {
 	health, _ := adapter.HealthCheck(context.Background())
 	if !health.Healthy {
 		t.Fatal("expected healthy default")
+	}
+	if _, err := adapter.CountTokens(context.Background(), &llm.ChatRequest{Model: "test"}); err == nil {
+		t.Fatal("expected CountTokens error without fallback")
 	}
 }
 

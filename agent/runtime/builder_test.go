@@ -177,6 +177,40 @@ func TestBuilder_Build_WithToolProvider(t *testing.T) {
 	assert.Equal(t, toolProvider, ag.ToolProvider())
 }
 
+func TestBuilder_Build_UnwrapsGatewayBackedProviders(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	mainFallback := mocks.NewSuccessProvider("main")
+	toolFallback := mocks.NewSuccessProvider("tool")
+	mainGateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: mainFallback,
+		Logger:       zap.NewNop(),
+	})
+	toolGateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: toolFallback,
+		Logger:       zap.NewNop(),
+	})
+
+	ag, err := NewBuilder(llmgateway.NewChatProviderAdapter(mainGateway, mainFallback), zap.NewNop()).
+		WithToolProvider(llmgateway.NewChatProviderAdapter(toolGateway, toolFallback)).
+		WithOptions(BuildOptions{}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+	assert.Same(t, mainFallback, ag.Provider())
+	assert.Same(t, toolFallback, ag.ToolProvider())
+	assert.Same(t, mainGateway, ag.MainGateway())
+	assert.Same(t, toolGateway, ag.ToolGateway())
+}
+
 func TestBuilder_Build_PassesThroughMaxLoopIterations(t *testing.T) {
 	cfg := types.AgentConfig{
 		Core: types.CoreConfig{

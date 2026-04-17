@@ -186,8 +186,6 @@ func TestBuildLLMHandlerRuntime_ChannelModeUsesRegisteredBuilderWithoutDatabase(
 }
 
 func TestBuildLLMHandlerRuntime_ChannelModePropagatesStaticStoreRoutingAndUsage(t *testing.T) {
-	t.Parallel()
-
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = config.LLMMainProviderModeChannelRouted
 

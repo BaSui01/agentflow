@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +45,17 @@ func TestAgentBuilder_Validate(t *testing.T) {
 			setup: func() *AgentBuilder {
 				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4"))
 			},
-			wantErr: "provider is required",
+			wantErr: "provider or gateway is required",
+		},
+		{
+			name: "gateway only",
+			setup: func() *AgentBuilder {
+				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
+					WithGateway(llmgateway.New(llmgateway.Config{
+						ChatProvider: &testProvider{name: "test"},
+						Logger:       zap.NewNop(),
+					}))
+			},
 		},
 		{
 			name: "valid config",
@@ -66,6 +77,22 @@ func TestAgentBuilder_Validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAgentBuilder_Build_WithGatewayOnly(t *testing.T) {
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: &testProvider{name: "test"},
+		Logger:       zap.NewNop(),
+	})
+
+	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
+		WithGateway(gateway).
+		WithLogger(zap.NewNop()).
+		Build()
+	require.NoError(t, err)
+	require.NotNil(t, agent)
+	assert.Same(t, gateway, agent.MainGateway())
+	assert.Nil(t, agent.Provider())
 }
 
 func TestAgentBuilder_WithMaxReActIterations(t *testing.T) {

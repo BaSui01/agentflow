@@ -8,6 +8,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -158,6 +159,32 @@ func TestBaseAgent_ValidateConfiguration_Success(t *testing.T) {
 	ba := newTestBaseAgent()
 	err := ba.ValidateConfiguration()
 	require.NoError(t, err)
+}
+
+func TestBaseAgent_ValidateConfiguration_WithExternalGatewayOnly(t *testing.T) {
+	ba := NewBaseAgent(testAgentConfig("test-1", "Test", "gpt-4"), nil, nil, nil, nil, zap.NewNop(), nil)
+	ba.SetGateway(llmgateway.New(llmgateway.Config{
+		ChatProvider: &testProvider{name: "gateway-provider"},
+		Logger:       zap.NewNop(),
+	}))
+
+	err := ba.ValidateConfiguration()
+	require.NoError(t, err)
+}
+
+func TestBaseAgent_PrepareChatRequest_WithExternalGatewayOnly(t *testing.T) {
+	ba := NewBaseAgent(testAgentConfig("test-1", "Test", "gpt-4"), nil, nil, nil, nil, zap.NewNop(), nil)
+	ba.SetGateway(llmgateway.New(llmgateway.Config{
+		ChatProvider: &testProvider{name: "gateway-provider"},
+		Logger:       zap.NewNop(),
+	}))
+
+	prepared, err := ba.prepareChatRequest(context.Background(), []types.Message{
+		{Role: llm.RoleUser, Content: "hello"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, prepared)
+	require.NotNil(t, prepared.chatProvider)
 }
 
 func TestBaseAgent_ValidateConfiguration_MissingExecutors(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -92,6 +93,25 @@ func TestAgentRegistry_Create_PreservesUnifiedBuildCoreWiring(t *testing.T) {
 	require.NotNil(t, baseAgent.MainGateway())
 	require.NotNil(t, baseAgent.ReasoningRegistry())
 	assert.Equal(t, "communication,reasoning", baseAgent.Config().Metadata["skill_categories"])
+}
+
+func TestAgentRegistry_CreateWithGateway(t *testing.T) {
+	r := NewAgentRegistry(zap.NewNop())
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: &testProvider{name: "test"},
+		Logger:       zap.NewNop(),
+	})
+
+	cfg := testAgentConfig("a3", "assistant", "gpt-4o-mini")
+	cfg.Core.Type = string(TypeAssistant)
+
+	created, err := r.CreateWithGateway(cfg, gateway, nil, nil, nil, zap.NewNop())
+	require.NoError(t, err)
+
+	baseAgent, ok := created.(*BaseAgent)
+	require.True(t, ok)
+	assert.Same(t, gateway, baseAgent.MainGateway())
+	assert.Nil(t, baseAgent.Provider())
 }
 
 func TestAgentRegistry_Create_UnknownType(t *testing.T) {

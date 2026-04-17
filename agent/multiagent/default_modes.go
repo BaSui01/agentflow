@@ -154,10 +154,10 @@ func (m *hierarchicalModeStrategy) Execute(ctx context.Context, agents []agent.A
 		}
 	}
 
-	// 尝试从 supervisor 获取真实 provider，避免使用 noopProvider
+	// 尝试从 supervisor 获取主请求链路 provider，避免退回到底层裸 provider。
 	var provider llm.Provider = safeStubProvider{}
 	if ba, ok := supervisor.(*agent.BaseAgent); ok {
-		if p := ba.Provider(); p != nil {
+		if p := ba.MainProvider(); p != nil {
 			provider = p
 		}
 	}

@@ -229,6 +229,25 @@ func (p *ChannelRoutedProvider) Endpoints() ProviderEndpoints {
 	return ProviderEndpoints{}
 }
 
+func (p *ChannelRoutedProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmroot.TokenCountResponse, error) {
+	if req == nil {
+		return nil, types.NewInvalidRequestError("chat request is required")
+	}
+
+	invocation, err := p.prepareInvocation(ctx, buildChannelRouteRequest(req, RouteModeCompletion, 1, retryExclusionState{}))
+	if err != nil {
+		return nil, err
+	}
+
+	counter, ok := invocation.provider.(llmroot.TokenCountProvider)
+	if !ok {
+		return nil, types.NewServiceUnavailableError("selected channel provider does not implement native token counting")
+	}
+
+	routedReq := cloneChatRequest(req, invocation.remoteModelName())
+	return counter.CountTokens(ctx, routedReq)
+}
+
 func (p *ChannelRoutedProvider) prepareInvocation(ctx context.Context, routeRequest *ChannelRouteRequest) (*resolvedChannelInvocation, error) {
 	if routeRequest == nil {
 		return nil, types.NewInvalidRequestError("channel route request is required")

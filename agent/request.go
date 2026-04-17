@@ -307,7 +307,7 @@ type preparedRequest struct {
 // filtering. Both ChatCompletion and StreamCompletion delegate here so that
 // the logic is maintained in a single place.
 func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Message) (*preparedRequest, error) {
-	if b.provider == nil {
+	if !b.hasMainExecutionSurface() {
 		return nil, ErrProviderNotSet
 	}
 	if messages == nil || len(messages) == 0 {
@@ -379,7 +379,7 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 
 	// 5. 选择执行 provider。工具协议差异（如 XML fallback）统一在 llm/gateway 内处理。
 	toolProv := chatProv
-	if b.toolProvider != nil {
+	if b.hasDedicatedToolExecutionSurface() {
 		toolProv = b.gatewayToolProvider()
 	}
 

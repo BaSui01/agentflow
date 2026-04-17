@@ -787,16 +787,18 @@ type BaseAgent struct {
 	execCount            int64               // 当前活跃执行数（配合并发状态机）
 	configMu             sync.RWMutex        // 配置互斥锁，与 execSem 分离，避免配置方法与 Execute 争用
 
-	// 使用 llm.Provider 接口解耦对 llm 包的直接依赖
+	// provider/toolProvider 保留给兼容层与 provider 元数据访问；
+	// agent 内部执行主语义已经收敛到 MainGateway/ToolGateway。
 	provider             llm.Provider
 	gatewayOnce          sync.Once
 	gatewayInstance      llmcore.Gateway
 	gatewayProviderCache llm.Provider
-	toolProvider         llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	toolProvider         llm.Provider // 工具调用专用 Provider（兼容面；执行语义以 ToolGateway 为准）
 	toolGatewayOnce      sync.Once
 	toolGatewayInst      llmcore.Gateway
 	toolGatewayProvider  llm.Provider
 	externalGateway      llmcore.Gateway // injected shared gateway (skips lazy creation)
+	externalToolGateway  llmcore.Gateway // injected shared tool gateway (skips lazy creation)
 	ledger               observability.Ledger
 	memory               MemoryManager
 	toolManager          ToolManager
@@ -1176,8 +1178,22 @@ func (b *BaseAgent) MainGateway() llmcore.Gateway {
 	return b.gatewayInstance
 }
 
+func (b *BaseAgent) hasMainExecutionSurface() bool {
+	return b != nil && b.MainGateway() != nil
+}
+
+func (b *BaseAgent) hasDedicatedToolExecutionSurface() bool {
+	if b == nil {
+		return false
+	}
+	return b.externalToolGateway != nil || b.toolProvider != nil || b.toolGatewayInst != nil
+}
+
 // ToolGateway 返回工具调用链路使用的 gateway（未配置时回退到主 gateway）。
 func (b *BaseAgent) ToolGateway() llmcore.Gateway {
+	if b.externalToolGateway != nil {
+		return b.externalToolGateway
+	}
 	if b.toolProvider == nil {
 		return b.MainGateway()
 	}
@@ -1196,8 +1212,15 @@ func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
 // SetToolProvider 设置工具调用专用的 LLM Provider
 func (b *BaseAgent) SetToolProvider(p llm.Provider) {
 	b.toolProvider = p
+	b.externalToolGateway = nil
 	b.toolGatewayOnce = sync.Once{} // reset lazy init
 	b.toolGatewayInst = nil
+	b.toolGatewayProvider = nil
+}
+
+// SetToolGateway injects a pre-built shared tool gateway.
+func (b *BaseAgent) SetToolGateway(gw llmcore.Gateway) {
+	b.externalToolGateway = gw
 	b.toolGatewayProvider = nil
 }
 
@@ -1220,7 +1243,7 @@ func (b *BaseAgent) gatewayProvider() llm.Provider {
 }
 
 func (b *BaseAgent) gatewayToolProvider() llm.Provider {
-	if b.toolProvider != nil {
+	if b.hasDedicatedToolExecutionSurface() {
 		toolGateway := b.ToolGateway()
 		if toolGateway != nil {
 			if b.toolGatewayProvider != nil {
@@ -1228,7 +1251,9 @@ func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 			}
 			return llmgateway.NewChatProviderAdapter(toolGateway, b.toolProvider)
 		}
-		return b.toolProvider
+		if b.toolProvider != nil {
+			return b.toolProvider
+		}
 	}
 	return b.gatewayProvider()
 }

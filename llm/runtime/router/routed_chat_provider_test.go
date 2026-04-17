@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	llmroot "github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
@@ -12,6 +13,7 @@ import (
 type captureProvider struct {
 	name      string
 	lastModel string
+	lastCount string
 }
 
 func (p *captureProvider) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -55,6 +57,11 @@ func (p *captureProvider) SupportsNativeFunctionCalling() bool { return true }
 func (p *captureProvider) ListModels(ctx context.Context) ([]Model, error) { return nil, nil }
 
 func (p *captureProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
+
+func (p *captureProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmroot.TokenCountResponse, error) {
+	p.lastCount = req.Model
+	return &llmroot.TokenCountResponse{InputTokens: len(req.Messages) + 1}, nil
+}
 
 func setupRouterForRoutedProviderTest(t *testing.T) (*MultiProviderRouter, map[string]*captureProvider) {
 	t.Helper()
@@ -187,5 +194,31 @@ func TestRoutedChatProvider_RespectsLatencyPolicy(t *testing.T) {
 	}
 	if providers["mockB"].lastModel != "remote-b" {
 		t.Fatalf("expected remote-b model, got %s", providers["mockB"].lastModel)
+	}
+}
+
+func TestRoutedChatProvider_CountTokensUsesResolvedProvider(t *testing.T) {
+	t.Parallel()
+
+	router, providers := setupRouterForRoutedProviderTest(t)
+	routed := NewRoutedChatProvider(router, RoutedChatProviderOptions{
+		DefaultStrategy: StrategyCostBased,
+		Logger:          zap.NewNop(),
+	})
+
+	resp, err := routed.CountTokens(context.Background(), &ChatRequest{
+		Model: "gpt-4o",
+		Metadata: map[string]string{
+			llmcore.MetadataKeyChatProvider: "mockB",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CountTokens error: %v", err)
+	}
+	if resp == nil || resp.InputTokens != 1 {
+		t.Fatalf("expected token count response, got %+v", resp)
+	}
+	if providers["mockB"].lastCount != "remote-b" {
+		t.Fatalf("expected remote-b count model, got %s", providers["mockB"].lastCount)
 	}
 }

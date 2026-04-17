@@ -25,8 +25,8 @@ func (r *ParseResult[T]) IsValid() bool {
 	return r.Value != nil && len(r.Errors) == 0
 }
 
-// 结构化输出是一个通用结构化输出处理器,生成
-// LLM 提供者的类型安全输出。
+// 结构化输出是一个通用结构化输出处理器，生成
+// 基于 llmcore.Gateway 的类型安全输出。
 type StructuredOutput[T any] struct {
 	schema    *JSONSchema
 	gateway   llmcore.Gateway
@@ -78,9 +78,9 @@ func (s *StructuredOutput[T]) Schema() *JSONSchema {
 	return s.schema
 }
 
-// 生成从快取字符串生成结构化输出 。
-// 它使用本地结构输出 如果提供者支持它,
-// 否则会回到即时工程
+// Generate 从 prompt 生成结构化输出。
+// 结构化 schema 约束统一通过 llmcore.Gateway 下发，
+// provider 差异由 llm 层处理。
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
 	messages := []types.Message{
 		{Role: llm.RoleUser, Content: prompt},

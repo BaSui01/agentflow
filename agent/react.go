@@ -22,7 +22,7 @@ var defaultCostCalc = observability.NewCostCalculator()
 // Plan 生成执行计划
 // 使用 LLM 分析任务并生成详细的执行步骤
 func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
-	if b.provider == nil {
+	if !b.hasMainExecutionSurface() {
 		return nil, ErrProviderNotSet
 	}
 

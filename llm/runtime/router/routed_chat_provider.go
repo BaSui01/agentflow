@@ -168,6 +168,32 @@ func (p *RoutedChatProvider) Endpoints() ProviderEndpoints {
 	return ProviderEndpoints{}
 }
 
+func (p *RoutedChatProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmroot.TokenCountResponse, error) {
+	if req == nil {
+		return nil, types.NewInvalidRequestError("chat request is required")
+	}
+
+	selection, err := p.selectProvider(ctx, req)
+	if err != nil {
+		if p.canFallback(req) {
+			counter, ok := p.fallback.(llmroot.TokenCountProvider)
+			if !ok {
+				return nil, types.NewServiceUnavailableError("fallback provider does not implement native token counting")
+			}
+			return counter.CountTokens(ctx, req)
+		}
+		return nil, err
+	}
+
+	counter, ok := selection.Provider.(llmroot.TokenCountProvider)
+	if !ok {
+		return nil, types.NewServiceUnavailableError("selected routed provider does not implement native token counting")
+	}
+
+	routedReq := cloneChatRequest(req, firstNonEmpty(selection.RemoteModel, req.Model))
+	return counter.CountTokens(ctx, routedReq)
+}
+
 func (p *RoutedChatProvider) selectProvider(ctx context.Context, req *ChatRequest) (*ProviderSelection, error) {
 	if p.router == nil {
 		return nil, types.NewServiceUnavailableError("multi-provider router is not configured")

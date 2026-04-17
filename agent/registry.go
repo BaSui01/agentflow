@@ -8,6 +8,8 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -127,6 +129,23 @@ func buildRegistryAgent(
 	}
 
 	return ag, nil
+}
+
+// CreateWithGateway 使用 gateway 作为 registry 创建入口。
+// 对内仍复用既有 factory 分发，但 gateway 会通过兼容 adapter 传入，
+// builtin/default 构建链会在 AgentBuilder 内自动回收为 gateway-first 语义。
+func (r *AgentRegistry) CreateWithGateway(
+	config types.AgentConfig,
+	gateway llmcore.Gateway,
+	memory MemoryManager,
+	toolManager ToolManager,
+	bus EventBus,
+	logger *zap.Logger,
+) (Agent, error) {
+	if gateway == nil {
+		return nil, fmt.Errorf("gateway is required")
+	}
+	return r.Create(config, llmgateway.NewChatProviderAdapter(gateway, nil), memory, toolManager, bus, logger)
 }
 
 // defaultPromptBundleForType returns a pre-configured PromptBundle for each agent type.
@@ -340,6 +359,25 @@ func CreateAgent(
 		return nil, fmt.Errorf("global registry not initialized, call InitGlobalRegistry first")
 	}
 	return registry.Create(config, provider, memory, toolManager, bus, logger)
+}
+
+// CreateAgentWithGateway 使用全局 registry 和 gateway 创建 agent。
+func CreateAgentWithGateway(
+	config types.AgentConfig,
+	gateway llmcore.Gateway,
+	memory MemoryManager,
+	toolManager ToolManager,
+	bus EventBus,
+	logger *zap.Logger,
+) (Agent, error) {
+	globalRegistryMu.RLock()
+	registry := GlobalRegistry
+	globalRegistryMu.RUnlock()
+
+	if registry == nil {
+		return nil, fmt.Errorf("global registry not initialized, call InitGlobalRegistry first")
+	}
+	return registry.CreateWithGateway(config, gateway, memory, toolManager, bus, logger)
 }
 
 // =============================================================================

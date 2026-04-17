@@ -940,30 +940,19 @@ func (s *Service) estimateRequestTokens(ctx context.Context, req *llmcore.Unifie
 
 func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) (int, error) {
 	s.normalizeChatToolCallMode(chatReq)
-	provider := ""
-	if s.chatProvider != nil {
-		provider = s.chatProvider.Name()
+	if s.chatProvider == nil {
+		return 0, types.NewServiceUnavailableError("gateway chat budget precheck requires a chat provider with native token counting")
 	}
 	tokenCounter, ok := s.chatProvider.(llm.TokenCountProvider)
 	if !ok {
-		s.logger.Debug("skip gateway token preflight: chat provider does not implement native token counting",
-			zap.String("provider", provider))
-		return 0, nil
+		return 0, types.NewServiceUnavailableError("gateway chat budget precheck requires native token counting")
 	}
 	countResp, err := tokenCounter.CountTokens(ctx, chatReq)
 	if err != nil {
-		if types.IsErrorCode(err, types.ErrServiceUnavailable) {
-			s.logger.Warn("skip gateway token preflight: native token counting unavailable",
-				zap.String("provider", provider),
-				zap.Error(err))
-			return 0, nil
-		}
 		return 0, err
 	}
 	if countResp == nil {
-		s.logger.Warn("skip gateway token preflight: native token counting returned no result",
-			zap.String("provider", provider))
-		return 0, nil
+		return 0, types.NewInternalError("native token counting returned no result")
 	}
 
 	promptTokens := countResp.InputTokens
@@ -1233,6 +1222,22 @@ func NewChatProviderAdapter(gw llmcore.Gateway, fallback llm.Provider) *ChatProv
 	}
 }
 
+// Gateway returns the native gateway carried by the adapter.
+func (a *ChatProviderAdapter) Gateway() llmcore.Gateway {
+	if a == nil {
+		return nil
+	}
+	return a.gateway
+}
+
+// FallbackProvider returns the underlying provider used for non-gateway metadata.
+func (a *ChatProviderAdapter) FallbackProvider() llm.Provider {
+	if a == nil {
+		return nil
+	}
+	return a.fallback
+}
+
 func (a *ChatProviderAdapter) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	if a.gateway == nil {
 		return nil, llmcore.GatewayUnavailableError("llm gateway is not configured")
@@ -1332,4 +1337,12 @@ func (a *ChatProviderAdapter) Endpoints() llm.ProviderEndpoints {
 		return a.fallback.Endpoints()
 	}
 	return llm.ProviderEndpoints{}
+}
+
+func (a *ChatProviderAdapter) CountTokens(ctx context.Context, req *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	tokenCounter, ok := a.fallback.(llm.TokenCountProvider)
+	if !ok {
+		return nil, types.NewServiceUnavailableError("wrapped provider does not implement native token counting")
+	}
+	return tokenCounter.CountTokens(ctx, req)
 }

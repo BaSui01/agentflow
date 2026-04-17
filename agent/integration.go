@@ -2193,7 +2193,7 @@ func (b *BaseAgent) PrintFeatureStatus() {
 func (b *BaseAgent) ValidateConfiguration() error {
 	validationErrors := b.extensions.ValidateConfiguration(b.config)
 
-	if b.provider == nil {
+	if !b.hasMainExecutionSurface() {
 		validationErrors = append(validationErrors, "provider not set")
 	}
 

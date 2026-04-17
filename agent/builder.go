@@ -26,6 +26,8 @@ type AgentBuilder struct {
 	config       types.AgentConfig
 	provider     llm.Provider
 	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	gateway      llmcore.Gateway
+	toolGateway  llmcore.Gateway
 	ledger       observability.Ledger
 	memory       MemoryManager
 	toolManager  ToolManager
@@ -83,13 +85,40 @@ func newAgentBuilder(config types.AgentConfig) *AgentBuilder {
 	return b
 }
 
+type gatewayBackedProvider interface {
+	Gateway() llmcore.Gateway
+	FallbackProvider() llm.Provider
+}
+
+func unwrapGatewayBackedProvider(provider llm.Provider) (llm.Provider, llmcore.Gateway) {
+	if provider == nil {
+		return nil, nil
+	}
+	adapter, ok := provider.(gatewayBackedProvider)
+	if !ok {
+		return provider, nil
+	}
+	gateway := adapter.Gateway()
+	if gateway == nil {
+		return provider, nil
+	}
+	if fallback := adapter.FallbackProvider(); fallback != nil {
+		return fallback, gateway
+	}
+	return nil, gateway
+}
+
 // WithProvider 设置 LLM Provider
 func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder {
 	if provider == nil {
 		b.errors = append(b.errors, fmt.Errorf("provider cannot be nil"))
 		return b
 	}
-	b.provider = provider
+	compatProvider, gateway := unwrapGatewayBackedProvider(provider)
+	b.provider = compatProvider
+	if gateway != nil {
+		b.gateway = gateway
+	}
 	return b
 }
 
@@ -97,7 +126,31 @@ func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder {
 // ReAct 循环中的推理和工具调用将使用此 Provider，而最终内容生成仍使用主 Provider。
 // 如果不设置，所有调用都使用主 Provider。
 func (b *AgentBuilder) WithToolProvider(provider llm.Provider) *AgentBuilder {
-	b.toolProvider = provider
+	compatProvider, gateway := unwrapGatewayBackedProvider(provider)
+	b.toolProvider = compatProvider
+	if gateway != nil {
+		b.toolGateway = gateway
+	}
+	return b
+}
+
+// WithGateway 设置主请求链路的 Gateway。
+func (b *AgentBuilder) WithGateway(gateway llmcore.Gateway) *AgentBuilder {
+	if gateway == nil {
+		b.errors = append(b.errors, fmt.Errorf("gateway cannot be nil"))
+		return b
+	}
+	b.gateway = gateway
+	return b
+}
+
+// WithToolGateway 设置工具调用专用 Gateway。
+func (b *AgentBuilder) WithToolGateway(gateway llmcore.Gateway) *AgentBuilder {
+	if gateway == nil {
+		b.errors = append(b.errors, fmt.Errorf("tool gateway cannot be nil"))
+		return b
+	}
+	b.toolGateway = gateway
 	return b
 }
 
@@ -393,10 +446,16 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 
 	// 创建基础 Agent
 	agent := b.newBaseAgent()
+	if b.gateway != nil {
+		agent.SetGateway(b.gateway)
+	}
 
 	// 设置工具专用 Provider（双模型模式）
-	if b.toolProvider != nil {
+	if b.toolProvider != nil || b.toolGateway != nil {
 		agent.SetToolProvider(b.toolProvider)
+		if b.toolGateway != nil {
+			agent.SetToolGateway(b.toolGateway)
+		}
 	}
 
 	// 设置并发度（默认 1，互斥执行）
@@ -417,7 +476,7 @@ func (b *AgentBuilder) validateBuildInputs() error {
 	if len(b.errors) > 0 {
 		return NewErrorWithCause(types.ErrInputValidation, "builder validation failed", b.errors[0])
 	}
-	if b.provider == nil {
+	if b.provider == nil && b.gateway == nil {
 		return ErrProviderNotSet
 	}
 	if b.config.LLM.Model == "" {
@@ -613,8 +672,8 @@ func (b *AgentBuilder) Validate() error {
 		return fmt.Errorf("model is required")
 	}
 
-	if b.provider == nil {
-		return fmt.Errorf("provider is required")
+	if b.provider == nil && b.gateway == nil {
+		return fmt.Errorf("provider or gateway is required")
 	}
 
 	return nil
