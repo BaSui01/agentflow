@@ -167,9 +167,31 @@ foreach ($path in $providerRoutingDocs) {
     }
 }
 
+# Rule 4.5: protected business-layer packages must not direct-call provider Completion/Stream.
+$protectedGatewayDirs = @(
+    "workflow",
+    "agent/reasoning",
+    "agent/structured",
+    "agent/evaluation",
+    "agent/deliberation"
+)
+foreach ($dir in $protectedGatewayDirs) {
+    if (-not (Test-Path $dir)) {
+        continue
+    }
+    $matches = rg -n '\.(Completion|Stream)\(' $dir -g '!**/*_test.go'
+    if ($LASTEXITCODE -eq 0 -and $matches) {
+        $matches -split "`n" | Where-Object { $_.Trim() -ne "" } | ForEach-Object {
+            $errors += "[GATEWAY] direct provider call forbidden: $_"
+        }
+    } elseif ($LASTEXITCODE -gt 1) {
+        $errors += "[GATEWAY] failed to scan $dir for direct provider calls"
+    }
+}
+
 # Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
 Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
-& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
+& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
 if ($LASTEXITCODE -ne 0) {
     $errors += "[TEST] focused architecture guard tests failed"
 }
