@@ -2085,6 +2085,84 @@ func TestWithApprovalExplainabilityEmitter_RecordsApprovalStep(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "write_file", meta["tool_name"])
 	assert.Equal(t, llmtools.PermissionEventRequested, meta["approval_type"])
+	require.Len(t, obs.timeline, 1)
+	assert.Equal(t, "approval", obs.timeline[0]["type"])
+}
+
+func TestRecordPromptLayerTimeline(t *testing.T) {
+	ag := buildTestAgent(t, "prompt-layer-timeline")
+	obs := &mockObservability{}
+	ag.extensions.EnableObservability(obs)
+
+	ag.recordPromptLayerTimeline("trace-1", agentcontext.ContextPlan{
+		AppliedLayers: []agentcontext.PromptLayerMeta{{ID: "tool_guidance", Type: agentcontext.SegmentEphemeral}},
+	})
+
+	require.Len(t, obs.timeline, 1)
+	assert.Equal(t, "prompt_layers", obs.timeline[0]["type"])
+}
+
+func TestLoopExecutor_RecordTimeline(t *testing.T) {
+	obs := &mockObservability{}
+	exec := &LoopExecutor{
+		Explainability: obs,
+		TraceID:        "trace-1",
+	}
+
+	exec.recordTimeline("validation_gate", "validation pending", map[string]any{"validation_status": "pending"})
+
+	require.Len(t, obs.timeline, 1)
+	assert.Equal(t, "validation_gate", obs.timeline[0]["type"])
+	assert.Equal(t, "validation pending", obs.timeline[0]["summary"])
+}
+
+func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
+	var capturedReq *llm.ChatRequest
+	prov := &testProvider{
+		name:           "trace-synopsis",
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			copied := *req
+			copied.Messages = append([]types.Message(nil), req.Messages...)
+			capturedReq = &copied
+			return &llm.ChatResponse{
+				Provider: "trace-synopsis",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "trace-synopsis", prov)
+	ag.Init(context.Background())
+	ag.config.Extensions.Observability = &types.ObservabilityConfig{Enabled: true, MetricsEnabled: true, TracingEnabled: true}
+	obs := &mockObservability{latestSynopsis: "layers=session_overlay | approvals=requested:write_file | ended=validation_failed"}
+	ag.extensions.EnableObservability(obs)
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID:   "trace-synopsis-1",
+		ChannelID: "session-1",
+		Content:   "continue after failed validation",
+	})
+	if err != nil {
+		t.Fatalf("Execute with trace synopsis failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	require.NotNil(t, capturedReq)
+	found := false
+	for _, msg := range capturedReq.Messages {
+		if strContains(msg.Content, "<trace_synopsis>") && strContains(msg.Content, "ended=validation_failed") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected trace_synopsis layer in messages, got %#v", capturedReq.Messages)
+	}
 }
 
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
@@ -2259,10 +2337,12 @@ func (m *statefulEnhancedMemory) RecordEpisode(_ context.Context, _ *types.Episo
 }
 
 type mockObservability struct {
-	traceStarted int
-	traceEnded   int
-	taskRecorded int
-	explainSteps []map[string]any
+	traceStarted   int
+	traceEnded     int
+	taskRecorded   int
+	explainSteps   []map[string]any
+	timeline       []map[string]any
+	latestSynopsis string
 }
 
 func (m *mockObservability) StartTrace(_, _ string) {
@@ -2283,6 +2363,16 @@ func (m *mockObservability) AddExplainabilityStep(_ string, stepType, content st
 	})
 }
 func (m *mockObservability) EndExplainabilityTrace(_ string, _ bool, _, _ string) {}
+func (m *mockObservability) AddExplainabilityTimeline(_ string, entryType, summary string, metadata map[string]any) {
+	m.timeline = append(m.timeline, map[string]any{
+		"type":     entryType,
+		"summary":  summary,
+		"metadata": metadata,
+	})
+}
+func (m *mockObservability) GetLatestExplainabilitySynopsis(_, _, _ string) string {
+	return m.latestSynopsis
+}
 
 type agentTestApprovalHandler struct {
 	approvalID string

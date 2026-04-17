@@ -251,15 +251,21 @@ var hotReloadableFields = map[string]HotReloadableField{
 		RequiresRestart: true,
 		Sensitive:       false,
 	},
-	"Server.GRPCPort": {
-		Path:            "Server.GRPCPort",
-		Description:     "gRPC server port",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
 	"Server.MetricsPort": {
 		Path:            "Server.MetricsPort",
 		Description:     "Metrics server port",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Server.MetricsBindAddress": {
+		Path:            "Server.MetricsBindAddress",
+		Description:     "Metrics server bind address",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Server.EnablePProf": {
+		Path:            "Server.EnablePProf",
+		Description:     "Enable pprof endpoints on the metrics server",
 		RequiresRestart: true,
 		Sensitive:       false,
 	},
@@ -1094,6 +1100,20 @@ func (m *HotReloadManager) GetConfigHistory() []ConfigSnapshot {
 	return result
 }
 
+// GetConfigSnapshot returns a single historical snapshot by version.
+func (m *HotReloadManager) GetConfigSnapshot(version int) (ConfigSnapshot, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, snapshot := range m.configHistory {
+		if snapshot.Version == version {
+			copied := snapshot
+			copied.Config = deepCopyConfig(snapshot.Config)
+			return copied, true
+		}
+	}
+	return ConfigSnapshot{}, false
+}
+
 // GetCurrentVersion 获取当前配置版本号
 func (m *HotReloadManager) GetCurrentVersion() int {
 	m.mu.RLock()
@@ -1269,8 +1289,16 @@ func (m *HotReloadManager) SanitizedConfig() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	return sanitizeConfig(m.config)
+}
+
+func sanitizeConfig(cfg *Config) map[string]any {
+	if cfg == nil {
+		return nil
+	}
+
 	// 转换为 JSON 并返回以获取地图
-	data, err := json.Marshal(m.config)
+	data, err := json.Marshal(cfg)
 	if err != nil {
 		return nil
 	}

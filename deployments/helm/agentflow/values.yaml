@@ -1,0 +1,161 @@
+replicaCount: 1
+
+image:
+  repository: agentflow
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+server:
+  environment: production
+  httpPort: 8080
+  metricsPort: 9091
+  metricsBindAddress: 127.0.0.1
+  enablePProf: false
+  allowNoAuth: false
+  readTimeout: 30s
+  writeTimeout: 30s
+  shutdownTimeout: 15s
+  apiKeys: []
+  jwt:
+    issuer: ""
+    audience: ""
+    expiration: 1h
+  corsAllowedOrigins: []
+  rateLimitRps: 100
+  rateLimitBurst: 200
+  tenantRateLimitRps: 50
+  tenantRateLimitBurst: 100
+
+agent:
+  name: default-agent
+  model: gpt-4
+  maxIterations: 10
+  temperature: "0.7"
+
+log:
+  level: info
+  format: json
+
+llm:
+  defaultProvider: openai
+  mainProviderMode: legacy
+  timeout: 2m
+  maxRetries: 3
+
+redis:
+  addr: redis:6379
+  db: "0"
+
+database:
+  host: postgres
+  port: "5432"
+  user: agentflow
+  name: agentflow
+  sslMode: require
+  maxOpenConns: "25"
+  maxIdleConns: "10"
+  connMaxLifetime: 5m
+
+mongodb:
+  host: mongodb
+  port: "27017"
+  user: agentflow
+  database: agentflow
+  authSource: admin
+
+qdrant:
+  host: qdrant
+  port: "6334"
+  collection: agentflow_vectors
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+metrics:
+  service:
+    enabled: false
+    type: ClusterIP
+    port: 9091
+    annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: agentflow.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+extraEnv: []
+
+secrets:
+  create: true
+  existingSecret: ""
+  data:
+    llmApiKey: ""
+    serverJWTSecret: ""
+    serverJWTPublicKey: ""
+    redisPassword: ""
+    databasePassword: ""
+    mongodbPassword: ""

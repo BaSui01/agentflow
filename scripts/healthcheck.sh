@@ -17,8 +17,6 @@ set -e
 # -----------------------------------------------------------------------------
 HTTP_HOST="${HEALTH_HTTP_HOST:-localhost}"
 HTTP_PORT="${HEALTH_HTTP_PORT:-8080}"
-GRPC_HOST="${HEALTH_GRPC_HOST:-localhost}"
-GRPC_PORT="${HEALTH_GRPC_PORT:-9090}"
 METRICS_PORT="${HEALTH_METRICS_PORT:-9091}"
 
 # 超时设置（秒）
@@ -27,7 +25,6 @@ TIMEOUT="${HEALTH_TIMEOUT:-5}"
 # 可选依赖检查开关
 CHECK_REDIS="${HEALTH_CHECK_REDIS:-false}"
 CHECK_DB="${HEALTH_CHECK_DB:-false}"
-CHECK_GRPC="${HEALTH_CHECK_GRPC:-true}"
 CHECK_METRICS="${HEALTH_CHECK_METRICS:-true}"
 
 # Redis 配置
@@ -103,37 +100,6 @@ check_http_ready() {
 
     # 如果 /ready 不存在，回退到 /health
     log_info "Readiness endpoint not available, falling back to health check"
-    return 0
-}
-
-# 检查 gRPC 健康端点
-check_grpc_health() {
-    if [ "$CHECK_GRPC" != "true" ]; then
-        log_info "gRPC health check skipped (disabled)"
-        return 0
-    fi
-
-    log_info "Checking gRPC health endpoint..."
-
-    # 使用 grpc_health_probe 如果可用
-    if check_command grpc_health_probe; then
-        if grpc_health_probe -addr="${GRPC_HOST}:${GRPC_PORT}" -connect-timeout="${TIMEOUT}s" 2>/dev/null; then
-            log_success "gRPC health check passed"
-            return 0
-        fi
-        log_error "gRPC health check failed"
-        return 1
-    fi
-
-    # 回退：检查端口是否监听
-    if check_command nc; then
-        if nc -z -w "$TIMEOUT" "$GRPC_HOST" "$GRPC_PORT" 2>/dev/null; then
-            log_success "gRPC port is listening"
-            return 0
-        fi
-    fi
-
-    log_info "gRPC health probe not available, skipping detailed check"
     return 0
 }
 
@@ -245,10 +211,6 @@ main() {
 
     # 可选检查
     check_http_ready || true
-
-    if ! check_grpc_health; then
-        failed=1
-    fi
 
     check_metrics || true
 

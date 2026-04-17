@@ -69,6 +69,15 @@ type configData struct {
 	// 更改列出配置更改
 	Changes []ConfigChange `json:"changes,omitempty"`
 
+	// Snapshot 是按版本导出的单个配置快照（已脱敏）
+	Snapshot *ConfigSnapshotView `json:"snapshot,omitempty"`
+
+	// Snapshots 是可导出的配置快照摘要列表
+	Snapshots []ConfigSnapshotView `json:"snapshots,omitempty"`
+
+	// ChangeSummary 汇总最近一段变更窗口
+	ChangeSummary *ConfigChangeSummary `json:"change_summary,omitempty"`
+
 	// CurrentVersion 当前配置版本
 	CurrentVersion int `json:"current_version,omitempty"`
 
@@ -95,6 +104,24 @@ type FieldInfo struct {
 
 	// CurrentValue 是当前值（如果敏感则进行编辑）
 	CurrentValue any `json:"current_value,omitempty"`
+}
+
+type ConfigSnapshotView struct {
+	Version   int            `json:"version"`
+	Timestamp time.Time      `json:"timestamp"`
+	Source    string         `json:"source"`
+	Checksum  string         `json:"checksum"`
+	Current   bool           `json:"current"`
+	Config    map[string]any `json:"config,omitempty"`
+}
+
+type ConfigChangeSummary struct {
+	TotalChanges         int        `json:"total_changes"`
+	AppliedChanges       int        `json:"applied_changes"`
+	FailedChanges        int        `json:"failed_changes"`
+	RequiresRestartCount int        `json:"requires_restart_count"`
+	Sources              []string   `json:"sources,omitempty"`
+	LatestTimestamp      *time.Time `json:"latest_timestamp,omitempty"`
 }
 
 // ConfigUpdateRequest 代表配置更新请求
@@ -152,6 +179,11 @@ func (h *ConfigAPIHandler) HandleChanges(w http.ResponseWriter, r *http.Request)
 	h.handleChanges(w, r)
 }
 
+// HandleSnapshots returns exportable config snapshots and change summary.
+func (h *ConfigAPIHandler) HandleSnapshots(w http.ResponseWriter, r *http.Request) {
+	h.handleSnapshots(w, r)
+}
+
 // HandleRollback 处理配置回滚请求（导出方法）
 func (h *ConfigAPIHandler) HandleRollback(w http.ResponseWriter, r *http.Request) {
 	h.handleRollback(w, r)
@@ -194,6 +226,7 @@ func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	config := h.manager.SanitizedConfig()
+	h.logAuditInfo(r, "get", "success")
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
@@ -271,6 +304,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		h.logAuditWarn(r, "update", "failed", zap.String("reason", "unexpected_trailing_data"))
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
@@ -284,6 +318,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if len(req.Updates) == 0 {
+		h.logAuditWarn(r, "update", "failed", zap.String("reason", "empty_updates"))
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
@@ -297,6 +332,10 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 
 	requiresRestart, err := h.manager.UpdateFields(req.Updates, "api")
 	if err != nil {
+		h.logAuditWarn(r, "update", "failed",
+			zap.Bool("requires_restart", requiresRestart),
+			zap.Error(err),
+		)
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
@@ -328,6 +367,10 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 			zap.Time("timestamp", time.Now()),
 		)
 	}
+	h.logAuditInfo(r, "update", "success",
+		zap.Int("updated_fields", len(req.Updates)),
+		zap.Bool("requires_restart", requiresRestart),
+	)
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
@@ -375,10 +418,7 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.manager.ReloadFromFile(); err != nil {
-		h.logger.Warn("config reload failed",
-			zap.String("remote_addr", r.RemoteAddr),
-			zap.Error(err),
-		)
+		h.logAuditWarn(r, "reload", "failed", zap.Error(err))
 		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
 			Success: false,
 			Error: &apiError{
@@ -390,11 +430,7 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// X-004: 审计日志 — 记录配置热重载
-	h.logger.Info("config reloaded from file",
-		zap.String("remote_addr", r.RemoteAddr),
-		zap.Time("timestamp", time.Now()),
-	)
+	h.logAuditInfo(r, "reload", "success")
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
@@ -444,6 +480,7 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 
 		fields[path] = info
 	}
+	h.logAuditInfo(r, "fields", "success", zap.Int("field_count", len(fields)))
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
@@ -493,12 +530,18 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 	changes := h.manager.GetChangeLog(limit)
 	history := h.manager.GetConfigHistory()
 	currentVersion := h.manager.GetCurrentVersion()
+	summary := summarizeConfigChanges(changes)
+	h.logAuditInfo(r, "changes", "success",
+		zap.Int("change_count", len(changes)),
+		zap.Int("history_size", len(history)),
+	)
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
 		Data: configData{
 			Message:        fmt.Sprintf("Retrieved %d configuration changes", len(changes)),
 			Changes:        changes,
+			ChangeSummary:  &summary,
 			CurrentVersion: currentVersion,
 			HistorySize:    len(history),
 		},
@@ -549,6 +592,7 @@ func (h *ConfigAPIHandler) handleRollback(w http.ResponseWriter, r *http.Request
 	}
 
 	if rollbackErr != nil {
+		h.logAuditWarn(r, "rollback", "failed", zap.Error(rollbackErr))
 		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
 			Success: false,
 			Error: &apiError{
@@ -560,6 +604,9 @@ func (h *ConfigAPIHandler) handleRollback(w http.ResponseWriter, r *http.Request
 		})
 		return
 	}
+	h.logAuditInfo(r, "rollback", "success",
+		zap.Int("current_version", h.manager.GetCurrentVersion()),
+	)
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
@@ -567,6 +614,128 @@ func (h *ConfigAPIHandler) handleRollback(w http.ResponseWriter, r *http.Request
 			Message:        "Configuration rolled back successfully",
 			Config:         h.manager.SanitizedConfig(),
 			CurrentVersion: h.manager.GetCurrentVersion(),
+		},
+		Timestamp: time.Now(),
+		RequestID: requestIDFromRequest(r),
+	})
+}
+
+func (h *ConfigAPIHandler) handleSnapshots(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		h.handleCORS(w, r)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		h.methodNotAllowed(w, r)
+		return
+	}
+
+	const (
+		defaultLimit = 20
+		maxLimit     = 100
+	)
+	limit := defaultLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
+	var requestedVersion int
+	if raw := strings.TrimSpace(r.URL.Query().Get("version")); raw != "" {
+		version, err := strconv.Atoi(raw)
+		if err != nil || version <= 0 {
+			h.logAuditWarn(r, "snapshots", "failed", zap.String("reason", "invalid_version"))
+			writeAPIJSON(w, http.StatusBadRequest, apiResponse{
+				Success: false,
+				Error: &apiError{
+					Code:    string(types.ErrInvalidRequest),
+					Message: "version must be a positive integer",
+				},
+				Timestamp: time.Now(),
+				RequestID: requestIDFromRequest(r),
+			})
+			return
+		}
+		requestedVersion = version
+	}
+
+	history := h.manager.GetConfigHistory()
+	currentVersion := h.manager.GetCurrentVersion()
+	if limit > len(history) {
+		limit = len(history)
+	}
+	start := 0
+	if limit > 0 && len(history) > limit {
+		start = len(history) - limit
+	}
+
+	snapshots := make([]ConfigSnapshotView, 0, len(history[start:]))
+	for _, snapshot := range history[start:] {
+		snapshots = append(snapshots, ConfigSnapshotView{
+			Version:   snapshot.Version,
+			Timestamp: snapshot.Timestamp,
+			Source:    snapshot.Source,
+			Checksum:  snapshot.Checksum,
+			Current:   snapshot.Version == currentVersion,
+		})
+	}
+
+	var selectedSnapshot *ConfigSnapshotView
+	if requestedVersion > 0 {
+		snapshot, ok := h.manager.GetConfigSnapshot(requestedVersion)
+		if !ok {
+			h.logAuditWarn(r, "snapshots", "failed",
+				zap.Int("version", requestedVersion),
+				zap.String("reason", "snapshot_not_found"),
+			)
+			writeAPIJSON(w, http.StatusNotFound, apiResponse{
+				Success: false,
+				Error: &apiError{
+					Code:    string(types.ErrModelNotFound),
+					Message: fmt.Sprintf("config snapshot version %d not found", requestedVersion),
+				},
+				Timestamp: time.Now(),
+				RequestID: requestIDFromRequest(r),
+			})
+			return
+		}
+		selectedSnapshot = &ConfigSnapshotView{
+			Version:   snapshot.Version,
+			Timestamp: snapshot.Timestamp,
+			Source:    snapshot.Source,
+			Checksum:  snapshot.Checksum,
+			Current:   snapshot.Version == currentVersion,
+			Config:    sanitizeConfig(snapshot.Config),
+		}
+	}
+
+	changeWindow := limit
+	if changeWindow == 0 {
+		changeWindow = defaultLimit
+	}
+	changes := h.manager.GetChangeLog(changeWindow)
+	summary := summarizeConfigChanges(changes)
+	h.logAuditInfo(r, "snapshots", "success",
+		zap.Int("snapshot_count", len(snapshots)),
+		zap.Int("history_size", len(history)),
+		zap.Int("current_version", currentVersion),
+	)
+
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message:        fmt.Sprintf("Retrieved %d configuration snapshots", len(snapshots)),
+			Config:         h.manager.SanitizedConfig(),
+			Snapshot:       selectedSnapshot,
+			Snapshots:      snapshots,
+			ChangeSummary:  &summary,
+			CurrentVersion: currentVersion,
+			HistorySize:    len(history),
 		},
 		Timestamp: time.Now(),
 		RequestID: requestIDFromRequest(r),
@@ -700,11 +869,9 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 
 			if !secureTokenEqual(apiKey, m.apiKey) {
 				m.handler.logger.Warn("config api authentication failed",
-					zap.String("remote_addr", r.RemoteAddr),
-					zap.String("path", r.URL.Path),
-					zap.String("method", r.Method),
-					zap.String("provided_api_key", MaskAPIKey(apiKey)),
-					zap.String("request_id", requestIDFromRequest(r)),
+					m.handler.auditFields(r, "authorize", "failed",
+						zap.String("provided_api_key", MaskAPIKey(apiKey)),
+					)...,
 				)
 				writeAPIJSON(w, http.StatusUnauthorized, apiResponse{
 					Success: false,
@@ -800,4 +967,82 @@ func requestIDFromRequest(r *http.Request) string {
 		return requestID
 	}
 	return strings.TrimSpace(r.Header.Get("X-Request-Id"))
+}
+
+func summarizeConfigChanges(changes []ConfigChange) ConfigChangeSummary {
+	sources := make(map[string]struct{})
+	summary := ConfigChangeSummary{TotalChanges: len(changes)}
+	for _, change := range changes {
+		if change.Applied {
+			summary.AppliedChanges++
+		} else {
+			summary.FailedChanges++
+		}
+		if change.RequiresRestart {
+			summary.RequiresRestartCount++
+		}
+		if change.Source != "" {
+			sources[change.Source] = struct{}{}
+		}
+		if summary.LatestTimestamp == nil || change.Timestamp.After(*summary.LatestTimestamp) {
+			ts := change.Timestamp
+			summary.LatestTimestamp = &ts
+		}
+	}
+	if len(sources) > 0 {
+		summary.Sources = make([]string, 0, len(sources))
+		for source := range sources {
+			summary.Sources = append(summary.Sources, source)
+		}
+	}
+	return summary
+}
+
+func (h *ConfigAPIHandler) auditFields(r *http.Request, action, result string, extra ...zap.Field) []zap.Field {
+	fields := []zap.Field{
+		zap.String("request_id", requestIDFromRequest(r)),
+		zap.String("remote_addr", requestRemoteAddr(r)),
+		zap.String("path", requestPath(r)),
+		zap.String("method", requestMethod(r)),
+		zap.String("resource", "config"),
+		zap.String("action", action),
+		zap.String("result", result),
+	}
+	fields = append(fields, extra...)
+	return fields
+}
+
+func (h *ConfigAPIHandler) logAuditInfo(r *http.Request, action, result string, extra ...zap.Field) {
+	if h.logger == nil {
+		return
+	}
+	h.logger.Info("config api request completed", h.auditFields(r, action, result, extra...)...)
+}
+
+func (h *ConfigAPIHandler) logAuditWarn(r *http.Request, action, result string, extra ...zap.Field) {
+	if h.logger == nil {
+		return
+	}
+	h.logger.Warn("config api request completed", h.auditFields(r, action, result, extra...)...)
+}
+
+func requestPath(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.URL.Path)
+}
+
+func requestMethod(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.Method)
+}
+
+func requestRemoteAddr(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.RemoteAddr)
 }

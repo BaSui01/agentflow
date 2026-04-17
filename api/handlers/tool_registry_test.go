@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/gorm"
 )
 
@@ -90,4 +91,31 @@ func TestToolRegistryHandler_Create_ReservedOrSelfName(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Equal(t, 0, runtime.reloadCalls)
+}
+
+func TestToolRegistryHandler_Create_AuditLogFields(t *testing.T) {
+	db := setupToolRegistryDB(t)
+	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
+	core, observed := observer.New(zap.InfoLevel)
+	handler := NewToolRegistryHandler(hosted.NewGormToolRegistryStore(db), runtime, zap.New(core))
+
+	body := []byte(`{"name":"knowledge_search","target":"retrieval","enabled":true}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/tools", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Request-ID", "req-tools-create")
+	r.RemoteAddr = "192.168.0.20:8080"
+	handler.HandleCreate(w, r)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	entries := observed.FilterMessage("tool registry request completed").All()
+	require.NotEmpty(t, entries)
+	fields := entries[len(entries)-1].ContextMap()
+	assert.Equal(t, "/api/v1/tools", fields["path"])
+	assert.Equal(t, "POST", fields["method"])
+	assert.Equal(t, "req-tools-create", fields["request_id"])
+	assert.Equal(t, "192.168.0.20:8080", fields["remote_addr"])
+	assert.Equal(t, "tool_registry", fields["resource"])
+	assert.Equal(t, "create", fields["action"])
+	assert.Equal(t, "success", fields["result"])
 }

@@ -187,6 +187,8 @@ func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc
 			ReasoningRegistry: b.reasoningRegistry,
 			ReflectionEnabled: options.UseReflection && b.extensions.ReflectionExecutor() != nil,
 			CheckpointManager: b.checkpointManager,
+			Explainability:    explainabilityTimelineRecorder(b.extensions.ObservabilitySystemExt()),
+			TraceID:           strings.TrimSpace(input.TraceID),
 			AgentID:           b.ID(),
 			Logger:            b.logger,
 		}
@@ -1406,6 +1408,8 @@ type LoopExecutor struct {
 	ReasoningRegistry *reasoning.PatternRegistry
 	ReflectionEnabled bool
 	CheckpointManager *CheckpointManager
+	Explainability    ExplainabilityTimelineRecorder
+	TraceID           string
 	AgentID           string
 	Logger            *zap.Logger
 }
@@ -1530,6 +1534,14 @@ func (e *LoopExecutor) Execute(ctx context.Context, input *Input) (*Output, erro
 				"unresolved_items":   cloneStringSlice(validation.UnresolvedItems),
 				"remaining_risks":    cloneStringSlice(validation.RemainingRisks),
 			})
+			e.recordTimeline("validation_gate", validation.Summary, map[string]any{
+				"validation_status":   string(validation.Status),
+				"validation_passed":   validation.Passed,
+				"validation_pending":  validation.Pending,
+				"acceptance_criteria": cloneStringSlice(validation.AcceptanceCriteria),
+				"unresolved_items":    cloneStringSlice(validation.UnresolvedItems),
+				"remaining_risks":     cloneStringSlice(validation.RemainingRisks),
+			})
 		}
 		e.saveCheckpoint(ctx, input, state, output)
 		state.AdvanceStage(LoopStageEvaluate)
@@ -1566,6 +1578,15 @@ func (e *LoopExecutor) Execute(ctx context.Context, input *Input) (*Output, erro
 			},
 		})
 		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "completion_judge_decision", "decision": string(decision.Decision), "confidence": decision.Confidence, "stop_reason": string(decision.StopReason)})
+		e.recordTimeline("completion_decision", decision.Reason, map[string]any{
+			"decision":        string(decision.Decision),
+			"confidence":      decision.Confidence,
+			"solved":          decision.Solved,
+			"need_replan":     decision.NeedReplan,
+			"need_reflection": decision.NeedReflection,
+			"need_human":      decision.NeedHuman,
+			"stop_reason":     string(decision.StopReason),
+		})
 		logger.Debug("loop iteration evaluated", zap.Int("iteration", state.Iteration), zap.String("reasoning_mode", state.SelectedReasoningMode), zap.String("decision", string(decision.Decision)), zap.String("stop_reason", string(state.StopReason)))
 		switch decision.Decision {
 		case LoopDecisionDone, LoopDecisionEscalate:
@@ -1812,6 +1833,13 @@ func (e *LoopExecutor) emitStatus(ctx context.Context, state *LoopState, eventTy
 	})
 }
 
+func (e *LoopExecutor) recordTimeline(entryType, summary string, metadata map[string]any) {
+	if e == nil || e.Explainability == nil || strings.TrimSpace(e.TraceID) == "" {
+		return
+	}
+	e.Explainability.AddExplainabilityTimeline(e.TraceID, entryType, summary, metadata)
+}
+
 func (e *LoopExecutor) finalize(state *LoopState, output *Output, execErr error) (*Output, error) {
 	if state != nil && state.StopReason == "" {
 		switch {
@@ -1962,6 +1990,11 @@ func (b *BaseAgent) observabilityMiddleware(options EnhancedExecutionOptions) Ex
 		)
 		return output, nil
 	}
+}
+
+func explainabilityTimelineRecorder(obs ObservabilityRunner) ExplainabilityTimelineRecorder {
+	recorder, _ := obs.(ExplainabilityTimelineRecorder)
+	return recorder
 }
 
 func (b *BaseAgent) skillsMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {

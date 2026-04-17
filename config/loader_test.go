@@ -18,8 +18,10 @@ func TestDefaultConfig(t *testing.T) {
 
 	// 验证服务器默认值
 	assert.Equal(t, 8080, cfg.Server.HTTPPort)
-	assert.Equal(t, 9090, cfg.Server.GRPCPort)
 	assert.Equal(t, 9091, cfg.Server.MetricsPort)
+	assert.Equal(t, "127.0.0.1", cfg.Server.MetricsBindAddress)
+	assert.Equal(t, "development", cfg.Server.Environment)
+	assert.False(t, cfg.Server.EnablePProf)
 	assert.Equal(t, 30*time.Second, cfg.Server.ReadTimeout)
 
 	// 验证 Agent 默认值
@@ -68,7 +70,10 @@ func TestLoader_LoadFromYAML(t *testing.T) {
 	yamlContent := `
 server:
   http_port: 8888
-  grpc_port: 9999
+  metrics_port: 9999
+  metrics_bind_address: "0.0.0.0"
+  environment: "production"
+  enable_pprof: true
   read_timeout: 60s
 
 agent:
@@ -115,7 +120,10 @@ log:
 
 	// 验证 YAML 值覆盖了默认值
 	assert.Equal(t, 8888, cfg.Server.HTTPPort)
-	assert.Equal(t, 9999, cfg.Server.GRPCPort)
+	assert.Equal(t, 9999, cfg.Server.MetricsPort)
+	assert.Equal(t, "0.0.0.0", cfg.Server.MetricsBindAddress)
+	assert.Equal(t, "production", cfg.Server.Environment)
+	assert.True(t, cfg.Server.EnablePProf)
 	assert.Equal(t, 60*time.Second, cfg.Server.ReadTimeout)
 
 	assert.Equal(t, "test-agent", cfg.Agent.Name)
@@ -148,26 +156,29 @@ log:
 func TestLoader_LoadFromEnv(t *testing.T) {
 	// 设置环境变量
 	envVars := map[string]string{
-		"AGENTFLOW_SERVER_HTTP_PORT":       "7777",
-		"AGENTFLOW_SERVER_GRPC_PORT":       "8888",
-		"AGENTFLOW_AGENT_NAME":             "env-agent",
-		"AGENTFLOW_AGENT_MODEL":            "gpt-4-turbo",
-		"AGENTFLOW_AGENT_TOOL_MODEL":       "gpt-4o-mini",
-		"AGENTFLOW_AGENT_MAX_ITERATIONS":   "15",
-		"AGENTFLOW_AGENT_TEMPERATURE":      "0.9",
-		"AGENTFLOW_LLM_MAIN_PROVIDER_MODE": "channel_routed",
-		"AGENTFLOW_LLM_DEFAULT_PROVIDER":   "openai",
-		"AGENTFLOW_LLM_API_KEY":            "main-key-env",
-		"AGENTFLOW_LLM_BASE_URL":           "https://main-env.example.com",
-		"AGENTFLOW_LLM_TIMEOUT":            "50s",
-		"AGENTFLOW_LLM_MAX_RETRIES":        "6",
-		"AGENTFLOW_LLM_TOOL_PROVIDER":      "gemini",
-		"AGENTFLOW_LLM_TOOL_API_KEY":       "tool-key-env",
-		"AGENTFLOW_LLM_TOOL_BASE_URL":      "https://tool-env.example.com",
-		"AGENTFLOW_LLM_TOOL_TIMEOUT":       "15s",
-		"AGENTFLOW_LLM_TOOL_MAX_RETRIES":   "2",
-		"AGENTFLOW_REDIS_ADDR":             "env-redis:6379",
-		"AGENTFLOW_LOG_LEVEL":              "warn",
+		"AGENTFLOW_SERVER_HTTP_PORT":            "7777",
+		"AGENTFLOW_SERVER_METRICS_PORT":         "8888",
+		"AGENTFLOW_SERVER_METRICS_BIND_ADDRESS": "0.0.0.0",
+		"AGENTFLOW_SERVER_ENVIRONMENT":          "production",
+		"AGENTFLOW_SERVER_ENABLE_PPROF":         "true",
+		"AGENTFLOW_AGENT_NAME":                  "env-agent",
+		"AGENTFLOW_AGENT_MODEL":                 "gpt-4-turbo",
+		"AGENTFLOW_AGENT_TOOL_MODEL":            "gpt-4o-mini",
+		"AGENTFLOW_AGENT_MAX_ITERATIONS":        "15",
+		"AGENTFLOW_AGENT_TEMPERATURE":           "0.9",
+		"AGENTFLOW_LLM_MAIN_PROVIDER_MODE":      "channel_routed",
+		"AGENTFLOW_LLM_DEFAULT_PROVIDER":        "openai",
+		"AGENTFLOW_LLM_API_KEY":                 "main-key-env",
+		"AGENTFLOW_LLM_BASE_URL":                "https://main-env.example.com",
+		"AGENTFLOW_LLM_TIMEOUT":                 "50s",
+		"AGENTFLOW_LLM_MAX_RETRIES":             "6",
+		"AGENTFLOW_LLM_TOOL_PROVIDER":           "gemini",
+		"AGENTFLOW_LLM_TOOL_API_KEY":            "tool-key-env",
+		"AGENTFLOW_LLM_TOOL_BASE_URL":           "https://tool-env.example.com",
+		"AGENTFLOW_LLM_TOOL_TIMEOUT":            "15s",
+		"AGENTFLOW_LLM_TOOL_MAX_RETRIES":        "2",
+		"AGENTFLOW_REDIS_ADDR":                  "env-redis:6379",
+		"AGENTFLOW_LOG_LEVEL":                   "warn",
 	}
 
 	// 设置环境变量
@@ -187,7 +198,10 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 
 	// 验证环境变量覆盖了默认值
 	assert.Equal(t, 7777, cfg.Server.HTTPPort)
-	assert.Equal(t, 8888, cfg.Server.GRPCPort)
+	assert.Equal(t, 8888, cfg.Server.MetricsPort)
+	assert.Equal(t, "0.0.0.0", cfg.Server.MetricsBindAddress)
+	assert.Equal(t, "production", cfg.Server.Environment)
+	assert.True(t, cfg.Server.EnablePProf)
 	assert.Equal(t, "env-agent", cfg.Agent.Name)
 	assert.Equal(t, "gpt-4-turbo", cfg.Agent.Model)
 	assert.Equal(t, "gpt-4o-mini", cfg.Agent.ToolModel)
@@ -462,6 +476,21 @@ func TestConfig_Validate(t *testing.T) {
 			name: "redis address is required when multimodal is enabled",
 			modify: func(c *Config) {
 				c.Redis.Addr = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid server environment",
+			modify: func(c *Config) {
+				c.Server.Environment = "staging"
+			},
+			wantErr: true,
+		},
+		{
+			name: "production forbids allow_no_auth",
+			modify: func(c *Config) {
+				c.Server.Environment = "production"
+				c.Server.AllowNoAuth = true
 			},
 			wantErr: true,
 		},

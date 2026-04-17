@@ -14,6 +14,8 @@
 
 ## 部署清单
 
+正式上线前，请先完成并复核 [基础设施上线清单](../基础设施上线清单.md)。
+
 ### 上线前检查清单
 
 - [ ] **基础设施**
@@ -28,6 +30,7 @@
   - [ ] 配置 RBAC 权限
   - [ ] 启用审计日志
   - [ ] 扫描容器镜像漏洞
+  - [ ] 生产环境未启用 `allow_no_auth=true`
 
 - [ ] **可靠性**
   - [ ] 配置 HPA 自动扩缩容
@@ -116,6 +119,33 @@ agent:
 
 ### Secret 管理
 
+生产部署时请显式固定运行环境与认证方式，避免把开发默认值带入线上：
+
+```yaml
+server:
+  environment: production
+  allow_no_auth: false
+  api_keys:
+    - "${AGENTFLOW_HTTP_API_KEY}"
+  # 或改用 server.jwt.secret / server.jwt.public_key
+```
+
+`server.environment=production` 与 `server.allow_no_auth=true` 同时出现时，服务会在启动校验阶段直接失败，不会进入“无认证继续启动”的状态。
+
+若使用 Helm，建议直接基于仓库内 chart 与生产 values：
+
+```bash
+helm upgrade --install agentflow ./deployments/helm/agentflow \
+  --namespace agentflow \
+  --create-namespace \
+  -f ./deployments/helm/agentflow/values-production.yaml \
+  --set image.repository=your-registry/agentflow \
+  --set image.tag=v1.0.0 \
+  --set secrets.existingSecret=agentflow-secrets
+```
+
+该 chart 通过挂载 `/app/config/config.yaml` 注入非敏感配置，再由 Secret 覆盖 `AGENTFLOW_LLM_API_KEY`、数据库/Redis/Mongo 密码以及 JWT 凭据；如果要继续使用 `server.api_keys`，请通过 values / YAML 提供，而不要误以为 `AGENTFLOW_SERVER_API_KEYS` 会被环境变量加载。
+
 ```bash
 # 使用 AWS Secrets Manager
 aws secretsmanager create-secret \
@@ -200,6 +230,30 @@ ingress:
         - agentflow.example.com
 ```
 
+### 受保护接口 Smoke Test
+
+发布后至少对一个受保护接口执行一次最小 smoke test，确认“未带认证失败、带认证成功”的链路一致：
+
+```bash
+# 1) 未携带认证信息时，必须 fail-closed
+curl -i http://127.0.0.1:8080/api/v1/agents
+
+# 期望：HTTP 401（已配置 JWT/API Key）或 HTTP 503（未配置认证且 allow_no_auth=false）
+
+# 2) 携带 API Key 后，受保护接口不应再返回认证错误
+curl -i http://127.0.0.1:8080/api/v1/agents \
+  -H "X-API-Key: ${AGENTFLOW_HTTP_API_KEY}"
+
+# 期望：返回非 401/403/503；若当前无业务数据，可接受 200 + 空列表
+```
+
+若生产改走 JWT，请将第二步替换为：
+
+```bash
+curl -i http://127.0.0.1:8080/api/v1/agents \
+  -H "Authorization: Bearer ${AGENTFLOW_JWT_TOKEN}"
+```
+
 ### Pod 安全标准
 
 ```yaml
@@ -250,6 +304,8 @@ topologySpreadConstraints:
 ### 健康检查
 
 ```yaml
+# /health: 轻量存活检查
+# /ready: 依赖就绪检查
 livenessProbe:
   httpGet:
     path: /health
@@ -277,6 +333,10 @@ startupProbe:
   timeoutSeconds: 5
   failureThreshold: 30
 ```
+
+说明：
+- `livenessProbe` 与 `startupProbe` 只探测进程存活
+- `readinessProbe` 才用于依赖就绪判断，必须指向 `/ready`
 
 ### 优雅关闭
 
@@ -334,6 +394,12 @@ autoscaling:
 ```
 
 ## 监控告警
+
+观测面默认策略：
+
+- `metrics` 默认仅绑定 `127.0.0.1:9091`
+- 若需要 Prometheus 跨容器或跨节点抓取，必须显式设置 `server.metrics_bind_address=0.0.0.0`
+- `pprof` 默认关闭，只在受控排障窗口中短时开启 `server.enable_pprof=true`
 
 ### 关键指标
 

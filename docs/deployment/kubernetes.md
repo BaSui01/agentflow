@@ -48,7 +48,8 @@ kubectl create namespace agentflow
 ```bash
 kubectl create secret generic agentflow-secrets \
   --namespace agentflow \
-  --from-literal=llm-api-key=your_api_key_here
+  --from-literal=AGENTFLOW_LLM_API_KEY=your_api_key_here \
+  --from-literal=AGENTFLOW_SERVER_JWT_SECRET=replace-with-32-byte-secret
 ```
 
 ### 4. 安装 AgentFlow
@@ -56,6 +57,10 @@ kubectl create secret generic agentflow-secrets \
 ```bash
 helm install agentflow ./deployments/helm/agentflow \
   --namespace agentflow \
+  --create-namespace \
+  -f ./deployments/helm/agentflow/values-production.yaml \
+  --set image.repository=your-registry/agentflow \
+  --set image.tag=v1.0.0 \
   --set secrets.existingSecret=agentflow-secrets
 ```
 
@@ -91,7 +96,7 @@ helm install agentflow ./deployments/helm/agentflow \
   --namespace agentflow \
   --set replicaCount=3 \
   --set image.tag=v1.0.0 \
-  --set config.agent.model=gpt-4-turbo \
+  --set agent.model=gpt-4-turbo \
   --set secrets.existingSecret=agentflow-secrets
 ```
 
@@ -105,14 +110,13 @@ image:
   repository: your-registry/agentflow
   tag: v1.0.0
 
-config:
-  agent:
-    model: "gpt-4-turbo"
-    maxIterations: 20
-    temperature: 0.5
+agent:
+  model: "gpt-4-turbo"
+  maxIterations: 20
+  temperature: "0.5"
 
-  log:
-    level: "debug"
+log:
+  level: "debug"
 
 resources:
   limits:
@@ -127,6 +131,13 @@ autoscaling:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+
+metrics:
+  service:
+    enabled: true
+
+serviceMonitor:
+  enabled: true
 
 ingress:
   enabled: true
@@ -155,10 +166,13 @@ helm install agentflow ./deployments/helm/agentflow \
 | `replicaCount` | Pod 副本数 | 1 |
 | `image.repository` | 镜像仓库 | agentflow |
 | `image.tag` | 镜像标签 | Chart appVersion |
-| `config.agent.model` | 默认模型 | gpt-4 |
-| `config.agent.maxIterations` | 最大迭代次数 | 10 |
-| `redis.enabled` | 启用内置 Redis | true |
-| `postgresql.enabled` | 启用内置 PostgreSQL | false |
+| `server.environment` | 运行环境 | `production` |
+| `server.allowNoAuth` | 是否允许无认证启动 | `false` |
+| `server.apiKeys` | 通过 YAML 配置的 HTTP API keys | `[]` |
+| `agent.model` | 默认模型 | gpt-4 |
+| `agent.maxIterations` | 最大迭代次数 | 10 |
+| `metrics.service.enabled` | 是否创建 metrics Service | false |
+| `serviceMonitor.enabled` | 是否创建 ServiceMonitor | false |
 | `autoscaling.enabled` | 启用 HPA | false |
 | `ingress.enabled` | 启用 Ingress | false |
 
@@ -204,26 +218,46 @@ autoscaling:
   targetMemoryUtilizationPercentage: 80
 ```
 
-### 外部数据库（生产推荐）
+### 外部依赖（生产推荐）
 
 ```yaml
 redis:
-  enabled: false
-  external:
-    host: "redis.example.com"
-    port: 6379
-    password: "your_redis_password"
+  addr: "redis.example.com:6379"
 
-postgresql:
-  enabled: false
-  external:
-    host: "postgres.example.com"
-    port: 5432
-    user: "agentflow"
-    password: "your_db_password"
-    database: "agentflow"
-    sslMode: "require"
+database:
+  host: "postgres.example.com"
+  port: "5432"
+  user: "agentflow"
+  name: "agentflow"
+  sslMode: "require"
+
+mongodb:
+  host: "mongodb.example.com"
+  port: "27017"
+  user: "agentflow"
+  database: "agentflow"
+
+qdrant:
+  host: "qdrant.example.com"
+  port: "6334"
+
+secrets:
+  existingSecret: agentflow-secrets
 ```
+
+`agentflow-secrets` 至少应提供以下环境变量键：
+
+- `AGENTFLOW_LLM_API_KEY`
+- `AGENTFLOW_SERVER_JWT_SECRET` 或 `AGENTFLOW_SERVER_JWT_PUBLIC_KEY`
+- `AGENTFLOW_DATABASE_PASSWORD`
+- `AGENTFLOW_REDIS_PASSWORD`
+- `AGENTFLOW_MONGODB_PASSWORD`
+
+说明：
+
+- chart 当前通过挂载 `/app/config/config.yaml` 注入非敏感配置，因此 `server.api_keys` 走 values / YAML；
+- 如果你不希望 API key 出现在 ConfigMap 中，生产环境优先改用 JWT，并通过 Secret 提供 `AGENTFLOW_SERVER_JWT_SECRET` 或 `AGENTFLOW_SERVER_JWT_PUBLIC_KEY`；
+- `server.apiKeys` 仍可用于内网、短期测试或配合加密 values 文件的场景。
 
 ## 安全配置
 
@@ -301,10 +335,14 @@ spec:
   target:
     name: agentflow-secrets
   data:
-    - secretKey: llm-api-key
+    - secretKey: AGENTFLOW_LLM_API_KEY
       remoteRef:
         key: agentflow/llm
         property: api-key
+    - secretKey: AGENTFLOW_SERVER_JWT_SECRET
+      remoteRef:
+        key: agentflow/http
+        property: jwt-secret
 ```
 
 ## 监控集成
@@ -313,13 +351,15 @@ spec:
 
 ```yaml
 metrics:
-  enabled: true
-  serviceMonitor:
+  service:
     enabled: true
-    interval: 30s
-    scrapeTimeout: 10s
-    labels:
-      release: prometheus
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
 ```
 
 ### Grafana 仪表盘
@@ -377,7 +417,7 @@ helm list -n agentflow
 # 升级到新版本
 helm upgrade agentflow ./deployments/helm/agentflow \
   --namespace agentflow \
-  -f my-values.yaml \
+  -f ./deployments/helm/agentflow/values-production.yaml \
   --set image.tag=v1.1.0
 
 # 查看升级历史
@@ -401,6 +441,8 @@ helm rollback agentflow 2 -n agentflow
 kubectl create namespace agentflow-green
 helm install agentflow-green ./deployments/helm/agentflow \
   --namespace agentflow-green \
+  --create-namespace \
+  -f ./deployments/helm/agentflow/values-production.yaml \
   --set image.tag=v1.1.0
 
 # 验证新版本
@@ -436,6 +478,15 @@ kubectl get events -n agentflow --sort-by='.lastTimestamp'
 
 ### 常见问题
 
+#### 0. `helm install` 失败，提示 chart 不存在
+
+```bash
+ls deployments/helm/agentflow
+helm lint ./deployments/helm/agentflow
+```
+
+如果 `deployments/helm/agentflow/` 缺少 `Chart.yaml` 或 `templates/`，说明当前工作区未同步到包含正式 Helm Chart 的版本。
+
 #### 1. Pod 处于 Pending 状态
 
 ```bash
@@ -453,7 +504,7 @@ kubectl top nodes
 kubectl logs -n agentflow <pod-name> --previous
 
 # 检查配置
-kubectl get configmap -n agentflow agentflow-config -o yaml
+kubectl get configmap -n agentflow -l app.kubernetes.io/name=agentflow -o yaml
 ```
 
 #### 3. 无法连接服务

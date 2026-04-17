@@ -1,0 +1,7 @@
+apiVersion: v2
+name: agentflow
+description: Helm chart for deploying AgentFlow as a production-ready HTTP + metrics service.
+type: application
+version: 0.1.0
+appVersion: "dev"
+

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type toolApprovalRuntimeStub struct {
@@ -240,4 +241,41 @@ func TestToolApprovalHandler_ListHistory(t *testing.T) {
 	handler.HandleHistory(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "\"event_type\":\"approval_requested\"")
+}
+
+func TestToolApprovalHandler_Resolve_AuditLogFields(t *testing.T) {
+	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
+	core, observed := observer.New(zap.InfoLevel)
+	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{manager: manager}, "tool_approval", zap.New(core))
+
+	interrupt, err := manager.CreatePendingInterrupt(context.Background(), hitl.InterruptOptions{
+		WorkflowID: "tool_approval",
+		Type:       hitl.InterruptTypeApproval,
+		Options: []hitl.Option{
+			{ID: "approve", Label: "Approve", IsDefault: true},
+		},
+	})
+	require.NoError(t, err)
+
+	resolveBody := []byte(`{"approved":true,"option_id":"approve","comment":"ok","user_id":"alice"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools/approvals/"+interrupt.ID+"/resolve", bytes.NewReader(resolveBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-ID", "req-approval-resolve")
+	req.RemoteAddr = "192.168.0.22:8080"
+	req.SetPathValue("id", interrupt.ID)
+	rec := httptest.NewRecorder()
+
+	handler.HandleResolve(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	entries := observed.FilterMessage("tool approval request completed").All()
+	require.NotEmpty(t, entries)
+	fields := entries[len(entries)-1].ContextMap()
+	assert.Equal(t, "/api/v1/tools/approvals/"+interrupt.ID+"/resolve", fields["path"])
+	assert.Equal(t, "POST", fields["method"])
+	assert.Equal(t, "req-approval-resolve", fields["request_id"])
+	assert.Equal(t, "192.168.0.22:8080", fields["remote_addr"])
+	assert.Equal(t, "tool_approval", fields["resource"])
+	assert.Equal(t, "resolve", fields["action"])
+	assert.Equal(t, "success", fields["result"])
 }

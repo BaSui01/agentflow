@@ -62,22 +62,18 @@ func (s *Server) initHandlers() error {
 
 	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(s.cfg, s.db, s.logger)
 	if err != nil {
-		s.logger.Warn("Failed to create LLM runtime, chat endpoints disabled",
-			zap.String("mode", mainProviderMode),
-			zap.String("provider", s.cfg.LLM.DefaultProvider),
-			zap.Error(err))
-	} else if llmRuntime == nil {
-		s.logger.Info("LLM main provider not configured, chat endpoints disabled",
-			zap.String("mode", mainProviderMode))
-	} else {
-		s.provider = llmRuntime.Provider
-		s.toolProvider = llmRuntime.ToolProvider
-		s.budgetManager = llmRuntime.BudgetManager
-		s.costTracker = llmRuntime.CostTracker
-		s.llmCache = llmRuntime.Cache
-		s.llmMetrics = llmRuntime.Metrics
-		s.costHandler = handlers.NewCostHandler(llmRuntime.CostTracker, s.logger)
+		return fmt.Errorf("failed to initialize llm runtime for mode %q provider %q: %w", mainProviderMode, s.cfg.LLM.DefaultProvider, err)
 	}
+	if llmRuntime == nil {
+		return fmt.Errorf("llm runtime is required for serve startup (mode=%q provider=%q)", mainProviderMode, s.cfg.LLM.DefaultProvider)
+	}
+	s.provider = llmRuntime.Provider
+	s.toolProvider = llmRuntime.ToolProvider
+	s.budgetManager = llmRuntime.BudgetManager
+	s.costTracker = llmRuntime.CostTracker
+	s.llmCache = llmRuntime.Cache
+	s.llmMetrics = llmRuntime.Metrics
+	s.costHandler = handlers.NewCostHandler(llmRuntime.CostTracker, s.logger)
 
 	discoveryRegistry, agentRegistry := bootstrap.BuildAgentRegistries(s.logger)
 	s.discoveryRegistry = discoveryRegistry

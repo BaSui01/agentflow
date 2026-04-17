@@ -18,6 +18,7 @@ type EphemeralPromptLayerInput struct {
 	TenantID                 string
 	UserID                   string
 	ChannelID                string
+	TraceSynopsis            string
 	CheckpointID             string
 	AllowedTools             []string
 	ToolsDisabled            bool
@@ -32,8 +33,11 @@ func NewEphemeralPromptLayerBuilder() *EphemeralPromptLayerBuilder {
 }
 
 func (b *EphemeralPromptLayerBuilder) Build(input EphemeralPromptLayerInput) []agentcontext.PromptLayer {
-	layers := make([]agentcontext.PromptLayer, 0, 4)
+	layers := make([]agentcontext.PromptLayer, 0, 5)
 	if layer := buildSessionOverlayLayer(input); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildTraceSynopsisLayer(input.TraceSynopsis); layer != nil {
 		layers = append(layers, *layer)
 	}
 	if layer := buildToolGuidanceLayer(input); layer != nil {
@@ -89,6 +93,24 @@ func buildSessionOverlayLayer(input EphemeralPromptLayerInput) *agentcontext.Pro
 			"layer_kind":     "session_overlay",
 			"checkpoint_id":  checkpointID,
 			"session_fields": sortedKeys(payload),
+		},
+	}
+}
+
+func buildTraceSynopsisLayer(synopsis string) *agentcontext.PromptLayer {
+	synopsis = strings.TrimSpace(synopsis)
+	if synopsis == "" {
+		return nil
+	}
+	return &agentcontext.PromptLayer{
+		ID:       "trace_synopsis",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  "<trace_synopsis>\nRecent completed execution summary for this session: " + synopsis + "\n</trace_synopsis>",
+		Priority: 89,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind": "trace_synopsis",
+			"source":     "explainability",
 		},
 	}
 }

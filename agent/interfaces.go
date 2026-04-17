@@ -94,6 +94,18 @@ type ExplainabilityRecorder interface {
 	EndExplainabilityTrace(traceID string, success bool, output, errorMsg string)
 }
 
+// ExplainabilityTimelineRecorder is an optional extension for recording
+// high-level decision timeline entries alongside low-level reasoning steps.
+type ExplainabilityTimelineRecorder interface {
+	AddExplainabilityTimeline(traceID, entryType, summary string, metadata map[string]any)
+}
+
+// ExplainabilitySynopsisReader is an optional extension for reading the latest
+// completed synopsis for an agent/session so it can be fed back into runtime.
+type ExplainabilitySynopsisReader interface {
+	GetLatestExplainabilitySynopsis(sessionID, agentID, excludeTraceID string) string
+}
+
 // =============================================================================
 // MongoDB Persistence Store Interfaces (required)
 // =============================================================================

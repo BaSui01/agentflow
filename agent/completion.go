@@ -262,6 +262,9 @@ func withApprovalExplainabilityEmitter(ctx context.Context, recorder Explainabil
 			}
 		}
 		recorder.AddExplainabilityStep(traceID, "approval", content, metadata)
+		if timelineRecorder, ok := recorder.(ExplainabilityTimelineRecorder); ok {
+			timelineRecorder.AddExplainabilityTimeline(traceID, "approval", content, metadata)
+		}
 	})
 }
 

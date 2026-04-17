@@ -1,8 +1,10 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
@@ -133,8 +135,42 @@ func OpenDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, er
 		return nil, fmt.Errorf("failed to connect database: %w", err)
 	}
 
-	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to access sql database handle: %w", err)
+	}
+	applyDatabasePoolConfig(sqlDB, dbCfg)
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := sqlDB.PingContext(pingCtx); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	logger.Info("Database connected",
+		zap.String("driver", dbCfg.Driver),
+		zap.Int("max_open_conns", dbCfg.MaxOpenConns),
+		zap.Int("max_idle_conns", dbCfg.MaxIdleConns),
+		zap.Duration("conn_max_lifetime", dbCfg.ConnMaxLifetime),
+	)
 	return db, nil
+}
+
+func applyDatabasePoolConfig(sqlDB interface {
+	SetMaxOpenConns(int)
+	SetMaxIdleConns(int)
+	SetConnMaxLifetime(time.Duration)
+}, dbCfg config.DatabaseConfig) {
+	if dbCfg.MaxOpenConns > 0 {
+		sqlDB.SetMaxOpenConns(dbCfg.MaxOpenConns)
+	}
+	if dbCfg.MaxIdleConns > 0 {
+		sqlDB.SetMaxIdleConns(dbCfg.MaxIdleConns)
+	}
+	if dbCfg.ConnMaxLifetime > 0 {
+		sqlDB.SetConnMaxLifetime(dbCfg.ConnMaxLifetime)
+	}
 }
 
 // InitializeServeRuntime centralizes startup bootstrapping for the serve command:
@@ -154,7 +190,7 @@ func InitializeServeRuntime(configPath string) (*ServeRuntime, error) {
 
 	db, err := OpenDatabase(cfg.Database, logger)
 	if err != nil {
-		logger.Warn("Database not available, API key management disabled", zap.Error(err))
+		return nil, fmt.Errorf("database is required for serve startup: %w", err)
 	}
 
 	return &ServeRuntime{

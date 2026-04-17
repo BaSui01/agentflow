@@ -313,7 +313,7 @@ cfg.Context = &types.ContextConfig{
 
 When `Skills`, enhanced `Memory`, retrieval, or tool-state context are enabled, they are injected as context-runtime-managed segments instead of mutating the original user input.
 
-Request-scoped strategy layers such as `session_overlay`, `tool_guidance`, `verification_gate`, and `context_pressure` are also injected through a shared ephemeral prompt layer builder instead of being merged into the stable system prompt; `tool_guidance` now exposes `safe_read / requires_approval / unknown` risk tiers, and approval semantics flow into both runtime stream events and explainability traces.
+Request-scoped strategy layers such as `session_overlay`, `tool_guidance`, `verification_gate`, and `context_pressure` are also injected through a shared ephemeral prompt layer builder instead of being merged into the stable system prompt; `tool_guidance` now exposes `safe_read / requires_approval / unknown` risk tiers, and approval semantics flow into both runtime stream events and explainability traces, where they are further summarized into a high-level decision timeline (`prompt_layers / approval / validation_gate / completion_decision`) and an automatically generated compressible `trace synopsis`.
 
 You can also toggle it via `runtime.Builder`:
 
@@ -549,6 +549,7 @@ agentflow/
 │   ├── server_services.go    # Lifecycle bus based on pkg/service.Registry
 │   ├── server_http.go        # Route registration and HTTP/Metrics manager wiring
 │   ├── server_handlers_runtime.go # Handler init and provider wiring
+│   ├── server_startup_summary.go # Startup summary and capability/dependency status report
 │   ├── server_stores.go      # Mongo/RAG/Memory/Audit wiring
 │   ├── server_hotreload.go   # Hot-reload manager initialization
 │   └── server_shutdown.go    # Graceful shutdown flow

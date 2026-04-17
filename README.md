@@ -115,8 +115,9 @@
 ## ⚠️ 认证迁移说明（2026-03）
 
 - API Key 仅支持 `X-API-Key` Header，`api_key` Query 参数已禁用且不再受支持。
+- `server.environment=production` 时，`server.allow_no_auth=true` 会在启动校验阶段直接报错并拒绝启动。
 - 当未配置 JWT/API Key 且 `server.allow_no_auth=false` 时，受保护接口会 fail-closed 返回 `503`。
-- 升级建议：生产环境必须显式配置 `server.api_keys` 或 `server.jwt`；仅本地开发可设置 `server.allow_no_auth=true`。
+- 升级建议：生产环境必须显式配置 `server.api_keys` 或 `server.jwt`；仅 `development` / `test` 环境可设置 `server.allow_no_auth=true`。
 
 ## 🚀 快速开始
 
@@ -324,7 +325,7 @@ cfg.Context = &types.ContextConfig{
 
 启用 `Skills` / 增强 `Memory` / retrieval / tool-state 注入时，这些信息会作为 context runtime 管理的独立上下文段进入消息组装，而不是直接改写原始用户输入。
 
-请求级 `session_overlay`、`tool_guidance`、`verification_gate`、`context_pressure` 等临时策略层，也会统一通过 ephemeral prompt layer builder 注入，而不是并入稳定 system prompt；其中 `tool_guidance` 会按 `safe_read / requires_approval / unknown` 风险层输出工具提示，审批语义会同时进入 runtime stream 事件与 explainability trace。
+请求级 `session_overlay`、`tool_guidance`、`verification_gate`、`context_pressure` 等临时策略层，也会统一通过 ephemeral prompt layer builder 注入，而不是并入稳定 system prompt；其中 `tool_guidance` 会按 `safe_read / requires_approval / unknown` 风险层输出工具提示，审批语义会同时进入 runtime stream 事件与 explainability trace，并进一步汇总进高层 decision timeline（如 `prompt_layers / approval / validation_gate / completion_decision`），最终自动生成可压缩的 `trace synopsis`。
 
 也可以通过 `runtime.Builder` 一键开关：
 
@@ -552,6 +553,7 @@ agentflow/
 │   ├── server_services.go    # 基于 pkg/service.Registry 的生命周期总线
 │   ├── server_http.go        # 路由注册与 HTTP/Metrics 管理器构建
 │   ├── server_handlers_runtime.go # handler 初始化与 provider 装配
+│   ├── server_startup_summary.go # 启动摘要与能力/依赖状态汇总
 │   ├── server_stores.go      # Mongo/RAG/Memory/Audit 装配
 │   ├── server_hotreload.go   # 热重载管理器初始化
 │   └── server_shutdown.go    # 优雅关闭流程
