@@ -12,9 +12,6 @@ import (
 type AgentStep struct {
 	id          string
 	AgentID     string
-	AgentModel  string
-	AgentPrompt string
-	AgentTools  []string
 	Agent       core.AgentExecutor
 }
 
@@ -48,15 +45,6 @@ func (s *AgentStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 		if _, exists := data["agent_id"]; !exists {
 			data["agent_id"] = s.AgentID
 		}
-	}
-	if s.AgentModel != "" {
-		data["agent_model"] = s.AgentModel
-	}
-	if s.AgentPrompt != "" {
-		data["agent_prompt"] = s.AgentPrompt
-	}
-	if len(s.AgentTools) > 0 {
-		data["agent_tools"] = s.AgentTools
 	}
 
 	result, err := s.Agent.Execute(ctx, data)

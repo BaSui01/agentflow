@@ -111,3 +111,8 @@ func workflowStreamEmitterFromContext(ctx context.Context) (WorkflowStreamEmitte
 	return emit, ok && emit != nil
 }
 
+// WorkflowStreamEmitterFromContext exposes the workflow stream emitter lookup to
+// subpackages such as workflow/steps without leaking the private context key.
+func WorkflowStreamEmitterFromContext(ctx context.Context) (WorkflowStreamEmitter, bool) {
+	return workflowStreamEmitterFromContext(ctx)
+}

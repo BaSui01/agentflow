@@ -44,16 +44,18 @@ func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engi
 	}
 	requester := deliberation.NewHITLInterruptAdapter(hitlManager)
 	_ = ensureAutoApproveHITL(hitlManager, logger)
+	agentExecutor := resolverAgentExecutor{
+		resolver: opts.AgentResolver,
+	}
 
 	return engine.StepDependencies{
 		Gateway:       newWorkflowGatewayAdapter(opts.LLMGateway, opts.DefaultModel),
 		ToolRegistry:  hostedToolRegistryAdapter{registry: toolRegistry},
 		ChainRegistry: toolRegistry,
 		HumanHandler:  hitlHumanInputHandler{requester: requester},
-		AgentExecutor: resolverAgentExecutor{
-			resolver: opts.AgentResolver,
-		},
-		CodeHandler: hostedCodeHandler{tool: codeTool}.Execute,
+		AgentExecutor: agentExecutor,
+		AgentResolver: agentExecutor,
+		CodeHandler:   hostedCodeHandler{tool: codeTool}.Execute,
 	}
 }
 
@@ -162,6 +164,106 @@ func (g *workflowGatewayAdapter) Invoke(ctx context.Context, req *core.LLMReques
 	return out, nil
 }
 
+func (g *workflowGatewayAdapter) Stream(ctx context.Context, req *core.LLMRequest) (<-chan core.LLMStreamChunk, error) {
+	if g.gateway == nil {
+		return nil, fmt.Errorf("workflow LLM gateway is not configured")
+	}
+
+	model := req.Model
+	if model == "" {
+		model = g.defaultModel
+	}
+
+	streamReq := &llm.ChatRequest{
+		Model: model,
+		Messages: []types.Message{
+			{
+				Role:    types.RoleUser,
+				Content: req.Prompt,
+			},
+		},
+		MaxTokens:   req.MaxTokens,
+		Temperature: float32(req.Temperature),
+		Metadata:    req.Metadata,
+		StreamOptions: &llm.StreamOptions{
+			IncludeUsage:      true,
+			ChunkIncludeUsage: true,
+		},
+	}
+
+	source, err := g.gateway.Stream(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  model,
+		Payload:    streamReq,
+		Metadata:   req.Metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(chan core.LLMStreamChunk)
+	go func() {
+		defer close(out)
+
+		var finalUsage *core.LLMUsage
+		finalModel := model
+
+		for chunk := range source {
+			if chunk.Err != nil {
+				out <- core.LLMStreamChunk{Err: chunk.Err}
+				continue
+			}
+			if chunk.Usage != nil {
+				usage := &core.LLMUsage{
+					PromptTokens:     chunk.Usage.PromptTokens,
+					CompletionTokens: chunk.Usage.CompletionTokens,
+					TotalTokens:      chunk.Usage.TotalTokens,
+				}
+				finalUsage = usage
+			}
+
+			streamChunk := core.LLMStreamChunk{
+				Model: finalModel,
+				Usage: finalUsage,
+				Done:  chunk.Done,
+			}
+
+			if typed, ok := chunk.Output.(*llm.StreamChunk); ok && typed != nil {
+				streamChunk.Delta = typed.Delta.Content
+				streamChunk.ReasoningContent = typed.Delta.ReasoningContent
+				if typed.Model != "" {
+					streamChunk.Model = typed.Model
+					finalModel = typed.Model
+				}
+				if typed.Usage != nil {
+					usage := &core.LLMUsage{
+						PromptTokens:     typed.Usage.PromptTokens,
+						CompletionTokens: typed.Usage.CompletionTokens,
+						TotalTokens:      typed.Usage.TotalTokens,
+					}
+					streamChunk.Usage = usage
+					finalUsage = usage
+				}
+				if typed.Err != nil {
+					streamChunk.Err = typed.Err
+				}
+			}
+
+			out <- streamChunk
+		}
+
+		if finalUsage != nil {
+			out <- core.LLMStreamChunk{
+				Model: finalModel,
+				Usage: finalUsage,
+				Done:  true,
+			}
+		}
+	}()
+
+	return out, nil
+}
+
 type hostedToolRegistryAdapter struct {
 	registry *hosted.ToolRegistry
 }
@@ -237,6 +339,16 @@ type resolverAgentExecutor struct {
 	resolver WorkflowAgentResolver
 }
 
+func (e resolverAgentExecutor) ResolveAgent(ctx context.Context, agentID string) (agent.Agent, error) {
+	if e.resolver == nil {
+		return nil, fmt.Errorf("workflow agent resolver is not configured")
+	}
+	if agentID == "" {
+		return nil, fmt.Errorf("workflow agent resolver requires agent id")
+	}
+	return e.resolver(ctx, agentID)
+}
+
 func (e resolverAgentExecutor) Execute(ctx context.Context, input map[string]any) (*core.AgentExecutionOutput, error) {
 	if e.resolver == nil {
 		return nil, fmt.Errorf("workflow agent resolver is not configured")
@@ -248,7 +360,7 @@ func (e resolverAgentExecutor) Execute(ctx context.Context, input map[string]any
 	}
 	content, _ := input["content"].(string)
 
-	ag, err := e.resolver(ctx, agentID)
+	ag, err := e.ResolveAgent(ctx, agentID)
 	if err != nil {
 		return nil, err
 	}

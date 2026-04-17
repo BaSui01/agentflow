@@ -58,8 +58,8 @@ type ToolDef struct {
 // StepDef 步骤定义
 type StepDef struct {
 	Type          string                 `yaml:"type" json:"type"` // llm, tool, human_input, code, passthrough, orchestration, agent
-	Agent         string                 `yaml:"agent,omitempty" json:"agent,omitempty"`
-	InlineAgent   *AgentDef              `yaml:"inline_agent,omitempty" json:"inline_agent,omitempty"`
+	Agent         string                 `yaml:"agent,omitempty" json:"agent,omitempty"` // Agent ID reference for agent steps.
+	InlineAgent   *AgentDef              `yaml:"inline_agent,omitempty" json:"inline_agent,omitempty"` // Legacy reject-only field. Presence is invalid and must be rejected during validation; agent steps only support `agent`.
 	Tool          string                 `yaml:"tool,omitempty" json:"tool,omitempty"`
 	Prompt        string                 `yaml:"prompt,omitempty" json:"prompt,omitempty"`
 	Config        map[string]any         `yaml:"config,omitempty" json:"config,omitempty"`
@@ -127,4 +127,3 @@ type ErrorDef struct {
 	RetryDelayMs  int         `yaml:"retry_delay_ms,omitempty" json:"retry_delay_ms,omitempty"`
 	FallbackValue any `yaml:"fallback_value,omitempty" json:"fallback_value,omitempty"`
 }
-

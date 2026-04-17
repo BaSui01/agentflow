@@ -3,9 +3,11 @@ package steps
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/types"
+	workflowpkg "github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
 )
 
@@ -40,23 +42,12 @@ func (s *LLMStep) Execute(ctx context.Context, input core.StepInput) (core.StepO
 	}
 
 	start := time.Now()
+	req := s.buildRequest(input)
 
-	// 构建 prompt：合并配置 prompt 与输入数据
-	prompt := s.Prompt
-	if content, ok := input.Data["content"].(string); ok && content != "" {
-		if prompt != "" {
-			prompt = prompt + "\n\n" + content
-		} else {
-			prompt = content
+	if _, ok := workflowpkg.WorkflowStreamEmitterFromContext(ctx); ok {
+		if output, err := s.executeStreaming(ctx, req, start); err == nil {
+			return output, nil
 		}
-	}
-
-	req := &core.LLMRequest{
-		Model:       s.Model,
-		Prompt:      prompt,
-		Temperature: s.Temperature,
-		MaxTokens:   s.MaxTokens,
-		Metadata:    input.Metadata,
 	}
 
 	resp, err := s.Gateway.Invoke(ctx, req)
@@ -77,5 +68,91 @@ func (s *LLMStep) Execute(ctx context.Context, input core.StepInput) (core.StepO
 		}
 	}
 
+	return output, nil
+}
+
+func (s *LLMStep) buildRequest(input core.StepInput) *core.LLMRequest {
+	prompt := s.Prompt
+	if content, ok := input.Data["content"].(string); ok && content != "" {
+		if prompt != "" {
+			prompt = prompt + "\n\n" + content
+		} else {
+			prompt = content
+		}
+	}
+
+	return &core.LLMRequest{
+		Model:       s.Model,
+		Prompt:      prompt,
+		Temperature: s.Temperature,
+		MaxTokens:   s.MaxTokens,
+		Metadata:    input.Metadata,
+	}
+}
+
+func (s *LLMStep) executeStreaming(ctx context.Context, req *core.LLMRequest, start time.Time) (core.StepOutput, error) {
+	stream, err := s.Gateway.Stream(ctx, req)
+	if err != nil {
+		return core.StepOutput{}, err
+	}
+
+	emitter, _ := workflowpkg.WorkflowStreamEmitterFromContext(ctx)
+	var (
+		contentBuilder   strings.Builder
+		reasoningBuilder strings.Builder
+		model            = req.Model
+		usage            *core.LLMUsage
+	)
+
+	for chunk := range stream {
+		if chunk.Err != nil {
+			return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeLLM, fmt.Errorf("%w: %w", core.ErrStepExecution, chunk.Err))
+		}
+		if chunk.Model != "" {
+			model = chunk.Model
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
+		if chunk.Delta != "" {
+			contentBuilder.WriteString(chunk.Delta)
+		}
+		if chunk.ReasoningContent != nil && *chunk.ReasoningContent != "" {
+			reasoningBuilder.WriteString(*chunk.ReasoningContent)
+		}
+		if emitter != nil && (chunk.Delta != "" || (chunk.ReasoningContent != nil && *chunk.ReasoningContent != "")) {
+			payload := map[string]any{
+				"delta": chunk.Delta,
+				"model": model,
+			}
+			if chunk.ReasoningContent != nil && *chunk.ReasoningContent != "" {
+				payload["reasoning_content"] = *chunk.ReasoningContent
+			}
+			emitter(workflowpkg.WorkflowStreamEvent{
+				Type:     workflowpkg.WorkflowEventToken,
+				NodeID:   s.id,
+				NodeName: s.id,
+				Data:     payload,
+			})
+		}
+	}
+
+	output := core.StepOutput{
+		Data: map[string]any{
+			"content": contentBuilder.String(),
+			"model":   model,
+		},
+		Latency: time.Since(start),
+	}
+	if reasoning := reasoningBuilder.String(); reasoning != "" {
+		output.Data["reasoning_content"] = reasoning
+	}
+	if usage != nil {
+		output.Usage = &types.TokenUsage{
+			PromptTokens:     usage.PromptTokens,
+			CompletionTokens: usage.CompletionTokens,
+			TotalTokens:      usage.TotalTokens,
+		}
+	}
 	return output, nil
 }

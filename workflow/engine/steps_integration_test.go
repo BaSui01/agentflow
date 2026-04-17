@@ -27,6 +27,22 @@ func (g *testGateway) Invoke(ctx context.Context, req *core.LLMRequest) (*core.L
 	}, nil
 }
 
+func (g *testGateway) Stream(ctx context.Context, req *core.LLMRequest) (<-chan core.LLMStreamChunk, error) {
+	ch := make(chan core.LLMStreamChunk, 1)
+	ch <- core.LLMStreamChunk{
+		Delta: "ok:" + req.Prompt,
+		Model: req.Model,
+		Usage: &core.LLMUsage{
+			PromptTokens:     1,
+			CompletionTokens: 1,
+			TotalTokens:      2,
+		},
+		Done: true,
+	}
+	close(ch)
+	return ch, nil
+}
+
 type testToolRegistry struct{}
 
 func (r *testToolRegistry) ExecuteTool(ctx context.Context, name string, params map[string]any) (any, error) {

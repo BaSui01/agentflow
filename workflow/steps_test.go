@@ -33,6 +33,35 @@ func (m *mockGateway) Invoke(ctx context.Context, req *core.LLMRequest) (*core.L
 	return m.response, nil
 }
 
+func (m *mockGateway) Stream(ctx context.Context, req *core.LLMRequest) (<-chan core.LLMStreamChunk, error) {
+	ch := make(chan core.LLMStreamChunk, 1)
+	if m.err != nil {
+		ch <- core.LLMStreamChunk{Err: m.err}
+		close(ch)
+		return ch, nil
+	}
+	content := ""
+	model := req.Model
+	if m.response != nil {
+		content = m.response.Content
+		if m.response.Model != "" {
+			model = m.response.Model
+		}
+	}
+	ch <- core.LLMStreamChunk{
+		Delta: content,
+		Model: model,
+		Usage: &core.LLMUsage{
+			PromptTokens:     1,
+			CompletionTokens: 1,
+			TotalTokens:      2,
+		},
+		Done: true,
+	}
+	close(ch)
+	return ch, nil
+}
+
 // mockTool implements Tool for testing.
 type mockTool struct {
 	name   string
@@ -507,5 +536,3 @@ func TestCodeStep_Execute_NilHandler(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "step dependency not configured")
 }
-
-

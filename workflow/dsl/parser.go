@@ -351,17 +351,13 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		return p.newEngineBackedStep(spec, "code")
 
 	case string(core.StepTypeAgent):
+		if stepDef.InlineAgent != nil {
+			return nil, fmt.Errorf("agent step does not support inline_agent")
+		}
 		spec := engine.StepSpec{
 			ID:      def.ID,
 			Type:    core.StepTypeAgent,
 			AgentID: stepDef.Agent,
-		}
-		if stepDef.InlineAgent != nil {
-			spec.AgentModel = stepDef.InlineAgent.Model
-			spec.AgentPrompt = stepDef.InlineAgent.SystemPrompt
-			if len(stepDef.InlineAgent.Tools) > 0 {
-				spec.AgentTools = append([]string(nil), stepDef.InlineAgent.Tools...)
-			}
 		}
 		return p.newEngineBackedStep(spec, "agent")
 
@@ -557,6 +553,10 @@ type protocolStepAdapter struct {
 type noopGateway struct{}
 
 func (noopGateway) Invoke(ctx context.Context, req *core.LLMRequest) (*core.LLMResponse, error) {
+	return nil, fmt.Errorf("step dependency not configured")
+}
+
+func (noopGateway) Stream(ctx context.Context, req *core.LLMRequest) (<-chan core.LLMStreamChunk, error) {
 	return nil, fmt.Errorf("step dependency not configured")
 }
 

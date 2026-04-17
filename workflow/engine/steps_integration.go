@@ -45,10 +45,7 @@ type StepSpec struct {
 	Dependencies []string
 	Input        core.StepInput
 
-	AgentID     string
-	AgentModel  string
-	AgentPrompt string
-	AgentTools  []string
+	AgentID string
 
 	OrchestrationMode      string
 	OrchestrationAgents    []string
@@ -116,9 +113,6 @@ func buildStep(spec StepSpec, deps StepDependencies) (core.StepProtocol, error) 
 	case core.StepTypeAgent:
 		step := workflowsteps.NewAgentStep(spec.ID, deps.AgentExecutor)
 		step.AgentID = spec.AgentID
-		step.AgentModel = spec.AgentModel
-		step.AgentPrompt = spec.AgentPrompt
-		step.AgentTools = append([]string(nil), spec.AgentTools...)
 		return step, step.Validate()
 	case core.StepTypeHybridRetrieve:
 		step := workflowsteps.NewHybridRetrieveStep(spec.ID, deps.HybridRetriever)

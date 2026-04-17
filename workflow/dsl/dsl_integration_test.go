@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/workflow"
+	"github.com/BaSui01/agentflow/workflow/steps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -185,9 +186,17 @@ workflow:
 	wf, err := p.Parse([]byte(yamlData))
 	require.NoError(t, err)
 	assert.NotNil(t, wf)
+
+	node, ok := wf.Graph().GetNode("a")
+	require.True(t, ok)
+	adapter, ok := node.Step.(*protocolStepAdapter)
+	require.True(t, ok)
+	step, ok := adapter.step.(*steps.AgentStep)
+	require.True(t, ok)
+	assert.Equal(t, "helper", step.AgentID)
 }
 
-func TestParse_AgentStepType_InlineAgent(t *testing.T) {
+func TestParse_AgentStepType_RejectsInlineAgent(t *testing.T) {
 	yamlData := `
 version: "1.0"
 name: "inline-agent-test"
@@ -206,8 +215,9 @@ workflow:
 `
 	p := NewParser()
 	wf, err := p.Parse([]byte(yamlData))
-	require.NoError(t, err)
-	assert.NotNil(t, wf)
+	require.Error(t, err)
+	assert.Nil(t, wf)
+	assert.Contains(t, err.Error(), "agent step does not support inline_agent")
 }
 
 func TestParse_CodeStepType(t *testing.T) {

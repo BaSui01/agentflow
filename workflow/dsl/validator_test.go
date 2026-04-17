@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/workflow"
+	"github.com/BaSui01/agentflow/workflow/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -180,6 +181,34 @@ func TestValidator_StepTypeAndRequiredFields(t *testing.T) {
 	assert.Contains(t, errMsgs, "step llm_no_p: llm step requires prompt")
 	assert.Contains(t, errMsgs, "step tool_no_t: tool step requires tool")
 	assert.Contains(t, errMsgs, "step human_no_p: human_input step requires prompt")
+}
+
+func TestValidator_AgentStepRejectsInlineAgent(t *testing.T) {
+	v := NewValidator()
+	dsl := &WorkflowDSL{
+		Version: "1.0",
+		Name:    "inline-agent-test",
+		Workflow: WorkflowNodesDef{
+			Entry: "start",
+			Nodes: []NodeDef{
+				{
+					ID:   "start",
+					Type: "action",
+					StepDef: &StepDef{
+						Type: string(core.StepTypeAgent),
+						InlineAgent: &AgentDef{
+							Model:        "gpt-4",
+							SystemPrompt: "inline helper",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	errs := v.Validate(dsl)
+	errMsgs := errStrings(errs)
+	assert.Contains(t, errMsgs, "step node start inline step_def: agent step does not support inline_agent; use agent")
 }
 
 func TestValidator_ConditionNode_NoCondition(t *testing.T) {

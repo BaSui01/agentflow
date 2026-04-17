@@ -216,6 +216,10 @@ func (v *Validator) validateStepDefinition(stepName string, step StepDef) []erro
 		if strings.TrimSpace(step.Prompt) == "" {
 			errs = append(errs, fmt.Errorf("step %s: human_input step requires prompt", stepName))
 		}
+	case string(core.StepTypeAgent):
+		if step.InlineAgent != nil {
+			errs = append(errs, fmt.Errorf("step %s: agent step does not support inline_agent; use agent", stepName))
+		}
 	case string(core.StepTypeOrchestration):
 		if step.Orchestration == nil {
 			errs = append(errs, fmt.Errorf("step %s: orchestration step requires orchestration definition", stepName))

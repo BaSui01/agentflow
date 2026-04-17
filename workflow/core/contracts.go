@@ -9,6 +9,7 @@ import (
 // workflow 层通过此接口调用 LLM，不直接依赖 llm.Provider。
 type GatewayLike interface {
 	Invoke(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
+	Stream(ctx context.Context, req *LLMRequest) (<-chan LLMStreamChunk, error)
 }
 
 // LLMRequest 是 workflow 层面的 LLM 请求。
@@ -25,6 +26,16 @@ type LLMResponse struct {
 	Content string
 	Model   string
 	Usage   *LLMUsage
+}
+
+// LLMStreamChunk 是 workflow 层面的流式 LLM 响应块。
+type LLMStreamChunk struct {
+	Delta            string
+	ReasoningContent *string
+	Model            string
+	Usage            *LLMUsage
+	Done             bool
+	Err              error
 }
 
 // LLMUsage 记录 token 用量。

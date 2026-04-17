@@ -27,6 +27,17 @@ func (g stubGateway) Invoke(_ context.Context, req *core.LLMRequest) (*core.LLMR
 	}, nil
 }
 
+func (g stubGateway) Stream(_ context.Context, req *core.LLMRequest) (<-chan core.LLMStreamChunk, error) {
+	model := g.model
+	if model == "" {
+		model = req.Model
+	}
+	ch := make(chan core.LLMStreamChunk, 1)
+	ch <- core.LLMStreamChunk{Delta: g.content, Model: model, Done: true}
+	close(ch)
+	return ch, nil
+}
+
 func TestBuilderBuild_DefaultRuntimeIncludesFacadeAndParser(t *testing.T) {
 	rt := NewBuilder(nil, zap.NewNop()).Build()
 	require.NotNil(t, rt)
