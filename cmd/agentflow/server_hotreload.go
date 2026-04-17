@@ -91,8 +91,12 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	s.costHandler = reloadedBindings.CostHandler
 
 	if s.agentRegistry != nil {
-		if provider != nil {
-			bootstrap.RegisterDefaultRuntimeAgentFactory(s.agentRegistry, provider, toolProvider, s.checkpointManager, ledger, s.logger)
+		if gateway != nil {
+			var toolGateway llmcore.Gateway
+			if llmRuntime != nil {
+				toolGateway = llmRuntime.ToolGateway
+			}
+			bootstrap.RegisterDefaultRuntimeAgentFactory(s.agentRegistry, gateway, toolGateway, s.checkpointManager, ledger, s.logger)
 		} else {
 			s.agentRegistry.Unregister(agent.TypeGeneric)
 		}

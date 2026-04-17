@@ -8,6 +8,8 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
@@ -31,6 +33,8 @@ type Runtime struct {
 	Provider llm.Provider
 	// ToolProvider is an optional dedicated provider for tool calls.
 	ToolProvider llm.Provider
+	Gateway      llmcore.Gateway
+	ToolGateway  llmcore.Gateway
 
 	agentBuilder *runtime.Builder
 
@@ -98,14 +102,16 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 	}
 	rt.Provider = mainProvider
 	rt.ToolProvider = toolProvider
+	rt.Gateway = gatewayFromProvider(mainProvider, ledger, logger)
+	rt.ToolGateway = gatewayFromProvider(toolProvider, ledger, logger)
 
 	// ------------------------
 	// Agent runtime assembly
 	// ------------------------
 	agentOpts := b.opts.Agent
 	if agentOpts != nil {
-		if rt.Provider == nil {
-			return nil, fmt.Errorf("sdk agent runtime requires Options.LLM provider")
+		if rt.Gateway == nil {
+			return nil, fmt.Errorf("sdk agent runtime requires Options.LLM gateway")
 		}
 		buildOpts := agentOpts.BuildOptions
 		if isZeroAgentBuildOptions(buildOpts) {
@@ -146,9 +152,9 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 			}
 		}
 
-		ab := runtime.NewBuilder(rt.Provider, logger).WithOptions(buildOpts)
-		if rt.ToolProvider != nil {
-			ab = ab.WithToolProvider(rt.ToolProvider)
+		ab := runtime.NewBuilder(rt.Gateway, logger).WithOptions(buildOpts)
+		if rt.ToolGateway != nil && rt.ToolGateway != rt.Gateway {
+			ab = ab.WithToolGateway(rt.ToolGateway)
 		}
 		if ledger != nil {
 			ab = ab.WithLedger(ledger)
@@ -257,6 +263,26 @@ func isZeroAgentBuildOptions(o runtime.BuildOptions) bool {
 	// Treat the struct zero value as "not set".
 	// DefaultBuildOptions() sets EnableAll=true etc.
 	return o == (runtime.BuildOptions{})
+}
+
+type gatewayBackedProvider interface {
+	Gateway() llmcore.Gateway
+}
+
+func gatewayFromProvider(provider llm.Provider, ledger llmobs.Ledger, logger *zap.Logger) llmcore.Gateway {
+	if provider == nil {
+		return nil
+	}
+	if adapter, ok := provider.(gatewayBackedProvider); ok {
+		if gateway := adapter.Gateway(); gateway != nil {
+			return gateway
+		}
+	}
+	return llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Ledger:       ledger,
+		Logger:       logger,
+	})
 }
 
 func buildSDKProviders(ctx context.Context, opts Options, logger *zap.Logger) (llm.Provider, llm.Provider, llmobs.Ledger, error) {

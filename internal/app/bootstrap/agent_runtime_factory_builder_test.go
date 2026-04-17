@@ -8,6 +8,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -15,12 +16,20 @@ import (
 	"go.uber.org/zap"
 )
 
+func testBootstrapGateway(provider llm.Provider) *llmgateway.Service {
+	return llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       zap.NewNop(),
+	})
+}
+
 func TestRegisterDefaultRuntimeAgentFactory_InjectsRuntimeDefaults(t *testing.T) {
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := mocks.NewSuccessProvider("hello")
 	checkpointManager := &agent.CheckpointManager{}
 
-	RegisterDefaultRuntimeAgentFactory(registry, provider, nil, checkpointManager, nil, zap.NewNop())
+	gateway := testBootstrapGateway(provider)
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, checkpointManager, nil, zap.NewNop())
 
 	created, err := registry.Create(types.AgentConfig{
 		Core: types.CoreConfig{
@@ -29,7 +38,7 @@ func TestRegisterDefaultRuntimeAgentFactory_InjectsRuntimeDefaults(t *testing.T)
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{Model: "gpt-4"},
-	}, provider, nil, nil, nil, zap.NewNop())
+	}, gateway, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*agent.BaseAgent)
@@ -51,7 +60,8 @@ func TestRegisterDefaultRuntimeAgentFactory_InjectsRuntimeDefaults(t *testing.T)
 func TestRegisterDefaultRuntimeAgentFactory_PreservesEventBusPassThrough(t *testing.T) {
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := mocks.NewSuccessProvider("hello")
-	RegisterDefaultRuntimeAgentFactory(registry, provider, nil, nil, nil, zap.NewNop())
+	gateway := testBootstrapGateway(provider)
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, zap.NewNop())
 
 	bus := &testEventBus{}
 	created, err := registry.Create(types.AgentConfig{
@@ -61,7 +71,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesEventBusPassThrough(t *test
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{Model: "gpt-4"},
-	}, provider, nil, nil, bus, zap.NewNop())
+	}, gateway, nil, nil, bus, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*agent.BaseAgent)
@@ -75,7 +85,8 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesEventBusPassThrough(t *test
 func TestRegisterDefaultRuntimeAgentFactory_PreservesConfiguredLoopBudget(t *testing.T) {
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := mocks.NewSuccessProvider("hello")
-	RegisterDefaultRuntimeAgentFactory(registry, provider, nil, nil, nil, zap.NewNop())
+	gateway := testBootstrapGateway(provider)
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, zap.NewNop())
 
 	created, err := registry.Create(types.AgentConfig{
 		Core: types.CoreConfig{
@@ -87,7 +98,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesConfiguredLoopBudget(t *tes
 		Runtime: types.RuntimeConfig{
 			MaxLoopIterations: 7,
 		},
-	}, provider, nil, nil, nil, zap.NewNop())
+	}, gateway, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*agent.BaseAgent)
@@ -98,7 +109,8 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesConfiguredLoopBudget(t *tes
 func TestRegisterDefaultRuntimeAgentFactory_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := &captureBootstrapProvider{content: "hello"}
-	RegisterDefaultRuntimeAgentFactory(registry, provider, nil, nil, nil, zap.NewNop())
+	gateway := testBootstrapGateway(provider)
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, zap.NewNop())
 
 	created, err := registry.Create(types.AgentConfig{
 		Core: types.CoreConfig{
@@ -107,7 +119,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PropagatesTaskLoopBudgetRunConfig(t 
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{Model: "gpt-4"},
-	}, provider, nil, nil, nil, zap.NewNop())
+	}, gateway, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*agent.BaseAgent)

@@ -21,6 +21,7 @@ import (
 // provider chain.
 type Runtime struct {
 	Gateway       llmcore.Gateway
+	ToolGateway   llmcore.Gateway
 	Provider      llm.Provider
 	ToolProvider  llm.Provider
 	BudgetManager *llmpolicy.TokenBudgetManager
@@ -176,8 +177,9 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 	providerAdapter := llmgateway.NewChatProviderAdapter(gateway, provider)
 	toolProvider := buildToolProviderOrFallback(cfg, logger, provider)
 	toolProviderAdapter := providerAdapter
+	toolGateway := gateway
 	if toolProvider != nil && toolProvider != provider {
-		toolGateway := llmgateway.New(llmgateway.Config{
+		toolGateway = llmgateway.New(llmgateway.Config{
 			ChatProvider:  toolProvider,
 			Ledger:        ledger,
 			PolicyManager: policyManager,
@@ -188,6 +190,7 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 
 	return &Runtime{
 		Gateway:       gateway,
+		ToolGateway:   toolGateway,
 		Provider:      providerAdapter,
 		ToolProvider:  toolProviderAdapter,
 		BudgetManager: budgetManager,

@@ -132,6 +132,14 @@ func New(cfg Config) *Service {
 	}
 }
 
+// ChatProvider exposes the underlying chat provider used by this gateway.
+func (s *Service) ChatProvider() llm.Provider {
+	if s == nil {
+		return nil
+	}
+	return s.chatProvider
+}
+
 // Invoke 执行统一同步调用。
 func (s *Service) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
 	if err := validateRequest(req); err != nil {

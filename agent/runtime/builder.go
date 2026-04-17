@@ -13,8 +13,8 @@ import (
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -93,12 +93,12 @@ func enabled(all bool, v bool) bool { return all || v }
 
 // Builder 是 agent/runtime 的唯一构建入口。
 type Builder struct {
-	provider     llm.Provider
-	toolProvider llm.Provider
-	ledger       llmobs.Ledger
-	logger       *zap.Logger
-	options      BuildOptions
-	toolScope    []string // tool whitelist for sub-agent isolation (empty = all tools)
+	gateway     llmcore.Gateway
+	toolGateway llmcore.Gateway
+	ledger      llmobs.Ledger
+	logger      *zap.Logger
+	options     BuildOptions
+	toolScope   []string // tool whitelist for sub-agent isolation (empty = all tools)
 }
 
 var defaultRuntimeReasoningModes = []string{
@@ -110,14 +110,14 @@ var defaultRuntimeReasoningModes = []string{
 }
 
 // NewBuilder 创建 runtime builder。logger 为必选参数，nil 时 panic。
-func NewBuilder(provider llm.Provider, logger *zap.Logger) *Builder {
+func NewBuilder(gateway llmcore.Gateway, logger *zap.Logger) *Builder {
 	if logger == nil {
 		panic("runtime.Builder: logger is required and cannot be nil")
 	}
 	return &Builder{
-		provider: provider,
-		logger:   logger,
-		options:  BuildOptions{},
+		gateway: gateway,
+		logger:  logger,
+		options: BuildOptions{},
 	}
 }
 
@@ -127,10 +127,10 @@ func (b *Builder) WithOptions(opts BuildOptions) *Builder {
 	return b
 }
 
-// WithToolProvider 设置工具调用专用 Provider（双模型模式）。
-// 未设置时，工具调用退化使用主 provider。
-func (b *Builder) WithToolProvider(provider llm.Provider) *Builder {
-	b.toolProvider = provider
+// WithToolGateway 设置工具调用专用 Gateway（双模型模式）。
+// 未设置时，工具调用退化使用主 gateway。
+func (b *Builder) WithToolGateway(gateway llmcore.Gateway) *Builder {
+	b.toolGateway = gateway
 	return b
 }
 
@@ -148,36 +148,13 @@ func (b *Builder) WithToolScope(toolNames []string) *Builder {
 	return b
 }
 
-type gatewayBackedProvider interface {
-	Gateway() llmcore.Gateway
-	FallbackProvider() llm.Provider
-}
-
-func unwrapGatewayBackedProvider(provider llm.Provider) (llm.Provider, llmcore.Gateway) {
-	if provider == nil {
-		return nil, nil
-	}
-	adapter, ok := provider.(gatewayBackedProvider)
-	if !ok {
-		return provider, nil
-	}
-	gateway := adapter.Gateway()
-	if gateway == nil {
-		return provider, nil
-	}
-	if fallback := adapter.FallbackProvider(); fallback != nil {
-		return fallback, gateway
-	}
-	return provider, gateway
-}
-
 // Build 构造一个 BaseAgent 并按选项接线可选子系统。
 func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error) {
 	opts := b.options
 	if b.logger == nil {
 		panic("runtime.Builder.Build: logger is required and cannot be nil")
 	}
-	if b.provider == nil {
+	if b.gateway == nil {
 		return nil, agent.ErrProviderNotSet
 	}
 	if strings.TrimSpace(cfg.LLM.Model) == "" {
@@ -201,26 +178,18 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
 
-	mainProvider, mainGateway := unwrapGatewayBackedProvider(b.provider)
-	toolProvider, toolGateway := unwrapGatewayBackedProvider(b.toolProvider)
-
 	ag := agent.NewBaseAgent(
 		cfg2,
-		mainProvider,
+		llmgateway.NewChatProviderAdapter(b.gateway, nil),
 		opts.MemoryManager,
 		opts.ToolManager,
 		opts.EventBus,
 		b.logger,
 		b.ledger,
 	)
-	if mainGateway != nil {
-		ag.SetGateway(mainGateway)
-	}
-	if b.toolProvider != nil {
-		ag.SetToolProvider(toolProvider)
-		if toolGateway != nil {
-			ag.SetToolGateway(toolGateway)
-		}
+	ag.SetGateway(b.gateway)
+	if b.toolGateway != nil {
+		ag.SetToolGateway(b.toolGateway)
 	}
 	if opts.MaxConcurrency > 0 {
 		ag.SetMaxConcurrency(opts.MaxConcurrency)

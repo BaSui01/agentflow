@@ -9,6 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
@@ -16,6 +17,24 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+func testGateway(provider llm.Provider) llmcore.Gateway {
+	if provider == nil {
+		return nil
+	}
+	return llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: zap.NewNop()})
+}
+
+func testGatewayProvider(gateway llmcore.Gateway) llm.Provider {
+	type providerBackedGateway interface {
+		ChatProvider() llm.Provider
+	}
+	backed, ok := gateway.(providerBackedGateway)
+	if !ok {
+		return nil
+	}
+	return backed.ChatProvider()
+}
 
 func TestDefaultBuildOptions(t *testing.T) {
 	opts := DefaultBuildOptions()
@@ -94,7 +113,7 @@ func TestBuilder_Build_AllDisabled(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	opts := BuildOptions{} // all disabled
 
-	ag, err := NewBuilder(provider, zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 }
@@ -127,7 +146,7 @@ func TestBuilder_Build_WithSubsystems(t *testing.T) {
 		LSPServerVersion:     "0.1.0",
 	}
 
-	ag, err := NewBuilder(provider, zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 }
@@ -148,12 +167,12 @@ func TestBuilder_Build_EnableAll(t *testing.T) {
 	opts.InitAgent = false
 	opts.SkillsDirectory = t.TempDir()
 
-	ag, err := NewBuilder(provider, zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 }
 
-func TestBuilder_Build_WithToolProvider(t *testing.T) {
+func TestBuilder_Build_WithToolGateway(t *testing.T) {
 	cfg := types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "test-agent",
@@ -167,14 +186,14 @@ func TestBuilder_Build_WithToolProvider(t *testing.T) {
 	mainProvider := mocks.NewSuccessProvider("main")
 	toolProvider := mocks.NewSuccessProvider("tool")
 
-	ag, err := NewBuilder(mainProvider, zap.NewNop()).
-		WithToolProvider(toolProvider).
+	ag, err := NewBuilder(testGateway(mainProvider), zap.NewNop()).
+		WithToolGateway(testGateway(toolProvider)).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
-	assert.Equal(t, mainProvider, ag.Provider())
-	assert.Equal(t, toolProvider, ag.ToolProvider())
+	assert.Same(t, mainProvider, testGatewayProvider(ag.MainGateway()))
+	assert.Same(t, toolProvider, testGatewayProvider(ag.ToolGateway()))
 }
 
 func TestBuilder_Build_UnwrapsGatewayBackedProviders(t *testing.T) {
@@ -199,14 +218,12 @@ func TestBuilder_Build_UnwrapsGatewayBackedProviders(t *testing.T) {
 		Logger:       zap.NewNop(),
 	})
 
-	ag, err := NewBuilder(llmgateway.NewChatProviderAdapter(mainGateway, mainFallback), zap.NewNop()).
-		WithToolProvider(llmgateway.NewChatProviderAdapter(toolGateway, toolFallback)).
+	ag, err := NewBuilder(mainGateway, zap.NewNop()).
+		WithToolGateway(toolGateway).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
-	assert.Same(t, mainFallback, ag.Provider())
-	assert.Same(t, toolFallback, ag.ToolProvider())
 	assert.Same(t, mainGateway, ag.MainGateway())
 	assert.Same(t, toolGateway, ag.ToolGateway())
 }
@@ -224,7 +241,7 @@ func TestBuilder_Build_PassesThroughMaxLoopIterations(t *testing.T) {
 	}
 	provider := mocks.NewSuccessProvider("hello")
 
-	ag, err := NewBuilder(provider, zap.NewNop()).
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{MaxLoopIterations: 6}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -246,7 +263,7 @@ func TestBuilder_Build_WithToolScope(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	toolScope := []string{"search", "calculator"}
 
-	ag, err := NewBuilder(provider, zap.NewNop()).
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithToolScope(toolScope).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
@@ -268,7 +285,7 @@ func TestBuilder_Build_InjectsDefaultReasoningRegistryWhenUnset(t *testing.T) {
 	}
 	provider := mocks.NewSuccessProvider("hello")
 
-	ag, err := NewBuilder(provider, zap.NewNop()).
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -292,14 +309,14 @@ func TestBuilder_Build_MatchesRegistryUnifiedCoreForBuiltinFactory(t *testing.T)
 	logger := zap.NewNop()
 	registry := agent.NewAgentRegistry(logger)
 
-	created, err := registry.Create(cfg, provider, nil, nil, nil, logger)
+	created, err := registry.Create(cfg, testGateway(provider), nil, nil, nil, logger)
 	require.NoError(t, err)
 
 	registryAgent, ok := created.(*agent.BaseAgent)
 	require.True(t, ok)
 	require.NotNil(t, registryAgent.ReasoningRegistry())
 
-	runtimeAgent, err := NewBuilder(provider, logger).
+	runtimeAgent, err := NewBuilder(testGateway(provider), logger).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), registryAgent.Config())
 	require.NoError(t, err)
@@ -313,8 +330,8 @@ func TestBuilder_Build_MatchesRegistryUnifiedCoreForBuiltinFactory(t *testing.T)
 	assert.Equal(t, registryAgent.Config().Runtime.SystemPrompt, runtimeAgent.Config().Runtime.SystemPrompt)
 	assert.Equal(t, registryAgent.Config().Metadata["skill_categories"], runtimeAgent.Config().Metadata["skill_categories"])
 	assert.Equal(t, registryCfg.IsObservabilityEnabled(), runtimeCfg.IsObservabilityEnabled())
-	assert.True(t, registryAgent.Provider() == runtimeAgent.Provider())
-	assert.True(t, registryAgent.ToolProvider() == runtimeAgent.ToolProvider())
+	assert.Equal(t, testGatewayProvider(registryAgent.MainGateway()), testGatewayProvider(runtimeAgent.MainGateway()))
+	assert.Equal(t, testGatewayProvider(registryAgent.ToolGateway()), testGatewayProvider(runtimeAgent.ToolGateway()))
 	assert.Equal(t, registryAgent.ReasoningRegistry().List(), runtimeAgent.ReasoningRegistry().List())
 }
 
@@ -332,7 +349,7 @@ func TestBuilder_Build_UsesExplicitReasoningRegistry(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	explicitRegistry := reasoning.NewPatternRegistry()
 
-	ag, err := NewBuilder(provider, zap.NewNop()).
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{ReasoningRegistry: explicitRegistry}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -387,7 +404,7 @@ func TestBuilder_Build_InjectsCheckpointManagerWhenProvided(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	checkpointManager := &agent.CheckpointManager{}
 
-	ag, err := NewBuilder(provider, zap.NewNop()).
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{CheckpointManager: checkpointManager}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -411,7 +428,7 @@ func TestBuilder_Build_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
 	}
 	provider := &captureRuntimeProvider{content: "hello"}
 
-	ag, err := NewBuilder(provider, zap.NewNop()).
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)

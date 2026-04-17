@@ -19,6 +19,7 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	pkgserver "github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
@@ -247,7 +248,7 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 	oldRegistry := agent.NewAgentRegistry(zap.NewNop())
 	oldRegistry.Register(agent.TypeGeneric, func(
 		config types.AgentConfig,
-		_ llm.Provider,
+		_ llmcore.Gateway,
 		_ agent.MemoryManager,
 		_ agent.ToolManager,
 		_ agent.EventBus,

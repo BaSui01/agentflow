@@ -40,12 +40,12 @@ func TestAgentBuilder_Validate(t *testing.T) {
 			},
 			wantErr: "model is required",
 		},
-		{
-			name: "missing provider",
-			setup: func() *AgentBuilder {
-				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4"))
-			},
-			wantErr: "provider or gateway is required",
+			{
+				name: "missing provider",
+				setup: func() *AgentBuilder {
+					return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4"))
+				},
+				wantErr: "gateway is required",
 		},
 		{
 			name: "gateway only",
@@ -92,7 +92,7 @@ func TestAgentBuilder_Build_WithGatewayOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, agent)
 	assert.Same(t, gateway, agent.MainGateway())
-	assert.Nil(t, agent.Provider())
+	assert.Same(t, compatProviderFromGateway(gateway), agent.Provider())
 }
 
 func TestAgentBuilder_WithMaxReActIterations(t *testing.T) {

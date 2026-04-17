@@ -12,6 +12,8 @@ import (
 	"github.com/BaSui01/agentflow/agent/hierarchical"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -154,15 +156,15 @@ func (m *hierarchicalModeStrategy) Execute(ctx context.Context, agents []agent.A
 		}
 	}
 
-	// 尝试从 supervisor 获取主请求链路 provider，避免退回到底层裸 provider。
-	var provider llm.Provider = safeStubProvider{}
+	// 尝试从 supervisor 获取主请求链路 gateway，避免退回到底层 stub。
+	var gateway llmcore.Gateway = llmgateway.New(llmgateway.Config{ChatProvider: safeStubProvider{}, Logger: m.logger})
 	if ba, ok := supervisor.(*agent.BaseAgent); ok {
-		if p := ba.MainProvider(); p != nil {
-			provider = p
+		if gw := ba.MainGateway(); gw != nil {
+			gateway = gw
 		}
 	}
 
-	base, err := newHierarchicalModeBaseAgent(supervisor, provider, m.logger)
+	base, err := newHierarchicalModeBaseAgent(supervisor, gateway, m.logger)
 	if err != nil {
 		return nil, fmt.Errorf("build hierarchical mode base agent: %w", err)
 	}
@@ -171,20 +173,22 @@ func (m *hierarchicalModeStrategy) Execute(ctx context.Context, agents []agent.A
 	return ha.Execute(ctx, input)
 }
 
-func newHierarchicalModeBaseAgent(supervisor agent.Agent, provider llm.Provider, logger *zap.Logger) (*agent.BaseAgent, error) {
+func newHierarchicalModeBaseAgent(supervisor agent.Agent, gateway llmcore.Gateway, logger *zap.Logger) (*agent.BaseAgent, error) {
 	model := "hierarchical-mode"
 	if base, ok := supervisor.(*agent.BaseAgent); ok {
 		if configured := strings.TrimSpace(base.Config().LLM.Model); configured != "" {
 			model = configured
 		}
 	}
-	if model == "hierarchical-mode" && provider != nil {
-		if name := strings.TrimSpace(provider.Name()); name != "" {
-			model = name
+	if model == "hierarchical-mode" && gateway != nil {
+		if provider := extractGatewayProvider(gateway); provider != nil {
+			if name := strings.TrimSpace(provider.Name()); name != "" {
+				model = name
+			}
 		}
 	}
 
-	return agentruntime.NewBuilder(provider, logger).Build(context.Background(), types.AgentConfig{
+	return agentruntime.NewBuilder(gateway, logger).Build(context.Background(), types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "multiagent-hierarchical-mode",
 			Name: "multiagent-hierarchical-mode",
@@ -194,6 +198,17 @@ func newHierarchicalModeBaseAgent(supervisor agent.Agent, provider llm.Provider,
 			Model: model,
 		},
 	})
+}
+
+func extractGatewayProvider(gateway llmcore.Gateway) llm.Provider {
+	type providerBackedGateway interface {
+		ChatProvider() llm.Provider
+	}
+	backed, ok := gateway.(providerBackedGateway)
+	if !ok {
+		return nil
+	}
+	return backed.ChatProvider()
 }
 
 type crewModeStrategy struct {

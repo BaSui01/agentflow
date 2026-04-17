@@ -7,6 +7,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/config"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,10 @@ func TestHotReload_DoesNotChangeRuntimeDefaultReasoningWiring(t *testing.T) {
 	}
 
 	RegisterHotReloadCallbacks(manager, zap.NewNop(), func(oldConfig, newConfig *config.Config) {
-		builder := agentruntime.NewBuilder(provider, zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
+		builder := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{
+			ChatProvider: provider,
+			Logger:       zap.NewNop(),
+		}), zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
 		ag, err := builder.Build(t.Context(), cfg)
 		require.NoError(t, err)
 		require.NotNil(t, ag.ReasoningRegistry())
@@ -71,7 +75,10 @@ func TestHotReload_PreservesTaskLoopBudgetRunConfigPath(t *testing.T) {
 	}
 
 	RegisterHotReloadCallbacks(manager, zap.NewNop(), func(oldConfig, newConfig *config.Config) {
-		builder := agentruntime.NewBuilder(provider, zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
+		builder := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{
+			ChatProvider: provider,
+			Logger:       zap.NewNop(),
+		}), zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
 		ag, err := builder.Build(context.Background(), cfg)
 		require.NoError(t, err)
 

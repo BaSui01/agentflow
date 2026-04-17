@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -37,8 +37,8 @@ func TestAgentRegistry_RegisterAndUnregister(t *testing.T) {
 
 	assert.False(t, r.IsRegistered(customType))
 
-	r.Register(customType, func(config types.AgentConfig, provider llm.Provider, memory MemoryManager, toolManager ToolManager, bus EventBus, logger *zap.Logger) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil
+	r.Register(customType, func(config types.AgentConfig, gateway llmcore.Gateway, memory MemoryManager, toolManager ToolManager, bus EventBus, logger *zap.Logger) (Agent, error) {
+		return NewBaseAgent(config, compatProviderFromGateway(gateway), memory, toolManager, bus, logger, nil), nil
 	})
 	assert.True(t, r.IsRegistered(customType))
 
@@ -52,7 +52,11 @@ func TestAgentRegistry_Create(t *testing.T) {
 	cfg := testAgentConfig("a1", "test", "gpt-4")
 	cfg.Core.Type = string(TypeAssistant)
 
-	agent, err := r.Create(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: &testProvider{name: "test"},
+		Logger:       zap.NewNop(),
+	})
+	agent, err := r.Create(cfg, gateway, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, agent)
 	assert.Equal(t, "a1", agent.ID())
@@ -81,7 +85,10 @@ func TestAgentRegistry_Create_PreservesUnifiedBuildCoreWiring(t *testing.T) {
 	cfg := testAgentConfig("a2", "assistant", "gpt-4o-mini")
 	cfg.Core.Type = string(TypeAssistant)
 
-	created, err := r.Create(cfg, provider, mem, tools, bus, zap.NewNop())
+	created, err := r.Create(cfg, llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       zap.NewNop(),
+	}), mem, tools, bus, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*BaseAgent)
@@ -105,13 +112,13 @@ func TestAgentRegistry_CreateWithGateway(t *testing.T) {
 	cfg := testAgentConfig("a3", "assistant", "gpt-4o-mini")
 	cfg.Core.Type = string(TypeAssistant)
 
-	created, err := r.CreateWithGateway(cfg, gateway, nil, nil, nil, zap.NewNop())
+	created, err := r.Create(cfg, gateway, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*BaseAgent)
 	require.True(t, ok)
 	assert.Same(t, gateway, baseAgent.MainGateway())
-	assert.Nil(t, baseAgent.Provider())
+	assert.Same(t, compatProviderFromGateway(gateway), baseAgent.Provider())
 }
 
 func TestAgentRegistry_Create_UnknownType(t *testing.T) {
@@ -119,7 +126,10 @@ func TestAgentRegistry_Create_UnknownType(t *testing.T) {
 
 	cfg := testAgentConfig("", "", "")
 	cfg.Core.Type = "unknown"
-	_, err := r.Create(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	_, err := r.Create(cfg, llmgateway.New(llmgateway.Config{
+		ChatProvider: &testProvider{name: "test"},
+		Logger:       zap.NewNop(),
+	}), nil, nil, nil, zap.NewNop())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not registered")
 }

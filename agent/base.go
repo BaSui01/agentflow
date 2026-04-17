@@ -787,18 +787,12 @@ type BaseAgent struct {
 	execCount            int64               // 当前活跃执行数（配合并发状态机）
 	configMu             sync.RWMutex        // 配置互斥锁，与 execSem 分离，避免配置方法与 Execute 争用
 
-	// provider/toolProvider 保留给兼容层与 provider 元数据访问；
-	// agent 内部执行主语义已经收敛到 MainGateway/ToolGateway。
-	provider             llm.Provider
-	gatewayOnce          sync.Once
-	gatewayInstance      llmcore.Gateway
+	mainGateway          llmcore.Gateway
+	toolGateway          llmcore.Gateway
+	mainProviderCompat   llm.Provider
+	toolProviderCompat   llm.Provider
 	gatewayProviderCache llm.Provider
-	toolProvider         llm.Provider // 工具调用专用 Provider（兼容面；执行语义以 ToolGateway 为准）
-	toolGatewayOnce      sync.Once
-	toolGatewayInst      llmcore.Gateway
 	toolGatewayProvider  llm.Provider
-	externalGateway      llmcore.Gateway // injected shared gateway (skips lazy creation)
-	externalToolGateway  llmcore.Gateway // injected shared tool gateway (skips lazy creation)
 	ledger               observability.Ledger
 	memory               MemoryManager
 	toolManager          ToolManager
@@ -846,6 +840,28 @@ func NewBaseAgent(
 	logger *zap.Logger,
 	ledger observability.Ledger,
 ) *BaseAgent {
+	return newBaseAgentWithExecutionSurface(
+		cfg,
+		wrapProviderWithGateway(provider, logger, ledger),
+		provider,
+		memory,
+		toolManager,
+		bus,
+		logger,
+		ledger,
+	)
+}
+
+func newBaseAgentWithExecutionSurface(
+	cfg types.AgentConfig,
+	gateway llmcore.Gateway,
+	compatProvider llm.Provider,
+	memory MemoryManager,
+	toolManager ToolManager,
+	bus EventBus,
+	logger *zap.Logger,
+	ledger observability.Ledger,
+) *BaseAgent {
 	ensureAgentType(&cfg)
 	if logger == nil {
 		panic("agent.BaseAgent: logger is required and cannot be nil")
@@ -857,7 +873,8 @@ func NewBaseAgent(
 		promptBundle:         promptBundleFromConfig(cfg),
 		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
 		state:                StateInit,
-		provider:             provider,
+		mainGateway:          gateway,
+		mainProviderCompat:   compatProvider,
 		ledger:               ledger,
 		memory:               memory,
 		toolManager:          toolManager,
@@ -1155,27 +1172,12 @@ func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([
 	return b.memory.Search(ctx, b.config.Core.ID, query, topK)
 }
 
-// Provider 返回 LLM Provider
-func (b *BaseAgent) Provider() llm.Provider { return b.provider }
-
-// MainProvider 返回经过 gateway 包装后的主 LLM Provider。
-func (b *BaseAgent) MainProvider() llm.Provider { return b.gatewayProvider() }
-
 // MainGateway 返回主请求链路使用的 gateway。
 func (b *BaseAgent) MainGateway() llmcore.Gateway {
-	if b.externalGateway != nil {
-		return b.externalGateway
-	}
-	if b.provider == nil {
+	if b == nil {
 		return nil
 	}
-	b.gatewayOnce.Do(func() {
-		b.gatewayInstance = wrapProviderWithGateway(b.provider, b.logger, b.ledger)
-		if b.gatewayInstance != nil {
-			b.gatewayProviderCache = llmgateway.NewChatProviderAdapter(b.gatewayInstance, b.provider)
-		}
-	})
-	return b.gatewayInstance
+	return b.mainGateway
 }
 
 func (b *BaseAgent) hasMainExecutionSurface() bool {
@@ -1186,48 +1188,31 @@ func (b *BaseAgent) hasDedicatedToolExecutionSurface() bool {
 	if b == nil {
 		return false
 	}
-	return b.externalToolGateway != nil || b.toolProvider != nil || b.toolGatewayInst != nil
+	return b.toolGateway != nil
 }
 
 // ToolGateway 返回工具调用链路使用的 gateway（未配置时回退到主 gateway）。
 func (b *BaseAgent) ToolGateway() llmcore.Gateway {
-	if b.externalToolGateway != nil {
-		return b.externalToolGateway
+	if b == nil {
+		return nil
 	}
-	if b.toolProvider == nil {
+	if b.toolGateway == nil {
 		return b.MainGateway()
 	}
-	b.toolGatewayOnce.Do(func() {
-		b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
-		if b.toolGatewayInst != nil {
-			b.toolGatewayProvider = llmgateway.NewChatProviderAdapter(b.toolGatewayInst, b.toolProvider)
-		}
-	})
-	return b.toolGatewayInst
-}
-
-// ToolProvider 返回工具调用专用的 LLM Provider（可能为 nil）
-func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
-
-// SetToolProvider 设置工具调用专用的 LLM Provider
-func (b *BaseAgent) SetToolProvider(p llm.Provider) {
-	b.toolProvider = p
-	b.externalToolGateway = nil
-	b.toolGatewayOnce = sync.Once{} // reset lazy init
-	b.toolGatewayInst = nil
-	b.toolGatewayProvider = nil
+	return b.toolGateway
 }
 
 // SetToolGateway injects a pre-built shared tool gateway.
 func (b *BaseAgent) SetToolGateway(gw llmcore.Gateway) {
-	b.externalToolGateway = gw
+	b.toolGateway = gw
+	b.toolProviderCompat = compatProviderFromGateway(gw)
 	b.toolGatewayProvider = nil
 }
 
 // SetGateway injects a pre-built shared Gateway instance.
-// When set, lazy gateway creation is skipped.
 func (b *BaseAgent) SetGateway(gw llmcore.Gateway) {
-	b.externalGateway = gw
+	b.mainGateway = gw
+	b.mainProviderCompat = compatProviderFromGateway(gw)
 	b.gatewayProviderCache = nil
 }
 
@@ -1237,9 +1222,9 @@ func (b *BaseAgent) gatewayProvider() llm.Provider {
 		if b.gatewayProviderCache != nil {
 			return b.gatewayProviderCache
 		}
-		return llmgateway.NewChatProviderAdapter(gateway, b.provider)
+		return llmgateway.NewChatProviderAdapter(gateway, b.mainProviderCompat)
 	}
-	return b.provider
+	return nil
 }
 
 func (b *BaseAgent) gatewayToolProvider() llm.Provider {
@@ -1249,13 +1234,25 @@ func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 			if b.toolGatewayProvider != nil {
 				return b.toolGatewayProvider
 			}
-			return llmgateway.NewChatProviderAdapter(toolGateway, b.toolProvider)
-		}
-		if b.toolProvider != nil {
-			return b.toolProvider
+			return llmgateway.NewChatProviderAdapter(toolGateway, b.toolProviderCompat)
 		}
 	}
 	return b.gatewayProvider()
+}
+
+type providerBackedGateway interface {
+	ChatProvider() llm.Provider
+}
+
+func compatProviderFromGateway(gateway llmcore.Gateway) llm.Provider {
+	if gateway == nil {
+		return nil
+	}
+	backed, ok := gateway.(providerBackedGateway)
+	if !ok {
+		return nil
+	}
+	return backed.ChatProvider()
 }
 
 func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llmcore.Gateway {

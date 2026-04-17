@@ -212,7 +212,7 @@ func (s *Server) initHandlers() error {
 		if llmRuntime != nil {
 			ledger = llmRuntime.Ledger
 		}
-		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, checkpointManager, ledger, s.logger)
+		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, llmRuntime.Gateway, llmRuntime.ToolGateway, checkpointManager, ledger, s.logger)
 		s.logger.Info("Default runtime agent factory registered")
 
 		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)

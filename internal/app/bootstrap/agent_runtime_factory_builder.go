@@ -6,7 +6,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
-	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -15,19 +15,19 @@ import (
 // RegisterDefaultRuntimeAgentFactory wires the default runtime-backed agent factory.
 func RegisterDefaultRuntimeAgentFactory(
 	agentRegistry *agent.AgentRegistry,
-	provider llm.Provider,
-	toolProvider llm.Provider,
+	gateway llmcore.Gateway,
+	toolGateway llmcore.Gateway,
 	checkpointManager *agent.CheckpointManager,
 	ledger observability.Ledger,
 	logger *zap.Logger,
 ) {
-	if provider == nil {
+	if gateway == nil {
 		return
 	}
 
 	agentRegistry.Register(agent.TypeGeneric, func(
 		cfg types.AgentConfig,
-		runtimeProvider llm.Provider,
+		runtimeGateway llmcore.Gateway,
 		mem agent.MemoryManager,
 		tm agent.ToolManager,
 		bus agent.EventBus,
@@ -53,13 +53,13 @@ func RegisterDefaultRuntimeAgentFactory(
 		if factoryLogger == nil {
 			factoryLogger = zap.NewNop()
 		}
-		if runtimeProvider == nil {
-			runtimeProvider = provider
+		if runtimeGateway == nil {
+			runtimeGateway = gateway
 		}
 
-		builder := runtime.NewBuilder(runtimeProvider, factoryLogger).WithOptions(opts)
-		if toolProvider != nil {
-			builder = builder.WithToolProvider(toolProvider)
+		builder := runtime.NewBuilder(runtimeGateway, factoryLogger).WithOptions(opts)
+		if toolGateway != nil {
+			builder = builder.WithToolGateway(toolGateway)
 		}
 		if ledger != nil {
 			builder = builder.WithLedger(ledger)
