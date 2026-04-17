@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/multiagent"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
@@ -13,33 +12,6 @@ import (
 	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
-
-// TODO(refactor): initHandlers contains conditional assembly logic (if/else on config, runtime availability).
-// Consider moving handler assembly decisions to bootstrap to keep cmd as pure composition root.
-type toolRegistryRuntimeAdapter struct {
-	runtime  *bootstrap.AgentToolingRuntime
-	onReload func(ctx context.Context)
-}
-
-func (a *toolRegistryRuntimeAdapter) ReloadBindings(ctx context.Context) error {
-	if a == nil || a.runtime == nil {
-		return nil
-	}
-	if err := a.runtime.ReloadBindings(ctx); err != nil {
-		return err
-	}
-	if a.onReload != nil {
-		a.onReload(ctx)
-	}
-	return nil
-}
-
-func (a *toolRegistryRuntimeAdapter) BaseToolNames() []string {
-	if a == nil || a.runtime == nil {
-		return nil
-	}
-	return a.runtime.BaseToolNames()
-}
 
 func (s *Server) initHandlers() error {
 	mainProviderMode := config.NormalizeLLMMainProviderMode(s.cfg.LLM.MainProviderMode)
@@ -154,96 +126,54 @@ func (s *Server) initHandlers() error {
 			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
 	}
 
-	toolApprovalRedis, toolApprovalStore, toolApprovalStoreErr := bootstrap.BuildToolApprovalGrantStore(s.cfg, s.logger)
-	if toolApprovalStoreErr != nil {
-		return fmt.Errorf("failed to build tool approval grant store: %w", toolApprovalStoreErr)
-	}
-	s.toolApprovalRedis = toolApprovalRedis
-	toolApprovalHistoryStore, toolApprovalHistoryErr := bootstrap.BuildToolApprovalHistoryStore(s.cfg, toolApprovalRedis)
-	if toolApprovalHistoryErr != nil {
-		return fmt.Errorf("failed to build tool approval history store: %w", toolApprovalHistoryErr)
-	}
-
-	toolingRuntime, toolErr := bootstrap.BuildAgentToolingRuntime(bootstrap.AgentToolingOptions{
-		RetrievalStore:      ragStore,
-		EmbeddingProvider:   ragEmbedding,
-		MCPServer:           protocolRuntime.MCPServer,
-		EnableMCPTools:      true,
-		DB:                  s.db,
-		ToolApprovalManager: s.currentToolApprovalManager(),
-		ToolApprovalConfig: bootstrap.ToolApprovalConfig{
-			Backend:           s.cfg.HostedTools.Approval.Backend,
-			GrantTTL:          s.cfg.HostedTools.Approval.GrantTTL,
-			Scope:             s.cfg.HostedTools.Approval.Scope,
-			PersistPath:       s.cfg.HostedTools.Approval.PersistPath,
-			RedisPrefix:       s.cfg.HostedTools.Approval.RedisPrefix,
-			HistoryMaxEntries: s.cfg.HostedTools.Approval.HistoryMaxEntries,
-			GrantStore:        toolApprovalStore,
-			HistoryStore:      toolApprovalHistoryStore,
-		},
-	}, s.logger)
-	if toolErr != nil {
-		return fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
-	}
-	s.toolingRuntime = toolingRuntime
-	toolRuntimeAdapter := &toolRegistryRuntimeAdapter{
-		runtime: toolingRuntime,
-		onReload: func(ctx context.Context) {
+	toolingBundle, toolErr := bootstrap.BuildToolingHandlerBundle(bootstrap.ToolingHandlerOptions{
+		Config:            s.cfg,
+		DB:                s.db,
+		RetrievalStore:    ragStore,
+		EmbeddingProvider: ragEmbedding,
+		MCPServer:         protocolRuntime.MCPServer,
+		EnableMCPTools:    true,
+		ApprovalManager:   s.currentToolApprovalManager(),
+		AgentRegistry:     agentRegistry,
+		ResolverResetCache: func(ctx context.Context) {
 			if s.resolver != nil {
 				s.resolver.ResetCache(ctx)
 				s.logger.Info("Agent resolver cache reset after tool runtime reload")
 			}
 		},
+		Logger: s.logger,
+	})
+	if toolErr != nil {
+		return fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
 	}
-	if s.toolRegistryHandler = bootstrap.BuildToolRegistryHandler(s.db, toolRuntimeAdapter, s.logger); s.toolRegistryHandler != nil {
+	s.toolingRuntime = toolingBundle.ToolingRuntime
+	s.toolApprovalRedis = toolingBundle.ToolApprovalRedis
+	s.toolRegistryHandler = toolingBundle.ToolRegistryHandler
+	s.toolProviderHandler = toolingBundle.ToolProviderHandler
+	s.toolApprovalHandler = toolingBundle.ToolApprovalHandler
+	s.capabilityCatalog = toolingBundle.CapabilityCatalog
+
+	if s.toolRegistryHandler != nil {
 		s.logger.Info("Tool registry handler initialized")
 	} else {
 		s.logger.Info("Tool registry handler disabled (database or tooling runtime unavailable)")
 	}
-	if s.toolProviderHandler = bootstrap.BuildToolProviderHandler(s.db, toolRuntimeAdapter, s.logger); s.toolProviderHandler != nil {
+	if s.toolProviderHandler != nil {
 		s.logger.Info("Tool provider handler initialized")
 	} else {
 		s.logger.Info("Tool provider handler disabled (database or tooling runtime unavailable)")
 	}
-	if s.toolApprovalHandler = bootstrap.BuildToolApprovalHandler(s.currentToolApprovalManager(), bootstrap.ToolApprovalWorkflowID(), bootstrap.ToolApprovalConfig{
-		Backend:           s.cfg.HostedTools.Approval.Backend,
-		GrantTTL:          s.cfg.HostedTools.Approval.GrantTTL,
-		Scope:             s.cfg.HostedTools.Approval.Scope,
-		PersistPath:       s.cfg.HostedTools.Approval.PersistPath,
-		RedisPrefix:       s.cfg.HostedTools.Approval.RedisPrefix,
-		HistoryMaxEntries: s.cfg.HostedTools.Approval.HistoryMaxEntries,
-		GrantStore:        toolApprovalStore,
-		HistoryStore:      toolApprovalHistoryStore,
-	}, s.logger); s.toolApprovalHandler != nil {
+	if s.toolApprovalHandler != nil {
 		s.logger.Info("Tool approval handler initialized")
 	}
-
-	if toolingRuntime != nil {
-		s.capabilityCatalog = bootstrap.BuildCapabilityCatalog(
-			toolingRuntime.Registry,
-			agentRegistry,
-			multiagent.GlobalModeRegistry(),
-		)
-		if s.capabilityCatalog != nil {
-			s.logger.Info("Runtime capability catalog initialized",
-				zap.Int("agent_type_count", len(s.capabilityCatalog.AgentTypes)),
-				zap.Int("tool_count", len(s.capabilityCatalog.Tools)),
-				zap.Int("mode_count", len(s.capabilityCatalog.Modes)))
-		}
+	if s.capabilityCatalog != nil {
+		s.logger.Info("Runtime capability catalog initialized",
+			zap.Int("agent_type_count", len(s.capabilityCatalog.AgentTypes)),
+			zap.Int("tool_count", len(s.capabilityCatalog.Tools)),
+			zap.Int("mode_count", len(s.capabilityCatalog.Modes)))
 	}
 
-	if llmRuntime != nil && s.provider != nil {
-		var chatToolManager agent.ToolManager
-		if toolingRuntime != nil {
-			chatToolManager = toolingRuntime.ToolManager
-		}
-		s.chatHandler = handlers.NewChatHandlerWithRuntime(
-			llmRuntime.Provider,
-			llmRuntime.PolicyManager,
-			chatToolManager,
-			llmRuntime.Ledger,
-			s.logger,
-		)
+	if s.chatHandler = bootstrap.BuildChatHandler(llmRuntime, s.toolingRuntime, s.logger); s.chatHandler != nil {
 		s.logger.Info("Chat handler initialized with middleware chain",
 			zap.String("mode", mainProviderMode),
 			zap.String("provider", s.cfg.LLM.DefaultProvider))
@@ -263,14 +193,14 @@ func (s *Server) initHandlers() error {
 	if s.provider != nil {
 		resolver := agent.NewCachingResolver(agentRegistry, s.provider, s.logger).
 			WithDefaultModel(s.cfg.Agent.Model)
-		if toolingRuntime != nil && toolingRuntime.ToolManager != nil {
-			resolver = resolver.WithToolManager(toolingRuntime.ToolManager)
-			if len(toolingRuntime.ToolNames) > 0 {
-				resolver = resolver.WithRuntimeTools(toolingRuntime.ToolNames)
+		if s.toolingRuntime != nil && s.toolingRuntime.ToolManager != nil {
+			resolver = resolver.WithToolManager(s.toolingRuntime.ToolManager)
+			if len(s.toolingRuntime.ToolNames) > 0 {
+				resolver = resolver.WithRuntimeTools(s.toolingRuntime.ToolNames)
 			}
 			s.logger.Info("Agent tool manager initialized",
-				zap.Int("tool_count", len(toolingRuntime.ToolNames)),
-				zap.Strings("tools", toolingRuntime.ToolNames))
+				zap.Int("tool_count", len(s.toolingRuntime.ToolNames)),
+				zap.Strings("tools", s.toolingRuntime.ToolNames))
 		}
 		s.resolver = resolver
 

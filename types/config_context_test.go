@@ -13,6 +13,15 @@ func TestDefaultContextConfig(t *testing.T) {
 	if cfg.MaxContextTokens == 0 {
 		t.Fatal("expected max context tokens to be set")
 	}
+	if !cfg.TraceFeedbackEnabled {
+		t.Fatal("expected trace feedback to be enabled by default")
+	}
+	if cfg.TraceFeedbackComplexityThreshold != 2 {
+		t.Fatalf("expected complexity threshold 2, got %d", cfg.TraceFeedbackComplexityThreshold)
+	}
+	if cfg.TraceHistoryMaxUsageRatio != 0.85 {
+		t.Fatalf("expected trace history max usage ratio 0.85, got %v", cfg.TraceHistoryMaxUsageRatio)
+	}
 }
 
 func TestAgentConfig_IsContextEnabled(t *testing.T) {

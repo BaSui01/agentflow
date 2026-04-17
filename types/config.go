@@ -67,39 +67,49 @@ type RuntimeConfig struct {
 
 // ContextConfig configures context assembly, budgeting, and compression.
 type ContextConfig struct {
-	Enabled              bool    `json:"enabled"`
-	MaxContextTokens     int     `json:"max_context_tokens,omitempty"`
-	ReserveForOutput     int     `json:"reserve_for_output,omitempty"`
-	SoftLimit            float64 `json:"soft_limit,omitempty"`
-	WarnLimit            float64 `json:"warn_limit,omitempty"`
-	HardLimit            float64 `json:"hard_limit,omitempty"`
-	TargetUsage          float64 `json:"target_usage,omitempty"`
-	KeepSystem           bool    `json:"keep_system,omitempty"`
-	KeepLastN            int     `json:"keep_last_n,omitempty"`
-	EnableSummarize      bool    `json:"enable_summarize,omitempty"`
-	EnableMetrics        bool    `json:"enable_metrics,omitempty"`
-	MemoryBudgetRatio    float64 `json:"memory_budget_ratio,omitempty"`
-	RetrievalBudgetRatio float64 `json:"retrieval_budget_ratio,omitempty"`
-	ToolStateBudgetRatio float64 `json:"tool_state_budget_ratio,omitempty"`
+	Enabled                          bool    `json:"enabled"`
+	MaxContextTokens                 int     `json:"max_context_tokens,omitempty"`
+	ReserveForOutput                 int     `json:"reserve_for_output,omitempty"`
+	SoftLimit                        float64 `json:"soft_limit,omitempty"`
+	WarnLimit                        float64 `json:"warn_limit,omitempty"`
+	HardLimit                        float64 `json:"hard_limit,omitempty"`
+	TargetUsage                      float64 `json:"target_usage,omitempty"`
+	KeepSystem                       bool    `json:"keep_system,omitempty"`
+	KeepLastN                        int     `json:"keep_last_n,omitempty"`
+	EnableSummarize                  bool    `json:"enable_summarize,omitempty"`
+	EnableMetrics                    bool    `json:"enable_metrics,omitempty"`
+	TraceFeedbackEnabled             bool    `json:"trace_feedback_enabled,omitempty"`
+	TraceFeedbackComplexityThreshold int     `json:"trace_feedback_complexity_threshold,omitempty"`
+	TraceSynopsisMinScore            int     `json:"trace_synopsis_min_score,omitempty"`
+	TraceHistoryMinScore             int     `json:"trace_history_min_score,omitempty"`
+	TraceHistoryMaxUsageRatio        float64 `json:"trace_history_max_usage_ratio,omitempty"`
+	MemoryBudgetRatio                float64 `json:"memory_budget_ratio,omitempty"`
+	RetrievalBudgetRatio             float64 `json:"retrieval_budget_ratio,omitempty"`
+	ToolStateBudgetRatio             float64 `json:"tool_state_budget_ratio,omitempty"`
 }
 
 // DefaultContextConfig returns sensible defaults for context orchestration.
 func DefaultContextConfig() *ContextConfig {
 	return &ContextConfig{
-		Enabled:              true,
-		MaxContextTokens:     32000,
-		ReserveForOutput:     4096,
-		SoftLimit:            0.7,
-		WarnLimit:            0.85,
-		HardLimit:            0.95,
-		TargetUsage:          0.5,
-		KeepSystem:           true,
-		KeepLastN:            2,
-		EnableSummarize:      true,
-		EnableMetrics:        true,
-		MemoryBudgetRatio:    0.2,
-		RetrievalBudgetRatio: 0.2,
-		ToolStateBudgetRatio: 0.2,
+		Enabled:                          true,
+		MaxContextTokens:                 32000,
+		ReserveForOutput:                 4096,
+		SoftLimit:                        0.7,
+		WarnLimit:                        0.85,
+		HardLimit:                        0.95,
+		TargetUsage:                      0.5,
+		KeepSystem:                       true,
+		KeepLastN:                        2,
+		EnableSummarize:                  true,
+		EnableMetrics:                    true,
+		TraceFeedbackEnabled:             true,
+		TraceFeedbackComplexityThreshold: 2,
+		TraceSynopsisMinScore:            2,
+		TraceHistoryMinScore:             3,
+		TraceHistoryMaxUsageRatio:        0.85,
+		MemoryBudgetRatio:                0.2,
+		RetrievalBudgetRatio:             0.2,
+		ToolStateBudgetRatio:             0.2,
 	}
 }
 
