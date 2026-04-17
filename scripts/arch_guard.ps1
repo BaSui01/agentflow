@@ -85,7 +85,6 @@ $allowOneFilePkg = @(
     "metrics",
     "openapi",
     "server",
-    "telemetry",
     "tlsutil"
 )
 

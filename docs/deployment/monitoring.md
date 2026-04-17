@@ -44,6 +44,46 @@ telemetry:
   sample_rate: 0.1
 ```
 
+### 字段规范
+
+为便于把指标、trace 和审计日志串起来，当前仓库统一采用以下字段约定：
+
+- 结构化日志字段：`trace_id`、`span_id`
+- 审计日志稳定字段：`request_id`、`remote_addr`、`path`、`method`、`resource`、`action`、`result`
+- OpenTelemetry attributes：
+  - `trace.id`
+  - `trace.type`
+  - `tenant.id`
+  - `user.id`
+  - `llm.provider`
+  - `llm.model`
+  - `llm.feature`
+  - `llm.status`
+  - `llm.token.type`
+  - `llm.cache.hit`
+  - `llm.fallback`
+  - `llm.fallback.level`
+  - `llm.duration.ms`
+  - `llm.cost`
+  - `tool.name`
+  - `tool.success`
+  - `tool.duration.ms`
+  - `error.code`
+  - `error.message`
+
+Prometheus 标签保持低基数、稳定命名：
+
+- HTTP：`method`、`path`、`status`
+- LLM：`provider`、`model`、`status`
+- LLM token：`provider`、`model`、`type`
+- Agent：`agent_type`、`status`
+- Agent state：`agent_type`、`from_state`、`to_state`
+- Cache：`cache_type`
+- Tool：`tool_name`、`status`
+- DB：`database`、`operation`
+
+实现侧的单一来源位于 `pkg/telemetry/observability_schema.go`。
+
 ## Helm 集成
 
 ### ServiceMonitor
