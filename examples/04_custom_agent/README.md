@@ -2,6 +2,12 @@
 
 展示如何创建多个不同角色的自定义 Agent，每个 Agent 有独立的 PromptBundle 和行为特征。
 
+入口说明：
+
+- 仓库级正式入口仍是 `sdk.New(opts).Build(ctx)`
+- 如果你只在 `agent` 子模块内装配运行时，正式入口是 `agent/runtime.Builder`
+- 本示例关注 `PromptBundle -> AgentConfig` 的高级定制方式，不把底层构造器当作默认主入口
+
 ## 功能
 
 - 定义自定义 AgentType（代码审查、数据分析、故事创作、数学辅导、产品经理）
@@ -23,4 +29,6 @@ go run main.go
 
 ## 代码说明
 
-示例先用 `agent.PromptBundle` 组装系统提示词，再映射到 `types.AgentConfig.Runtime.SystemPrompt`，最后通过 `agent.NewBaseAgent(...)` 创建 Agent。不同 Agent 使用不同的 `types.AgentConfig.LLM` 参数（如 Temperature、MaxTokens）。
+示例先用 `agent.PromptBundle` 组装系统提示词，再映射到 `types.AgentConfig.Runtime.SystemPrompt`，然后通过 `agent/runtime.Builder` 构建并初始化 Agent。不同 Agent 使用不同的 `types.AgentConfig.LLM` 参数（如 Temperature、MaxTokens）。
+
+这里保留的是“如何做角色化 Prompt 定制”的思路，而不是推广底层 `BaseAgent` 构造路径。

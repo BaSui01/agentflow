@@ -67,7 +67,7 @@ type Paper struct {
 	Year      int      `json:"year"`
 	Citations int      `json:"citations"`
 	Source    string   `json:"source"` // "arxiv", "ieee", "github", etc.
-	Score    float64  `json:"score"`  // Quality score (0-1)
+	Score     float64  `json:"score"`  // Quality score (0-1)
 }
 
 // ResearchIdea represents a generated research idea.
@@ -332,7 +332,8 @@ func main() {
 	// DAG Workflow Execution
 	// ========================================================================
 	//
-	// In production, each phase would be a DAGNode with proper error handling:
+	// In production, each phase would be a DAGNode with proper error handling,
+	// and workflow runtime should be assembled once through workflow/runtime.Builder.
 	//
 	//   builder := workflow.NewDAGBuilder("research-pipeline", logger)
 	//   builder.AddActionNode("collect", collectStep).
@@ -350,8 +351,10 @@ func main() {
 	//       AddEdge("validate", "report").
 	//       SetEntry("collect")
 	//
-	//   executor := workflow.NewDAGExecutor(logger)
-	//   result, err := executor.Execute(ctx, builder.Build(), input)
+	//   wfRuntime := workflowruntime.NewBuilder(nil, logger).
+	//       WithDSLParser(false).
+	//       Build()
+	//   result, err := wfRuntime.Facade.ExecuteDAG(ctx, builder.Build(), input)
 	//
 	// ========================================================================
 
@@ -431,4 +434,3 @@ func main() {
 	reportJSON, _ := json.MarshalIndent(report, "", "  ")
 	fmt.Printf("\n📋 Full Report (JSON):\n%s\n", string(reportJSON))
 }
-

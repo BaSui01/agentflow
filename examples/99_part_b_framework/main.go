@@ -34,10 +34,16 @@ import (
 	"github.com/BaSui01/agentflow/llm/tokenizer"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
+	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
 )
 
-type R struct{ Name, Status string; D time.Duration; Info string }
+type R struct {
+	Name, Status string
+	D            time.Duration
+	Info         string
+}
+
 var rs []R
 
 func rec(n, s string, d time.Duration, info string) {
@@ -141,9 +147,15 @@ func b01RewriterChain() {
 	chain := middleware.NewRewriterChain(middleware.NewXMLToolRewriter(), middleware.NewEmptyToolsCleaner())
 	req := &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}}
 	out, err := chain.Execute(context.Background(), req)
-	if err != nil { rec("RewriterChain", "FAIL", time.Since(t), err.Error()); return }
-	if out != nil && out.Model == "test" { rec("RewriterChain", "PASS", time.Since(t), "链式执行成功")
-	} else { rec("RewriterChain", "FAIL", time.Since(t), "输出异常") }
+	if err != nil {
+		rec("RewriterChain", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if out != nil && out.Model == "test" {
+		rec("RewriterChain", "PASS", time.Since(t), "链式执行成功")
+	} else {
+		rec("RewriterChain", "FAIL", time.Since(t), "输出异常")
+	}
 }
 
 func b02XMLToolFormat() {
@@ -153,7 +165,9 @@ func b02XMLToolFormat() {
 	})
 	if strings.Contains(xml, "tool_calls") && strings.Contains(xml, "search") {
 		rec("XML工具格式化", "PASS", time.Since(t), fmt.Sprintf("生成%d字符XML", len(xml)))
-	} else { rec("XML工具格式化", "FAIL", time.Since(t), "XML格式不正确") }
+	} else {
+		rec("XML工具格式化", "FAIL", time.Since(t), "XML格式不正确")
+	}
 }
 
 func b03EmptyToolsCleaner() {
@@ -161,9 +175,15 @@ func b03EmptyToolsCleaner() {
 	cleaner := middleware.NewEmptyToolsCleaner()
 	req := &llm.ChatRequest{Tools: []types.ToolSchema{}} // 空工具列表
 	out, err := cleaner.Rewrite(context.Background(), req)
-	if err != nil { rec("空工具清理器", "FAIL", time.Since(t), err.Error()); return }
-	if out.Tools == nil || len(out.Tools) == 0 { rec("空工具清理器", "PASS", time.Since(t), "空列表已清理")
-	} else { rec("空工具清理器", "FAIL", time.Since(t), "未清理") }
+	if err != nil {
+		rec("空工具清理器", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if out.Tools == nil || len(out.Tools) == 0 {
+		rec("空工具清理器", "PASS", time.Since(t), "空列表已清理")
+	} else {
+		rec("空工具清理器", "FAIL", time.Since(t), "未清理")
+	}
 }
 
 // ═══ 韧性 ═══
@@ -175,11 +195,16 @@ func b04RetryPolicy() {
 	attempts := 0
 	err := retryer.Do(context.Background(), func() error {
 		attempts++
-		if attempts < 3 { return fmt.Errorf("模拟失败 #%d", attempts) }
+		if attempts < 3 {
+			return fmt.Errorf("模拟失败 #%d", attempts)
+		}
 		return nil
 	})
-	if err == nil && attempts == 3 { rec("重试策略", "PASS", time.Since(t), fmt.Sprintf("重试%d次后成功", attempts))
-	} else { rec("重试策略", "FAIL", time.Since(t), fmt.Sprintf("attempts=%d err=%v", attempts, err)) }
+	if err == nil && attempts == 3 {
+		rec("重试策略", "PASS", time.Since(t), fmt.Sprintf("重试%d次后成功", attempts))
+	} else {
+		rec("重试策略", "FAIL", time.Since(t), fmt.Sprintf("attempts=%d err=%v", attempts, err))
+	}
 }
 
 func b05ResilientProvider() {
@@ -187,7 +212,9 @@ func b05ResilientProvider() {
 	callCount := 0
 	mock := &mockProvider{fn: func() (*llm.ChatResponse, error) {
 		callCount++
-		if callCount < 2 { return nil, &types.Error{Code: types.ErrUpstreamError, Message: "503", Retryable: true} }
+		if callCount < 2 {
+			return nil, &types.Error{Code: types.ErrUpstreamError, Message: "503", Retryable: true}
+		}
 		return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: types.Message{Content: "ok"}}}}, nil
 	}}
 	rp := llm.NewResilientProvider(mock, &llm.ResilientConfig{
@@ -196,7 +223,9 @@ func b05ResilientProvider() {
 	resp, err := rp.Completion(context.Background(), &llm.ChatRequest{Model: "test"})
 	if err == nil && resp != nil && resp.Choices[0].Message.Content == "ok" {
 		rec("弹性Provider", "PASS", time.Since(t), fmt.Sprintf("重试%d次后成功", callCount))
-	} else { rec("弹性Provider", "FAIL", time.Since(t), fmt.Sprintf("err=%v calls=%d", err, callCount)) }
+	} else {
+		rec("弹性Provider", "FAIL", time.Since(t), fmt.Sprintf("err=%v calls=%d", err, callCount))
+	}
 }
 
 // ═══ Token ═══
@@ -205,9 +234,15 @@ func b06TokenEstimator() {
 	t := time.Now()
 	tok := tokenizer.GetTokenizerOrEstimator("unknown-model")
 	n, err := tok.CountTokens("Hello world, 你好世界！This is a test.")
-	if err != nil { rec("Token估算器", "FAIL", time.Since(t), err.Error()); return }
-	if n > 0 && n < 100 { rec("Token估算器", "PASS", time.Since(t), fmt.Sprintf("估算=%d tokens", n))
-	} else { rec("Token估算器", "WARN", time.Since(t), fmt.Sprintf("估算值异常=%d", n)) }
+	if err != nil {
+		rec("Token估算器", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if n > 0 && n < 100 {
+		rec("Token估算器", "PASS", time.Since(t), fmt.Sprintf("估算=%d tokens", n))
+	} else {
+		rec("Token估算器", "WARN", time.Since(t), fmt.Sprintf("估算值异常=%d", n))
+	}
 }
 
 // ═══ 背压流 ═══
@@ -219,19 +254,31 @@ func b07BackpressureStream() {
 	s := streaming.NewBackpressureStream(cfg)
 	ctx := context.Background()
 	// 写入
-	for i := 0; i < 5; i++ { s.Write(ctx, streaming.Token{Content: fmt.Sprintf("t%d", i), Index: i}) }
+	for i := 0; i < 5; i++ {
+		s.Write(ctx, streaming.Token{Content: fmt.Sprintf("t%d", i), Index: i})
+	}
 	s.Write(ctx, streaming.Token{Final: true})
 	// 读取
 	var tokens []string
-	for { tk, err := s.Read(ctx); if err != nil || tk.Final { break }; tokens = append(tokens, tk.Content) }
+	for {
+		tk, err := s.Read(ctx)
+		if err != nil || tk.Final {
+			break
+		}
+		tokens = append(tokens, tk.Content)
+	}
 	s.Close()
-	if len(tokens) == 5 { rec("背压流", "PASS", time.Since(t), fmt.Sprintf("写入5读出5"))
-	} else { rec("背压流", "FAIL", time.Since(t), fmt.Sprintf("读出%d", len(tokens))) }
+	if len(tokens) == 5 {
+		rec("背压流", "PASS", time.Since(t), fmt.Sprintf("写入5读出5"))
+	} else {
+		rec("背压流", "FAIL", time.Since(t), fmt.Sprintf("读出%d", len(tokens)))
+	}
 }
 
 func b08StreamMultiplexer() {
 	t := time.Now()
-	cfg := streaming.DefaultBackpressureConfig(); cfg.BufferSize = 20
+	cfg := streaming.DefaultBackpressureConfig()
+	cfg.BufferSize = 20
 	src := streaming.NewBackpressureStream(cfg)
 	mux := streaming.NewStreamMultiplexer(src)
 	c1 := mux.AddConsumer(cfg)
@@ -240,14 +287,35 @@ func b08StreamMultiplexer() {
 	defer cancel()
 	go mux.Start(ctx)
 	// 写入源
-	go func() { for i := 0; i < 3; i++ { src.Write(ctx, streaming.Token{Content: fmt.Sprintf("m%d", i)}) }; src.Write(ctx, streaming.Token{Final: true}) }()
+	go func() {
+		for i := 0; i < 3; i++ {
+			src.Write(ctx, streaming.Token{Content: fmt.Sprintf("m%d", i)})
+		}
+		src.Write(ctx, streaming.Token{Final: true})
+	}()
 	// 两个消费者都应该收到相同数据
-	read := func(s *streaming.BackpressureStream) int { n := 0; for { tk, e := s.Read(ctx); if e != nil || tk.Final { break }; n++ }; return n }
-	var wg sync.WaitGroup; var n1, n2 int
-	wg.Add(2); go func() { defer wg.Done(); n1 = read(c1) }(); go func() { defer wg.Done(); n2 = read(c2) }()
+	read := func(s *streaming.BackpressureStream) int {
+		n := 0
+		for {
+			tk, e := s.Read(ctx)
+			if e != nil || tk.Final {
+				break
+			}
+			n++
+		}
+		return n
+	}
+	var wg sync.WaitGroup
+	var n1, n2 int
+	wg.Add(2)
+	go func() { defer wg.Done(); n1 = read(c1) }()
+	go func() { defer wg.Done(); n2 = read(c2) }()
 	wg.Wait()
-	if n1 == 3 && n2 == 3 { rec("流多路复用", "PASS", time.Since(t), fmt.Sprintf("2消费者各收%d", n1))
-	} else { rec("流多路复用", "WARN", time.Since(t), fmt.Sprintf("c1=%d c2=%d", n1, n2)) }
+	if n1 == 3 && n2 == 3 {
+		rec("流多路复用", "PASS", time.Since(t), fmt.Sprintf("2消费者各收%d", n1))
+	} else {
+		rec("流多路复用", "WARN", time.Since(t), fmt.Sprintf("c1=%d c2=%d", n1, n2))
+	}
 }
 
 // ═══ Guardrails ═══
@@ -257,12 +325,21 @@ func b09ValidatorChain() {
 	chain := guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{Mode: guardrails.ChainModeCollectAll})
 	chain.Add(&lengthValidator{max: 50})
 	r, err := chain.Validate(context.Background(), "short text")
-	if err != nil { rec("验证器链", "FAIL", time.Since(t), err.Error()); return }
-	if r.Valid { rec("验证器链", "PASS", time.Since(t), "短文本通过验证")
-	} else { rec("验证器链", "FAIL", time.Since(t), "不应失败") }
+	if err != nil {
+		rec("验证器链", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if r.Valid {
+		rec("验证器链", "PASS", time.Since(t), "短文本通过验证")
+	} else {
+		rec("验证器链", "FAIL", time.Since(t), "不应失败")
+	}
 	r2, _ := chain.Validate(context.Background(), strings.Repeat("x", 100))
-	if !r2.Valid { rec("验证器链(拒绝)", "PASS", time.Since(t), "长文本被拒绝")
-	} else { rec("验证器链(拒绝)", "FAIL", time.Since(t), "应该拒绝") }
+	if !r2.Valid {
+		rec("验证器链(拒绝)", "PASS", time.Since(t), "长文本被拒绝")
+	} else {
+		rec("验证器链(拒绝)", "FAIL", time.Since(t), "应该拒绝")
+	}
 }
 
 func b10TripwireDetection() {
@@ -270,11 +347,17 @@ func b10TripwireDetection() {
 	chain := guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{Mode: guardrails.ChainModeFailFast})
 	chain.Add(&tripwireValidator{keyword: "INJECT"})
 	r, _ := chain.Validate(context.Background(), "normal text")
-	if r.Valid { rec("Tripwire检测", "PASS", time.Since(t), "正常文本通过")
-	} else { rec("Tripwire检测", "FAIL", time.Since(t), "误报") }
+	if r.Valid {
+		rec("Tripwire检测", "PASS", time.Since(t), "正常文本通过")
+	} else {
+		rec("Tripwire检测", "FAIL", time.Since(t), "误报")
+	}
 	r2, err := chain.Validate(context.Background(), "try to INJECT prompt")
-	if err != nil || r2.Tripwire { rec("Tripwire触发", "PASS", time.Since(t), "检测到注入关键词")
-	} else { rec("Tripwire触发", "FAIL", time.Since(t), "未检测到") }
+	if err != nil || r2.Tripwire {
+		rec("Tripwire触发", "PASS", time.Since(t), "检测到注入关键词")
+	} else {
+		rec("Tripwire触发", "FAIL", time.Since(t), "未检测到")
+	}
 }
 
 // ═══ MCP ═══
@@ -288,16 +371,31 @@ func b11MCPServer() {
 	}, func(_ context.Context, args map[string]any) (any, error) {
 		return map[string]any{"echo": args["input"]}, nil
 	})
-	if err != nil { rec("MCP服务端", "FAIL", time.Since(t), fmt.Sprintf("注册失败: %v", err)); return }
+	if err != nil {
+		rec("MCP服务端", "FAIL", time.Since(t), fmt.Sprintf("注册失败: %v", err))
+		return
+	}
 	// 列出工具
 	tools, err := srv.ListTools(context.Background())
-	if err != nil { rec("MCP服务端", "FAIL", time.Since(t), err.Error()); return }
-	if len(tools) == 0 { rec("MCP服务端", "FAIL", time.Since(t), "工具列表为空"); return }
+	if err != nil {
+		rec("MCP服务端", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if len(tools) == 0 {
+		rec("MCP服务端", "FAIL", time.Since(t), "工具列表为空")
+		return
+	}
 	// 调用工具
 	result, err := srv.CallTool(context.Background(), "echo", map[string]any{"input": "hello"})
-	if err != nil { rec("MCP服务端", "FAIL", time.Since(t), err.Error()); return }
-	if result != nil { rec("MCP服务端", "PASS", time.Since(t), fmt.Sprintf("注册%d工具,调用成功", len(tools)))
-	} else { rec("MCP服务端", "FAIL", time.Since(t), "调用返回nil") }
+	if err != nil {
+		rec("MCP服务端", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if result != nil {
+		rec("MCP服务端", "PASS", time.Since(t), fmt.Sprintf("注册%d工具,调用成功", len(tools)))
+	} else {
+		rec("MCP服务端", "FAIL", time.Since(t), "调用返回nil")
+	}
 }
 
 // ═══ A2A ═══
@@ -309,7 +407,9 @@ func b12A2AAgentCard() {
 	info := card
 	if info.Name == "test-agent" && len(info.Capabilities) == 1 {
 		rec("A2A AgentCard", "PASS", time.Since(t), fmt.Sprintf("name=%s caps=%d", info.Name, len(info.Capabilities)))
-	} else { rec("A2A AgentCard", "FAIL", time.Since(t), "字段异常") }
+	} else {
+		rec("A2A AgentCard", "FAIL", time.Since(t), "字段异常")
+	}
 }
 
 // ═══ 多 Agent ═══
@@ -322,10 +422,15 @@ func b13AggregatorMergeAll() {
 		{AgentID: "a2", Content: "回答2", Score: 0.9},
 	}
 	out, err := agg.Aggregate(results)
-	if err != nil { rec("聚合-MergeAll", "FAIL", time.Since(t), err.Error()); return }
+	if err != nil {
+		rec("聚合-MergeAll", "FAIL", time.Since(t), err.Error())
+		return
+	}
 	if strings.Contains(out.Content, "回答1") && strings.Contains(out.Content, "回答2") {
 		rec("聚合-MergeAll", "PASS", time.Since(t), "两个结果合并")
-	} else { rec("聚合-MergeAll", "FAIL", time.Since(t), out.Content) }
+	} else {
+		rec("聚合-MergeAll", "FAIL", time.Since(t), out.Content)
+	}
 }
 
 func b14AggregatorBestOfN() {
@@ -336,9 +441,15 @@ func b14AggregatorBestOfN() {
 		{AgentID: "a2", Content: "高分回答", Score: 0.95},
 	}
 	out, err := agg.Aggregate(results)
-	if err != nil { rec("聚合-BestOfN", "FAIL", time.Since(t), err.Error()); return }
-	if strings.Contains(out.Content, "高分") { rec("聚合-BestOfN", "PASS", time.Since(t), "选择最高分")
-	} else { rec("聚合-BestOfN", "FAIL", time.Since(t), out.Content) }
+	if err != nil {
+		rec("聚合-BestOfN", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if strings.Contains(out.Content, "高分") {
+		rec("聚合-BestOfN", "PASS", time.Since(t), "选择最高分")
+	} else {
+		rec("聚合-BestOfN", "FAIL", time.Since(t), out.Content)
+	}
 }
 
 func b15AggregatorVoteMajority() {
@@ -350,9 +461,15 @@ func b15AggregatorVoteMajority() {
 		{AgentID: "a3", Content: "Rust最好"},
 	}
 	out, err := agg.Aggregate(results)
-	if err != nil { rec("聚合-多数投票", "FAIL", time.Since(t), err.Error()); return }
-	if strings.Contains(out.Content, "Go") { rec("聚合-多数投票", "PASS", time.Since(t), "多数胜出")
-	} else { rec("聚合-多数投票", "WARN", time.Since(t), out.Content) }
+	if err != nil {
+		rec("聚合-多数投票", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if strings.Contains(out.Content, "Go") {
+		rec("聚合-多数投票", "PASS", time.Since(t), "多数胜出")
+	} else {
+		rec("聚合-多数投票", "WARN", time.Since(t), out.Content)
+	}
 }
 
 // ═══ 工作流 ═══
@@ -367,28 +484,44 @@ func b16SequentialWorkflow() {
 	})
 	// 手动串联
 	out1, err := step1.Execute(context.Background(), "hello")
-	if err != nil { rec("工作流串行", "FAIL", time.Since(t), err.Error()); return }
+	if err != nil {
+		rec("工作流串行", "FAIL", time.Since(t), err.Error())
+		return
+	}
 	out2, err := step2.Execute(context.Background(), out1)
-	if err != nil { rec("工作流串行", "FAIL", time.Since(t), err.Error()); return }
-	if out2.(string) == "HELLO_DONE" { rec("工作流串行", "PASS", time.Since(t), "HELLO_DONE")
-	} else { rec("工作流串行", "FAIL", time.Since(t), fmt.Sprintf("got=%v", out2)) }
+	if err != nil {
+		rec("工作流串行", "FAIL", time.Since(t), err.Error())
+		return
+	}
+	if out2.(string) == "HELLO_DONE" {
+		rec("工作流串行", "PASS", time.Since(t), "HELLO_DONE")
+	} else {
+		rec("工作流串行", "FAIL", time.Since(t), fmt.Sprintf("got=%v", out2))
+	}
 }
 
 func b17CredentialOverride() {
 	t := time.Now()
 	ctx := llm.WithCredentialOverride(context.Background(), llm.CredentialOverride{APIKey: "test-key-123"})
 	cred, ok := llm.CredentialOverrideFromContext(ctx)
-	if ok && cred.APIKey == "test-key-123" { rec("凭据覆盖", "PASS", time.Since(t), "上下文传递正确")
-	} else { rec("凭据覆盖", "FAIL", time.Since(t), "凭据丢失") }
+	if ok && cred.APIKey == "test-key-123" {
+		rec("凭据覆盖", "PASS", time.Since(t), "上下文传递正确")
+	} else {
+		rec("凭据覆盖", "FAIL", time.Since(t), "凭据丢失")
+	}
 }
 
 func b18ToolCallIndexField() {
 	t := time.Now()
 	tc := types.ToolCall{Index: 2, ID: "call_123", Name: "test", Arguments: json.RawMessage(`{"a":1}`)}
 	data, _ := json.Marshal(tc)
-	var tc2 types.ToolCall; json.Unmarshal(data, &tc2)
-	if tc2.Index == 2 && tc2.ID == "call_123" { rec("ToolCall.Index字段", "PASS", time.Since(t), "序列化round-trip正确")
-	} else { rec("ToolCall.Index字段", "FAIL", time.Since(t), fmt.Sprintf("got index=%d id=%s", tc2.Index, tc2.ID)) }
+	var tc2 types.ToolCall
+	json.Unmarshal(data, &tc2)
+	if tc2.Index == 2 && tc2.ID == "call_123" {
+		rec("ToolCall.Index字段", "PASS", time.Since(t), "序列化round-trip正确")
+	} else {
+		rec("ToolCall.Index字段", "FAIL", time.Since(t), fmt.Sprintf("got index=%d id=%s", tc2.Index, tc2.ID))
+	}
 }
 
 // ═══ 评估框架 ═══
@@ -398,9 +531,9 @@ func b42EvaluationFramework() {
 
 	// 1. 用 mock provider 构建 EvalExecutor
 	executor := &evalMockExecutor{
-		response:  "Go语言是一种高效、简洁的编程语言，适合构建后端服务和分布式系统。",
-		tokens:    42,
-		latency:   15 * time.Millisecond,
+		response: "Go语言是一种高效、简洁的编程语言，适合构建后端服务和分布式系统。",
+		tokens:   42,
+		latency:  15 * time.Millisecond,
 	}
 
 	// 2. 构建评估套件
@@ -507,13 +640,26 @@ func printSummary() {
 	fmt.Println("║  📊 Part B 测试汇总                                         ║")
 	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
 	ps, fl, wr := 0, 0, 0
-	for _, r := range rs { switch r.Status { case "PASS": ps++; case "FAIL": fl++; case "WARN": wr++ } }
+	for _, r := range rs {
+		switch r.Status {
+		case "PASS":
+			ps++
+		case "FAIL":
+			fl++
+		case "WARN":
+			wr++
+		}
+	}
 	fmt.Printf("\n  总计: %d | ✅ PASS: %d | ❌ FAIL: %d | ⚠️  WARN: %d\n\n", len(rs), ps, fl, wr)
 	for _, r := range rs {
 		i := map[string]string{"PASS": "✅", "FAIL": "❌", "WARN": "⚠️"}[r.Status]
 		fmt.Printf("  %s %-32s %8v  %s\n", i, r.Name, r.D.Round(time.Microsecond), r.Info)
 	}
-	if fl == 0 { fmt.Println("\n  🎉 全部框架内部测试通过！") } else { fmt.Printf("\n  ⚠️  有 %d 项失败\n", fl) }
+	if fl == 0 {
+		fmt.Println("\n  🎉 全部框架内部测试通过！")
+	} else {
+		fmt.Printf("\n  ⚠️  有 %d 项失败\n", fl)
+	}
 }
 
 // ─── Mock & 辅助类型 ────────────────────────────────────
@@ -521,26 +667,46 @@ func printSummary() {
 type mockProvider struct {
 	fn func() (*llm.ChatResponse, error)
 }
+
 func (m *mockProvider) Name() string { return "mock" }
-func (m *mockProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) { return m.fn() }
-func (m *mockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) { return nil, nil }
-func (m *mockProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) { return &llm.HealthStatus{Healthy: true}, nil }
-func (m *mockProvider) SupportsNativeFunctionCalling() bool { return false }
+func (m *mockProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return m.fn()
+}
+func (m *mockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	return nil, nil
+}
+func (m *mockProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+func (m *mockProvider) SupportsNativeFunctionCalling() bool               { return false }
 func (m *mockProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
-func (m *mockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (m *mockProvider) Endpoints() llm.ProviderEndpoints                  { return llm.ProviderEndpoints{} }
 
 type lengthValidator struct{ max int }
+
 func (v *lengthValidator) Validate(_ context.Context, c string) (*guardrails.ValidationResult, error) {
-	r := guardrails.NewValidationResult(); if len([]rune(c)) > v.max { r.Valid = false; r.Errors = append(r.Errors, guardrails.ValidationError{Code: "too_long", Message: "超长"}) }; return r, nil
+	r := guardrails.NewValidationResult()
+	if len([]rune(c)) > v.max {
+		r.Valid = false
+		r.Errors = append(r.Errors, guardrails.ValidationError{Code: "too_long", Message: "超长"})
+	}
+	return r, nil
 }
-func (v *lengthValidator) Name() string { return "length" }
+func (v *lengthValidator) Name() string  { return "length" }
 func (v *lengthValidator) Priority() int { return 1 }
 
 type tripwireValidator struct{ keyword string }
+
 func (v *tripwireValidator) Validate(_ context.Context, c string) (*guardrails.ValidationResult, error) {
-	r := guardrails.NewValidationResult(); if strings.Contains(c, v.keyword) { r.Valid = false; r.Tripwire = true; r.Errors = append(r.Errors, guardrails.ValidationError{Code: "injection", Message: "检测到注入"}) }; return r, nil
+	r := guardrails.NewValidationResult()
+	if strings.Contains(c, v.keyword) {
+		r.Valid = false
+		r.Tripwire = true
+		r.Errors = append(r.Errors, guardrails.ValidationError{Code: "injection", Message: "检测到注入"})
+	}
+	return r, nil
 }
-func (v *tripwireValidator) Name() string { return "tripwire" }
+func (v *tripwireValidator) Name() string  { return "tripwire" }
 func (v *tripwireValidator) Priority() int { return 0 }
 
 // ═══ 熔断器 ═══
@@ -613,8 +779,11 @@ func b20DAGWorkflow() {
 	graph.AddEdge("middle", "end")
 	graph.SetEntry("start")
 
-	executor := workflow.NewDAGExecutor(nil, zap.NewNop())
-	result, err := executor.Execute(context.Background(), graph, "INIT")
+	wf := workflow.NewDAGWorkflow("demo-dag", "Facade-driven DAG demo", graph)
+	wfRuntime := workflowruntime.NewBuilder(nil, zap.NewNop()).
+		WithDSLParser(false).
+		Build()
+	result, err := wfRuntime.Facade.ExecuteDAG(context.Background(), wf, "INIT")
 	if err != nil {
 		rec("DAG工作流", "FAIL", time.Since(t), err.Error())
 		return
@@ -707,7 +876,10 @@ func b24UnicodeContent() {
 	content := "你好🌍！Go语言🚀 café naïve 日本語テスト"
 	msg := types.Message{Role: "user", Content: content}
 	data, err := json.Marshal(msg)
-	if err != nil { rec("Unicode处理", "FAIL", time.Since(t), err.Error()); return }
+	if err != nil {
+		rec("Unicode处理", "FAIL", time.Since(t), err.Error())
+		return
+	}
 	var msg2 types.Message
 	json.Unmarshal(data, &msg2)
 	if msg2.Content == content {
@@ -724,13 +896,15 @@ type mockAgent struct {
 	output string
 }
 
-func (a *mockAgent) ID() string                                                    { return a.id }
-func (a *mockAgent) Name() string                                                  { return a.id }
-func (a *mockAgent) Type() agent.AgentType                                         { return "mock" }
-func (a *mockAgent) State() agent.State                                            { return "ready" }
-func (a *mockAgent) Init(_ context.Context) error                                  { return nil }
-func (a *mockAgent) Teardown(_ context.Context) error                              { return nil }
-func (a *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) { return nil, nil }
+func (a *mockAgent) ID() string                       { return a.id }
+func (a *mockAgent) Name() string                     { return a.id }
+func (a *mockAgent) Type() agent.AgentType            { return "mock" }
+func (a *mockAgent) State() agent.State               { return "ready" }
+func (a *mockAgent) Init(_ context.Context) error     { return nil }
+func (a *mockAgent) Teardown(_ context.Context) error { return nil }
+func (a *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
+	return nil, nil
+}
 func (a *mockAgent) Execute(_ context.Context, input *agent.Input) (*agent.Output, error) {
 	return &agent.Output{TraceID: input.TraceID, Content: a.output, TokensUsed: 10, Duration: time.Millisecond}, nil
 }
@@ -741,7 +915,11 @@ func (a *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error { return
 func b25HTTPErrorMapping() {
 	t := time.Now()
 	providerbase := provbase.MapHTTPError
-	tests := []struct{ code int; wantRetry bool; wantCode types.ErrorCode }{
+	tests := []struct {
+		code      int
+		wantRetry bool
+		wantCode  types.ErrorCode
+	}{
 		{401, false, types.ErrUnauthorized},
 		{403, false, types.ErrForbidden},
 		{429, true, types.ErrRateLimit},
@@ -896,7 +1074,7 @@ func b33ReActStopOnError() {
 		callCount++
 		return &llm.ChatResponse{Choices: []llm.ChatChoice{{
 			FinishReason: "tool_calls",
-			Message: types.Message{Role: "assistant", ToolCalls: []types.ToolCall{{ID: "c1", Name: "bad_tool", Arguments: json.RawMessage(`{"x":"1"}`)}}},
+			Message:      types.Message{Role: "assistant", ToolCalls: []types.ToolCall{{ID: "c1", Name: "bad_tool", Arguments: json.RawMessage(`{"x":"1"}`)}}},
 		}}}, nil
 	}}
 	reg := tools.NewDefaultRegistry(lg) // bad_tool 未注册 → 执行失败
@@ -947,8 +1125,11 @@ func b36DAGCycleDetection() {
 	graph.AddEdge("a", "b")
 	graph.AddEdge("b", "a") // 环！
 	graph.SetEntry("a")
-	executor := workflow.NewDAGExecutor(nil, zap.NewNop())
-	_, err := executor.Execute(context.Background(), graph, "input")
+	wf := workflow.NewDAGWorkflow("cycle-dag", "Cycle detection via facade", graph)
+	wfRuntime := workflowruntime.NewBuilder(nil, zap.NewNop()).
+		WithDSLParser(false).
+		Build()
+	_, err := wfRuntime.Facade.ExecuteDAG(context.Background(), wf, "input")
 	if err != nil && strings.Contains(err.Error(), "cycle") {
 		rec("DAG环检测", "PASS", time.Since(t), "正确检测到环")
 	} else if err != nil {
@@ -962,13 +1143,15 @@ func b36DAGCycleDetection() {
 
 type failAgent struct{}
 
-func (a *failAgent) ID() string                                                    { return "fail" }
-func (a *failAgent) Name() string                                                  { return "fail" }
-func (a *failAgent) Type() agent.AgentType                                         { return "mock" }
-func (a *failAgent) State() agent.State                                            { return "ready" }
-func (a *failAgent) Init(_ context.Context) error                                  { return nil }
-func (a *failAgent) Teardown(_ context.Context) error                              { return nil }
-func (a *failAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) { return nil, nil }
+func (a *failAgent) ID() string                       { return "fail" }
+func (a *failAgent) Name() string                     { return "fail" }
+func (a *failAgent) Type() agent.AgentType            { return "mock" }
+func (a *failAgent) State() agent.State               { return "ready" }
+func (a *failAgent) Init(_ context.Context) error     { return nil }
+func (a *failAgent) Teardown(_ context.Context) error { return nil }
+func (a *failAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
+	return nil, nil
+}
 func (a *failAgent) Execute(_ context.Context, _ *agent.Input) (*agent.Output, error) {
 	return nil, fmt.Errorf("模拟Agent执行失败")
 }
@@ -1156,12 +1339,14 @@ type handoffMockAgent struct {
 	caps []handoff.AgentCapability
 }
 
-func (a *handoffMockAgent) ID() string                          { return a.id }
+func (a *handoffMockAgent) ID() string                              { return a.id }
 func (a *handoffMockAgent) Capabilities() []handoff.AgentCapability { return a.caps }
 func (a *handoffMockAgent) CanHandle(task handoff.Task) bool {
 	for _, c := range a.caps {
 		for _, tt := range c.TaskTypes {
-			if tt == task.Type { return true }
+			if tt == task.Type {
+				return true
+			}
 		}
 	}
 	return false
@@ -1182,26 +1367,38 @@ type inMemoryMgr struct {
 }
 
 func (m *inMemoryMgr) Save(_ context.Context, rec memorycore.MemoryRecord) error {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.records[rec.ID] = rec
 	return nil
 }
 func (m *inMemoryMgr) Delete(_ context.Context, id string) error {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.records, id)
 	return nil
 }
 func (m *inMemoryMgr) Clear(_ context.Context, agentID string, _ memorycore.MemoryKind) error {
-	m.mu.Lock(); defer m.mu.Unlock()
-	for k, v := range m.records { if v.AgentID == agentID { delete(m.records, k) } }
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, v := range m.records {
+		if v.AgentID == agentID {
+			delete(m.records, k)
+		}
+	}
 	return nil
 }
 func (m *inMemoryMgr) LoadRecent(_ context.Context, agentID string, kind memorycore.MemoryKind, limit int) ([]memorycore.MemoryRecord, error) {
-	m.mu.Lock(); defer m.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var out []memorycore.MemoryRecord
 	for _, v := range m.records {
-		if v.AgentID == agentID && v.Kind == kind { out = append(out, v) }
-		if len(out) >= limit { break }
+		if v.AgentID == agentID && v.Kind == kind {
+			out = append(out, v)
+		}
+		if len(out) >= limit {
+			break
+		}
 	}
 	return out, nil
 }
@@ -1209,7 +1406,10 @@ func (m *inMemoryMgr) Search(_ context.Context, agentID string, _ string, topK i
 	return m.LoadRecent(context.Background(), agentID, "", topK)
 }
 func (m *inMemoryMgr) Get(_ context.Context, id string) (*memorycore.MemoryRecord, error) {
-	m.mu.Lock(); defer m.mu.Unlock()
-	if r, ok := m.records[id]; ok { return &r, nil }
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.records[id]; ok {
+		return &r, nil
+	}
 	return nil, fmt.Errorf("not found")
 }
