@@ -82,6 +82,7 @@ type ContextConfig struct {
 	TraceFeedbackComplexityThreshold int     `json:"trace_feedback_complexity_threshold,omitempty"`
 	TraceSynopsisMinScore            int     `json:"trace_synopsis_min_score,omitempty"`
 	TraceHistoryMinScore             int     `json:"trace_history_min_score,omitempty"`
+	TraceMemoryRecallMinScore        int     `json:"trace_memory_recall_min_score,omitempty"`
 	TraceHistoryMaxUsageRatio        float64 `json:"trace_history_max_usage_ratio,omitempty"`
 	MemoryBudgetRatio                float64 `json:"memory_budget_ratio,omitempty"`
 	RetrievalBudgetRatio             float64 `json:"retrieval_budget_ratio,omitempty"`
@@ -106,6 +107,7 @@ func DefaultContextConfig() *ContextConfig {
 		TraceFeedbackComplexityThreshold: 2,
 		TraceSynopsisMinScore:            2,
 		TraceHistoryMinScore:             3,
+		TraceMemoryRecallMinScore:        2,
 		TraceHistoryMaxUsageRatio:        0.85,
 		MemoryBudgetRatio:                0.2,
 		RetrievalBudgetRatio:             0.2,

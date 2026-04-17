@@ -37,6 +37,7 @@ excludeFiles:
   - '^.*[\\/]examples[\\/].*$'
   - '^.*[\\/]\.snow[\\/].*$'
   - '^.*[\\/]agentflow\.go$'
+  - '^.*[\\/]doc\.go$'
 
 components:
   types:

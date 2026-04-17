@@ -25,6 +25,9 @@ func TestDefaultContextConfig(t *testing.T) {
 	if cfg.TraceHistoryMinScore != 3 {
 		t.Fatalf("expected trace history min score 3, got %d", cfg.TraceHistoryMinScore)
 	}
+	if cfg.TraceMemoryRecallMinScore != 2 {
+		t.Fatalf("expected trace memory recall min score 2, got %d", cfg.TraceMemoryRecallMinScore)
+	}
 	if cfg.TraceHistoryMaxUsageRatio != 0.85 {
 		t.Fatalf("expected trace history max usage ratio 0.85, got %v", cfg.TraceHistoryMaxUsageRatio)
 	}
