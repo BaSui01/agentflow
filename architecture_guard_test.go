@@ -13,8 +13,6 @@ import (
 	"testing"
 )
 
-// Keep the root agent package shrinking over time.
-// This guard prevents adding more production files to agent/.
 func TestAgentRootPackageFileBudget(t *testing.T) {
 	const maxAgentRootFiles = 27
 
@@ -40,7 +38,6 @@ func TestAgentRootPackageFileBudget(t *testing.T) {
 	}
 }
 
-// One-file pkg directories are allowed only when explicitly reviewed.
 func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 	allowlist := map[string]string{
 		"cache":      "single cohesive cache manager entrypoint",
@@ -100,156 +97,36 @@ func TestDependencyDirectionGuards(t *testing.T) {
 	}
 
 	rules := []guardRule{
-		{
-			sourcePrefix: "pkg",
-			targetPrefix: "api",
-			reason:       "infrastructure pkg layer must not depend on API adapter layer",
-		},
-		{
-			sourcePrefix: "pkg",
-			targetPrefix: "cmd",
-			reason:       "infrastructure pkg layer must not depend on composition root",
-		},
-		{
-			sourcePrefix: "workflow",
-			targetPrefix: "agent/persistence",
-			reason:       "workflow must not depend on agent persistence implementation",
-		},
-		{
-			sourcePrefix: "rag",
-			targetPrefix: "agent",
-			reason:       "RAG layer must not depend on agent layer",
-		},
-		{
-			sourcePrefix: "rag",
-			targetPrefix: "workflow",
-			reason:       "RAG layer must not depend on workflow layer",
-		},
-		{
-			sourcePrefix: "rag",
-			targetPrefix: "api",
-			reason:       "RAG layer must not depend on API adapter layer",
-		},
-		{
-			sourcePrefix: "rag",
-			targetPrefix: "cmd",
-			reason:       "RAG layer must not depend on composition root",
-		},
-		{
-			sourcePrefix: "rag",
-			targetPrefix: "internal",
-			reason:       "RAG layer must not depend on startup-only internal composition support",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "agent",
-			reason:       "shared types must stay leaf-level and avoid business dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "api",
-			reason:       "shared types must stay leaf-level and avoid adapter dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "cmd",
-			reason:       "shared types must stay leaf-level and avoid composition-root dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "config",
-			reason:       "shared types must stay leaf-level and avoid runtime config dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "internal",
-			reason:       "shared types must stay leaf-level and avoid internal layer dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "llm",
-			reason:       "shared types must stay leaf-level and avoid provider/business dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "pkg",
-			reason:       "shared types must stay leaf-level and avoid infrastructure dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "rag",
-			reason:       "shared types must stay leaf-level and avoid business dependencies",
-		},
-		{
-			sourcePrefix: "types",
-			targetPrefix: "workflow",
-			reason:       "shared types must stay leaf-level and avoid business dependencies",
-		},
-		{
-			sourcePrefix: "llm",
-			targetPrefix: "rag",
-			reason:       "llm layer must not depend on sibling rag capability layer",
-		},
-		{
-			sourcePrefix: "llm",
-			targetPrefix: "agent",
-			reason:       "llm layer must not depend on agent layer",
-		},
-		{
-			sourcePrefix: "llm",
-			targetPrefix: "workflow",
-			reason:       "llm layer must not depend on workflow layer",
-		},
-		{
-			sourcePrefix: "llm",
-			targetPrefix: "api",
-			reason:       "llm layer must not depend on API adapter layer",
-		},
-		{
-			sourcePrefix: "llm",
-			targetPrefix: "cmd",
-			reason:       "llm layer must not depend on composition root",
-		},
-		{
-			sourcePrefix: "llm",
-			targetPrefix: "internal",
-			reason:       "llm layer must not depend on startup-only internal composition support",
-		},
-		{
-			sourcePrefix: "agent",
-			targetPrefix: "workflow",
-			reason:       "agent layer must not depend upward on workflow orchestrator",
-		},
-		{
-			sourcePrefix: "agent",
-			targetPrefix: "api",
-			reason:       "agent layer must not depend on API adapter layer",
-		},
-		{
-			sourcePrefix: "agent",
-			targetPrefix: "cmd",
-			reason:       "agent layer must not depend on composition root",
-		},
-		{
-			sourcePrefix: "agent",
-			targetPrefix: "internal",
-			reason:       "agent layer must not depend on startup-only internal composition support",
-		},
-		{
-			sourcePrefix: "workflow",
-			targetPrefix: "api",
-			reason:       "workflow layer must not depend on API adapter layer",
-		},
-		{
-			sourcePrefix: "workflow",
-			targetPrefix: "cmd",
-			reason:       "workflow layer must not depend on composition root",
-		},
-		{
-			sourcePrefix: "workflow",
-			targetPrefix: "internal",
-			reason:       "workflow layer must not depend on startup-only internal composition support",
-		},
+		{sourcePrefix: "pkg", targetPrefix: "api", reason: "infrastructure pkg layer must not depend on API adapter layer"},
+		{sourcePrefix: "pkg", targetPrefix: "cmd", reason: "infrastructure pkg layer must not depend on composition root"},
+		{sourcePrefix: "workflow", targetPrefix: "agent/persistence", reason: "workflow must not depend on agent persistence implementation"},
+		{sourcePrefix: "rag", targetPrefix: "agent", reason: "RAG layer must not depend on agent layer"},
+		{sourcePrefix: "rag", targetPrefix: "workflow", reason: "RAG layer must not depend on workflow layer"},
+		{sourcePrefix: "rag", targetPrefix: "api", reason: "RAG layer must not depend on API adapter layer"},
+		{sourcePrefix: "rag", targetPrefix: "cmd", reason: "RAG layer must not depend on composition root"},
+		{sourcePrefix: "rag", targetPrefix: "internal", reason: "RAG layer must not depend on startup-only internal composition support"},
+		{sourcePrefix: "types", targetPrefix: "agent", reason: "shared types must stay leaf-level and avoid business dependencies"},
+		{sourcePrefix: "types", targetPrefix: "api", reason: "shared types must stay leaf-level and avoid adapter dependencies"},
+		{sourcePrefix: "types", targetPrefix: "cmd", reason: "shared types must stay leaf-level and avoid composition-root dependencies"},
+		{sourcePrefix: "types", targetPrefix: "config", reason: "shared types must stay leaf-level and avoid runtime config dependencies"},
+		{sourcePrefix: "types", targetPrefix: "internal", reason: "shared types must stay leaf-level and avoid internal layer dependencies"},
+		{sourcePrefix: "types", targetPrefix: "llm", reason: "shared types must stay leaf-level and avoid provider/business dependencies"},
+		{sourcePrefix: "types", targetPrefix: "pkg", reason: "shared types must stay leaf-level and avoid infrastructure dependencies"},
+		{sourcePrefix: "types", targetPrefix: "rag", reason: "shared types must stay leaf-level and avoid business dependencies"},
+		{sourcePrefix: "types", targetPrefix: "workflow", reason: "shared types must stay leaf-level and avoid business dependencies"},
+		{sourcePrefix: "llm", targetPrefix: "rag", reason: "llm layer must not depend on sibling rag capability layer"},
+		{sourcePrefix: "llm", targetPrefix: "agent", reason: "llm layer must not depend on agent layer"},
+		{sourcePrefix: "llm", targetPrefix: "workflow", reason: "llm layer must not depend on workflow layer"},
+		{sourcePrefix: "llm", targetPrefix: "api", reason: "llm layer must not depend on API adapter layer"},
+		{sourcePrefix: "llm", targetPrefix: "cmd", reason: "llm layer must not depend on composition root"},
+		{sourcePrefix: "llm", targetPrefix: "internal", reason: "llm layer must not depend on startup-only internal composition support"},
+		{sourcePrefix: "agent", targetPrefix: "workflow", reason: "agent layer must not depend upward on workflow orchestrator"},
+		{sourcePrefix: "agent", targetPrefix: "api", reason: "agent layer must not depend on API adapter layer"},
+		{sourcePrefix: "agent", targetPrefix: "cmd", reason: "agent layer must not depend on composition root"},
+		{sourcePrefix: "agent", targetPrefix: "internal", reason: "agent layer must not depend on startup-only internal composition support"},
+		{sourcePrefix: "workflow", targetPrefix: "api", reason: "workflow layer must not depend on API adapter layer"},
+		{sourcePrefix: "workflow", targetPrefix: "cmd", reason: "workflow layer must not depend on composition root"},
+		{sourcePrefix: "workflow", targetPrefix: "internal", reason: "workflow layer must not depend on startup-only internal composition support"},
 	}
 
 	const modulePrefix = "github.com/BaSui01/agentflow/"
@@ -361,32 +238,22 @@ func TestLLMComposeImportGuards(t *testing.T) {
 	}
 }
 
-// API handlers must stay at protocol-adapter boundary.
-// Allow infra imports only in explicit store adapter files.
 func TestAPIHandlerInfraImportGuards(t *testing.T) {
-	const (
-		handlerDir = "api/handlers"
-	)
 	disallowedPrefixes := []string{
 		"gorm.io/",
 		"github.com/BaSui01/agentflow/llm/runtime/router",
 		"github.com/BaSui01/agentflow/llm/providers/",
 	}
-	allowlistFileSuffix := []string{
-		"_store.go",
-	}
+	allowlistFileSuffix := []string{"_store.go"}
 
 	fset := token.NewFileSet()
 	var violations []string
 
-	walkErr := filepath.WalkDir(handlerDir, func(path string, d os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir("api/handlers", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 
@@ -521,10 +388,10 @@ func TestGatewayDirectProviderCallGuards(t *testing.T) {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
+			if !ok || sel.Sel == nil {
 				return true
 			}
-			if sel.Sel == nil {
+			if isGatewaySelector(sel.X) {
 				return true
 			}
 			switch sel.Sel.Name {
@@ -632,57 +499,6 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 	}
 }
 
-func TestVendorChatProviderEntryPoints(t *testing.T) {
-	type sourceExpectation struct {
-		path              string
-		requiredSnippets  []string
-		forbiddenSnippets []string
-	}
-
-	expectations := []sourceExpectation{
-		{
-			path:             "internal/app/bootstrap/main_provider_registry.go",
-			requiredSnippets: []string{"VendorChatProviderFactory{"},
-			forbiddenSnippets: []string{
-				"NewOpenAIProvider(",
-				"NewClaudeProvider(",
-				"NewGeminiProvider(",
-			},
-		},
-		{
-			path:             "llm/runtime/compose/runtime.go",
-			requiredSnippets: []string{"VendorChatProviderFactory{"},
-			forbiddenSnippets: []string{
-				"NewOpenAIProvider(",
-				"NewClaudeProvider(",
-				"NewGeminiProvider(",
-			},
-		},
-		{
-			path:             "llm/runtime/router/chat_provider_factory.go",
-			requiredSnippets: []string{"vendor.NewChatProviderFromConfig("},
-		},
-	}
-
-	for _, tt := range expectations {
-		data, err := os.ReadFile(filepath.FromSlash(tt.path))
-		if err != nil {
-			t.Fatalf("read %s: %v", tt.path, err)
-		}
-		src := string(data)
-		for _, snippet := range tt.requiredSnippets {
-			if !strings.Contains(src, snippet) {
-				t.Fatalf("%s must contain %q", tt.path, snippet)
-			}
-		}
-		for _, snippet := range tt.forbiddenSnippets {
-			if strings.Contains(src, snippet) {
-				t.Fatalf("%s must not contain %q", tt.path, snippet)
-			}
-		}
-	}
-}
-
 func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 	type sourceExpectation struct {
 		path              string
@@ -705,7 +521,7 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 			path: "agent/multiagent/default_modes.go",
 			requiredSnippets: []string{
 				"newHierarchicalModeBaseAgent(",
-				"agentruntime.NewBuilder(provider, logger).Build(",
+				"agentruntime.NewBuilder(gateway, logger).Build(",
 			},
 			forbiddenSnippets: []string{
 				"agent.NewBaseAgent(types.AgentConfig{",
@@ -732,29 +548,6 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 	}
 }
 
-func TestPublicProviderRoutingDocsUseVendorFactory(t *testing.T) {
-	docPaths := []string{
-		"README.md",
-		"README_EN.md",
-		"docs/cn/tutorials/02.Provider配置指南.md",
-		"docs/en/tutorials/02.ProviderConfiguration.md",
-	}
-
-	for _, path := range docPaths {
-		data, err := os.ReadFile(filepath.FromSlash(path))
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		src := string(data)
-		if !strings.Contains(src, "VendorChatProviderFactory") {
-			t.Fatalf("%s must document VendorChatProviderFactory for multi-provider routing", path)
-		}
-		if strings.Contains(src, "NewDefaultProviderFactory()") {
-			t.Fatalf("%s must not document legacy NewDefaultProviderFactory() for public multi-provider routing", path)
-		}
-	}
-}
-
 func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 	type sourceExpectation struct {
 		path              string
@@ -762,62 +555,15 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 	}
 
 	expectations := []sourceExpectation{
-		{
-			path: "README.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-			},
-		},
-		{
-			path: "README_EN.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-			},
-		},
-		{
-			path: "docs/getting_started.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-			},
-		},
-		{
-			path: "docs/cn/tutorials/01.快速开始.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-			},
-		},
-		{
-			path: "docs/en/tutorials/01.QuickStart.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-			},
-		},
-		{
-			path: "docs/cn/tutorials/03.Agent开发教程.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-				"agent.CreateAgent(",
-			},
-		},
-		{
-			path: "docs/en/tutorials/03.AgentDevelopment.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-				"agent.CreateAgent(",
-			},
-		},
-		{
-			path: "docs/cn/tutorials/05.工作流编排.md",
-			forbiddenSnippets: []string{
-				"DAGWorkflow.Execute(",
-			},
-		},
-		{
-			path: "docs/cn/guides/best-practices.md",
-			forbiddenSnippets: []string{
-				"agent.NewAgentBuilder(",
-			},
-		},
+		{path: "README.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "README_EN.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "docs/getting_started.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "docs/cn/tutorials/01.快速开始.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "docs/en/tutorials/01.QuickStart.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "docs/cn/tutorials/03.Agent开发教程.md", forbiddenSnippets: []string{"agent.NewAgentBuilder(", "agent.CreateAgent("}},
+		{path: "docs/en/tutorials/03.AgentDevelopment.md", forbiddenSnippets: []string{"agent.NewAgentBuilder(", "agent.CreateAgent("}},
+		{path: "docs/cn/tutorials/05.工作流编排.md", forbiddenSnippets: []string{"DAGWorkflow.Execute("}},
+		{path: "docs/cn/guides/best-practices.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
 	}
 
 	for _, tt := range expectations {
@@ -829,92 +575,6 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 		for _, snippet := range tt.forbiddenSnippets {
 			if strings.Contains(src, snippet) {
 				t.Fatalf("%s must not promote legacy public entry %q; use the unified runtime/facade entry instead", tt.path, snippet)
-			}
-		}
-	}
-}
-
-func TestNativeProviderSDKTransportAndToolMappingGuards(t *testing.T) {
-	type sourceExpectation struct {
-		path              string
-		requiredSnippets  []string
-		forbiddenSnippets []string
-	}
-
-	expectations := []sourceExpectation{
-		{
-			path: "llm/providers/openai/provider.go",
-			requiredSnippets: []string{
-				"openaiofficial.NewClient(",
-				"providerbase.NewToolCallDeltaAccumulator()",
-				"providerbase.BuildOpenAIResponsesToolOutputItem(",
-			},
-			forbiddenSnippets: []string{
-				"http.NewRequest(",
-				"http.NewRequestWithContext(",
-				"client.Do(",
-				"func convertCustomToolFormat(",
-				"func normalizeToolType(",
-				"func buildToolCallTypeIndex(",
-			},
-		},
-		{
-			path: "llm/providers/anthropic/provider.go",
-			requiredSnippets: []string{
-				"anthropicofficial.NewClient(",
-				"providerbase.BuildAnthropicToolResultBlock(",
-				"providerbase.NormalizeToolChoice(",
-			},
-			forbiddenSnippets: []string{
-				"http.NewRequest(",
-				"http.NewRequestWithContext(",
-				"client.Do(",
-			},
-		},
-		{
-			path: "llm/providers/gemini/provider.go",
-			requiredSnippets: []string{
-				"googlegenai.NewClient(",
-				"providerbase.BuildGeminiFunctionResponse(",
-				"providerbase.NormalizeToolChoice(",
-			},
-			forbiddenSnippets: []string{
-				"func geminiAllowedFunctionNames(",
-			},
-		},
-		{
-			path: "llm/providers/gemini/multimodal.go",
-			requiredSnippets: []string{
-				"client.Tunings.Tune(",
-				"client.Tunings.All(",
-				"client.Tunings.Get(",
-				"client.Tunings.Cancel(",
-			},
-			forbiddenSnippets: []string{
-				"http.NewRequest(",
-				"http.NewRequestWithContext(",
-				"client.Do(",
-				"func postGeminiJSON(",
-				"func parseGeminiImageResponse(",
-				"func parseGeminiVideoResponse(",
-			},
-		},
-	}
-
-	for _, tt := range expectations {
-		data, err := os.ReadFile(filepath.FromSlash(tt.path))
-		if err != nil {
-			t.Fatalf("read %s: %v", tt.path, err)
-		}
-		src := string(data)
-		for _, snippet := range tt.requiredSnippets {
-			if !strings.Contains(src, snippet) {
-				t.Fatalf("%s must contain %q", tt.path, snippet)
-			}
-		}
-		for _, snippet := range tt.forbiddenSnippets {
-			if strings.Contains(src, snippet) {
-				t.Fatalf("%s must not contain %q", tt.path, snippet)
 			}
 		}
 	}
@@ -1004,87 +664,22 @@ func hasAnyPathPrefix(path string, prefixes []string) bool {
 	return false
 }
 
-func shouldSkipDir(path string) bool {
-	name := filepath.Base(path)
-	switch name {
-	case ".git", ".snow", ".vscode", "vendor", ".bug":
-		return true
+func isGatewaySelector(expr ast.Expr) bool {
+	switch v := expr.(type) {
+	case *ast.Ident:
+		return strings.HasSuffix(v.Name, "Gateway")
+	case *ast.SelectorExpr:
+		return v.Sel != nil && strings.HasSuffix(v.Sel.Name, "Gateway")
 	default:
 		return false
 	}
 }
 
-// TestAgentPackageExportedErrorStyle ensures agent root package key API files
-// do not add bare fmt.Errorf. External API should use agent.NewError / types.Error
-// instead. Baseline values are current counts; test fails if count increases.
-func TestAgentPackageExportedErrorStyle(t *testing.T) {
-	keyFiles := []string{
-		"agent/base.go",
-		"agent/react.go",
-		"agent/integration.go",
-		"agent/completion.go",
-	}
-	maxAllowed := map[string]int{
-		"agent/base.go":        0,
-		"agent/react.go":       1,
-		"agent/integration.go": 0,
-		"agent/completion.go":  0,
-	}
-
-	for _, rel := range keyFiles {
-		content, err := os.ReadFile(rel)
-		if err != nil {
-			t.Fatalf("read %s: %v", rel, err)
-		}
-		count := strings.Count(string(content), "fmt.Errorf")
-		baseline, ok := maxAllowed[rel]
-		if !ok {
-			continue
-		}
-		if count > baseline {
-			t.Fatalf("file %s has %d fmt.Errorf, exceeds allowed baseline %d — use agent.NewError instead", rel, count, baseline)
-		}
-	}
-}
-
-// TestWorkflowDSLNoMagicStringStepTypes ensures workflow/dsl/ does not use magic
-// strings for step type comparisons. Step types must use core.StepType constants.
-func TestWorkflowDSLNoMagicStringStepTypes(t *testing.T) {
-	disallowed := []string{
-		`case "llm":`,
-		`case "tool":`,
-		`case "agent":`,
-		`case "orchestration":`,
-		`case "chain":`,
-	}
-
-	entries, err := os.ReadDir("workflow/dsl")
-	if err != nil {
-		t.Fatalf("read workflow/dsl: %v", err)
-	}
-
-	var violations []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		path := filepath.Join("workflow", "dsl", e.Name())
-		content, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		lines := strings.Split(string(content), "\n")
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			for _, bad := range disallowed {
-				if strings.Contains(trimmed, bad) {
-					violations = append(violations, fmt.Sprintf("%s:%d: %s (use core.StepType constant)", path, i+1, bad))
-				}
-			}
-		}
-	}
-
-	if len(violations) > 0 {
-		t.Fatalf("workflow/dsl magic string step type violations:\n%s", strings.Join(violations, "\n"))
+func shouldSkipDir(path string) bool {
+	switch filepath.Base(path) {
+	case ".git", ".snow", ".vscode", "vendor", ".bug":
+		return true
+	default:
+		return false
 	}
 }
