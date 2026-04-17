@@ -870,14 +870,14 @@ func (b *BaseAgent) recordTraceFeedbackDecision(traceID string, mode traceFeedba
 		return
 	}
 	metadata := map[string]any{
-		"inject_synopsis": mode.InjectSynopsis,
-		"inject_history":  mode.InjectHistory,
-		"score":           mode.Score,
+		"inject_synopsis":    mode.InjectSynopsis,
+		"inject_history":     mode.InjectHistory,
+		"score":              mode.Score,
 		"synopsis_threshold": mode.SynopsisThreshold,
 		"history_threshold":  mode.HistoryThreshold,
-		"reasons":         cloneStringSlice(mode.Reasons),
-		"selected_layers": cloneStringSlice(mode.SelectedLayers),
-		"suppressed_layers": cloneStringSlice(mode.SuppressedLayers),
+		"reasons":            cloneStringSlice(mode.Reasons),
+		"selected_layers":    cloneStringSlice(mode.SelectedLayers),
+		"suppressed_layers":  cloneStringSlice(mode.SuppressedLayers),
 	}
 	if status != nil {
 		metadata["usage_ratio"] = status.UsageRatio

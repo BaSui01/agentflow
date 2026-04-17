@@ -8,15 +8,15 @@ import (
 )
 
 type TraceFeedbackMode struct {
-	InjectSynopsis bool
-	InjectHistory  bool
-	Score          int
+	InjectSynopsis    bool
+	InjectHistory     bool
+	Score             int
 	SynopsisThreshold int
 	HistoryThreshold  int
-	Reasons        []string
-	SelectedLayers []string
-	SuppressedLayers []string
-	Summary        string
+	Reasons           []string
+	SelectedLayers    []string
+	SuppressedLayers  []string
+	Summary           string
 }
 
 type TraceFeedbackSelector interface {

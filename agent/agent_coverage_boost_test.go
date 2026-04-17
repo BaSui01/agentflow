@@ -2245,6 +2245,12 @@ func TestDecideTraceFeedbackMode(t *testing.T) {
 	if !mode.InjectSynopsis || !mode.InjectHistory {
 		t.Fatalf("expected adaptive mode to inject both layers, got %#v", mode)
 	}
+	if len(mode.SelectedLayers) != 2 {
+		t.Fatalf("expected selected layers to be populated, got %#v", mode.SelectedLayers)
+	}
+	if mode.Summary == "" {
+		t.Fatal("expected decision summary")
+	}
 
 	mode = selector.Decide(&Input{
 		Content: "hello",
@@ -2252,6 +2258,9 @@ func TestDecideTraceFeedbackMode(t *testing.T) {
 	}, &agentcontext.Status{Level: agentcontext.LevelNone, UsageRatio: 0.1}, snapshot, DefaultTraceFeedbackConfig())
 	if mode.InjectSynopsis || mode.InjectHistory {
 		t.Fatalf("expected simple mode to skip trace layers, got %#v", mode)
+	}
+	if len(mode.SuppressedLayers) == 0 {
+		t.Fatal("expected suppressed layers for simple mode")
 	}
 }
 
@@ -2270,6 +2279,7 @@ func TestRecordTraceFeedbackDecision(t *testing.T) {
 
 	require.Len(t, obs.timeline, 1)
 	assert.Equal(t, "trace_feedback_decision", obs.timeline[0]["type"])
+	assert.Contains(t, obs.timeline[0]["summary"], "inject=trace_synopsis")
 }
 
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
