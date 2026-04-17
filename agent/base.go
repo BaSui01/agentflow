@@ -15,11 +15,13 @@ import (
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 )
 
 // AgentType 定义 Agent 类型
@@ -781,25 +783,25 @@ type BaseAgent struct {
 	runtimeGuardrailsCfg *guardrails.GuardrailsConfig
 	state                State
 	stateMu              sync.RWMutex
-	// TODO(T-001/T-002): 当前使用 TryLock 拒绝并发请求；
-	// 应引入带超时的 Lock 或请求队列，并将配置锁与执行锁分离。
-	execMu   sync.Mutex   // 执行互斥锁，防止并发执行
-	configMu sync.RWMutex // 配置互斥锁，与 execMu 分离，避免配置方法与 Execute 争用
+	execSem              *semaphore.Weighted // 执行信号量，控制并发执行数（默认1）
+	configMu             sync.RWMutex        // 配置互斥锁，与 execSem 分离，避免配置方法与 Execute 争用
 
 	// 使用 llm.Provider 接口解耦对 llm 包的直接依赖
-	provider        llm.Provider
-	gatewayOnce     sync.Once
-	gatewayInstance llm.Provider
-	toolProvider    llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
-	toolGatewayOnce sync.Once
-	toolGatewayInst llm.Provider
-	externalGateway llm.Provider // injected shared gateway (skips lazy creation)
-	ledger          observability.Ledger
-	memory          MemoryManager
-	toolManager     ToolManager
-	retriever       RetrievalProvider
-	toolState       ToolStateProvider
-	bus             EventBus
+	provider             llm.Provider
+	gatewayOnce          sync.Once
+	gatewayInstance      llmcore.Gateway
+	gatewayProviderCache llm.Provider
+	toolProvider         llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	toolGatewayOnce      sync.Once
+	toolGatewayInst      llmcore.Gateway
+	toolGatewayProvider  llm.Provider
+	externalGateway      llmcore.Gateway // injected shared gateway (skips lazy creation)
+	ledger               observability.Ledger
+	memory               MemoryManager
+	toolManager          ToolManager
+	retriever            RetrievalProvider
+	toolState            ToolStateProvider
+	bus                  EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
 	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
@@ -809,6 +811,7 @@ type BaseAgent struct {
 	// 上下文工程相关
 	contextManager       ContextManager // 上下文管理器（可选）
 	contextEngineEnabled bool           // 是否启用上下文工程
+	ephemeralPrompt      *EphemeralPromptLayerBuilder
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
@@ -855,8 +858,10 @@ func NewBaseAgent(
 		toolManager:          toolManager,
 		bus:                  bus,
 		logger:               agentLogger,
+		ephemeralPrompt:      NewEphemeralPromptLayerBuilder(),
 		reasoningSelector:    NewDefaultReasoningModeSelector(),
 		completionJudge:      NewDefaultCompletionJudge(),
+		execSem:              semaphore.NewWeighted(1),
 	}
 
 	// Initialize composite sub-managers for pipeline steps
@@ -1068,25 +1073,31 @@ func (b *BaseAgent) Teardown(ctx context.Context) error {
 // execLockWaitTimeout 短超时等待，避免并发请求直接返回 ErrAgentBusy
 const execLockWaitTimeout = 100 * time.Millisecond
 
-// TryLockExec 尝试获取执行锁，防止并发执行
-// 在超时时间内（默认 100ms）会重试获取锁，而非立即返回失败
+// TryLockExec 尝试获取执行槽位，防止并发执行超出限制。
+// 在超时时间内（默认 100ms）会等待，而非立即返回失败。
 func (b *BaseAgent) TryLockExec() bool {
-	if b.execMu.TryLock() {
-		return true
-	}
-	deadline := time.Now().Add(execLockWaitTimeout)
-	for time.Now().Before(deadline) {
-		if b.execMu.TryLock() {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
+	ctx, cancel := context.WithTimeout(context.Background(), execLockWaitTimeout)
+	defer cancel()
+	return b.execSem.Acquire(ctx, 1) == nil
 }
 
-// UnlockExec 释放执行锁
+// UnlockExec 释放执行槽位。
 func (b *BaseAgent) UnlockExec() {
-	b.execMu.Unlock()
+	b.execSem.Release(1)
+}
+
+// SetMaxConcurrency 设置 Agent 的最大并发执行数（默认 1）。
+// 如果当前有执行在进行，会等待它们完成后才生效。
+func (b *BaseAgent) SetMaxConcurrency(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	// 获取全部旧容量，确保没有正在执行的请求
+	_ = b.execSem.Acquire(context.Background(), 1)
+	b.execSem.Release(1)
+	b.execSem = semaphore.NewWeighted(int64(n))
 }
 
 // EnsureReady 确保 Agent 处于就绪状态
@@ -1143,6 +1154,37 @@ func (b *BaseAgent) Provider() llm.Provider { return b.provider }
 // MainProvider 返回经过 gateway 包装后的主 LLM Provider。
 func (b *BaseAgent) MainProvider() llm.Provider { return b.gatewayProvider() }
 
+// MainGateway 返回主请求链路使用的 gateway。
+func (b *BaseAgent) MainGateway() llmcore.Gateway {
+	if b.externalGateway != nil {
+		return b.externalGateway
+	}
+	if b.provider == nil {
+		return nil
+	}
+	b.gatewayOnce.Do(func() {
+		b.gatewayInstance = wrapProviderWithGateway(b.provider, b.logger, b.ledger)
+		if b.gatewayInstance != nil {
+			b.gatewayProviderCache = llmgateway.NewChatProviderAdapter(b.gatewayInstance, b.provider)
+		}
+	})
+	return b.gatewayInstance
+}
+
+// ToolGateway 返回工具调用链路使用的 gateway（未配置时回退到主 gateway）。
+func (b *BaseAgent) ToolGateway() llmcore.Gateway {
+	if b.toolProvider == nil {
+		return b.MainGateway()
+	}
+	b.toolGatewayOnce.Do(func() {
+		b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
+		if b.toolGatewayInst != nil {
+			b.toolGatewayProvider = llmgateway.NewChatProviderAdapter(b.toolGatewayInst, b.toolProvider)
+		}
+	})
+	return b.toolGatewayInst
+}
+
 // ToolProvider 返回工具调用专用的 LLM Provider（可能为 nil）
 func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
 
@@ -1151,53 +1193,50 @@ func (b *BaseAgent) SetToolProvider(p llm.Provider) {
 	b.toolProvider = p
 	b.toolGatewayOnce = sync.Once{} // reset lazy init
 	b.toolGatewayInst = nil
+	b.toolGatewayProvider = nil
 }
 
 // SetGateway injects a pre-built shared Gateway instance.
 // When set, lazy gateway creation is skipped.
-func (b *BaseAgent) SetGateway(gw llm.Provider) {
+func (b *BaseAgent) SetGateway(gw llmcore.Gateway) {
 	b.externalGateway = gw
+	b.gatewayProviderCache = nil
 }
 
 func (b *BaseAgent) gatewayProvider() llm.Provider {
-	if b.externalGateway != nil {
-		return b.externalGateway
-	}
-	if b.provider == nil {
-		return b.provider
-	}
-	b.gatewayOnce.Do(func() {
-		b.gatewayInstance = wrapProviderWithGateway(b.provider, b.logger, b.ledger)
-	})
-	if b.gatewayInstance != nil {
-		return b.gatewayInstance
+	gateway := b.MainGateway()
+	if gateway != nil {
+		if b.gatewayProviderCache != nil {
+			return b.gatewayProviderCache
+		}
+		return llmgateway.NewChatProviderAdapter(gateway, b.provider)
 	}
 	return b.provider
 }
 
 func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 	if b.toolProvider != nil {
-		b.toolGatewayOnce.Do(func() {
-			b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
-		})
-		if b.toolGatewayInst != nil {
-			return b.toolGatewayInst
+		toolGateway := b.ToolGateway()
+		if toolGateway != nil {
+			if b.toolGatewayProvider != nil {
+				return b.toolGatewayProvider
+			}
+			return llmgateway.NewChatProviderAdapter(toolGateway, b.toolProvider)
 		}
 		return b.toolProvider
 	}
 	return b.gatewayProvider()
 }
 
-func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llm.Provider {
+func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llmcore.Gateway {
 	if provider == nil {
 		return nil
 	}
-	service := llmgateway.New(llmgateway.Config{
+	return llmgateway.New(llmgateway.Config{
 		ChatProvider: provider,
 		Ledger:       ledger,
 		Logger:       logger,
 	})
-	return llmgateway.NewChatProviderAdapter(service, provider)
 }
 
 // maxReActIterations 返回 ReAct 最大迭代次数，默认 10

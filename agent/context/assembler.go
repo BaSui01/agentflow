@@ -68,7 +68,7 @@ func (a *Assembler) Assemble(ctx context.Context, req *AssembleRequest) (*Assemb
 }
 
 func (a *Assembler) buildSegments(req *AssembleRequest) []ContextSegment {
-	segments := make([]ContextSegment, 0, 8+len(req.Conversation)+len(req.MemoryContext)+len(req.Retrieval)+len(req.ToolState))
+	segments := make([]ContextSegment, 0, 8+len(req.SkillContext)+len(req.Conversation)+len(req.MemoryContext)+len(req.Retrieval)+len(req.ToolState))
 	if prompt := strings.TrimSpace(req.SystemPrompt); prompt != "" {
 		if extra := additionalContextText(req.AdditionalContext); extra != "" {
 			prompt += "\n\n<additional_context>\n" + extra + "\n</additional_context>"
@@ -76,6 +76,13 @@ func (a *Assembler) buildSegments(req *AssembleRequest) []ContextSegment {
 		segments = append(segments, a.newSegment("system", SegmentSystem, types.RoleSystem, prompt, 100, true, nil))
 	}
 
+	for i, item := range req.SkillContext {
+		content := strings.TrimSpace(item)
+		if content == "" {
+			continue
+		}
+		segments = append(segments, a.newSegment(fmt.Sprintf("skill-%d", i), SegmentSkill, types.RoleSystem, content, 65, false, nil))
+	}
 	for i, item := range req.MemoryContext {
 		content := strings.TrimSpace(item)
 		if content == "" {

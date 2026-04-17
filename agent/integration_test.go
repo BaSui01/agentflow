@@ -485,42 +485,37 @@ func TestDefaultEnhancedExecutionOptions(t *testing.T) {
 	assert.True(t, opts.RecordTrace)
 }
 
-func TestPrependSkillInstructions(t *testing.T) {
+func TestNormalizeInstructionList(t *testing.T) {
 	tests := []struct {
 		name         string
-		prompt       string
 		instructions []string
-		expected     string
+		expected     []string
 	}{
 		{
 			name:         "empty instructions",
-			prompt:       "hello",
 			instructions: nil,
-			expected:     "hello",
+			expected:     nil,
 		},
 		{
 			name:         "all blank instructions",
-			prompt:       "hello",
 			instructions: []string{"", "  ", ""},
-			expected:     "hello",
+			expected:     nil,
 		},
 		{
 			name:         "with instructions",
-			prompt:       "hello",
 			instructions: []string{"do this", "do that"},
-			expected:     "技能执行指令:\n1. do this\n2. do that\n\n用户请求:\nhello",
+			expected:     []string{"do this", "do that"},
 		},
 		{
 			name:         "deduplicates instructions",
-			prompt:       "hello",
 			instructions: []string{"do this", "do this", "do that"},
-			expected:     "技能执行指令:\n1. do this\n2. do that\n\n用户请求:\nhello",
+			expected:     []string{"do this", "do that"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := prependSkillInstructions(tt.prompt, tt.instructions)
+			result := normalizeInstructionList(tt.instructions)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

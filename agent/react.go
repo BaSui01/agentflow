@@ -243,6 +243,10 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	}
 
 	systemContent := activeBundle.RenderSystemPromptWithVars(input.Variables)
+	skillContext := skillInstructionsFromInputContext(input.Context)
+	if len(skillContext) == 0 {
+		skillContext = normalizeInstructionList(skillInstructionsFromCtx(ctx))
+	}
 	retrievalItems := retrievalItemsFromInputContext(input.Context)
 	if len(retrievalItems) == 0 && b.retriever != nil {
 		if records, err := b.retriever.Retrieve(ctx, input.Content, 5); err != nil {
@@ -260,7 +264,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 	}
 
-	messages, assembled := b.assembleMessages(ctx, systemContent, publicInputContext(input.Context), memoryContext, conversation, retrievalItems, toolStates, input.Content)
+	messages, assembled := b.assembleMessages(ctx, systemContent, publicInputContext(input.Context), skillContext, memoryContext, conversation, retrievalItems, toolStates, input.Content)
 	if assembled != nil {
 		b.logger.Debug("context assembled",
 			zap.Int("tokens_before", assembled.TokensBefore),
@@ -586,6 +590,7 @@ func (b *BaseAgent) assembleMessages(
 	ctx context.Context,
 	systemPrompt string,
 	additionalContext map[string]any,
+	skillContext []string,
 	memoryContext []string,
 	conversation []types.Message,
 	retrieval []agentcontext.RetrievalItem,
@@ -598,6 +603,7 @@ func (b *BaseAgent) assembleMessages(
 		result, err := manager.Assemble(ctx, &agentcontext.AssembleRequest{
 			SystemPrompt:      systemPrompt,
 			AdditionalContext: additionalContext,
+			SkillContext:      skillContext,
 			MemoryContext:     memoryContext,
 			Conversation:      conversation,
 			Retrieval:         retrieval,
@@ -613,13 +619,19 @@ func (b *BaseAgent) assembleMessages(
 		}
 	}
 
-	msgCap := 1 + len(memoryContext) + len(conversation) + 1
+	msgCap := 1 + len(skillContext) + len(memoryContext) + len(conversation) + 1
 	messages := make([]types.Message, 0, msgCap)
 	if strings.TrimSpace(systemPrompt) != "" {
 		if publicCtx := additionalContextText(additionalContext); publicCtx != "" {
 			systemPrompt += "\n\n<additional_context>\n" + publicCtx + "\n</additional_context>"
 		}
 		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
+	}
+	for _, item := range skillContext {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
 	}
 	for _, item := range memoryContext {
 		messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
@@ -642,6 +654,21 @@ func retrievalItemsFromInputContext(values map[string]any) []agentcontext.Retrie
 		return nil
 	}
 	return append([]agentcontext.RetrievalItem(nil), items...)
+}
+
+func skillInstructionsFromInputContext(values map[string]any) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	raw, ok := values["skill_context"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]string)
+	if !ok {
+		return nil
+	}
+	return normalizeInstructionList(items)
 }
 
 func retrievalItemsFromRecords(records []types.RetrievalRecord) []agentcontext.RetrievalItem {

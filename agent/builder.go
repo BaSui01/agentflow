@@ -15,6 +15,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"go.uber.org/zap"
 )
@@ -53,6 +54,9 @@ type AgentBuilder struct {
 	// Orchestration and reasoning (optional)
 	orchestratorInstance OrchestratorRunner
 	reasoningRegistry    *reasoning.PatternRegistry
+
+	// 并发控制
+	maxConcurrency int
 
 	errors []error
 }
@@ -122,6 +126,15 @@ func (b *AgentBuilder) WithMaxLoopIterations(n int) *AgentBuilder {
 // Empty values are ignored and duplicates are removed.
 func (b *AgentBuilder) WithHandoffs(agentIDs []string) *AgentBuilder {
 	b.config.Runtime.Handoffs = normalizeAgentIDList(agentIDs)
+	return b
+}
+
+// WithMaxConcurrency 设置 Agent 的最大并发执行数（默认 1）。
+// n <= 0 时忽略，保持默认值。
+func (b *AgentBuilder) WithMaxConcurrency(n int) *AgentBuilder {
+	if n > 0 {
+		b.maxConcurrency = n
+	}
 	return b
 }
 
@@ -369,6 +382,11 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	// 设置工具专用 Provider（双模型模式）
 	if b.toolProvider != nil {
 		agent.SetToolProvider(b.toolProvider)
+	}
+
+	// 设置并发度（默认 1，互斥执行）
+	if b.maxConcurrency > 0 {
+		agent.SetMaxConcurrency(b.maxConcurrency)
 	}
 
 	b.configurePersistence(agent)
@@ -704,7 +722,7 @@ func typesGuardrailsFromRuntime(cfg *guardrails.GuardrailsConfig) *types.Guardra
 // NewDefaultReasoningRegistry constructs the default reasoning registry used by
 // runtime.Builder when the caller does not inject one explicitly.
 func NewDefaultReasoningRegistry(
-	provider types.ChatProvider,
+	gateway llmcore.Gateway,
 	model string,
 	toolManager ToolManager,
 	agentID string,
@@ -720,23 +738,23 @@ func NewDefaultReasoningRegistry(
 
 	totCfg := reasoning.DefaultTreeOfThoughtConfig()
 	totCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(provider, toolExecutor, totCfg, logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(gateway, toolExecutor, totCfg, logger), logger)
 
 	rewooCfg := reasoning.DefaultReWOOConfig()
 	rewooCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(provider, toolExecutor, toolSchemas, rewooCfg, logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(gateway, toolExecutor, toolSchemas, rewooCfg, logger), logger)
 
 	peCfg := reasoning.DefaultPlanExecuteConfig()
 	peCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(provider, toolExecutor, toolSchemas, peCfg, logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(gateway, toolExecutor, toolSchemas, peCfg, logger), logger)
 
 	dpCfg := reasoning.DefaultDynamicPlannerConfig()
 	dpCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(provider, toolExecutor, toolSchemas, dpCfg, logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(gateway, toolExecutor, toolSchemas, dpCfg, logger), logger)
 
 	refCfg := reasoning.DefaultReflexionConfig()
 	refCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(provider, toolExecutor, toolSchemas, refCfg, logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(gateway, toolExecutor, toolSchemas, refCfg, logger), logger)
 	return registry
 }
 
