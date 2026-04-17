@@ -313,6 +313,8 @@ cfg.Context = &types.ContextConfig{
 
 When `Skills`, enhanced `Memory`, retrieval, or tool-state context are enabled, they are injected as context-runtime-managed segments instead of mutating the original user input.
 
+Request-scoped hints such as `request_context`, checkpoint resume guidance, and context-pressure warnings are also injected through a shared ephemeral prompt layer builder instead of being merged into the stable system prompt.
+
 You can also toggle it via `runtime.Builder`:
 
 ```go

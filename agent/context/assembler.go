@@ -68,7 +68,7 @@ func (a *Assembler) Assemble(ctx context.Context, req *AssembleRequest) (*Assemb
 }
 
 func (a *Assembler) buildSegments(req *AssembleRequest) []ContextSegment {
-	segments := make([]ContextSegment, 0, 8+len(req.SkillContext)+len(req.Conversation)+len(req.MemoryContext)+len(req.Retrieval)+len(req.ToolState))
+	segments := make([]ContextSegment, 0, 8+len(req.EphemeralLayers)+len(req.SkillContext)+len(req.Conversation)+len(req.MemoryContext)+len(req.Retrieval)+len(req.ToolState))
 	if prompt := strings.TrimSpace(req.SystemPrompt); prompt != "" {
 		segments = append(segments, a.newSegment("system", SegmentSystem, types.RoleSystem, prompt, 100, true, nil))
 	}
@@ -248,7 +248,7 @@ func renderSegments(segments []ContextSegment) []types.Message {
 func promptLayers(req *AssembleRequest) []PromptLayer {
 	layers := make([]PromptLayer, 0, len(req.EphemeralLayers)+1)
 	if len(req.AdditionalContext) > 0 {
-		if extra := additionalContextText(req.AdditionalContext); extra != "" {
+		if extra := AdditionalContextText(req.AdditionalContext); extra != "" {
 			layers = append(layers, PromptLayer{
 				ID:       "request_context",
 				Type:     SegmentEphemeral,

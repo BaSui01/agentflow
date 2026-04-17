@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -622,7 +621,7 @@ func (b *BaseAgent) assembleMessages(
 	msgCap := 1 + len(skillContext) + len(memoryContext) + len(conversation) + 1
 	messages := make([]types.Message, 0, msgCap)
 	if strings.TrimSpace(systemPrompt) != "" {
-		if publicCtx := additionalContextText(additionalContext); publicCtx != "" {
+		if publicCtx := agentcontext.AdditionalContextText(additionalContext); publicCtx != "" {
 			systemPrompt += "\n\n<additional_context>\n" + publicCtx + "\n</additional_context>"
 		}
 		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
@@ -721,17 +720,6 @@ func toolStatesFromSnapshots(items []types.ToolStateSnapshot) []agentcontext.Too
 		})
 	}
 	return out
-}
-
-func additionalContextText(values map[string]any) string {
-	if len(values) == 0 {
-		return ""
-	}
-	ctxJSON, err := json.Marshal(values)
-	if err != nil {
-		return ""
-	}
-	return string(ctxJSON)
 }
 
 // applyInputContext injects well-known keys from Input.Context into the Go context

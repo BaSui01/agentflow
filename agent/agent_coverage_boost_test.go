@@ -1963,6 +1963,69 @@ func TestBaseAgent_Execute_InjectsSkillsAsContextSegments(t *testing.T) {
 	}
 }
 
+func TestBaseAgent_Execute_InjectsEphemeralPromptLayers(t *testing.T) {
+	var capturedReq *llm.ChatRequest
+	prov := &testProvider{
+		name:           "ephemeral-layers",
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			copied := *req
+			copied.Messages = append([]types.Message(nil), req.Messages...)
+			capturedReq = &copied
+			return &llm.ChatResponse{
+				Provider: "ephemeral-layers",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "ephemeral-layers", prov)
+	ag.Init(context.Background())
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "ephemeral-layers-1",
+		Content: "continue the interrupted task",
+		Context: map[string]any{
+			"tenant_id":     "tenant-1",
+			"checkpoint_id": "cp-42",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute with ephemeral layers failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if capturedReq == nil {
+		t.Fatal("expected captured request")
+	}
+	if len(capturedReq.Messages) < 3 {
+		t.Fatalf("expected multiple messages, got %#v", capturedReq.Messages)
+	}
+	if capturedReq.Messages[0].Content != "" && strContains(capturedReq.Messages[0].Content, "<request_context>") {
+		t.Fatalf("expected stable system prompt to remain separate from ephemeral layers, got %q", capturedReq.Messages[0].Content)
+	}
+	foundRequestContext := false
+	foundResumeContext := false
+	for _, msg := range capturedReq.Messages {
+		if strContains(msg.Content, "<request_context>") && strContains(msg.Content, "tenant-1") {
+			foundRequestContext = true
+		}
+		if strContains(msg.Content, "<resume_context>") && strContains(msg.Content, "cp-42") {
+			foundResumeContext = true
+		}
+	}
+	if !foundRequestContext {
+		t.Fatalf("expected request_context ephemeral layer, got %#v", capturedReq.Messages)
+	}
+	if !foundResumeContext {
+		t.Fatalf("expected resume_context ephemeral layer, got %#v", capturedReq.Messages)
+	}
+}
+
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
 	var capturedReq *llm.ChatRequest
 	prov := &testProvider{

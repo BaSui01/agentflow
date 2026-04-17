@@ -143,7 +143,7 @@ func ConfigFromAgentConfig(cfg types.AgentConfig) AgentContextConfig {
 	return out
 }
 
-func additionalContextText(values map[string]any) string {
+func AdditionalContextText(values map[string]any) string {
 	if len(values) == 0 {
 		return ""
 	}
