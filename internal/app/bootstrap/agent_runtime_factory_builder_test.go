@@ -189,3 +189,9 @@ func (p *captureBootstrapProvider) ListModels(context.Context) ([]llm.Model, err
 	return []llm.Model{{ID: "test-model"}}, nil
 }
 func (p *captureBootstrapProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+func (*captureBootstrapProvider) CountTokens(_ context.Context, req *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	return &llm.TokenCountResponse{
+		InputTokens: len(req.Messages) + req.MaxTokens,
+	}, nil
+}

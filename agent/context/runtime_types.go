@@ -12,6 +12,8 @@ type SegmentType string
 
 const (
 	SegmentSystem       SegmentType = "system"
+	SegmentEphemeral    SegmentType = "ephemeral"
+	SegmentSkill        SegmentType = "skill"
 	SegmentMemory       SegmentType = "memory"
 	SegmentConversation SegmentType = "conversation"
 	SegmentRetrieval    SegmentType = "retrieval"
@@ -45,9 +47,21 @@ type ToolState struct {
 	ArtifactID string
 }
 
+type PromptLayer struct {
+	ID       string
+	Type     SegmentType
+	Role     types.Role
+	Content  string
+	Priority int
+	Sticky   bool
+	Metadata map[string]any
+}
+
 type AssembleRequest struct {
 	SystemPrompt      string
 	AdditionalContext map[string]any
+	EphemeralLayers   []PromptLayer
+	SkillContext      []string
 	MemoryContext     []string
 	Conversation      []types.Message
 	Retrieval         []RetrievalItem

@@ -212,6 +212,9 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 	}
 	mergeChatRoutingMetadata(req, chatReq)
 	provider := s.prepareChatExecutionProvider(chatReq)
+	if provider == nil {
+		return nil, llmcore.GatewayUnavailableError("chat provider is not available")
+	}
 
 	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
 	source, err := provider.Stream(ctx, chatReq)
@@ -287,15 +290,17 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 		}
 
 		if finalUsage != nil && finalCost != nil {
-			s.policyManager.RecordUsage(llmpolicy.UsageRecord{
-				Timestamp: time.Now(),
-				Tokens:    finalUsage.TotalTokens,
-				Cost:      costAmount(finalCost),
-				Model:     finalDecision.Model,
-				RequestID: traceID,
-				UserID:    metadataValue(req, "user_id"),
-				AgentID:   metadataValue(req, "agent_id"),
-			})
+			if s.policyManager != nil {
+				s.policyManager.RecordUsage(llmpolicy.UsageRecord{
+					Timestamp: time.Now(),
+					Tokens:    finalUsage.TotalTokens,
+					Cost:      costAmount(finalCost),
+					Model:     finalDecision.Model,
+					RequestID: traceID,
+					UserID:    metadataValue(req, "user_id"),
+					AgentID:   metadataValue(req, "agent_id"),
+				})
+			}
 			s.recordLedger(ctx, req, traceID, finalDecision, *finalUsage, *finalCost)
 		}
 	}(ctx)
@@ -314,6 +319,9 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 	}
 	mergeChatRoutingMetadata(req, chatReq)
 	provider := s.prepareChatExecutionProvider(chatReq)
+	if provider == nil {
+		return nil, llmcore.GatewayUnavailableError("chat provider is not available")
+	}
 
 	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
 	resp, err := provider.Completion(ctx, chatReq)
@@ -932,16 +940,30 @@ func (s *Service) estimateRequestTokens(ctx context.Context, req *llmcore.Unifie
 
 func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) (int, error) {
 	s.normalizeChatToolCallMode(chatReq)
+	provider := ""
+	if s.chatProvider != nil {
+		provider = s.chatProvider.Name()
+	}
 	tokenCounter, ok := s.chatProvider.(llm.TokenCountProvider)
 	if !ok {
-		return 0, llmcore.GatewayUnavailableError("chat provider does not implement native token counting")
+		s.logger.Debug("skip gateway token preflight: chat provider does not implement native token counting",
+			zap.String("provider", provider))
+		return 0, nil
 	}
 	countResp, err := tokenCounter.CountTokens(ctx, chatReq)
 	if err != nil {
+		if types.IsErrorCode(err, types.ErrServiceUnavailable) {
+			s.logger.Warn("skip gateway token preflight: native token counting unavailable",
+				zap.String("provider", provider),
+				zap.Error(err))
+			return 0, nil
+		}
 		return 0, err
 	}
 	if countResp == nil {
-		return 0, llmcore.GatewayUnavailableError("native token counting returned no result")
+		s.logger.Warn("skip gateway token preflight: native token counting returned no result",
+			zap.String("provider", provider))
+		return 0, nil
 	}
 
 	promptTokens := countResp.InputTokens

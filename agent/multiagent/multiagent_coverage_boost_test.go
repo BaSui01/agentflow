@@ -8,56 +8,60 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/crews"
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
 // ---------------------------------------------------------------------------
-// noopProvider coverage
+// safeStubProvider coverage
 // ---------------------------------------------------------------------------
 
-func TestNoopProvider_Completion(t *testing.T) {
-	np := noopProvider{}
-	_, err := np.Completion(context.Background(), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not implemented")
+func TestSafeStubProvider_Completion(t *testing.T) {
+	sp := safeStubProvider{}
+	resp, err := sp.Completion(context.Background(), &llm.ChatRequest{Model: "test"})
+	require.NoError(t, err)
+	assert.Equal(t, "test", resp.Model)
+	assert.Contains(t, resp.Choices[0].Message.Content, "stub")
 }
 
-func TestNoopProvider_Stream(t *testing.T) {
-	np := noopProvider{}
-	_, err := np.Stream(context.Background(), nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not implemented")
+func TestSafeStubProvider_Stream(t *testing.T) {
+	sp := safeStubProvider{}
+	ch, err := sp.Stream(context.Background(), &llm.ChatRequest{Model: "test"})
+	require.NoError(t, err)
+	chunk := <-ch
+	assert.Equal(t, "test", chunk.Model)
+	assert.Contains(t, chunk.Delta.Content, "stub")
 }
 
-func TestNoopProvider_HealthCheck(t *testing.T) {
-	np := noopProvider{}
-	status, err := np.HealthCheck(context.Background())
+func TestSafeStubProvider_HealthCheck(t *testing.T) {
+	sp := safeStubProvider{}
+	status, err := sp.HealthCheck(context.Background())
 	require.NoError(t, err)
 	assert.True(t, status.Healthy)
 }
 
-func TestNoopProvider_Name(t *testing.T) {
-	np := noopProvider{}
-	assert.Equal(t, "noop", np.Name())
+func TestSafeStubProvider_Name(t *testing.T) {
+	sp := safeStubProvider{}
+	assert.Equal(t, "safe-stub", sp.Name())
 }
 
-func TestNoopProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	np := noopProvider{}
-	assert.False(t, np.SupportsNativeFunctionCalling())
+func TestSafeStubProvider_SupportsNativeFunctionCalling(t *testing.T) {
+	sp := safeStubProvider{}
+	assert.False(t, sp.SupportsNativeFunctionCalling())
 }
 
-func TestNoopProvider_ListModels(t *testing.T) {
-	np := noopProvider{}
-	models, err := np.ListModels(context.Background())
+func TestSafeStubProvider_ListModels(t *testing.T) {
+	sp := safeStubProvider{}
+	models, err := sp.ListModels(context.Background())
 	require.NoError(t, err)
 	assert.Nil(t, models)
 }
 
-func TestNoopProvider_Endpoints(t *testing.T) {
-	np := noopProvider{}
-	ep := np.Endpoints()
+func TestSafeStubProvider_Endpoints(t *testing.T) {
+	sp := safeStubProvider{}
+	ep := sp.Endpoints()
 	assert.Empty(t, ep.Completion)
 	assert.Empty(t, ep.Models)
 	assert.Empty(t, ep.BaseURL)

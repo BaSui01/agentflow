@@ -322,6 +322,8 @@ cfg.Context = &types.ContextConfig{
 }
 ```
 
+启用 `Skills` / 增强 `Memory` / retrieval / tool-state 注入时，这些信息会作为 context runtime 管理的独立上下文段进入消息组装，而不是直接改写原始用户输入。
+
 也可以通过 `runtime.Builder` 一键开关：
 
 ```go

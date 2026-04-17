@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -52,19 +53,19 @@ func DefaultIterativeDeepeningConfig() IterativeDeepeningConfig {
 // - 综合文献/信息调查
 // - 通过逐步完善,加深理解
 type IterativeDeepening struct {
-	provider     llm.Provider
+	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
 	config       IterativeDeepeningConfig
 	logger       *zap.Logger
 }
 
 // NewIterative Deepenning 创造了一个新的"活泼"Deepenning Research causeer. 互联网档案馆的存檔,存档日期2013-12-21.
-func NewIterativeDeepening(provider llm.Provider, executor tools.ToolExecutor, config IterativeDeepeningConfig, logger *zap.Logger) *IterativeDeepening {
+func NewIterativeDeepening(gateway llmcore.Gateway, executor tools.ToolExecutor, config IterativeDeepeningConfig, logger *zap.Logger) *IterativeDeepening {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &IterativeDeepening{
-		provider:     provider,
+		gateway:      gateway,
 		toolExecutor: executor,
 		config:       config,
 		logger:       logger,
@@ -326,7 +327,7 @@ Generate queries that explore NEW aspects not covered by previous findings.`, co
 
 Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
 
-	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -381,7 +382,7 @@ Provide your analysis as a JSON array of findings:
 
 Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 1.0.`, query)
 
-	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -447,7 +448,7 @@ Respond as JSON array:
 
 Priority should be 0.0-1.0 based on how important this direction is.`, task, findingsStr.String(), id.config.Breadth)
 
-	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -495,7 +496,7 @@ Synthesize these findings into a clear, comprehensive answer. Include:
 
 Be thorough but concise.`, task, findingsStr.String())
 
-	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},

@@ -32,6 +32,7 @@ import (
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/coder/websocket"
@@ -470,7 +471,7 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   Deliberation iterations: %d\n", result.Iterations)
 	fmt.Printf("   Final confidence: %.2f\n", result.FinalConfidence)
 
-	llmReasoner := deliberation.NewLLMReasoner(&reasonerProvider{}, "demo-reasoner", logger)
+	llmReasoner := deliberation.NewLLMReasoner(llmgateway.New(llmgateway.Config{ChatProvider: &reasonerProvider{}, Logger: logger}), "demo-reasoner", logger)
 	_, llmConfidence, llmErr := llmReasoner.Think(context.Background(), "Need confidence scored reasoning")
 	if llmErr != nil {
 		fmt.Printf("   LLM reasoner error: %v\n\n", llmErr)
@@ -1295,6 +1296,7 @@ func demoReasoningPatterns(logger *zap.Logger) {
 
 	ctx := context.Background()
 	provider := &reasoningDemoProvider{}
+	gw := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
 	executor := &reasoningToolExecutor{}
 	toolSchemas := []types.ToolSchema{
 		{
@@ -1308,39 +1310,39 @@ func demoReasoningPatterns(logger *zap.Logger) {
 	totCfg.BranchingFactor = 2
 	totCfg.MaxDepth = 2
 	totCfg.Timeout = 2 * time.Second
-	tot := reasoning.NewTreeOfThought(provider, executor, totCfg, logger)
+	tot := reasoning.NewTreeOfThought(gw, executor, totCfg, logger)
 	_, _ = tot.Execute(ctx, "design a resilient rollout plan")
 
 	rewooCfg := reasoning.DefaultReWOOConfig()
 	rewooCfg.MaxPlanSteps = 2
 	rewooCfg.Timeout = 2 * time.Second
-	rewoo := reasoning.NewReWOO(provider, executor, toolSchemas, rewooCfg, logger)
+	rewoo := reasoning.NewReWOO(gw, executor, toolSchemas, rewooCfg, logger)
 	_, _ = rewoo.Execute(ctx, "collect and summarize deployment signals")
 
 	reflexionCfg := reasoning.DefaultReflexionConfig()
 	reflexionCfg.MaxTrials = 2
 	reflexionCfg.Timeout = 2 * time.Second
-	reflexion := reasoning.NewReflexionExecutor(provider, executor, toolSchemas, reflexionCfg, logger)
+	reflexion := reasoning.NewReflexionExecutor(gw, executor, toolSchemas, reflexionCfg, logger)
 	_, _ = reflexion.Execute(ctx, "draft an incident communication update")
 
 	planCfg := reasoning.DefaultPlanExecuteConfig()
 	planCfg.MaxPlanSteps = 2
 	planCfg.Timeout = 2 * time.Second
-	planExec := reasoning.NewPlanAndExecute(provider, executor, toolSchemas, planCfg, logger)
+	planExec := reasoning.NewPlanAndExecute(gw, executor, toolSchemas, planCfg, logger)
 	_, _ = planExec.Execute(ctx, "prepare release checklist")
 
 	dynCfg := reasoning.DefaultDynamicPlannerConfig()
 	dynCfg.MaxPlanDepth = 2
 	dynCfg.Timeout = 2 * time.Second
 	dynCfg.ConfidenceThreshold = 0.1
-	dyn := reasoning.NewDynamicPlanner(provider, executor, toolSchemas, dynCfg, logger)
+	dyn := reasoning.NewDynamicPlanner(gw, executor, toolSchemas, dynCfg, logger)
 	_, _ = dyn.Execute(ctx, "resolve a rollout blocker")
 
 	iterCfg := reasoning.DefaultIterativeDeepeningConfig()
 	iterCfg.Breadth = 2
 	iterCfg.MaxDepth = 2
 	iterCfg.Timeout = 2 * time.Second
-	iterative := reasoning.NewIterativeDeepening(provider, executor, iterCfg, logger)
+	iterative := reasoning.NewIterativeDeepening(gw, executor, iterCfg, logger)
 	_, _ = iterative.Execute(ctx, "investigate latency anomaly root causes")
 
 	registry := reasoning.NewPatternRegistry()
@@ -1479,7 +1481,7 @@ func demoStructuredOutput(logger *zap.Logger) {
 	parsedSchema, _ := structured.FromJSON(rawSchema)
 
 	provider := &structuredDemoProvider{}
-	so, _ := structured.NewStructuredOutputWithSchema[demoStructuredRecord](provider, parsedSchema)
+	so, _ := structured.NewStructuredOutputWithSchema[demoStructuredRecord](llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger}), parsedSchema)
 	_ = so.Schema()
 
 	parseResult, _ := so.GenerateWithParse(ctx, "return structured result")

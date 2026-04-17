@@ -20,6 +20,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/voice"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/pkg/cache"
 	"github.com/BaSui01/agentflow/pkg/database"
 	"github.com/BaSui01/agentflow/rag"
@@ -656,7 +657,7 @@ func demoEvaluationSubsystem(ctx context.Context, logger *zap.Logger) {
 
 	judgeCfg := evaluation.DefaultLLMJudgeConfig()
 	judgeCfg.Model = "demo-judge"
-	judge := evaluation.NewLLMJudge(&demoJudgeProvider{}, judgeCfg, logger)
+	judge := evaluation.NewLLMJudge(llmgateway.New(llmgateway.Config{ChatProvider: &demoJudgeProvider{}, Logger: logger}), judgeCfg, logger)
 	judgeRes, _ := judge.Judge(ctx, in, out)
 	batchRes, _ := judge.JudgeBatch(ctx, []evaluation.InputOutputPair{
 		{Input: in, Output: out},

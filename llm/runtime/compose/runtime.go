@@ -8,6 +8,8 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmmw "github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
@@ -18,6 +20,7 @@ import (
 // Runtime groups the LLM-facing runtime dependencies assembled around a main
 // provider chain.
 type Runtime struct {
+	Gateway       llmcore.Gateway
 	Provider      llm.Provider
 	ToolProvider  llm.Provider
 	BudgetManager *llmpolicy.TokenBudgetManager
@@ -164,11 +167,29 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 	}, nil))
 
 	provider = llmmw.NewMiddlewareProvider(provider, chain)
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider:  provider,
+		Ledger:        ledger,
+		PolicyManager: policyManager,
+		Logger:        logger,
+	})
+	providerAdapter := llmgateway.NewChatProviderAdapter(gateway, provider)
 	toolProvider := buildToolProviderOrFallback(cfg, logger, provider)
+	toolProviderAdapter := providerAdapter
+	if toolProvider != nil && toolProvider != provider {
+		toolGateway := llmgateway.New(llmgateway.Config{
+			ChatProvider:  toolProvider,
+			Ledger:        ledger,
+			PolicyManager: policyManager,
+			Logger:        logger,
+		})
+		toolProviderAdapter = llmgateway.NewChatProviderAdapter(toolGateway, toolProvider)
+	}
 
 	return &Runtime{
-		Provider:      provider,
-		ToolProvider:  toolProvider,
+		Gateway:       gateway,
+		Provider:      providerAdapter,
+		ToolProvider:  toolProviderAdapter,
 		BudgetManager: budgetManager,
 		CostTracker:   costTracker,
 		Ledger:        ledger,

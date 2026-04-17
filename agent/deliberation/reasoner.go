@@ -6,28 +6,28 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/BaSui01/agentflow/types"
-
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
-// LLMReasoner implements Reasoner using an llm.Provider.
+// LLMReasoner implements Reasoner using an llmcore.Gateway.
 type LLMReasoner struct {
-	provider llm.Provider
-	model    string
-	logger   *zap.Logger
+	gateway llmcore.Gateway
+	model   string
+	logger  *zap.Logger
 }
 
 // NewLLMReasoner creates a new LLM-backed Reasoner.
-func NewLLMReasoner(provider llm.Provider, model string, logger *zap.Logger) *LLMReasoner {
+func NewLLMReasoner(gateway llmcore.Gateway, model string, logger *zap.Logger) *LLMReasoner {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &LLMReasoner{
-		provider: provider,
-		model:    model,
-		logger:   logger.With(zap.String("component", "llm_reasoner")),
+		gateway: gateway,
+		model:   model,
+		logger:  logger.With(zap.String("component", "llm_reasoner")),
 	}
 }
 
@@ -49,9 +49,9 @@ func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string,
 		Temperature: 0.3,
 	}
 
-	resp, err := r.provider.Completion(ctx, req)
+	resp, err := r.invokeChat(ctx, req)
 	if err != nil {
-		return "", 0, fmt.Errorf("llm completion failed: %w", err)
+		return "", 0, fmt.Errorf("llm invoke failed: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -67,6 +67,26 @@ func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string,
 	)
 
 	return content, confidence, nil
+}
+
+func (r *LLMReasoner) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if r.gateway == nil {
+		return nil, fmt.Errorf("gateway is not configured")
+	}
+	resp, err := r.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  req.Model,
+		TraceID:    req.TraceID,
+		Payload:    req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	if !ok || chatResp == nil {
+		return nil, fmt.Errorf("invalid chat response from gateway")
+	}
+	return chatResp, nil
 }
 
 // parseConfidence extracts a confidence value from the LLM response.

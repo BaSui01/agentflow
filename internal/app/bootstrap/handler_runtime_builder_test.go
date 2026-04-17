@@ -42,6 +42,7 @@ func TestBuildLLMHandlerRuntimeFromProvider_ReusesSharedHandlerAssembly(t *testi
 	runtime, err := BuildLLMHandlerRuntimeFromProvider(cfg, provider, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.Gateway)
 	require.NotNil(t, runtime.Provider)
 	require.NotNil(t, runtime.ToolProvider)
 	require.Same(t, runtime.Provider, runtime.ToolProvider)
@@ -169,6 +170,7 @@ func TestBuildLLMHandlerRuntime_ChannelModeUsesRegisteredBuilderWithoutDatabase(
 	runtime, err := BuildLLMHandlerRuntime(cfg, nil, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.Gateway)
 	require.NotNil(t, runtime.Provider)
 
 	resp, err := runtime.Provider.Completion(context.Background(), &llm.ChatRequest{
@@ -356,3 +358,9 @@ func (*bootstrapChannelProvider) SupportsNativeFunctionCalling() bool { return t
 func (*bootstrapChannelProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
 
 func (*bootstrapChannelProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+func (*bootstrapChannelProvider) CountTokens(_ context.Context, req *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	return &llm.TokenCountResponse{
+		InputTokens: len(req.Messages) + req.MaxTokens,
+	}, nil
+}

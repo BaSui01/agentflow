@@ -9,6 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -268,7 +269,10 @@ func TestResolveRuntimeReasoningRegistry_PrefersExplicitRegistry(t *testing.T) {
 	explicitRegistry := reasoning.NewPatternRegistry()
 
 	resolved := resolveRuntimeReasoningRegistry(
-		mocks.NewSuccessProvider("hello"),
+		llmgateway.New(llmgateway.Config{
+			ChatProvider: mocks.NewSuccessProvider("hello"),
+			Logger:       zap.NewNop(),
+		}),
 		"gpt-4",
 		"agent-1",
 		BuildOptions{ReasoningRegistry: explicitRegistry},
@@ -280,7 +284,10 @@ func TestResolveRuntimeReasoningRegistry_PrefersExplicitRegistry(t *testing.T) {
 
 func TestResolveRuntimeReasoningRegistry_UsesRuntimeDefaultModesOnly(t *testing.T) {
 	resolved := resolveRuntimeReasoningRegistry(
-		mocks.NewSuccessProvider("hello"),
+		llmgateway.New(llmgateway.Config{
+			ChatProvider: mocks.NewSuccessProvider("hello"),
+			Logger:       zap.NewNop(),
+		}),
 		"gpt-4",
 		"agent-1",
 		BuildOptions{},

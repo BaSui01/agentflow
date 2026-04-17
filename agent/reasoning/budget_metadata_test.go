@@ -32,7 +32,7 @@ func TestReflexionExecutor_ExportsInternalBudgetMetadata(t *testing.T) {
 	cfg := DefaultReflexionConfig()
 	cfg.MaxTrials = 2
 	cfg.SuccessThreshold = 0.85
-	executor := NewReflexionExecutor(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	executor := NewReflexionExecutor(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := executor.Execute(context.Background(), "solve")
 	if err != nil {
@@ -79,7 +79,7 @@ func TestPlanAndExecute_ExportsInternalBudgetMetadata(t *testing.T) {
 	cfg := DefaultPlanExecuteConfig()
 	cfg.MaxReplanAttempts = 4
 	cfg.MaxPlanSteps = 7
-	executor := NewPlanAndExecute(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	executor := NewPlanAndExecute(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := executor.Execute(context.Background(), "solve")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestDynamicPlanner_ExportsInternalBudgetMetadata(t *testing.T) {
 	cfg.MaxPlanDepth = 6
 	cfg.ConfidenceThreshold = 0.55
 	cfg.MaxBacktracks = 2
-	executor := NewDynamicPlanner(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	executor := NewDynamicPlanner(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := executor.Execute(context.Background(), "solve")
 	if err != nil {
@@ -165,7 +165,7 @@ func TestReflexionExecutor_UsesTrialBudgetAsInternalCauseOnly(t *testing.T) {
 	cfg := DefaultReflexionConfig()
 	cfg.MaxTrials = 2
 	cfg.SuccessThreshold = 0.85
-	executor := NewReflexionExecutor(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	executor := NewReflexionExecutor(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := executor.Execute(context.Background(), "solve")
 	if err != nil {

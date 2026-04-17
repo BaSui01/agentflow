@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,21 +78,18 @@ type testLLMProvider struct {
 	completionFn func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
 }
 
-func (p *testLLMProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return p.completionFn(ctx, req)
+func (p *testLLMProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
+	chatReq, ok := req.Payload.(*llm.ChatRequest)
+	if !ok || chatReq == nil {
+		return nil, assert.AnError
+	}
+	resp, err := p.completionFn(ctx, chatReq)
+	if err != nil {
+		return nil, err
+	}
+	return &llmcore.UnifiedResponse{Output: resp}, nil
 }
 
-func (p *testLLMProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (p *testLLMProvider) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-chan llmcore.UnifiedChunk, error) {
 	return nil, nil
 }
-
-func (p *testLLMProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
-}
-
-func (p *testLLMProvider) Name() string                        { return "test" }
-func (p *testLLMProvider) SupportsNativeFunctionCalling() bool { return false }
-func (p *testLLMProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	return nil, nil
-}
-func (p *testLLMProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }

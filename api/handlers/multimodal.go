@@ -90,12 +90,12 @@ type MultimodalHandlerConfig struct {
 }
 
 type MultimodalHandler struct {
-	logger             *zap.Logger
-	router             *multimodal.Router
-	gateway            llmcore.Gateway
-	structuredProvider llm.Provider
-	pipeline           multimodal.PromptPipeline
-	service            multimodalService
+	logger      *zap.Logger
+	router      *multimodal.Router
+	gateway     llmcore.Gateway
+	chatEnabled bool
+	pipeline    multimodal.PromptPipeline
+	service     multimodalService
 
 	defaultImageProvider string
 	defaultVideoProvider string
@@ -244,16 +244,12 @@ func NewMultimodalHandlerWithProviders(
 		Ledger:        ledger,
 		Logger:        logger,
 	})
-	var structuredProvider llm.Provider
-	if chatProvider != nil {
-		structuredProvider = llmgateway.NewChatProviderAdapter(gw, chatProvider)
-	}
 
 	handler := &MultimodalHandler{
 		logger:               logger.With(zap.String("handler", "multimodal")),
 		router:               router,
 		gateway:              gw,
-		structuredProvider:   structuredProvider,
+		chatEnabled:          chatProvider != nil,
 		pipeline:             pipeline,
 		defaultImageProvider: defaultImage,
 		defaultVideoProvider: defaultVideo,
@@ -295,9 +291,9 @@ func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Re
 			"text_to_video":    len(h.videoProviders) > 0,
 			"image_to_video":   len(h.videoProviders) > 0,
 			"advanced_prompt":  true,
-			"chat":             h.structuredProvider != nil,
-			"agent_mode":       h.structuredProvider != nil,
-			"plan_generation":  h.structuredProvider != nil,
+			"chat":             h.chatEnabled,
+			"agent_mode":       h.chatEnabled,
+			"plan_generation":  h.chatEnabled,
 		},
 	})
 }
@@ -751,7 +747,7 @@ func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
-	if h.structuredProvider == nil {
+	if !h.chatEnabled {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "chat provider is not configured", h.logger)
 		return
 	}
@@ -785,7 +781,7 @@ Requirements:
 	}
 	prompt = h.promptOptimizer.OptimizePrompt(prompt)
 
-	so, err := structured.NewStructuredOutput[visualPlan](h.structuredProvider)
+	so, err := structured.NewStructuredOutput[visualPlan](h.gateway)
 	if err != nil {
 		h.writeProviderError(w, err)
 		return
@@ -832,7 +828,7 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
-	if h.structuredProvider == nil {
+	if !h.chatEnabled {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "chat provider is not configured", h.logger)
 		return
 	}

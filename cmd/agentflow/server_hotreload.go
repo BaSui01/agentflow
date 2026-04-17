@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"go.uber.org/zap"
@@ -51,6 +52,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		costTracker   = s.costTracker
 		llmCache      = s.llmCache
 		llmMetrics    = s.llmMetrics
+		gateway       llmcore.Gateway
 		ledger        observability.Ledger
 		policyManager *llmpolicy.Manager
 	)
@@ -61,6 +63,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		costTracker = llmRuntime.CostTracker
 		llmCache = llmRuntime.Cache
 		llmMetrics = llmRuntime.Metrics
+		gateway = llmRuntime.Gateway
 		ledger = llmRuntime.Ledger
 		policyManager = llmRuntime.PolicyManager
 	}
@@ -70,7 +73,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		return err
 	}
 
-	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, provider, resolver)
+	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, gateway, resolver)
 
 	s.provider = provider
 	s.toolProvider = toolProvider
@@ -153,11 +156,11 @@ func (s *Server) buildReloadedResolver(cfg *config.Config, provider llm.Provider
 
 func (s *Server) buildReloadedWorkflowRuntime(
 	cfg *config.Config,
-	provider llm.Provider,
+	gateway llmcore.Gateway,
 	resolver *agent.CachingResolver,
 ) *bootstrap.WorkflowRuntime {
 	opts := bootstrap.WorkflowRuntimeOptions{
-		LLMProvider:             provider,
+		LLMGateway:              gateway,
 		DefaultModel:            cfg.Agent.Model,
 		RetrievalStore:          s.ragStore,
 		EmbeddingProvider:       s.ragEmbedding,

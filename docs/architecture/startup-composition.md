@@ -63,6 +63,7 @@ Notes:
 - `internal/app/bootstrap/handler_runtime_builder.go`
   - LLM runtime setup (reusable main-provider assembly + default legacy multi-provider router path)
   - `BuildLLMHandlerRuntimeFromProvider(...)` now delegates to the public `llm/runtime/compose.Build(...)` seam so bootstrap and external projects reuse the same handler runtime wiring around any already-constructed main provider
+  - `llm/runtime/compose.Runtime` now exposes a shared `Gateway`, so handler/runtime consumers reuse one unified chat entry instead of rebuilding provider-side adapters per domain
   - chat middleware chain setup
   - policy/cache/metrics/budget runtime wiring
 - `internal/app/bootstrap/domain_runtime_builders.go`
@@ -125,6 +126,7 @@ Notes:
 - Shared bootstrap seam
   - External projects use `llm/runtime/compose.Build(...)` to assemble middleware/cache/policy/tool-provider wiring around any main provider.
   - `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)` remains the composition-root adapter that reuses the same public assembly seam for the built-in server startup path.
+  - The built-in startup chain now passes the shared runtime `Gateway` down into workflow runtime assembly and multimodal structured planning, so business-layer chat calls converge on `llmcore.Gateway`.
   - Built-in startup selection now uses `llm.main_provider_mode`, while public registration goes through `llm/runtime/compose.RegisterMainProviderBuilder(...)`.
   - Adapter-only integration, built-in config-switch usage, and `channelstore.NewMainProviderBuilder(...)` examples are documented in `docs/architecture/channel-routing-adapter-template.zh-CN.md` and `docs/architecture/channel-routing-adapter-template.md`.
   - Built-in config hot reload now reuses the same seam to rebuild the text runtime in place when `llm.main_provider_mode` or related LLM runtime config changes.

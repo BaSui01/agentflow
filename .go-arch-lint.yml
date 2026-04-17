@@ -15,6 +15,7 @@ exclude:
   - workflow
   - testutil
   - scripts
+  - sdk
   - examples
   - .snow
   - vendor

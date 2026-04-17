@@ -199,6 +199,8 @@ func publicInputContext(values map[string]any) map[string]any {
 		switch key {
 		case internalContextHandoffMessages, internalContextParentHandoff, internalContextFromAgentID, internalContextHandoffTool:
 			continue
+		case "memory_context", "retrieval_context", "tool_state", "skill_context", "checkpoint_id":
+			continue
 		default:
 			out[key] = value
 		}

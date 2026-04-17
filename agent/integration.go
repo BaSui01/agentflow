@@ -1971,9 +1971,13 @@ func (b *BaseAgent) skillsMiddleware(options EnhancedExecutionOptions) Execution
 			b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
 		}
 
+		skillInstructions = normalizeInstructionList(skillInstructions)
 		if len(skillInstructions) > 0 {
 			input = shallowCopyInput(input)
-			input.Content = prependSkillInstructions(input.Content, skillInstructions)
+			if input.Context == nil {
+				input.Context = make(map[string]any, 1)
+			}
+			input.Context["skill_context"] = append([]string(nil), skillInstructions...)
 		}
 		ctx = withSkillInstructions(ctx, skillInstructions)
 		return next(ctx, input)
@@ -2179,9 +2183,9 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]any {
 	return metrics
 }
 
-func prependSkillInstructions(prompt string, instructions []string) string {
+func normalizeInstructionList(instructions []string) []string {
 	if len(instructions) == 0 {
-		return prompt
+		return nil
 	}
 
 	unique := make(map[string]struct{}, len(instructions))
@@ -2199,17 +2203,9 @@ func prependSkillInstructions(prompt string, instructions []string) string {
 	}
 
 	if len(cleaned) == 0 {
-		return prompt
+		return nil
 	}
-
-	var sb strings.Builder
-	sb.WriteString("技能执行指令:\n")
-	for idx, instruction := range cleaned {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", idx+1, instruction))
-	}
-	sb.WriteString("\n用户请求:\n")
-	sb.WriteString(prompt)
-	return sb.String()
+	return cleaned
 }
 
 // ExportConfiguration 导出配置（用于持久化或分享）

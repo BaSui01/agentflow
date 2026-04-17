@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -41,7 +42,7 @@ func DefaultReWOOConfig() ReWOOConfig {
 // 它产生一个完整的计划前, 然后执行所有步骤,
 // 最后从所有观测中合成答案。
 type ReWOO struct {
-	provider     types.ChatProvider
+	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       ReWOOConfig
@@ -49,12 +50,12 @@ type ReWOO struct {
 }
 
 // NewReWOO创建了新的ReWOO理性.
-func NewReWOO(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
+func NewReWOO(gateway llmcore.Gateway, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &ReWOO{
-		provider:     provider,
+		gateway:      gateway,
 		toolExecutor: executor,
 		toolSchemas:  schemas,
 		config:       config,
@@ -150,7 +151,7 @@ Create a plan (max %d steps). Output as JSON array:
   {"id": "#E2", "tool": "tool_name", "arguments": "use #E1 result", "reasoning": "why needed"}
 ]`, strings.Join(toolDescs, "\n"), task, r.config.MaxPlanSteps)
 
-	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -309,7 +310,7 @@ Plan execution results:
 
 Based on these results, provide a clear and complete answer to the task.`, task, strings.Join(planSummary, "\n"))
 
-	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},

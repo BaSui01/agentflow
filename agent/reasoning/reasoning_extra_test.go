@@ -26,7 +26,7 @@ func TestDynamicPlanner_ExecuteNode_ThinkAction(t *testing.T) {
 			}, nil
 		},
 	}
-	dp := NewDynamicPlanner(provider, nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
+	dp := NewDynamicPlanner(testGateway(provider), nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
 
 	node := &PlanNode{ID: "n1", Action: "think", Description: "analyze problem"}
 	result, tokens, err := dp.executeNode(context.Background(), node)
@@ -44,7 +44,7 @@ func TestDynamicPlanner_ExecuteNode_ReasonAction(t *testing.T) {
 			}, nil
 		},
 	}
-	dp := NewDynamicPlanner(provider, nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
+	dp := NewDynamicPlanner(testGateway(provider), nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
 
 	node := &PlanNode{ID: "n1", Action: "reason", Description: "reason about it"}
 	result, _, err := dp.executeNode(context.Background(), node)
@@ -102,7 +102,7 @@ func TestDynamicPlanner_ExecuteLLMNode_Error(t *testing.T) {
 			return nil, fmt.Errorf("LLM unavailable")
 		},
 	}
-	dp := NewDynamicPlanner(provider, nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
+	dp := NewDynamicPlanner(testGateway(provider), nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
 
 	node := &PlanNode{ID: "n1", Action: "think", Description: "think"}
 	_, _, err := dp.executeLLMNode(context.Background(), node)
@@ -119,7 +119,7 @@ func TestDynamicPlanner_ExecuteLLMNode_NoChoices(t *testing.T) {
 			}, nil
 		},
 	}
-	dp := NewDynamicPlanner(provider, nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
+	dp := NewDynamicPlanner(testGateway(provider), nil, nil, DefaultDynamicPlannerConfig(), zap.NewNop())
 
 	node := &PlanNode{ID: "n1", Action: "think", Description: "think"}
 	_, _, err := dp.executeLLMNode(context.Background(), node)

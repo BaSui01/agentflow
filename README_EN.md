@@ -311,6 +311,8 @@ cfg.Context = &types.ContextConfig{
 }
 ```
 
+When `Skills`, enhanced `Memory`, retrieval, or tool-state context are enabled, they are injected as context-runtime-managed segments instead of mutating the original user input.
+
 You can also toggle it via `runtime.Builder`:
 
 ```go

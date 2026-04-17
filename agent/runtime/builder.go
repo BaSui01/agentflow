@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -256,7 +257,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		return nil, err
 	}
 
-	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainProvider(), cfg2.LLM.Model, cfg2.Core.ID, opts, b.logger)
+	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainGateway(), cfg2.LLM.Model, cfg2.Core.ID, opts, b.logger)
 	ag.SetReasoningRegistry(reasoningRegistry)
 	if opts.CheckpointManager != nil {
 		ag.SetCheckpointManager(opts.CheckpointManager)
@@ -276,7 +277,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 }
 
 func resolveRuntimeReasoningRegistry(
-	provider llm.Provider,
+	gateway llmcore.Gateway,
 	model string,
 	agentID string,
 	opts BuildOptions,
@@ -286,7 +287,7 @@ func resolveRuntimeReasoningRegistry(
 		return opts.ReasoningRegistry
 	}
 	return agent.NewDefaultReasoningRegistry(
-		provider,
+		gateway,
 		model,
 		opts.ToolManager,
 		agentID,

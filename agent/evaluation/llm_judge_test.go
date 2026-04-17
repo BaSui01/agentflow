@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/types"
-
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,40 +21,28 @@ type mockProvider struct {
 	lastRequest *llm.ChatRequest
 }
 
-func (m *mockProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (m *mockProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
 	m.callCount++
-	m.lastRequest = req
+	if req != nil {
+		if chatReq, ok := req.Payload.(*llm.ChatRequest); ok {
+			m.lastRequest = chatReq
+		}
+	}
 	if m.err != nil {
 		return nil, m.err
 	}
-	return &llm.ChatResponse{
-		Choices: []llm.ChatChoice{
-			{Message: types.Message{Content: m.response}},
+	return &llmcore.UnifiedResponse{
+		Output: &llm.ChatResponse{
+			Choices: []llm.ChatChoice{
+				{Message: types.Message{Content: m.response}},
+			},
 		},
 	}, nil
 }
 
-func (m *mockProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (m *mockProvider) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-chan llmcore.UnifiedChunk, error) {
 	return nil, nil
 }
-
-func (m *mockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
-}
-
-func (m *mockProvider) Name() string {
-	return "mock"
-}
-
-func (m *mockProvider) SupportsNativeFunctionCalling() bool {
-	return true
-}
-
-func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	return nil, nil
-}
-
-func (m *mockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 func TestNewLLMJudge(t *testing.T) {
 	provider := &mockProvider{}

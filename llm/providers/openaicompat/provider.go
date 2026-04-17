@@ -287,25 +287,12 @@ func (p *Provider) Endpoints() llm.ProviderEndpoints {
 	}
 }
 
-// Completion performs a non-streaming chat completion.
-func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// Apply rewriter chain
-	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
-	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-		}
-	}
-	req = rewrittenReq
-
-	apiKey := p.resolveAPIKey(ctx)
+// buildRequestBody constructs the common OpenAI-compatible request body.
+func (p *Provider) buildRequestBody(req *llm.ChatRequest, isStream bool) (providerbase.OpenAICompatRequest, error) {
 	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
-	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
-	if cacheErr != nil {
-		return nil, cacheErr
+	promptCacheRetention, err := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
+	if err != nil {
+		return providerbase.OpenAICompatRequest{}, err
 	}
 
 	body := providerbase.OpenAICompatRequest{
@@ -316,6 +303,7 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 		Temperature:          req.Temperature,
 		TopP:                 req.TopP,
 		Stop:                 req.Stop,
+		Stream:               isStream,
 		FrequencyPenalty:     req.FrequencyPenalty,
 		PresencePenalty:      req.PresencePenalty,
 		RepetitionPenalty:    req.RepetitionPenalty,
@@ -340,20 +328,42 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	if rf := providerbase.ConvertResponseFormat(req.ResponseFormat); rf != nil {
 		body.ResponseFormat = rf
 	}
-
-	// 传递 reasoning_effort
+	if isStream && req.StreamOptions != nil {
+		body.StreamOptions = &providerbase.StreamOptions{
+			IncludeUsage:      req.StreamOptions.IncludeUsage,
+			ChunkIncludeUsage: req.StreamOptions.ChunkIncludeUsage,
+		}
+	}
 	if req.ReasoningEffort != "" {
 		body.ReasoningEffort = &req.ReasoningEffort
 	}
-
-	// 传递 web_search_options
 	if req.WebSearchOptions != nil {
 		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
 	}
-
-	// Apply provider-specific request hook
 	if p.Cfg.RequestHook != nil {
 		p.Cfg.RequestHook(req, &body)
+	}
+	return body, nil
+}
+
+// Completion performs a non-streaming chat completion.
+func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	// Apply rewriter chain
+	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
+	if err != nil {
+		return nil, &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("request rewrite failed: %v", err),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   p.Name(),
+		}
+	}
+	req = rewrittenReq
+
+	apiKey := p.resolveAPIKey(ctx)
+	body, err := p.buildRequestBody(req, false)
+	if err != nil {
+		return nil, err
 	}
 	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
 		Provider:     p.Name(),
@@ -390,65 +400,9 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	req = rewrittenReq
 
 	apiKey := p.resolveAPIKey(ctx)
-	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
-	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
-	if cacheErr != nil {
-		return nil, cacheErr
-	}
-
-	body := providerbase.OpenAICompatRequest{
-		Model:                model,
-		Messages:             providerbase.ConvertMessagesToOpenAI(req.Messages),
-		Tools:                providerbase.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:            req.MaxTokens,
-		Temperature:          req.Temperature,
-		TopP:                 req.TopP,
-		Stop:                 req.Stop,
-		Stream:               true,
-		FrequencyPenalty:     req.FrequencyPenalty,
-		PresencePenalty:      req.PresencePenalty,
-		RepetitionPenalty:    req.RepetitionPenalty,
-		N:                    req.N,
-		LogProbs:             req.LogProbs,
-		TopLogProbs:          req.TopLogProbs,
-		ParallelToolCalls:    req.ParallelToolCalls,
-		ServiceTier:          req.ServiceTier,
-		User:                 req.User,
-		MaxCompletionTokens:  req.MaxCompletionTokens,
-		Store:                req.Store,
-		Modalities:           req.Modalities,
-		PromptCacheKey:       req.PromptCacheKey,
-		PromptCacheRetention: promptCacheRetention,
-		PreviousResponseID:   req.PreviousResponseID,
-		Include:              req.Include,
-		Truncation:           req.Truncation,
-	}
-	if req.ToolChoice != nil {
-		body.ToolChoice = req.ToolChoice
-	}
-	if rf := providerbase.ConvertResponseFormat(req.ResponseFormat); rf != nil {
-		body.ResponseFormat = rf
-	}
-	if req.StreamOptions != nil {
-		body.StreamOptions = &providerbase.StreamOptions{
-			IncludeUsage:      req.StreamOptions.IncludeUsage,
-			ChunkIncludeUsage: req.StreamOptions.ChunkIncludeUsage,
-		}
-	}
-
-	// 传递 reasoning_effort
-	if req.ReasoningEffort != "" {
-		body.ReasoningEffort = &req.ReasoningEffort
-	}
-
-	// 传递 web_search_options
-	if req.WebSearchOptions != nil {
-		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
-	}
-
-	// Apply provider-specific request hook
-	if p.Cfg.RequestHook != nil {
-		p.Cfg.RequestHook(req, &body)
+	body, err := p.buildRequestBody(req, true)
+	if err != nil {
+		return nil, err
 	}
 	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
 		Provider:     p.Name(),
@@ -488,7 +442,13 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// panic recovered; body and ch will be closed by defers below
+				select {
+				case <-ctx.Done():
+				case ch <- llm.StreamChunk{Err: &types.Error{
+					Code: llm.ErrUpstreamError, Message: fmt.Sprintf("stream parse panic: %v", r),
+					HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
+				}}:
+				}
 			}
 		}()
 		defer body.Close()

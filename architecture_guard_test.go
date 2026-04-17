@@ -2,6 +2,7 @@ package agentflow_test
 
 import (
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -470,6 +471,82 @@ func TestCmdEntrypointImportAllowlist(t *testing.T) {
 	}
 }
 
+func TestGatewayDirectProviderCallGuards(t *testing.T) {
+	protectedPrefixes := []string{
+		"workflow",
+		"agent/reasoning",
+		"agent/structured",
+		"agent/evaluation",
+		"agent/deliberation",
+	}
+	allowlistPrefixes := []string{
+		"llm/providers",
+		"llm/runtime",
+		"llm/gateway",
+		"internal/app/bootstrap",
+	}
+
+	var violations []string
+	fset := token.NewFileSet()
+
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if !hasAnyPathPrefix(rel, protectedPrefixes) || hasAnyPathPrefix(rel, allowlistPrefixes) {
+			return nil
+		}
+
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return fmt.Errorf("parse file for %s: %w", rel, err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if sel.Sel == nil {
+				return true
+			}
+			switch sel.Sel.Name {
+			case "Completion", "Stream":
+				pos := fset.Position(sel.Sel.Pos())
+				violations = append(violations, fmt.Sprintf("%s:%d uses direct provider call .%s(...)", rel, pos.Line, sel.Sel.Name))
+			}
+			return true
+		})
+		return nil
+	})
+
+	if walkErr != nil {
+		t.Fatalf("scan gateway direct provider guards: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		slices.Sort(violations)
+		t.Fatalf("business-layer direct provider call violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
 func TestReadmeCmdAgentflowStructureConsistency(t *testing.T) {
 	actualFiles, err := listProductionGoFiles("cmd/agentflow")
 	if err != nil {
@@ -793,6 +870,15 @@ func hasPathPrefix(path, prefix string) bool {
 	path = strings.Trim(filepath.ToSlash(path), "/")
 	prefix = strings.Trim(filepath.ToSlash(prefix), "/")
 	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+func hasAnyPathPrefix(path string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if hasPathPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldSkipDir(path string) bool {

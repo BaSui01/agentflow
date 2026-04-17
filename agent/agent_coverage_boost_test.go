@@ -6,9 +6,12 @@ import (
 	"testing"
 	"time"
 
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -1103,14 +1106,17 @@ func TestWrapProviderWithGateway_WithLedger(t *testing.T) {
 	if wrapped == nil {
 		t.Fatal("expected non-nil wrapped provider")
 	}
-	resp, err := wrapped.Completion(context.Background(), &llm.ChatRequest{
-		Model:    "test",
-		Messages: []types.Message{{Role: llm.RoleUser, Content: "hi"}},
+	resp, err := wrapped.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		Payload: &llm.ChatRequest{
+			Model:    "test",
+			Messages: []types.Message{{Role: llm.RoleUser, Content: "hi"}},
+		},
 	})
 	if err != nil {
-		t.Fatalf("wrapped provider completion failed: %v", err)
+		t.Fatalf("wrapped provider invoke failed: %v", err)
 	}
-	if resp == nil {
+	if resp == nil || resp.Output == nil {
 		t.Fatal("expected non-nil response")
 	}
 }
@@ -1897,6 +1903,66 @@ func TestBaseAgent_Execute_UsesConfiguredExtensions(t *testing.T) {
 	}
 }
 
+func TestBaseAgent_Execute_InjectsSkillsAsContextSegments(t *testing.T) {
+	var capturedReq *llm.ChatRequest
+	prov := &testProvider{
+		name:           "skill-context",
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			copied := *req
+			copied.Messages = append([]types.Message(nil), req.Messages...)
+			capturedReq = &copied
+			return &llm.ChatResponse{
+				Provider: "skill-context",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "skill-context", prov)
+	ag.Init(context.Background())
+	ag.config.Extensions.Skills = &types.SkillsConfig{Enabled: true}
+	ag.EnableSkills(&mockSkillDiscoverer{
+		skills: []*types.DiscoveredSkill{
+			{Name: "tooling", Instructions: "use repo search before editing"},
+			{Name: "tooling-dup", Instructions: "use repo search before editing"},
+		},
+	})
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "skill-context-1",
+		Content: "please inspect the bug",
+	})
+	if err != nil {
+		t.Fatalf("Execute with skills enabled failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if capturedReq == nil {
+		t.Fatal("expected captured request")
+	}
+	last := capturedReq.Messages[len(capturedReq.Messages)-1]
+	if last.Role != types.RoleUser || last.Content != "please inspect the bug" {
+		t.Fatalf("expected original user input to be preserved, got role=%q content=%q", last.Role, last.Content)
+	}
+	foundSkill := false
+	for _, msg := range capturedReq.Messages {
+		if msg.Role == types.RoleSystem && strContains(msg.Content, "use repo search before editing") {
+			foundSkill = true
+		}
+		if strContains(msg.Content, "技能执行指令:") {
+			t.Fatalf("expected skills to be injected as context, got legacy prompt mutation in %q", msg.Content)
+		}
+	}
+	if !foundSkill {
+		t.Fatalf("expected discovered skill instructions in system context, got %#v", capturedReq.Messages)
+	}
+}
+
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
 	var capturedReq *llm.ChatRequest
 	prov := &testProvider{
@@ -1958,6 +2024,37 @@ func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
 	}
 	if mem.episodeCount < 1 {
 		t.Fatalf("expected feedback execution to record at least 1 episode, got %d", mem.episodeCount)
+	}
+}
+
+func TestPublicInputContext_FiltersAgentManagedContextKeys(t *testing.T) {
+	values := map[string]any{
+		"memory_context":    []string{"m1"},
+		"retrieval_context": []agentcontext.RetrievalItem{{Content: "doc"}},
+		"tool_state":        []agentcontext.ToolState{{ToolName: "shell", Summary: "cwd=/tmp"}},
+		"skill_context":     []string{"use search"},
+		"checkpoint_id":     "cp-1",
+		"user_goal":         "ship feature",
+	}
+
+	got := publicInputContext(values)
+	if _, ok := got["memory_context"]; ok {
+		t.Fatalf("expected memory_context to be filtered, got %#v", got)
+	}
+	if _, ok := got["retrieval_context"]; ok {
+		t.Fatalf("expected retrieval_context to be filtered, got %#v", got)
+	}
+	if _, ok := got["tool_state"]; ok {
+		t.Fatalf("expected tool_state to be filtered, got %#v", got)
+	}
+	if _, ok := got["skill_context"]; ok {
+		t.Fatalf("expected skill_context to be filtered, got %#v", got)
+	}
+	if _, ok := got["checkpoint_id"]; ok {
+		t.Fatalf("expected checkpoint_id to be filtered, got %#v", got)
+	}
+	if got["user_goal"] != "ship feature" {
+		t.Fatalf("expected public context to preserve user keys, got %#v", got)
 	}
 }
 
@@ -2797,10 +2894,11 @@ func TestBaseAgent_SaveMemory_WithMemory(t *testing.T) {
 func TestBaseAgent_GatewayProvider_ExternalGateway(t *testing.T) {
 	ag := buildTestAgent(t, "gw-ext")
 	ext := &testMockProvider{}
-	ag.SetGateway(ext)
+	gwExt := llmgateway.New(llmgateway.Config{ChatProvider: ext, Logger: zap.NewNop()})
+	ag.SetGateway(gwExt)
 	gw := ag.gatewayProvider()
-	if gw != ext {
-		t.Fatal("expected external gateway")
+	if gw == nil {
+		t.Fatal("expected non-nil provider from external gateway")
 	}
 }
 

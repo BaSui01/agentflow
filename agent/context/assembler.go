@@ -68,14 +68,33 @@ func (a *Assembler) Assemble(ctx context.Context, req *AssembleRequest) (*Assemb
 }
 
 func (a *Assembler) buildSegments(req *AssembleRequest) []ContextSegment {
-	segments := make([]ContextSegment, 0, 8+len(req.Conversation)+len(req.MemoryContext)+len(req.Retrieval)+len(req.ToolState))
+	segments := make([]ContextSegment, 0, 8+len(req.SkillContext)+len(req.Conversation)+len(req.MemoryContext)+len(req.Retrieval)+len(req.ToolState))
 	if prompt := strings.TrimSpace(req.SystemPrompt); prompt != "" {
-		if extra := additionalContextText(req.AdditionalContext); extra != "" {
-			prompt += "\n\n<additional_context>\n" + extra + "\n</additional_context>"
-		}
 		segments = append(segments, a.newSegment("system", SegmentSystem, types.RoleSystem, prompt, 100, true, nil))
 	}
+	for _, layer := range promptLayers(req) {
+		role := layer.Role
+		if role == "" {
+			role = types.RoleSystem
+		}
+		layerType := layer.Type
+		if layerType == "" {
+			layerType = SegmentEphemeral
+		}
+		priority := layer.Priority
+		if priority <= 0 {
+			priority = 80
+		}
+		segments = append(segments, a.newSegment(layer.ID, layerType, role, layer.Content, priority, layer.Sticky, layer.Metadata))
+	}
 
+	for i, item := range req.SkillContext {
+		content := strings.TrimSpace(item)
+		if content == "" {
+			continue
+		}
+		segments = append(segments, a.newSegment(fmt.Sprintf("skill-%d", i), SegmentSkill, types.RoleSystem, content, 65, false, nil))
+	}
 	for i, item := range req.MemoryContext {
 		content := strings.TrimSpace(item)
 		if content == "" {
@@ -180,7 +199,7 @@ func (a *Assembler) fitSegments(ctx context.Context, segments []ContextSegment, 
 		return kept, dropped, summarized, reason, nil
 	}
 
-	priorityOrder := []SegmentType{SegmentRetrieval, SegmentToolState, SegmentMemory, SegmentConversation}
+	priorityOrder := []SegmentType{SegmentRetrieval, SegmentToolState, SegmentEphemeral, SegmentMemory, SegmentConversation}
 	for _, segmentType := range priorityOrder {
 		for i := 0; i < len(kept) && a.estimateSegmentTokens(kept) > budget; {
 			if kept[i].Sticky || kept[i].Type != segmentType {
@@ -221,9 +240,33 @@ func (a *Assembler) fitSegments(ctx context.Context, segments []ContextSegment, 
 func renderSegments(segments []ContextSegment) []types.Message {
 	messages := make([]types.Message, 0, len(segments))
 	for _, seg := range segments {
-		messages = append(messages, types.Message{Role: seg.Role, Content: seg.Content})
+		messages = append(messages, types.Message{Role: seg.Role, Content: seg.Content, Metadata: seg.Metadata})
 	}
 	return messages
+}
+
+func promptLayers(req *AssembleRequest) []PromptLayer {
+	layers := make([]PromptLayer, 0, len(req.EphemeralLayers)+1)
+	if len(req.AdditionalContext) > 0 {
+		if extra := additionalContextText(req.AdditionalContext); extra != "" {
+			layers = append(layers, PromptLayer{
+				ID:       "request_context",
+				Type:     SegmentEphemeral,
+				Role:     types.RoleSystem,
+				Content:  "<request_context>\n" + extra + "\n</request_context>",
+				Priority: 85,
+				Sticky:   true,
+				Metadata: map[string]any{"source": "additional_context"},
+			})
+		}
+	}
+	if len(req.EphemeralLayers) > 0 {
+		layers = append(layers, req.EphemeralLayers...)
+	}
+	if len(layers) == 0 {
+		return nil
+	}
+	return layers
 }
 
 func truncateMessages(msgs []types.Message, maxTokens int, tokenizer types.Tokenizer) []types.Message {

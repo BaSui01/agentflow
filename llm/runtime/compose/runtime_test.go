@@ -66,6 +66,12 @@ func (*countingProvider) ListModels(context.Context) ([]llm.Model, error) { retu
 
 func (*countingProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
+func (*countingProvider) CountTokens(_ context.Context, req *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	return &llm.TokenCountResponse{
+		InputTokens: len(req.Messages) + req.MaxTokens,
+	}, nil
+}
+
 func TestBuild_ReusesMainProviderAndSharedAssembly(t *testing.T) {
 	t.Parallel()
 
@@ -74,11 +80,14 @@ func TestBuild_ReusesMainProviderAndSharedAssembly(t *testing.T) {
 		Timeout:    2 * time.Second,
 		MaxRetries: 1,
 		Budget: BudgetConfig{
-			Enabled:            true,
-			MaxTokensPerMinute: 1000,
-			MaxTokensPerDay:    10000,
-			MaxCostPerDay:      10,
-			AlertThreshold:     0.8,
+			Enabled:             true,
+			MaxTokensPerRequest: 1000,
+			MaxTokensPerMinute:  1000,
+			MaxTokensPerHour:    5000,
+			MaxTokensPerDay:     10000,
+			MaxCostPerRequest:   10,
+			MaxCostPerDay:       10,
+			AlertThreshold:      0.8,
 		},
 		Cache: CacheConfig{
 			Enabled:      true,
@@ -89,6 +98,7 @@ func TestBuild_ReusesMainProviderAndSharedAssembly(t *testing.T) {
 	}, provider, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.Gateway)
 	require.NotNil(t, runtime.Provider)
 	require.NotNil(t, runtime.ToolProvider)
 	require.Same(t, runtime.Provider, runtime.ToolProvider)
@@ -151,6 +161,7 @@ func TestBuild_UsesExplicitToolProviderOverride(t *testing.T) {
 	}, mainProvider, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.Gateway)
 	require.NotNil(t, runtime.Provider)
 	require.NotNil(t, runtime.ToolProvider)
 	require.NotSame(t, runtime.Provider, runtime.ToolProvider)
