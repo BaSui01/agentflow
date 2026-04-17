@@ -8,6 +8,23 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	labelMethod    = "method"
+	labelPath      = "path"
+	labelStatus    = "status"
+	labelProvider  = "provider"
+	labelModel     = "model"
+	labelTokenType = "type"
+	labelAgentType = "agent_type"
+	labelAgentID   = "agent_id"
+	labelFromState = "from_state"
+	labelToState   = "to_state"
+	labelCacheType = "cache_type"
+	labelToolName  = "tool_name"
+	labelDatabase  = "database"
+	labelOperation = "operation"
+)
+
 // =============================================================================
 // 📊 指标收集器
 // =============================================================================
@@ -40,8 +57,8 @@ type Collector struct {
 	cacheSize      *prometheus.GaugeVec
 
 	// 工具调用指标
-	toolCallsTotal    *prometheus.CounterVec
-	toolCallDuration  *prometheus.HistogramVec
+	toolCallsTotal   *prometheus.CounterVec
+	toolCallDuration *prometheus.HistogramVec
 
 	// 数据库指标
 	dbConnectionsOpen *prometheus.GaugeVec
@@ -64,7 +81,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "http_requests_total",
 			Help:      "Total number of HTTP requests",
 		},
-		[]string{"method", "path", "status"},
+		[]string{labelMethod, labelPath, labelStatus},
 	)
 
 	c.httpRequestDuration = promauto.NewHistogramVec(
@@ -74,7 +91,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "HTTP request duration in seconds",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"method", "path"},
+		[]string{labelMethod, labelPath},
 	)
 
 	c.httpRequestSize = promauto.NewHistogramVec(
@@ -84,7 +101,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "HTTP request size in bytes",
 			Buckets:   prometheus.ExponentialBuckets(100, 10, 8),
 		},
-		[]string{"method", "path"},
+		[]string{labelMethod, labelPath},
 	)
 
 	c.httpResponseSize = promauto.NewHistogramVec(
@@ -94,7 +111,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "HTTP response size in bytes",
 			Buckets:   prometheus.ExponentialBuckets(100, 10, 8),
 		},
-		[]string{"method", "path"},
+		[]string{labelMethod, labelPath},
 	)
 
 	// LLM 指标
@@ -104,7 +121,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "llm_requests_total",
 			Help:      "Total number of LLM requests",
 		},
-		[]string{"provider", "model", "status"},
+		[]string{labelProvider, labelModel, labelStatus},
 	)
 
 	c.llmRequestDuration = promauto.NewHistogramVec(
@@ -114,7 +131,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "LLM request duration in seconds",
 			Buckets:   []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60},
 		},
-		[]string{"provider", "model"},
+		[]string{labelProvider, labelModel},
 	)
 
 	c.llmTokensUsed = promauto.NewCounterVec(
@@ -123,7 +140,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "llm_tokens_used_total",
 			Help:      "Total number of tokens used",
 		},
-		[]string{"provider", "model", "type"}, // type: prompt, completion
+		[]string{labelProvider, labelModel, labelTokenType}, // token_type: prompt, completion
 	)
 
 	c.llmCost = promauto.NewCounterVec(
@@ -132,7 +149,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "llm_cost_total",
 			Help:      "Total LLM cost in USD",
 		},
-		[]string{"provider", "model"},
+		[]string{labelProvider, labelModel},
 	)
 
 	// Agent 指标
@@ -143,7 +160,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "agent_executions_total",
 			Help:      "Total number of agent executions",
 		},
-		[]string{"agent_type", "status"},
+		[]string{labelAgentType, labelStatus},
 	)
 
 	c.agentExecutionDuration = promauto.NewHistogramVec(
@@ -153,7 +170,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "Agent execution duration in seconds",
 			Buckets:   []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120},
 		},
-		[]string{"agent_type"},
+		[]string{labelAgentType},
 	)
 
 	c.agentStateTransitions = promauto.NewCounterVec(
@@ -162,7 +179,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "agent_state_transitions_total",
 			Help:      "Total number of agent state transitions",
 		},
-		[]string{"agent_type", "from_state", "to_state"},
+		[]string{labelAgentType, labelFromState, labelToState},
 	)
 
 	// agent_info gauge 保留 agent_id 的可观测性，但不参与高频指标
@@ -172,7 +189,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "agent_info",
 			Help:      "Agent metadata mapping (agent_id to agent_type)",
 		},
-		[]string{"agent_id", "agent_type"},
+		[]string{labelAgentID, labelAgentType},
 	)
 
 	// 缓存指标
@@ -182,7 +199,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "cache_hits_total",
 			Help:      "Total number of cache hits",
 		},
-		[]string{"cache_type"},
+		[]string{labelCacheType},
 	)
 
 	c.cacheMisses = promauto.NewCounterVec(
@@ -191,7 +208,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "cache_misses_total",
 			Help:      "Total number of cache misses",
 		},
-		[]string{"cache_type"},
+		[]string{labelCacheType},
 	)
 
 	c.cacheEvictions = promauto.NewCounterVec(
@@ -200,7 +217,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "cache_evictions_total",
 			Help:      "Total number of cache evictions",
 		},
-		[]string{"cache_type"},
+		[]string{labelCacheType},
 	)
 
 	c.cacheSize = promauto.NewGaugeVec(
@@ -209,7 +226,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "cache_size",
 			Help:      "Current number of items in cache",
 		},
-		[]string{"cache_type"},
+		[]string{labelCacheType},
 	)
 
 	// 工具调用指标
@@ -219,7 +236,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "tool_calls_total",
 			Help:      "Total number of tool calls",
 		},
-		[]string{"tool_name", "status"},
+		[]string{labelToolName, labelStatus},
 	)
 
 	c.toolCallDuration = promauto.NewHistogramVec(
@@ -229,7 +246,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "Tool call duration in seconds",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"tool_name"},
+		[]string{labelToolName},
 	)
 
 	// 数据库指标
@@ -239,7 +256,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "db_connections_open",
 			Help:      "Number of open database connections",
 		},
-		[]string{"database"},
+		[]string{labelDatabase},
 	)
 
 	c.dbConnectionsIdle = promauto.NewGaugeVec(
@@ -248,7 +265,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "db_connections_idle",
 			Help:      "Number of idle database connections",
 		},
-		[]string{"database"},
+		[]string{labelDatabase},
 	)
 
 	c.dbQueryDuration = promauto.NewHistogramVec(
@@ -258,7 +275,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "Database query duration in seconds",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"database", "operation"},
+		[]string{labelDatabase, labelOperation},
 	)
 
 	logger.Info("metrics collector initialized", zap.String("namespace", namespace))
@@ -381,4 +398,3 @@ func statusCode(code int) string {
 		return "unknown"
 	}
 }
-

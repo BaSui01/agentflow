@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -60,7 +61,7 @@ func NewMetrics() (*Metrics, error) {
 	}
 
 	// 错误计数
-	m.errorTotal, err = meter.Int64Counter("types.Error.total",
+	m.errorTotal, err = meter.Int64Counter("llm.error.total",
 		metric.WithDescription("Total number of errors"),
 		metric.WithUnit("{error}"))
 	if err != nil {
@@ -155,19 +156,23 @@ type ResponseAttrs struct {
 // StartRequest 开始请求追踪
 func (m *Metrics) StartRequest(ctx context.Context, attrs RequestAttrs) (context.Context, trace.Span) {
 	ctx, span := m.tracer.Start(ctx, "llm.completion",
-		trace.WithAttributes(
-			attribute.String("llm.provider", attrs.Provider),
-			attribute.String("llm.model", attrs.Model),
-			attribute.String("tenant.id", attrs.TenantID),
-			attribute.String("user.id", attrs.UserID),
-			attribute.String("llm.feature", attrs.Feature),
-			attribute.String("request.id", attrs.TraceID),
-		))
+		trace.WithAttributes(telemetry.LLMTraceAttrs(
+			attrs.Provider,
+			attrs.Model,
+			attrs.TenantID,
+			attrs.UserID,
+			attrs.Feature,
+			attrs.TraceID,
+		)...))
 
 	m.activeRequests.Add(ctx, 1,
-		metric.WithAttributes(
-			attribute.String("provider", attrs.Provider),
-			attribute.String("model", attrs.Model)))
+		metric.WithAttributes(telemetry.LLMIdentityAttrs(
+			attrs.Provider,
+			attrs.Model,
+			attrs.TenantID,
+			attrs.UserID,
+			attrs.Feature,
+		)...))
 
 	return ctx, span
 }
@@ -176,19 +181,24 @@ func (m *Metrics) StartRequest(ctx context.Context, attrs RequestAttrs) (context
 func (m *Metrics) EndRequest(ctx context.Context, span trace.Span, req RequestAttrs, resp ResponseAttrs) {
 	defer span.End()
 
-	commonAttrs := []attribute.KeyValue{
-		attribute.String("provider", req.Provider),
-		attribute.String("model", req.Model),
-		attribute.String("tenant_id", req.TenantID),
-		attribute.String("feature", req.Feature),
-		attribute.String("status", resp.Status),
-	}
+	commonAttrs := telemetry.LLMRequestAttrs(
+		req.Provider,
+		req.Model,
+		req.TenantID,
+		req.UserID,
+		req.Feature,
+		resp.Status,
+	)
 
 	// 减少活跃请求
 	m.activeRequests.Add(ctx, -1,
-		metric.WithAttributes(
-			attribute.String("provider", req.Provider),
-			attribute.String("model", req.Model)))
+		metric.WithAttributes(telemetry.LLMIdentityAttrs(
+			req.Provider,
+			req.Model,
+			req.TenantID,
+			req.UserID,
+			req.Feature,
+		)...))
 
 	// 记录请求
 	m.requestTotal.Add(ctx, 1, metric.WithAttributes(commonAttrs...))
@@ -200,19 +210,13 @@ func (m *Metrics) EndRequest(ctx context.Context, span trace.Span, req RequestAt
 	totalTokens := int64(resp.TokensPrompt + resp.TokensCompletion)
 	if totalTokens > 0 {
 		m.tokenTotal.Add(ctx, totalTokens, metric.WithAttributes(
-			attribute.String("provider", req.Provider),
-			attribute.String("model", req.Model),
-			attribute.String("type", "total")))
+			telemetry.LLMTokenAttrs(req.Provider, req.Model, req.TenantID, req.UserID, req.Feature, "total")...))
 
 		m.tokenTotal.Add(ctx, int64(resp.TokensPrompt), metric.WithAttributes(
-			attribute.String("provider", req.Provider),
-			attribute.String("model", req.Model),
-			attribute.String("type", "prompt")))
+			telemetry.LLMTokenAttrs(req.Provider, req.Model, req.TenantID, req.UserID, req.Feature, "prompt")...))
 
 		m.tokenTotal.Add(ctx, int64(resp.TokensCompletion), metric.WithAttributes(
-			attribute.String("provider", req.Provider),
-			attribute.String("model", req.Model),
-			attribute.String("type", "completion")))
+			telemetry.LLMTokenAttrs(req.Provider, req.Model, req.TenantID, req.UserID, req.Feature, "completion")...))
 
 		m.tokenCount.Record(ctx, totalTokens, metric.WithAttributes(commonAttrs...))
 	}
@@ -225,54 +229,61 @@ func (m *Metrics) EndRequest(ctx context.Context, span trace.Span, req RequestAt
 	// 记录错误
 	if resp.ErrorCode != "" {
 		m.errorTotal.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("provider", req.Provider),
-			attribute.String("model", req.Model),
-			attribute.String("error_code", resp.ErrorCode)))
+			append(telemetry.LLMIdentityAttrs(
+				req.Provider,
+				req.Model,
+				req.TenantID,
+				req.UserID,
+				req.Feature,
+			), telemetry.AttrErrorCode.String(resp.ErrorCode))...))
 
-		span.SetAttributes(attribute.String("error.code", resp.ErrorCode))
+		span.SetAttributes(telemetry.AttrErrorCode.String(resp.ErrorCode))
 	}
 
 	// 记录降级
 	if resp.Fallback {
 		m.fallbackTotal.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("provider", req.Provider),
-			attribute.String("model", req.Model),
-			attribute.Int("level", resp.FallbackLevel)))
+			append(telemetry.LLMIdentityAttrs(
+				req.Provider,
+				req.Model,
+				req.TenantID,
+				req.UserID,
+				req.Feature,
+			), telemetry.AttrLLMFallbackLevel.Int(resp.FallbackLevel))...))
 
 		span.SetAttributes(
-			attribute.Bool("llm.fallback", true),
-			attribute.Int("llm.fallback_level", resp.FallbackLevel))
+			telemetry.AttrLLMFallback.Bool(true),
+			telemetry.AttrLLMFallbackLevel.Int(resp.FallbackLevel))
 	}
 
 	// 记录缓存
 	if resp.Cached {
 		m.cacheHitTotal.Add(ctx, 1, metric.WithAttributes(commonAttrs...))
-		span.SetAttributes(attribute.Bool("llm.cache_hit", true))
+		span.SetAttributes(telemetry.AttrLLMCacheHit.Bool(true))
 	}
 
 	// Span 属性
 	span.SetAttributes(
-		attribute.String("llm.status", resp.Status),
+		telemetry.AttrLLMStatus.String(resp.Status),
 		attribute.Int("llm.tokens.prompt", resp.TokensPrompt),
 		attribute.Int("llm.tokens.completion", resp.TokensCompletion),
-		attribute.Float64("llm.cost", resp.Cost),
-		attribute.Float64("llm.duration_ms", float64(resp.Duration.Milliseconds())))
+		telemetry.AttrLLMCost.Float64(resp.Cost),
+		telemetry.AttrLLMDurationMS.Float64(float64(resp.Duration.Milliseconds())))
 }
 
 // RecordCacheMiss 记录缓存未命中
 func (m *Metrics) RecordCacheMiss(ctx context.Context, provider, model string) {
 	m.cacheMissTotal.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("provider", provider),
-		attribute.String("model", model)))
+		telemetry.LLMIdentityAttrs(provider, model, "", "", "")...))
 }
 
 // RecordToolCall 记录工具调用
 func (m *Metrics) RecordToolCall(ctx context.Context, toolName string, duration time.Duration, success bool) {
 	_, span := m.tracer.Start(ctx, "llm.tool_call",
 		trace.WithAttributes(
-			attribute.String("tool.name", toolName),
-			attribute.Bool("tool.success", success),
-			attribute.Float64("tool.duration_ms", float64(duration.Milliseconds()))))
+			telemetry.AttrToolName.String(toolName),
+			telemetry.AttrToolSuccess.Bool(success),
+			telemetry.AttrToolDurationMS.Float64(float64(duration.Milliseconds()))))
 	defer span.End()
 }
 
