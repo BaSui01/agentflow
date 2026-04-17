@@ -295,9 +295,6 @@ func (r *MultiProviderRouter) selectByQPSMulti(ctx context.Context, candidates [
 		return nil, &Error{Code: "BUSINESS_LLM_PROVIDER_UNAVAILABLE", Message: "Failed to select provider by QPS"}
 	}
 
-	// 增加 QPS 计数
-	r.healthMonitor.IncrementQPS(bestCandidate.ProviderCode)
-
 	return r.buildSelectionMulti(ctx, bestCandidate.LLMProviderModel, bestCandidate.ProviderCode, bestCandidate.ModelName, StrategyQPSBased)
 }
 

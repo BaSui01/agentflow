@@ -125,7 +125,11 @@ func (p *RoutedChatProvider) Stream(ctx context.Context, req *ChatRequest) (<-ch
 			if strings.TrimSpace(chunk.Model) == "" {
 				chunk.Model = req.Model
 			}
-			out <- chunk
+			select {
+			case <-ctx.Done():
+				return
+			case out <- chunk:
+			}
 		}
 		p.recordAPIKeyUsage(ctx, selection, success, errMsg)
 	}()
