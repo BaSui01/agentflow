@@ -1,0 +1,102 @@
+# AgentFlow 沙箱环境配置
+
+AgentFlow 提供 `agent/execution` 包用于在隔离环境中执行代码。支持三种后端：
+
+| 后端 | 模式 | 适用场景 | 安全级别 |
+|------|------|----------|----------|
+| **Docker** | `docker` | 生产环境默认 | 高 |
+| **进程** | `process` | 本地开发/信任环境 | 中 |
+| **WASM** | `wasm` | 轻量隔离 | 高 |
+
+## Docker 后端（推荐）
+
+### 前提条件
+
+- 安装 [Docker](https://docs.docker.com/get-docker/)
+- 确保当前用户有权执行 `docker run`
+
+### 默认配置
+
+```go
+import "github.com/BaSui01/agentflow/agent/execution"
+
+cfg := execution.DefaultSandboxConfig()
+// Mode:           docker
+// Timeout:        30s
+// MaxMemoryMB:    512
+// MaxCPUPercent:  50
+// NetworkEnabled: false
+```
+
+### 创建执行器
+
+```go
+backend := execution.NewDockerBackend(logger)
+exec := execution.NewSandboxExecutor(cfg, backend, logger)
+```
+
+### 执行代码
+
+```go
+result, err := exec.Execute(context.Background(), &execution.ExecutionRequest{
+    ID:       "exec-1",
+    Language: execution.LangPython,
+    Code:     "print('hello from sandbox')",
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("stdout:", result.Stdout)
+fmt.Println("stderr:", result.Stderr)
+fmt.Println("exit code:", result.ExitCode)
+```
+
+## 进程后端（本地开发）
+
+当你没有 Docker 环境时，可以使用进程后端。**请勿在生产环境使用。**
+
+```go
+backend := execution.NewProcessBackendWithConfig(nil, execution.ProcessBackendConfig{
+    Enabled: true,
+    CustomInterpreters: map[execution.Language]string{
+        execution.LangPython: "python3",
+        execution.LangGo:     "go",
+    },
+})
+exec := execution.NewSandboxExecutor(execution.DefaultSandboxConfig(), backend, logger)
+```
+
+## 代码验证
+
+`SandboxExecutor` 内置简单的危险代码模式检查（如 `os.system`、`subprocess` 等），会在执行前输出 `warning` 日志，但不会阻止执行。你可以在业务层自行决定是否拦截。
+
+## 输出截断
+
+默认最大输出为 1MB。如果 stdout/stderr 超过此限制，结果会被截断，`result.Truncated` 标记为 `true`。
+
+```go
+cfg := execution.DefaultSandboxConfig()
+cfg.MaxOutputBytes = 5 * 1024 * 1024 // 提高到 5MB
+```
+
+## 网络控制
+
+```go
+cfg.NetworkEnabled = true
+// 或仅允许特定域名
+cfg.AllowedHosts = []string{"api.example.com"}
+```
+
+> 网络白名单仅在 Docker 后端中生效。
+
+## 挂载目录
+
+```go
+cfg.MountPaths = map[string]string{
+    "/host/data": "/data",
+}
+```
+
+## 完整示例
+
+参见 `examples/18_advanced_agent_features/main.go` 中的代码执行演示。
