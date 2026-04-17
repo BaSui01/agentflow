@@ -39,6 +39,62 @@ func TestOpenAIProvider_Endpoints(t *testing.T) {
 	assert.Contains(t, ep.Completion, "/v1/responses")
 }
 
+func TestOpenAIProvider_HealthCheck(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-5.2","object":"model","created":1700000000,"owned_by":"openai"}]}`))
+	}))
+	defer server.Close()
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	status, err := p.HealthCheck(context.Background())
+	require.NoError(t, err)
+	assert.True(t, status.Healthy)
+}
+
+func TestOpenAIProvider_ListModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-5.2","object":"model","created":1700000000,"owned_by":"openai"}]}`))
+	}))
+	defer server.Close()
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	models, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	assert.Equal(t, "gpt-5.2", models[0].ID)
+	assert.Equal(t, "model", models[0].Object)
+	assert.Equal(t, int64(1700000000), models[0].Created)
+	assert.Equal(t, "openai", models[0].OwnedBy)
+}
+
+func TestOpenAIProvider_ListModels_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"message":"Forbidden"}}`))
+	}))
+	defer server.Close()
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.ListModels(context.Background())
+	require.Error(t, err)
+	llmErr, ok := err.(*types.Error)
+	require.True(t, ok)
+	assert.Equal(t, llm.ErrForbidden, llmErr.Code)
+}
+
 func TestOpenAIProvider_Completion_Standard(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)

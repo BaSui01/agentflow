@@ -109,19 +109,12 @@ func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	start := time.Now()
 	latency := time.Duration(0)
 	client := p.sdkClient(p.resolveAPIKey(ctx))
-	var resp *http.Response
-	err := client.Get(ctx, "/v1/models", nil, &resp, p.sdkRequestOptions("")...)
+	_, err := client.Models.List(ctx, anthropicsdk.ModelListParams{
+		Limit: anthropicsdkparam.NewOpt(int64(1)),
+	}, p.sdkRequestOptions("")...)
 	latency = time.Since(start)
 	if err != nil {
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, p.mapSDKError(err)
-	}
-	if resp == nil {
-		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("claude health check returned empty response")
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("claude health check failed: status=%d msg=%s", resp.StatusCode, msg)
 	}
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
@@ -140,66 +133,30 @@ func (p *ClaudeProvider) Endpoints() llm.ProviderEndpoints {
 
 // ListModels 获取 Claude 支持的模型列表
 func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	type claudeModelPayload struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Model       string `json:"model"`
-		DisplayName string `json:"display_name"`
-		CreatedAt   string `json:"created_at"`
-		Created     int64  `json:"created"`
-		Type        string `json:"type"`
-		OwnedBy     string `json:"owned_by"`
-	}
-	var modelsResp struct {
-		Data   []claudeModelPayload `json:"data"`
-		Models []claudeModelPayload `json:"models"`
-	}
 	client := p.sdkClient(p.resolveAPIKey(ctx))
-	var resp *http.Response
-	if err := client.Get(ctx, "/v1/models", nil, &resp, p.sdkRequestOptions("")...); err != nil {
-		return nil, p.mapSDKError(err)
-	}
-	if resp == nil || resp.Body == nil {
-		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    "claude models list returned empty response body",
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		msg := providerbase.ReadErrorMessage(resp.Body)
-		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+	page, err := client.Models.List(ctx, anthropicsdk.ModelListParams{}, p.sdkRequestOptions("")...)
+	if err != nil {
 		return nil, p.mapSDKError(err)
 	}
 
-	source := modelsResp.Data
-	if len(source) == 0 && len(modelsResp.Models) > 0 {
-		source = modelsResp.Models
-	}
-
-	models := make([]llm.Model, 0, len(source))
-	for _, m := range source {
-		id := strings.TrimSpace(firstNonEmpty(m.ID, m.Model, strings.TrimPrefix(m.Name, "models/")))
-		if id == "" {
-			continue
+	models := make([]llm.Model, 0, len(page.Data))
+	for current := page; current != nil; {
+		for _, m := range current.Data {
+			id := strings.TrimSpace(m.ID)
+			if id == "" {
+				continue
+			}
+			models = append(models, llm.Model{
+				ID:      id,
+				Object:  string(m.Type),
+				Created: m.CreatedAt.Unix(),
+				OwnedBy: "anthropic",
+			})
 		}
-		var created int64
-		if t, err := time.Parse(time.RFC3339, m.CreatedAt); err == nil {
-			created = t.Unix()
-		} else if m.Created > 0 {
-			created = m.Created
+		current, err = current.GetNextPage()
+		if err != nil {
+			return nil, p.mapSDKError(err)
 		}
-		models = append(models, llm.Model{
-			ID:      id,
-			Object:  "model",
-			Created: created,
-			OwnedBy: strings.TrimSpace(firstNonEmpty(m.OwnedBy, "anthropic")),
-		})
 	}
 
 	return models, nil

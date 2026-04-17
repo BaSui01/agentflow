@@ -115,10 +115,7 @@ func (p *OpenAIProvider) mapSDKError(err error) error {
 func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	client := p.sdkClient(ctx)
-	var modelsResp struct {
-		Data []any `json:"data"`
-	}
-	err := client.Get(ctx, "/models", nil, &modelsResp)
+	_, err := client.Models.List(ctx)
 	latency := time.Since(start)
 	if err != nil {
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, p.mapSDKError(err)
@@ -128,13 +125,21 @@ func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *OpenAIProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	client := p.sdkClient(ctx)
-	var modelsResp struct {
-		Data []llm.Model `json:"data"`
-	}
-	if err := client.Get(ctx, "/models", nil, &modelsResp); err != nil {
+	page, err := client.Models.List(ctx)
+	if err != nil {
 		return nil, p.mapSDKError(err)
 	}
-	return modelsResp.Data, nil
+
+	models := make([]llm.Model, 0, len(page.Data))
+	for _, m := range page.Data {
+		models = append(models, llm.Model{
+			ID:      m.ID,
+			Object:  string(m.Object),
+			Created: m.Created,
+			OwnedBy: m.OwnedBy,
+		})
+	}
+	return models, nil
 }
 
 // Completion 覆写基类方法，支持 Responses API 路由.

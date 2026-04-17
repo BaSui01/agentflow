@@ -573,6 +573,7 @@ func TestClaudeProvider_Stream_Error(t *testing.T) {
 func TestClaudeProvider_HealthCheck(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/models", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte(`{"data":[]}`))
 		require.NoError(t, err)
@@ -610,7 +611,7 @@ func TestClaudeProvider_ListModels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/models", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"id":"claude-3-opus","display_name":"Claude 3 Opus","created_at":"2024-02-29T00:00:00Z","type":"model"}]}`))
+		w.Write([]byte(`{"data":[{"id":"claude-3-opus","display_name":"Claude 3 Opus","created_at":"2024-02-29T00:00:00Z","max_input_tokens":200000,"max_tokens":4096,"type":"model","capabilities":{"batch":{"supported":false},"citations":{"supported":false},"code_execution":{"supported":false},"context_management":{"clear_thinking_20251015":{"supported":false},"clear_tool_uses_20250919":{"supported":false},"compact_20260112":{"supported":false},"supported":false},"effort":{"high":{"supported":false},"low":{"supported":false},"max":{"supported":false},"medium":{"supported":false},"supported":false},"image_input":{"supported":false},"pdf_input":{"supported":false},"structured_outputs":{"supported":false},"thinking":{"supported":false,"types":{"adaptive":{"supported":false},"enabled":{"supported":false}}}}}]}`))
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -622,26 +623,8 @@ func TestClaudeProvider_ListModels(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, models, 1)
 	assert.Equal(t, "claude-3-opus", models[0].ID)
+	assert.Equal(t, "model", models[0].Object)
 	assert.Equal(t, "anthropic", models[0].OwnedBy)
-}
-
-func TestClaudeProvider_ListModels_TolerantModelsEnvelope(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/models", r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"models":[{"name":"models/glm-5","owned_by":"openai-compatible"}]}`))
-	}))
-	t.Cleanup(func() { server.Close() })
-
-	p := NewClaudeProvider(providers.ClaudeConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
-	}, zap.NewNop())
-
-	models, err := p.ListModels(context.Background())
-	require.NoError(t, err)
-	require.Len(t, models, 1)
-	assert.Equal(t, "glm-5", models[0].ID)
-	assert.Equal(t, "openai-compatible", models[0].OwnedBy)
 }
 
 func TestClaudeProvider_ListModels_Error(t *testing.T) {
@@ -814,6 +797,7 @@ func TestClaudeProvider_HealthCheck_MultiKey(t *testing.T) {
 	var capturedKey string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedKey = r.Header.Get("x-api-key")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"data":[]}`))
 	}))
