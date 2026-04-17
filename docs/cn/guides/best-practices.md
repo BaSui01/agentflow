@@ -19,16 +19,16 @@
 每个 Agent 应该专注于一个特定任务：
 
 ```go
-// ✅ 好的设计：专注于翻译
-translatorAgent, _ := agent.NewAgentBuilder(types.AgentConfig{
+// ✅ 好的设计：通过统一 runtime 入口创建专注于翻译的 Agent
+translatorAgent, _ := runtime.NewBuilder(provider, logger).Build(ctx, types.AgentConfig{
     Core: types.CoreConfig{Name: "translator", Type: "translator"},
-}).WithProvider(provider).WithLogger(logger).Build()
+})
 
 // ❌ 避免：一个 Agent 做太多事情
-superAgent, _ := agent.NewAgentBuilder(types.AgentConfig{
+superAgent, _ := runtime.NewBuilder(provider, logger).Build(ctx, types.AgentConfig{
     Core: types.CoreConfig{Name: "super-agent", Type: "assistant"},
     // 同时处理翻译、分析、总结...
-}).WithProvider(provider).WithLogger(logger).Build()
+})
 ```
 
 ### 2. 使用合适的提示词
@@ -247,7 +247,8 @@ func TestAgent_Execute(t *testing.T) {
         },
     }
 
-    agent, _ := agent.NewAgentBuilder(config).WithProvider(mockProvider).WithLogger(zap.NewNop()).Build()
+    runtimeBuilder := runtime.NewBuilder(mockProvider, zap.NewNop())
+    agent, _ := runtimeBuilder.Build(ctx, config)
 
     output, err := agent.Execute(ctx, &Input{Content: "test"})
 
@@ -269,7 +270,8 @@ func TestAgent_Integration(t *testing.T) {
         APIKey: os.Getenv("OPENAI_API_KEY"),
     })
 
-    agent, _ := agent.NewAgentBuilder(config).WithProvider(provider).WithLogger(zap.NewNop()).Build()
+    runtimeBuilder := runtime.NewBuilder(provider, zap.NewNop())
+    agent, _ := runtimeBuilder.Build(ctx, config)
 
     assert.NoError(t, err)
     assert.NotEmpty(t, output.Content)

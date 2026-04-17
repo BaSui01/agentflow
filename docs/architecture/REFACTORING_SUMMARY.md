@@ -5,7 +5,10 @@
 > 本文档记录的是早期重构阶段（2025-Q3）的状态快照，当前架构已发生重大变化：
 >
 > - `agent.Config` 已迁移为 `types.AgentConfig`（嵌套结构：Core/LLM/Runtime/Features/Extensions）
-> - `agent.NewBaseAgent(...)` 已替换为 `agent.NewAgentBuilder(config).WithProvider(...).Build()` Builder 模式
+> - 仓库级正式入口已收敛到 `sdk.New(opts).Build(ctx)`
+> - `agent` 子模块正式 runtime 入口已收敛到 `agent/runtime.Builder`
+> - `workflow` 已补齐 `workflow/runtime.Builder`，正式执行入口为 `workflow.Facade.ExecuteDAG(...)`
+> - `agent.NewAgentBuilder(...)`、`agent.CreateAgent(...)`、`agent.NewBaseAgent(...)` 仅保留为高级扩展或底层构件，不再作为正式主入口
 > - `internal/database`、`internal/cache`、`internal/metrics`、`internal/server` 已迁移至 `pkg/` 目录
 > - `internal/bridge/` 已删除
 >
@@ -13,6 +16,27 @@
 
 > 当前真实启动链路（2026-03-03）：
 > `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`。
+
+---
+
+## 当前入口边界（2026-04-17）
+
+本文档虽然保留历史归档用途，但以下入口边界已经是当前代码与文档应共同遵守的主口径：
+
+- 仓库级正式入口：`sdk.New(opts).Build(ctx)`
+- `agent` 正式 runtime 入口：`agent/runtime.Builder`
+- `workflow` 正式 runtime 装配入口：`workflow/runtime.Builder`
+- `workflow` 正式执行入口：`workflow.Facade.ExecuteDAG(...)`
+
+以下符号不再作为正式主入口宣传，只保留为高级扩展或底层能力：
+
+- `agent.NewAgentBuilder(...)`
+- `agent.CreateAgent(...)`
+- `agent.NewBaseAgent(...)`
+- `workflow.NewDAGExecutor(...)`
+- `(*DAGWorkflow).Execute(...)`
+
+文档、README、教程与示例在描述 Agent / Workflow 接入方式时，应先写正式入口，再单独标注高级扩展入口；不得把上述底层符号与正式入口并列为同级推荐。
 
 ---
 

@@ -114,6 +114,12 @@ English | [中文](README.md)
 go get github.com/BaSui01/agentflow
 ```
 
+Entrypoint policy:
+
+- Repository-level official entry: `sdk.New(opts).Build(ctx)`
+- `agent/runtime.Builder` is only the runtime entry for the `agent` submodule
+- `agent.NewAgentBuilder`, `agent.NewBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths, not peer official entrypoints
+
 ### Basic Chat
 
 Runnable example: `examples/01_simple_chat/`
@@ -126,13 +132,16 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    "github.com/BaSui01/agentflow/agent"
+    "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/BaSui01/agentflow/types"
     "go.uber.org/zap"
 )
 
 func main() {
+    ctx := context.Background()
     logger, _ := zap.NewDevelopment()
     defer logger.Sync()
 
@@ -143,17 +152,43 @@ func main() {
         },
     }, logger)
 
-    resp, err := provider.Completion(context.Background(), &llm.ChatRequest{
-        Model: "gpt-4o",
-        Messages: []llm.Message{
-            {Role: llm.RoleUser, Content: "Hello!"},
+    rt, err := sdk.New(sdk.Options{
+        Logger: logger,
+        LLM: &sdk.LLMOptions{
+            Provider: provider,
+        },
+        Agent: &sdk.AgentOptions{},
+    }).Build(ctx)
+    if err != nil {
+        panic(err)
+    }
+
+    ag, err := rt.NewAgent(ctx, types.AgentConfig{
+        Core: types.CoreConfig{
+            ID:   "hello-agent",
+            Name: "Hello Agent",
+            Type: "assistant",
+        },
+        LLM: types.LLMConfig{
+            Model: "gpt-4o-mini",
         },
     })
     if err != nil {
         panic(err)
     }
-    
-    fmt.Println(resp.Choices[0].Message.Content)
+
+    if err := ag.Init(ctx); err != nil {
+        panic(err)
+    }
+
+    out, err := ag.Execute(ctx, &agent.Input{
+        Content: "Hello!",
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println(out.Content)
 }
 ```
 
@@ -278,7 +313,24 @@ result, _ := executor.ExecuteWithReflection(ctx, input)
 ### One-Click LSP Enablement
 
 ```go
-cfg := types.AgentConfig{
+opts := runtime.DefaultBuildOptions()
+opts.EnableAll = false
+opts.EnableLSP = true
+
+rt, err := sdk.New(sdk.Options{
+    Logger: logger,
+    LLM: &sdk.LLMOptions{
+        Provider: provider,
+    },
+    Agent: &sdk.AgentOptions{
+        BuildOptions: opts,
+    },
+}).Build(ctx)
+if err != nil {
+    panic(err)
+}
+
+ag, err := rt.NewAgent(ctx, types.AgentConfig{
     Core: types.CoreConfig{
         ID:   "assistant-1",
         Name: "Assistant",
@@ -287,13 +339,7 @@ cfg := types.AgentConfig{
     LLM: types.LLMConfig{
         Model: "gpt-4o-mini",
     },
-}
-
-ag, err := agent.NewAgentBuilder(cfg).
-    WithProvider(provider).
-    WithLogger(logger).
-    WithDefaultLSPServer("agentflow-lsp", "0.1.0").
-    Build()
+})
 if err != nil {
     panic(err)
 }
@@ -301,7 +347,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-The context runtime is also wired by default through `AgentBuilder` / `runtime.Builder`; configure it via `types.AgentConfig.Context`:
+The context runtime is wired by default through the `sdk` -> `agent/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -313,7 +359,7 @@ cfg.Context = &types.ContextConfig{
 
 When `Skills`, enhanced `Memory`, retrieval, or tool-state context are enabled, they are injected as context-runtime-managed segments instead of mutating the original user input.
 
-Request-scoped strategy layers such as `session_overlay`, `trace_synopsis`, `trace_history`, `tool_guidance`, `verification_gate`, and `context_pressure` are also injected through a shared ephemeral prompt layer builder instead of being merged into the stable system prompt; `tool_guidance` now exposes `safe_read / requires_approval / unknown` risk tiers, and approval semantics flow into both runtime stream events and explainability traces, where they are further summarized into a high-level decision timeline (`prompt_layers / approval / validation_gate / completion_decision`) and fed back as a two-layer summary: short-form `trace_synopsis` plus compressed long-form `trace_history`.
+Request-scoped strategy layers such as `session_overlay`, `trace_feedback_plan`, `trace_synopsis`, `trace_history`, `tool_guidance`, `verification_gate`, and `context_pressure` are also injected through a shared ephemeral prompt layer builder instead of being merged into the stable system prompt; `tool_guidance` now exposes `safe_read / requires_approval / unknown` risk tiers, and approval semantics flow into both runtime stream events and explainability traces, where they are further summarized into a high-level decision timeline (`prompt_layers / approval / validation_gate / completion_decision`) and fed back as a two-layer summary: short-form `trace_synopsis` plus compressed long-form `trace_history`. Injection of those two layers is no longer a hard-coded rule path; a lightweight `TraceFeedbackPlanner` first produces a trace-aware micro plan (goal, recommended action, primary/secondary layer, reasons, thresholds), then decides whether to inject them and records the choice as a `trace_feedback_decision` timeline event. The default runtime path is `ComposedTraceFeedbackPlanner(rule-based planner + hint adapter)`, and future stats-driven or LLM planners should plug into that same planner adapter surface instead of creating a second injection path.
 
 You can also toggle it via `runtime.Builder`:
 
@@ -343,7 +389,13 @@ graph.AddEdge("start", "process")
 graph.SetEntry("start")
 
 wf := workflow.NewDAGWorkflow("my-workflow", "description", graph)
-result, _ := wf.Execute(ctx, input)
+
+rt, _ := sdk.New(sdk.Options{
+    Logger:   logger,
+    Workflow: &sdk.WorkflowOptions{Enable: true},
+}).Build(ctx)
+
+result, _ := rt.Workflow.Facade.ExecuteDAG(ctx, wf, input)
 ```
 
 ## 🏗️ Project Structure

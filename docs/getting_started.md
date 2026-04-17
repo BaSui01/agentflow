@@ -2,10 +2,16 @@
 
 本指南帮助你在 5 分钟内运行第一个 Agent。
 
+正式入口口径：
+
+- 仓库级正式入口：`sdk.New(opts).Build(ctx)`
+- `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
+- `agent.NewAgentBuilder`、`agent.CreateAgent`、`agent.NewBaseAgent` 仅保留给高级扩展场景，不作为默认接入方式
+
 ## 前提条件
 
 - Go 1.22+
-- （可选）Docker - 如果你需要使用代码沙箱功能
+- （可选）Docker，如果你需要使用代码沙箱功能
 
 ## 安装
 
@@ -24,48 +30,55 @@ import (
     "context"
     "fmt"
     "log"
+    "os"
 
     "github.com/BaSui01/agentflow/agent"
-    "github.com/BaSui01/agentflow/llm"
+    "github.com/BaSui01/agentflow/llm/providers"
+    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/types"
     "go.uber.org/zap"
 )
 
 func main() {
     logger, _ := zap.NewDevelopment()
+    ctx := context.Background()
 
-    // 1. 创建 LLM Provider（示例使用内置兼容层）
-    provider, err := llm.NewOpenAICompatProvider(llm.OpenAICompatConfig{
-        BaseURL: "https://api.openai.com/v1",
-        APIKey:  os.Getenv("OPENAI_API_KEY"),
+    rt, err := sdk.New(sdk.Options{
+        Logger: logger,
+        LLM: &sdk.LLMOptions{
+            Provider: openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
+                BaseProviderConfig: providers.BaseProviderConfig{
+                    APIKey:  os.Getenv("OPENAI_API_KEY"),
+                    BaseURL: "https://api.openai.com",
+                },
+            }, logger),
+        },
+        Agent: &sdk.AgentOptions{},
+    }).Build(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    ag, err := rt.NewAgent(ctx, types.AgentConfig{
+        Core: types.CoreConfig{
+            ID:   "my-first-agent",
+            Name: "My First Agent",
+            Type: "assistant",
+        },
+        LLM: types.LLMConfig{
+            Model: "gpt-4o-mini",
+        },
     })
     if err != nil {
         log.Fatal(err)
     }
 
-    // 2. 构建 Agent
-    ag, err := agent.NewAgentBuilder(types.AgentConfig{
-        Core: types.CoreConfig{
-            ID:   "my-first-agent",
-            Name: "My First Agent",
-        },
-        LLM: types.LLMConfig{
-            Model: "gpt-4o-mini",
-        },
-    }).
-        WithProvider(provider).
-        WithLogger(logger).
-        Build()
-    if err != nil {
+    if err := ag.Init(ctx); err != nil {
         log.Fatal(err)
     }
 
-    // 3. 初始化并执行
-    if err := ag.Init(context.Background()); err != nil {
-        log.Fatal(err)
-    }
-
-    output, err := ag.Execute(context.Background(), &agent.Input{
+    output, err := ag.Execute(ctx, &agent.Input{
         Content: "你好，请用一句话介绍自己",
     })
     if err != nil {
@@ -83,18 +96,28 @@ export OPENAI_API_KEY=sk-xxx
 go run main.go
 ```
 
-## 配置并发
+## `agent` 子模块 runtime 入口
 
-默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。你可以通过 `WithMaxConcurrency` 提高并发上限：
+如果你明确只在 `agent` 子模块内装配运行时，推荐入口是 `agent/runtime.Builder`：
 
 ```go
-ag, err := agent.NewAgentBuilder(cfg).
-    WithProvider(provider).
-    WithMaxConcurrency(10). // 允许最多 10 个并发请求
-    Build()
+import runtime "github.com/BaSui01/agentflow/agent/runtime"
+
+opts := runtime.DefaultBuildOptions()
+opts.EnableAll = false
+opts.EnableLSP = true
+opts.MaxLoopIterations = 8
+
+ag, err := runtime.NewBuilder(provider, logger).
+    WithOptions(opts).
+    Build(ctx, cfg)
 ```
 
-> 注意：`maxConcurrency` 受限于底层 Provider 的速率限制和机器资源。
+## 并发与运行时策略
+
+默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/runtime.Builder` 管理运行时能力；`agent.NewAgentBuilder` 更适合需要逐项注入底层依赖的高级扩展场景。
+
+> 注意：并发上限仍受底层 Provider 的速率限制和机器资源约束。
 
 ## 下一步
 

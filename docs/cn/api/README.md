@@ -153,23 +153,19 @@ const (
 )
 ```
 
-### AgentBuilder
+### Agent Runtime 入口
 
-通过 Builder 模式创建 Agent 实例。
+`agent` 子模块的正式 runtime 入口是 `agent/runtime.Builder`；仓库级正式入口则应从 `sdk.New(opts).Build(ctx)` 进入。
 
 ```go
-// 创建 AgentBuilder（接受 types.AgentConfig）
-func NewAgentBuilder(config types.AgentConfig) *AgentBuilder
+func DefaultBuildOptions() BuildOptions
+func NewBuilder(provider llm.Provider, logger *zap.Logger) *Builder
+func (b *Builder) WithOptions(opts BuildOptions) *Builder
+func (b *Builder) WithToolProvider(provider llm.Provider) *Builder
+func (b *Builder) WithLedger(ledger llmobs.Ledger) *Builder
+func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error)
 
-// Builder 链式调用
-func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder
-func (b *AgentBuilder) WithLogger(logger *zap.Logger) *AgentBuilder
-func (b *AgentBuilder) WithMemory(memory MemoryManager) *AgentBuilder
-func (b *AgentBuilder) WithToolManager(toolManager ToolManager) *AgentBuilder
-func (b *AgentBuilder) WithEventBus(bus EventBus) *AgentBuilder
-func (b *AgentBuilder) Build() (*BaseAgent, error)
-
-// 主要方法
+// BaseAgent 主要方法
 func (b *BaseAgent) Init(ctx context.Context) error
 func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error)
 func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
@@ -177,9 +173,16 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error
 func (b *BaseAgent) Teardown(ctx context.Context) error
 ```
 
+高级扩展入口：
+
+- `agent.NewAgentBuilder(...)`：细粒度高级 builder，适合逐项注入底层依赖
+- `agent.AgentRegistry.Register(...)` / `agent.InitGlobalRegistry(...)`：typed factory 扩展入口，适合按类型分发构造逻辑
+- `agent.NewBaseAgent(...)`：最低层 primitive 构件，仅建议用于底层封装或高级扩展
+
 说明：
 
 - `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`。
+- `agent.NewAgentBuilder(...)`、`agent.CreateAgent(...)`、`agent.NewBaseAgent(...)` 不再作为 `agent` 子模块的正式主入口；它们保留为高级扩展或底层封装面，不应与 `agent/runtime.Builder` 同级推荐。
 - 默认单 Agent 请求不会经 `multiagent` 模式分发；`multiagent` 仅用于 `agent_ids` 多目标协作请求。
 - `Output` 中的 `current_stage / iteration_count / selected_reasoning_mode / stop_reason / checkpoint_id / resumable` 是默认闭环执行和恢复链路的统一可观测字段。
 - `Observe(...)` 写入的反馈在启用 enhanced memory 时会回流到后续 `Execute(...)` 的上下文注入链路中，不再停留为“仅存储不消费”。
@@ -341,31 +344,52 @@ type Workflow interface {
 }
 ```
 
-### DAGWorkflow
+### Workflow Runtime 入口
 
-DAG 工作流。
+`workflow` 子模块当前的正式 runtime 装配入口是 `workflow/runtime.Builder`，正式执行入口是 `workflow.Facade.ExecuteDAG(...)`。外部调用方应先统一装配 runtime，再通过 `Facade` 执行 DAG。
 
 ```go
-// 创建 DAG 构建器
-func NewDAGBuilder(name string) *DAGBuilder
+func NewBuilder(checkpointMgr workflow.CheckpointManager, logger *zap.Logger) *Builder
+func (b *Builder) WithHistoryStore(store *workflow.ExecutionHistoryStore) *Builder
+func (b *Builder) WithCircuitBreaker(
+    config workflow.CircuitBreakerConfig,
+    handler workflow.CircuitBreakerEventHandler,
+) *Builder
+func (b *Builder) WithStepDependencies(deps engine.StepDependencies) *Builder
+func (b *Builder) WithDSLParser(enabled bool) *Builder
+func (b *Builder) Build() *Runtime
 
-// 添加节点（返回 NodeBuilder）
-func (b *DAGBuilder) AddNode(id string, nodeType NodeType) *NodeBuilder
+type Runtime struct {
+    Executor *workflow.DAGExecutor
+    Facade   *workflow.Facade
+    Parser   *dsl.Parser
+}
 
-// 添加边
-func (b *DAGBuilder) AddEdge(from, to string) *DAGBuilder
-
-// 设置入口
-func (b *DAGBuilder) SetEntry(nodeID string) *DAGBuilder
-
-// 构建
-func (b *DAGBuilder) Build() (*DAGWorkflow, error)
-
-// 执行
-func (w *DAGWorkflow) Execute(ctx context.Context, input any) (any, error)
+func NewFacade(executor *DAGExecutor) *Facade
+func (f *Facade) ExecuteDAG(ctx context.Context, wf *DAGWorkflow, input any) (any, error)
 ```
 
-说明：当前推荐的工作流执行模型为 DAG 单入口，文档中的链式/路由/并行旧入口不再作为主链 API 使用。
+定义/编译入口：
+
+```go
+func NewDAGBuilder(name string) *DAGBuilder
+func (b *DAGBuilder) AddNode(id string, nodeType NodeType) *NodeBuilder
+func (b *DAGBuilder) AddEdge(from, to string) *DAGBuilder
+func (b *DAGBuilder) SetEntry(nodeID string) *DAGBuilder
+func (b *DAGBuilder) Build() (*DAGWorkflow, error)
+```
+
+高级扩展入口：
+
+- `dsl.NewParser()`：DSL 编译入口，不是正式执行入口
+- `workflow.NewDAGExecutor(...)`：底层执行器构件，适合 runtime 扩展或测试装配
+- `(*DAGWorkflow).Execute(...)`：底层执行旁路；当前主路径不再把它作为正式执行入口推荐
+
+说明：
+
+- `workflow/runtime.Builder` 负责一次性装配 `Executor + Facade + 可选 Parser`，避免外层重复手工拼装 runtime。
+- `workflow.Facade.ExecuteDAG(...)` 是当前推荐的 DAG 单入口执行模型；文档中的链式/路由/并行旧入口不再作为主链 API 使用。
+- `(*DAGWorkflow).Execute(...)` 仍作为底层能力存在，但它会在未注入 executor 时惰性创建默认 `DAGExecutor`，因此不应继续作为正式主入口宣传。
 
 ---
 

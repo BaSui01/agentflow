@@ -125,6 +125,12 @@
 go get github.com/BaSui01/agentflow
 ```
 
+正式入口约定：
+
+- 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
+- `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
+- `agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景，不再作为同级正式入口宣传
+
 ### 基础对话
 
 完整可运行示例：`examples/01_simple_chat/`
@@ -137,13 +143,16 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    "github.com/BaSui01/agentflow/agent"
+    "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/BaSui01/agentflow/types"
     "go.uber.org/zap"
 )
 
 func main() {
+    ctx := context.Background()
     logger, _ := zap.NewDevelopment()
     defer logger.Sync()
 
@@ -154,18 +163,43 @@ func main() {
         },
     }, logger)
 
-    // 注意：provider.Completion 是低级 API，生产环境推荐通过 Agent 或 Gateway 调用
-    resp, err := provider.Completion(context.Background(), &llm.ChatRequest{
-        Model: "gpt-4o",
-        Messages: []llm.Message{
-            {Role: llm.RoleUser, Content: "Hello!"},
+    rt, err := sdk.New(sdk.Options{
+        Logger: logger,
+        LLM: &sdk.LLMOptions{
+            Provider: provider,
+        },
+        Agent: &sdk.AgentOptions{},
+    }).Build(ctx)
+    if err != nil {
+        panic(err)
+    }
+
+    ag, err := rt.NewAgent(ctx, types.AgentConfig{
+        Core: types.CoreConfig{
+            ID:   "hello-agent",
+            Name: "Hello Agent",
+            Type: "assistant",
+        },
+        LLM: types.LLMConfig{
+            Model: "gpt-4o-mini",
         },
     })
     if err != nil {
         panic(err)
     }
 
-    fmt.Println(resp.Choices[0].Message.Content)
+    if err := ag.Init(ctx); err != nil {
+        panic(err)
+    }
+
+    out, err := ag.Execute(ctx, &agent.Input{
+        Content: "Hello!",
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println(out.Content)
 }
 ```
 
@@ -290,7 +324,24 @@ result, _ := executor.ExecuteWithReflection(ctx, input)
 ### LSP 一键启用
 
 ```go
-cfg := types.AgentConfig{
+opts := runtime.DefaultBuildOptions()
+opts.EnableAll = false
+opts.EnableLSP = true
+
+rt, err := sdk.New(sdk.Options{
+    Logger: logger,
+    LLM: &sdk.LLMOptions{
+        Provider: provider,
+    },
+    Agent: &sdk.AgentOptions{
+        BuildOptions: opts,
+    },
+}).Build(ctx)
+if err != nil {
+    panic(err)
+}
+
+ag, err := rt.NewAgent(ctx, types.AgentConfig{
     Core: types.CoreConfig{
         ID:   "assistant-1",
         Name: "Assistant",
@@ -299,13 +350,7 @@ cfg := types.AgentConfig{
     LLM: types.LLMConfig{
         Model: "gpt-4o-mini",
     },
-}
-
-ag, err := agent.NewAgentBuilder(cfg).
-    WithProvider(provider).
-    WithLogger(logger).
-    WithDefaultLSPServer("agentflow-lsp", "0.1.0").
-    Build()
+})
 if err != nil {
     panic(err)
 }
@@ -313,7 +358,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-上下文运行时默认也会随 `AgentBuilder` / `runtime.Builder` 装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
+上下文运行时默认会随 `sdk` -> `agent/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -325,7 +370,7 @@ cfg.Context = &types.ContextConfig{
 
 启用 `Skills` / 增强 `Memory` / retrieval / tool-state 注入时，这些信息会作为 context runtime 管理的独立上下文段进入消息组装，而不是直接改写原始用户输入。
 
-请求级 `session_overlay`、`trace_synopsis`、`trace_history`、`tool_guidance`、`verification_gate`、`context_pressure` 等临时策略层，也会统一通过 ephemeral prompt layer builder 注入，而不是并入稳定 system prompt；其中 `tool_guidance` 会按 `safe_read / requires_approval / unknown` 风险层输出工具提示，审批语义会同时进入 runtime stream 事件与 explainability trace，并进一步汇总进高层 decision timeline（如 `prompt_layers / approval / validation_gate / completion_decision`），最终生成双层可回灌摘要：短层 `trace_synopsis` 与压缩长层 `trace_history`。
+请求级 `session_overlay`、`trace_feedback_plan`、`trace_synopsis`、`trace_history`、`tool_guidance`、`verification_gate`、`context_pressure` 等临时策略层，也会统一通过 ephemeral prompt layer builder 注入，而不是并入稳定 system prompt；其中 `tool_guidance` 会按 `safe_read / requires_approval / unknown` 风险层输出工具提示，审批语义会同时进入 runtime stream 事件与 explainability trace，并进一步汇总进高层 decision timeline（如 `prompt_layers / approval / validation_gate / completion_decision`），最终生成双层可回灌摘要：短层 `trace_synopsis` 与压缩长层 `trace_history`。这两层是否注入不再是写死规则，而是由轻量 `TraceFeedbackPlanner` 先产出一个 `trace-aware micro plan`（目标、推荐动作、主/辅层、原因、阈值），再决定是否注入，并把决策结果写入 `trace_feedback_decision` timeline。默认主链是 `ComposedTraceFeedbackPlanner(rule-based planner + hint adapter)`，后续统计驱动或 LLM 规划器也应通过同一 planner adapter 面接入，而不是引入第二套注入主链。
 
 也可以通过 `runtime.Builder` 一键开关：
 
@@ -355,7 +400,13 @@ graph.AddEdge("start", "process")
 graph.SetEntry("start")
 
 wf := workflow.NewDAGWorkflow("my-workflow", "description", graph)
-result, _ := wf.Execute(ctx, input)
+
+rt, _ := sdk.New(sdk.Options{
+    Logger:   logger,
+    Workflow: &sdk.WorkflowOptions{Enable: true},
+}).Build(ctx)
+
+result, _ := rt.Workflow.Facade.ExecuteDAG(ctx, wf, input)
 ```
 
 ## 🏗️ 项目结构
