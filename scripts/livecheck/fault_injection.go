@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
@@ -129,10 +130,7 @@ func runFaultTimeout(ctx context.Context, logger *zap.Logger) error {
 		},
 	}
 
-	ag, err := agent.NewAgentBuilder(cfg).
-		WithProvider(provider).
-		WithLogger(logger).
-		Build()
+	ag, err := agentruntime.NewBuilder(provider, logger).Build(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("build timeout fault agent: %w", err)
 	}

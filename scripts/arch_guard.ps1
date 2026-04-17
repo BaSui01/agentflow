@@ -8,7 +8,7 @@ $strictMode = $true
 if ($env:ARCH_GUARD_STRICT -eq "0") {
     $strictMode = $false
 }
-$maxAgentRootFiles = 26
+$maxAgentRootFiles = 27
 if ($env:ARCH_GUARD_MAX_FILES) {
     $maxAgentRootFiles = [int]$env:ARCH_GUARD_MAX_FILES
 }
@@ -109,7 +109,6 @@ foreach ($name in $allowOneFilePkg) {
 
 # Rule 3: config-driven chat provider entry must stay on vendor factory path.
 $vendorEntryFiles = @(
-    "agentflow.go",
     "internal/app/bootstrap/main_provider_registry.go",
     "llm/runtime/compose/runtime.go",
     "llm/runtime/router/chat_provider_factory.go"
@@ -117,11 +116,6 @@ $vendorEntryFiles = @(
 foreach ($path in $vendorEntryFiles) {
     $content = Get-Content -Path $path -Raw
     switch ($path) {
-        "agentflow.go" {
-            if ($content -notmatch "vendor\.NewChatProviderFromConfig\(") {
-                $errors += "[LLM] $path must use vendor.NewChatProviderFromConfig(...)"
-            }
-        }
         "llm/runtime/router/chat_provider_factory.go" {
             if ($content -notmatch "vendor\.NewChatProviderFromConfig\(") {
                 $errors += "[LLM] $path must route provider construction through vendor.NewChatProviderFromConfig(...)"
@@ -166,6 +160,33 @@ foreach ($path in $providerRoutingDocs) {
     }
 }
 
+# Rule 4.25: public README/docs must not promote legacy agent/workflow entrypoints.
+$legacyUnifiedEntryDocs = @(
+    "README.md",
+    "README_EN.md",
+    "docs/getting_started.md",
+    "docs/cn/tutorials/01.快速开始.md",
+    "docs/en/tutorials/01.QuickStart.md",
+    "docs/cn/tutorials/03.Agent开发教程.md",
+    "docs/en/tutorials/03.AgentDevelopment.md",
+    "docs/cn/tutorials/05.工作流编排.md",
+    "docs/cn/guides/best-practices.md"
+)
+$legacyUnifiedEntryPatterns = @(
+    "agent\.NewAgentBuilder\(",
+    "agent\.NewBaseAgent\(",
+    "agent\.CreateAgent\(",
+    "DAGWorkflow\.Execute\("
+)
+foreach ($path in $legacyUnifiedEntryDocs) {
+    $content = Get-Content -Path $path -Raw
+    foreach ($pattern in $legacyUnifiedEntryPatterns) {
+        if ($content -match $pattern) {
+            $errors += "[DOCS] $path must not promote legacy public entry pattern '$pattern'; use the unified runtime/facade entry instead"
+        }
+    }
+}
+
 # Rule 4.5: protected business-layer packages must not direct-call provider Completion/Stream.
 $protectedGatewayDirs = @(
     "workflow",
@@ -190,7 +211,7 @@ foreach ($dir in $protectedGatewayDirs) {
 
 # Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
 Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
-& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
+& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentUnifiedBuilderEntryPoints|PublicUnifiedEntrypointDocs|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
 if ($LASTEXITCODE -ne 0) {
     $errors += "[TEST] focused architecture guard tests failed"
 }

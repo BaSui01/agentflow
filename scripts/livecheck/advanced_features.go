@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -137,7 +138,7 @@ func runSkillsAndMCP(ctx context.Context, logger *zap.Logger, provider llm.Provi
 		},
 	}
 
-	ag, err := agent.NewAgentBuilder(cfg).WithProvider(provider).WithLogger(logger).Build()
+	ag, err := agentruntime.NewBuilder(provider, logger).Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -326,11 +327,9 @@ func runSubAgentDelegation(ctx context.Context, logger *zap.Logger, provider llm
 		},
 	}
 
-	parent, err := agent.NewAgentBuilder(parentCfg).
-		WithProvider(provider).
-		WithToolManager(toolMgr).
-		WithLogger(logger).
-		Build()
+	parent, err := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+		ToolManager: toolMgr,
+	}).Build(ctx, parentCfg)
 	if err != nil {
 		return err
 	}
@@ -406,7 +405,11 @@ func newLiveBaseAgent(id, name, model, systemPrompt string, provider llm.Provide
 			SystemPrompt: systemPrompt,
 		},
 	}
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
+	ag, err := agentruntime.NewBuilder(provider, logger).Build(context.Background(), cfg)
+	if err != nil {
+		return nil
+	}
+	return ag
 }
 
 func teardownAgents(agents []agent.Agent) {

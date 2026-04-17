@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	embeddingcap "github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -670,10 +671,7 @@ func runAgentBasic(ctx context.Context, logger *zap.Logger, provider llm.Provide
 		},
 	}
 
-	ag, err := agent.NewAgentBuilder(cfg).
-		WithProvider(provider).
-		WithLogger(logger).
-		Build()
+	ag, err := agentruntime.NewBuilder(provider, logger).Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -722,11 +720,9 @@ func runAgentToolLoop(ctx context.Context, logger *zap.Logger, provider llm.Prov
 		},
 	}
 
-	ag, err := agent.NewAgentBuilder(cfg).
-		WithProvider(provider).
-		WithToolManager(toolMgr).
-		WithLogger(logger).
-		Build()
+	ag, err := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+		ToolManager: toolMgr,
+	}).Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
