@@ -22,6 +22,12 @@ const (
 	validateMaxTokensMax     = 128000
 )
 
+const (
+	ServerEnvironmentDevelopment = "development"
+	ServerEnvironmentTest        = "test"
+	ServerEnvironmentProduction  = "production"
+)
+
 // Checkpoint 存储类型常量，替代 magic string
 const (
 	StorageTypeFile     = "file"
@@ -95,10 +101,14 @@ type Config struct {
 type ServerConfig struct {
 	// HTTP 端口
 	HTTPPort int `yaml:"http_port" env:"HTTP_PORT"`
-	// gRPC 端口 — Reserved for future gRPC support, not currently used.
-	GRPCPort int `yaml:"grpc_port" env:"GRPC_PORT"`
 	// Metrics 端口
 	MetricsPort int `yaml:"metrics_port" env:"METRICS_PORT"`
+	// Metrics 监听地址；默认仅监听 loopback，生产若需外部抓取必须显式放开。
+	MetricsBindAddress string `yaml:"metrics_bind_address" env:"METRICS_BIND_ADDRESS"`
+	// 运行环境；用于固化生产环境安全默认值。
+	Environment string `yaml:"environment" env:"ENVIRONMENT" json:"environment,omitempty"`
+	// 是否启用 pprof 诊断端点；默认关闭，避免在 metrics 端口暴露 profiling 能力。
+	EnablePProf bool `yaml:"enable_pprof" env:"ENABLE_PPROF" json:"enable_pprof,omitempty"`
 	// 读取超时
 	ReadTimeout time.Duration `yaml:"read_timeout" env:"READ_TIMEOUT"`
 	// 写入超时
@@ -121,8 +131,8 @@ type ServerConfig struct {
 	TenantRateLimitRPS int `yaml:"tenant_rate_limit_rps" json:"tenant_rate_limit_rps,omitempty"`
 	// 租户级限流 Burst，默认 100
 	TenantRateLimitBurst int `yaml:"tenant_rate_limit_burst" json:"tenant_rate_limit_burst,omitempty"`
-	// AllowNoAuth 允许在无认证配置时启动（默认 false）。
-	// 生产环境必须显式设置为 true 才能在无 JWT/API Key 配置时启动。
+	// AllowNoAuth 允许在无认证配置时跳过 HTTP 鉴权（默认 false）。
+	// 仅 development/test 环境允许开启；production 会在配置校验阶段直接拒绝启动。
 	AllowNoAuth bool `yaml:"allow_no_auth" env:"ALLOW_NO_AUTH" json:"allow_no_auth,omitempty"`
 }
 
@@ -746,9 +756,19 @@ func LoadFromEnv() (*Config, error) {
 func (c *Config) Validate() error {
 	var errs []string
 
+	c.Server.Environment = normalizeServerEnvironment(c.Server.Environment)
+
 	// 验证服务器配置
 	if c.Server.HTTPPort <= 0 || c.Server.HTTPPort > 65535 {
 		errs = append(errs, "invalid HTTP port")
+	}
+	switch c.Server.Environment {
+	case ServerEnvironmentDevelopment, ServerEnvironmentTest, ServerEnvironmentProduction:
+	default:
+		errs = append(errs, "server.environment must be one of: development, test, production")
+	}
+	if c.Server.Environment == ServerEnvironmentProduction && c.Server.AllowNoAuth {
+		errs = append(errs, "server.allow_no_auth cannot be true when server.environment=production")
 	}
 
 	// V-008: Agent.Model required validation
@@ -846,6 +866,14 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func normalizeServerEnvironment(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return ServerEnvironmentDevelopment
+	}
+	return normalized
 }
 
 // DSN 返回数据库连接字符串

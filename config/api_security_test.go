@@ -75,5 +75,35 @@ func TestConfigAPIMiddleware_RequireAuth_AuthFailureAuditLog(t *testing.T) {
 	assert.Equal(t, "/api/v1/config", fields["path"])
 	assert.Equal(t, "GET", fields["method"])
 	assert.Equal(t, "req-123", fields["request_id"])
+	assert.Equal(t, "127.0.0.1:12345", fields["remote_addr"])
+	assert.Equal(t, "config", fields["resource"])
+	assert.Equal(t, "authorize", fields["action"])
+	assert.Equal(t, "failed", fields["result"])
+}
+
+func TestConfigAPIHandler_HandleSnapshots_AuditLogIncludesUnifiedFields(t *testing.T) {
+	manager := NewHotReloadManager(DefaultConfig())
+	core, observed := observer.New(zap.InfoLevel)
+	h := NewConfigAPIHandler(manager)
+	h.SetLogger(zap.New(core))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/snapshots?limit=1", nil)
+	req.RemoteAddr = "10.0.0.8:9999"
+	req.Header.Set("X-Request-ID", "req-snapshots")
+	w := httptest.NewRecorder()
+
+	h.handleSnapshots(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	entries := observed.FilterMessage("config api request completed").All()
+	require.NotEmpty(t, entries)
+	fields := entries[len(entries)-1].ContextMap()
+	assert.Equal(t, "/api/v1/config/snapshots", fields["path"])
+	assert.Equal(t, "GET", fields["method"])
+	assert.Equal(t, "req-snapshots", fields["request_id"])
+	assert.Equal(t, "10.0.0.8:9999", fields["remote_addr"])
+	assert.Equal(t, "config", fields["resource"])
+	assert.Equal(t, "snapshots", fields["action"])
+	assert.Equal(t, "success", fields["result"])
 }
 

@@ -141,6 +141,18 @@ func TestConfigAPIHandler_ChangesMethodNotAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 }
 
+func TestConfigAPIHandler_SnapshotsMethodNotAllowed(t *testing.T) {
+	manager := NewHotReloadManager(DefaultConfig())
+	h := NewConfigAPIHandler(manager)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/config/snapshots", nil)
+	w := httptest.NewRecorder()
+
+	h.handleSnapshots(w, req)
+
+	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+}
+
 // --- Response Content-Type ---
 
 func TestConfigAPIHandler_WriteJSON_ContentType(t *testing.T) {
@@ -154,6 +166,47 @@ func TestConfigAPIHandler_WriteJSON_ContentType(t *testing.T) {
 
 	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
 	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+}
+
+func TestConfigAPIHandler_HandleSnapshots_ReturnsSummariesAndSanitizedSnapshot(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Database.Password = "secret123"
+	manager := NewHotReloadManager(cfg)
+	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
+
+	h := NewConfigAPIHandler(manager)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/snapshots?version=1&limit=5", nil)
+	w := httptest.NewRecorder()
+
+	h.handleSnapshots(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp apiResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.True(t, resp.Success)
+
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+
+	snapshot, ok := data["snapshot"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(1), snapshot["version"])
+	configMap, ok := snapshot["config"].(map[string]any)
+	require.True(t, ok)
+	dbMap, ok := configMap["Database"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "[REDACTED]", dbMap["Password"])
+
+	summaries, ok := data["snapshots"].([]any)
+	require.True(t, ok)
+	require.Len(t, summaries, 2)
+
+	changeSummary, ok := data["change_summary"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(1), changeSummary["total_changes"])
+	assert.Equal(t, float64(1), changeSummary["applied_changes"])
 }
 
 // --- Middleware: RequireAuth ---

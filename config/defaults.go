@@ -111,8 +111,10 @@ func DefaultConfig() *Config {
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
 		HTTPPort:             8080,
-		GRPCPort:             9090,
 		MetricsPort:          9091,
+		MetricsBindAddress:   "127.0.0.1",
+		Environment:          ServerEnvironmentDevelopment,
+		EnablePProf:          false,
 		ReadTimeout:          30 * time.Second,
 		WriteTimeout:         30 * time.Second,
 		ShutdownTimeout:      15 * time.Second,

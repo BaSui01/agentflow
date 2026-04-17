@@ -33,8 +33,10 @@ func TestDefaultConfig_ContainsAllSubConfigs(t *testing.T) {
 func TestDefaultServerConfig(t *testing.T) {
 	cfg := DefaultServerConfig()
 	assert.Equal(t, 8080, cfg.HTTPPort)
-	assert.Equal(t, 9090, cfg.GRPCPort)
 	assert.Equal(t, 9091, cfg.MetricsPort)
+	assert.Equal(t, "127.0.0.1", cfg.MetricsBindAddress)
+	assert.Equal(t, "development", cfg.Environment)
+	assert.False(t, cfg.EnablePProf)
 	assert.Equal(t, 30*time.Second, cfg.ReadTimeout)
 	assert.Equal(t, 30*time.Second, cfg.WriteTimeout)
 	assert.Equal(t, 15*time.Second, cfg.ShutdownTimeout)
