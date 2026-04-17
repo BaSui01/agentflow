@@ -1989,8 +1989,10 @@ func TestBaseAgent_Execute_InjectsEphemeralPromptLayers(t *testing.T) {
 		TraceID: "ephemeral-layers-1",
 		Content: "continue the interrupted task",
 		Context: map[string]any{
-			"tenant_id":     "tenant-1",
-			"checkpoint_id": "cp-42",
+			"tenant_id":                  "tenant-1",
+			"checkpoint_id":              "cp-42",
+			"tool_verification_required": true,
+			"acceptance_criteria":        []string{"confirm the final answer with evidence"},
 		},
 	})
 	if err != nil {
@@ -2005,25 +2007,84 @@ func TestBaseAgent_Execute_InjectsEphemeralPromptLayers(t *testing.T) {
 	if len(capturedReq.Messages) < 3 {
 		t.Fatalf("expected multiple messages, got %#v", capturedReq.Messages)
 	}
-	if capturedReq.Messages[0].Content != "" && strContains(capturedReq.Messages[0].Content, "<request_context>") {
-		t.Fatalf("expected stable system prompt to remain separate from ephemeral layers, got %q", capturedReq.Messages[0].Content)
-	}
-	foundRequestContext := false
-	foundResumeContext := false
+	foundSessionOverlay := false
+	foundToolGuidance := false
+	foundVerificationGate := false
 	for _, msg := range capturedReq.Messages {
-		if strContains(msg.Content, "<request_context>") && strContains(msg.Content, "tenant-1") {
-			foundRequestContext = true
+		if strContains(msg.Content, "<session_overlay>") && strContains(msg.Content, "tenant-1") && strContains(msg.Content, "cp-42") {
+			foundSessionOverlay = true
 		}
-		if strContains(msg.Content, "<resume_context>") && strContains(msg.Content, "cp-42") {
-			foundResumeContext = true
+		if strContains(msg.Content, "<tool_guidance>") {
+			foundToolGuidance = true
+		}
+		if strContains(msg.Content, "<verification_gate>") && strContains(msg.Content, "confirm the final answer with evidence") {
+			foundVerificationGate = true
 		}
 	}
-	if !foundRequestContext {
-		t.Fatalf("expected request_context ephemeral layer, got %#v", capturedReq.Messages)
+	if !foundSessionOverlay {
+		t.Fatalf("expected session_overlay ephemeral layer, got %#v", capturedReq.Messages)
 	}
-	if !foundResumeContext {
-		t.Fatalf("expected resume_context ephemeral layer, got %#v", capturedReq.Messages)
+	if !foundVerificationGate {
+		t.Fatalf("expected verification_gate ephemeral layer, got %#v", capturedReq.Messages)
 	}
+	if foundToolGuidance {
+		t.Fatalf("did not expect tool_guidance without configured tools, got %#v", capturedReq.Messages)
+	}
+	if output.Metadata["applied_prompt_layers"] == nil {
+		t.Fatalf("expected output metadata to include applied_prompt_layers, got %#v", output.Metadata)
+	}
+}
+
+func TestEmitRuntimeApprovalEvent(t *testing.T) {
+	var events []RuntimeStreamEvent
+	emit := func(ev RuntimeStreamEvent) {
+		events = append(events, ev)
+	}
+	pr := &preparedRequest{toolRisks: map[string]string{"write_file": toolRiskRequiresApproval}}
+	emitRuntimeApprovalEvent(emit, pr, llmtools.PermissionEvent{
+		Type:       llmtools.PermissionEventRequested,
+		ToolName:   "write_file",
+		ApprovalID: "approval-1",
+		Decision:   llmtools.PermissionRequireApproval,
+		Reason:     "approval required",
+		Metadata:   map[string]string{"hosted_tool_risk": toolRiskRequiresApproval},
+	})
+	require.Len(t, events, 1)
+	assert.Equal(t, RuntimeStreamApproval, events[0].Type)
+	assert.Equal(t, SDKApprovalRequested, events[0].SDKEventName)
+	assert.Equal(t, "write_file", events[0].ToolName)
+	payload, ok := events[0].Data.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, toolRiskRequiresApproval, payload["hosted_tool_risk"])
+	assert.Equal(t, "approval-1", payload["approval_id"])
+}
+
+func TestWithApprovalExplainabilityEmitter_RecordsApprovalStep(t *testing.T) {
+	obs := &mockObservability{}
+	ctx := withApprovalExplainabilityEmitter(context.Background(), obs, "trace-1")
+
+	pm := llmtools.NewPermissionManager(nil)
+	mockHandler := &agentTestApprovalHandler{approvalID: "approval-123", approved: false}
+	pm.SetApprovalHandler(mockHandler)
+	require.NoError(t, pm.AddRule(&llmtools.PermissionRule{
+		ID:          "r1",
+		Name:        "needs-approval",
+		ToolPattern: "*",
+		Decision:    llmtools.PermissionRequireApproval,
+	}))
+
+	result, err := pm.CheckPermission(ctx, &llmtools.PermissionContext{
+		ToolName: "write_file",
+		Metadata: map[string]string{"hosted_tool_risk": toolRiskRequiresApproval},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, llmtools.PermissionRequireApproval, result.Decision)
+	require.Len(t, obs.explainSteps, 1)
+	assert.Equal(t, "approval", obs.explainSteps[0]["type"])
+	meta, ok := obs.explainSteps[0]["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "write_file", meta["tool_name"])
+	assert.Equal(t, llmtools.PermissionEventRequested, meta["approval_type"])
 }
 
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
@@ -2072,8 +2133,15 @@ func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
 	if capturedReq == nil {
 		t.Fatal("expected captured request")
 	}
-	if got := capturedReq.Messages[0].Content; !strContains(got, "remember this correction") {
-		t.Fatalf("expected system prompt to include saved feedback, got %q", got)
+	foundFeedbackInMessages := false
+	for _, msg := range capturedReq.Messages {
+		if strContains(msg.Content, "remember this correction") {
+			foundFeedbackInMessages = true
+			break
+		}
+	}
+	if !foundFeedbackInMessages {
+		t.Fatalf("expected assembled messages to include saved feedback, got %#v", capturedReq.Messages)
 	}
 	foundFeedback := false
 	for _, entry := range mem.shortTerm {
@@ -2194,6 +2262,7 @@ type mockObservability struct {
 	traceStarted int
 	traceEnded   int
 	taskRecorded int
+	explainSteps []map[string]any
 }
 
 func (m *mockObservability) StartTrace(_, _ string) {
@@ -2204,6 +2273,29 @@ func (m *mockObservability) EndTrace(_, _ string, _ error) {
 }
 func (m *mockObservability) RecordTask(_ string, _ bool, _ time.Duration, _ int, _, _ float64) {
 	m.taskRecorded++
+}
+func (m *mockObservability) StartExplainabilityTrace(_, _, _ string) {}
+func (m *mockObservability) AddExplainabilityStep(_ string, stepType, content string, metadata map[string]any) {
+	m.explainSteps = append(m.explainSteps, map[string]any{
+		"type":     stepType,
+		"content":  content,
+		"metadata": metadata,
+	})
+}
+func (m *mockObservability) EndExplainabilityTrace(_ string, _ bool, _, _ string) {}
+
+type agentTestApprovalHandler struct {
+	approvalID string
+	approved   bool
+	err        error
+}
+
+func (m *agentTestApprovalHandler) RequestApproval(_ context.Context, _ *llmtools.PermissionContext, _ *llmtools.PermissionRule) (string, error) {
+	return m.approvalID, m.err
+}
+
+func (m *agentTestApprovalHandler) CheckApprovalStatus(_ context.Context, _ string) (bool, error) {
+	return m.approved, m.err
 }
 
 type mockSkillDiscoverer struct {

@@ -75,6 +75,7 @@ func (b *BaseAgent) startReactStreaming(ctx context.Context, pr *preparedRequest
 	const selectedMode = ReasoningModeReact
 	reactReq := *pr.req
 	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
+	ctx = withRuntimeApprovalEmitter(ctx, emit, pr)
 	toolExec := newRuntimeHandoffExecutor(
 		b,
 		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
@@ -210,6 +211,7 @@ func emitReactToolCalls(emit RuntimeStreamEmitter, pr *preparedRequest, state *r
 func emitReactToolResults(emit RuntimeStreamEmitter, pr *preparedRequest, state *reactStreamingState, results []types.ToolResult) {
 	for _, tr := range results {
 		sdkEventName, resultPayload := reactToolResultPayload(pr, tr)
+		emitApprovalRuntimeEventFromToolResult(emit, pr, state, tr)
 		emit(RuntimeStreamEvent{
 			Type:           RuntimeStreamToolResult,
 			Timestamp:      time.Now(),
@@ -227,6 +229,148 @@ func emitReactToolResults(emit RuntimeStreamEmitter, pr *preparedRequest, state 
 			SDKEventName: sdkEventName,
 		})
 	}
+}
+
+func withRuntimeApprovalEmitter(ctx context.Context, emit RuntimeStreamEmitter, pr *preparedRequest) context.Context {
+	if emit == nil {
+		return ctx
+	}
+	return llmtools.WithPermissionEventEmitter(ctx, func(event llmtools.PermissionEvent) {
+		emitRuntimeApprovalEvent(emit, pr, event)
+	})
+}
+
+func withApprovalExplainabilityEmitter(ctx context.Context, recorder ExplainabilityRecorder, traceID string) context.Context {
+	if recorder == nil || strings.TrimSpace(traceID) == "" {
+		return ctx
+	}
+	return llmtools.WithPermissionEventEmitter(ctx, func(event llmtools.PermissionEvent) {
+		content := strings.TrimSpace(event.Reason)
+		if content == "" {
+			content = string(event.Type)
+		}
+		metadata := map[string]any{
+			"approval_type": event.Type,
+			"approval_id":   event.ApprovalID,
+			"decision":      string(event.Decision),
+			"tool_name":     event.ToolName,
+			"rule_id":       event.RuleID,
+		}
+		if len(event.Metadata) > 0 {
+			for key, value := range event.Metadata {
+				metadata[key] = value
+			}
+		}
+		recorder.AddExplainabilityStep(traceID, "approval", content, metadata)
+	})
+}
+
+func emitRuntimeApprovalEvent(emit RuntimeStreamEmitter, pr *preparedRequest, event llmtools.PermissionEvent) {
+	if emit == nil {
+		return
+	}
+	sdkEventName := SDKApprovalResponse
+	if event.Type == llmtools.PermissionEventRequested {
+		sdkEventName = SDKApprovalRequested
+	}
+	data := map[string]any{
+		"approval_type": event.Type,
+		"decision":      string(event.Decision),
+		"reason":        event.Reason,
+		"approval_id":   event.ApprovalID,
+	}
+	if len(event.Metadata) > 0 {
+		for key, value := range event.Metadata {
+			data[key] = value
+		}
+	}
+	if risk := toolRiskForPreparedRequest(pr, event.ToolName, event.Metadata); risk != "" {
+		data["hosted_tool_risk"] = risk
+	}
+	emit(RuntimeStreamEvent{
+		Type:         RuntimeStreamApproval,
+		SDKEventType: SDKRunItemEvent,
+		SDKEventName: sdkEventName,
+		Timestamp:    time.Now(),
+		ToolName:     event.ToolName,
+		Data:         data,
+	})
+}
+
+func emitApprovalRuntimeEventFromToolResult(emit RuntimeStreamEmitter, pr *preparedRequest, state *reactStreamingState, tr types.ToolResult) {
+	if emit == nil {
+		return
+	}
+	risk := toolRiskForPreparedRequest(pr, tr.Name, nil)
+	if risk != toolRiskRequiresApproval {
+		return
+	}
+	approvalID, required := parseApprovalRequiredError(tr.Error)
+	if required {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamApproval,
+			SDKEventType:   SDKRunItemEvent,
+			SDKEventName:   SDKApprovalRequested,
+			Timestamp:      time.Now(),
+			ToolName:       tr.Name,
+			CurrentStage:   "acting",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+			Data: map[string]any{
+				"approval_type":    "approval_requested",
+				"approval_id":      approvalID,
+				"hosted_tool_risk": risk,
+				"reason":           tr.Error,
+			},
+		})
+		return
+	}
+	if tr.Error == "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamApproval,
+			SDKEventType:   SDKRunItemEvent,
+			SDKEventName:   SDKApprovalResponse,
+			Timestamp:      time.Now(),
+			ToolName:       tr.Name,
+			CurrentStage:   "acting",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+			Data: map[string]any{
+				"approval_type":    "approval_granted",
+				"approved":         true,
+				"hosted_tool_risk": risk,
+			},
+		})
+	}
+}
+
+func parseApprovalRequiredError(errText string) (string, bool) {
+	trimmed := strings.TrimSpace(errText)
+	if !strings.HasPrefix(trimmed, "approval required") {
+		return "", false
+	}
+	const prefix = "approval required (ID: "
+	if strings.HasPrefix(trimmed, prefix) {
+		rest := strings.TrimPrefix(trimmed, prefix)
+		if idx := strings.Index(rest, ")"); idx >= 0 {
+			return strings.TrimSpace(rest[:idx]), true
+		}
+	}
+	return "", true
+}
+
+func toolRiskForPreparedRequest(pr *preparedRequest, toolName string, metadata map[string]string) string {
+	if metadata != nil {
+		if risk := strings.TrimSpace(metadata["hosted_tool_risk"]); risk != "" {
+			return risk
+		}
+	}
+	if pr != nil && len(pr.toolRisks) > 0 {
+		if risk, ok := pr.toolRisks[strings.TrimSpace(toolName)]; ok {
+			return risk
+		}
+	}
+	return classifyToolRiskByName(toolName)
 }
 
 func reactToolResultPayload(pr *preparedRequest, tr types.ToolResult) (SDKRunItemEventName, json.RawMessage) {
@@ -541,6 +685,7 @@ const (
 	RuntimeStreamToolCall     RuntimeStreamEventType = "tool_call"
 	RuntimeStreamToolResult   RuntimeStreamEventType = "tool_result"
 	RuntimeStreamToolProgress RuntimeStreamEventType = "tool_progress"
+	RuntimeStreamApproval     RuntimeStreamEventType = "approval"
 	RuntimeStreamSession      RuntimeStreamEventType = "session"
 	RuntimeStreamStatus       RuntimeStreamEventType = "status"
 	RuntimeStreamSteering     RuntimeStreamEventType = "steering"
@@ -561,6 +706,8 @@ const (
 	SDKToolSearchOutput     SDKRunItemEventName = "tool_search_output_created"
 	SDKToolOutput           SDKRunItemEventName = "tool_output"
 	SDKReasoningCreated     SDKRunItemEventName = "reasoning_item_created"
+	SDKApprovalRequested    SDKRunItemEventName = "approval_requested"
+	SDKApprovalResponse     SDKRunItemEventName = "approval_response"
 	SDKMCPApprovalRequested SDKRunItemEventName = "mcp_approval_requested"
 	SDKMCPApprovalResponse  SDKRunItemEventName = "mcp_approval_response"
 	SDKMCPListTools         SDKRunItemEventName = "mcp_list_tools"

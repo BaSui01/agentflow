@@ -13,9 +13,18 @@ import (
 type EphemeralPromptLayerBuilder struct{}
 
 type EphemeralPromptLayerInput struct {
-	PublicContext map[string]any
-	CheckpointID  string
-	ContextStatus *agentcontext.Status
+	PublicContext            map[string]any
+	TraceID                  string
+	TenantID                 string
+	UserID                   string
+	ChannelID                string
+	CheckpointID             string
+	AllowedTools             []string
+	ToolsDisabled            bool
+	AcceptanceCriteria       []string
+	ToolVerificationRequired bool
+	CodeVerificationRequired bool
+	ContextStatus            *agentcontext.Status
 }
 
 func NewEphemeralPromptLayerBuilder() *EphemeralPromptLayerBuilder {
@@ -23,11 +32,14 @@ func NewEphemeralPromptLayerBuilder() *EphemeralPromptLayerBuilder {
 }
 
 func (b *EphemeralPromptLayerBuilder) Build(input EphemeralPromptLayerInput) []agentcontext.PromptLayer {
-	layers := make([]agentcontext.PromptLayer, 0, 3)
-	if layer := buildRequestContextLayer(input.PublicContext); layer != nil {
+	layers := make([]agentcontext.PromptLayer, 0, 4)
+	if layer := buildSessionOverlayLayer(input); layer != nil {
 		layers = append(layers, *layer)
 	}
-	if layer := buildResumeContextLayer(input.CheckpointID); layer != nil {
+	if layer := buildToolGuidanceLayer(input); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildVerificationGateLayer(input); layer != nil {
 		layers = append(layers, *layer)
 	}
 	if layer := buildContextPressureLayer(input.ContextStatus); layer != nil {
@@ -39,36 +51,128 @@ func (b *EphemeralPromptLayerBuilder) Build(input EphemeralPromptLayerInput) []a
 	return layers
 }
 
-func buildRequestContextLayer(values map[string]any) *agentcontext.PromptLayer {
-	if len(values) == 0 {
+func buildSessionOverlayLayer(input EphemeralPromptLayerInput) *agentcontext.PromptLayer {
+	payload := make(map[string]any, len(input.PublicContext)+5)
+	if traceID := strings.TrimSpace(input.TraceID); traceID != "" {
+		payload["trace_id"] = traceID
+	}
+	if tenantID := strings.TrimSpace(input.TenantID); tenantID != "" {
+		payload["tenant_id"] = tenantID
+	}
+	if userID := strings.TrimSpace(input.UserID); userID != "" {
+		payload["user_id"] = userID
+	}
+	if channelID := strings.TrimSpace(input.ChannelID); channelID != "" {
+		payload["channel_id"] = channelID
+	}
+	for key, value := range input.PublicContext {
+		payload[key] = value
+	}
+	checkpointID := strings.TrimSpace(input.CheckpointID)
+	if checkpointID != "" {
+		payload["checkpoint_id"] = checkpointID
+	}
+	if len(payload) == 0 {
 		return nil
 	}
-	payload, err := json.Marshal(values)
-	if err != nil || len(payload) == 0 {
+	raw, err := json.Marshal(payload)
+	if err != nil || len(raw) == 0 {
 		return nil
 	}
 	return &agentcontext.PromptLayer{
-		ID:       "request_context",
+		ID:       "session_overlay",
 		Type:     agentcontext.SegmentEphemeral,
-		Content:  "<request_context>\n" + string(payload) + "\n</request_context>",
-		Priority: 85,
+		Content:  "<session_overlay>\n" + string(raw) + "\n</session_overlay>",
+		Priority: 90,
 		Sticky:   true,
-		Metadata: map[string]any{"source": "input_context"},
+		Metadata: map[string]any{
+			"layer_kind":     "session_overlay",
+			"checkpoint_id":  checkpointID,
+			"session_fields": sortedKeys(payload),
+		},
 	}
 }
 
-func buildResumeContextLayer(checkpointID string) *agentcontext.PromptLayer {
-	checkpointID = strings.TrimSpace(checkpointID)
-	if checkpointID == "" {
+func buildToolGuidanceLayer(input EphemeralPromptLayerInput) *agentcontext.PromptLayer {
+	if input.ToolsDisabled {
+		return &agentcontext.PromptLayer{
+			ID:       "tool_guidance",
+			Type:     agentcontext.SegmentEphemeral,
+			Content:  "<tool_guidance>\nTools are disabled for this request. Do not plan around tool usage.\n</tool_guidance>",
+			Priority: 88,
+			Sticky:   true,
+			Metadata: map[string]any{"layer_kind": "tool_guidance", "tools_disabled": true},
+		}
+	}
+	tools := normalizeStringSlice(input.AllowedTools)
+	if len(tools) == 0 {
 		return nil
 	}
+	grouped := groupToolRisks(tools)
+	var body strings.Builder
+	body.WriteString("<tool_guidance>\n")
+	body.WriteString("Available tools are grouped by permission risk for this request.\n")
+	if len(grouped[toolRiskSafeRead]) > 0 {
+		body.WriteString("Safe read tools: " + strings.Join(grouped[toolRiskSafeRead], ", ") + ".\n")
+	}
+	if len(grouped[toolRiskRequiresApproval]) > 0 {
+		body.WriteString("Approval-required tools: " + strings.Join(grouped[toolRiskRequiresApproval], ", ") + ". Request approval before relying on mutating, execution, or MCP actions.\n")
+	}
+	if len(grouped[toolRiskUnknown]) > 0 {
+		body.WriteString("Unknown-risk tools: " + strings.Join(grouped[toolRiskUnknown], ", ") + ". Treat them conservatively and avoid them unless clearly needed.\n")
+	}
+	body.WriteString("</tool_guidance>")
 	return &agentcontext.PromptLayer{
-		ID:       "resume_context",
+		ID:       "tool_guidance",
 		Type:     agentcontext.SegmentEphemeral,
-		Content:  "<resume_context>\nContinue from the checkpointed run state instead of restarting from scratch. checkpoint_id=" + checkpointID + "\n</resume_context>",
-		Priority: 90,
+		Content:  body.String(),
+		Priority: 88,
 		Sticky:   true,
-		Metadata: map[string]any{"checkpoint_id": checkpointID},
+		Metadata: map[string]any{
+			"layer_kind":              "tool_guidance",
+			"allowed_tools":           tools,
+			"safe_read_tools":         grouped[toolRiskSafeRead],
+			"approval_required_tools": grouped[toolRiskRequiresApproval],
+			"unknown_risk_tools":      grouped[toolRiskUnknown],
+			"tools_disabled":          false,
+		},
+	}
+}
+
+func buildVerificationGateLayer(input EphemeralPromptLayerInput) *agentcontext.PromptLayer {
+	criteria := normalizeStringSlice(input.AcceptanceCriteria)
+	if len(criteria) == 0 && !input.ToolVerificationRequired && !input.CodeVerificationRequired {
+		return nil
+	}
+	var body strings.Builder
+	body.WriteString("<verification_gate>\n")
+	body.WriteString("Do not treat the task as complete until all applicable verification gates are satisfied.\n")
+	if len(criteria) > 0 {
+		body.WriteString("Acceptance criteria:\n")
+		for _, item := range criteria {
+			body.WriteString("- " + item + "\n")
+		}
+	}
+	if input.ToolVerificationRequired {
+		body.WriteString("- Tool-backed claims require verification before completion.\n")
+	}
+	if input.CodeVerificationRequired {
+		body.WriteString("- Code changes require implementation-oriented verification before completion.\n")
+	}
+	body.WriteString("</verification_gate>")
+	return &agentcontext.PromptLayer{
+		ID:       "verification_gate",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  body.String(),
+		Priority: 87,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind":                 "verification_gate",
+			"acceptance_criteria":        criteria,
+			"acceptance_criteria_count":  len(criteria),
+			"tool_verification_required": input.ToolVerificationRequired,
+			"code_verification_required": input.CodeVerificationRequired,
+		},
 	}
 }
 
@@ -100,4 +204,21 @@ func buildContextPressureLayer(status *agentcontext.Status) *agentcontext.Prompt
 			"ephemeral_layer": "context_pressure",
 		},
 	}
+}
+
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	// Keys are tiny here; a stable O(n^2) insertion sort is enough and keeps this helper local.
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
 }

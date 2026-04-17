@@ -784,6 +784,7 @@ type BaseAgent struct {
 	state                State
 	stateMu              sync.RWMutex
 	execSem              *semaphore.Weighted // 执行信号量，控制并发执行数（默认1）
+	execCount            int64               // 当前活跃执行数（配合并发状态机）
 	configMu             sync.RWMutex        // 配置互斥锁，与 execSem 分离，避免配置方法与 Execute 争用
 
 	// 使用 llm.Provider 接口解耦对 llm 包的直接依赖
@@ -1103,7 +1104,7 @@ func (b *BaseAgent) SetMaxConcurrency(n int) {
 // EnsureReady 确保 Agent 处于就绪状态
 func (b *BaseAgent) EnsureReady() error {
 	state := b.State()
-	if state != StateReady {
+	if state != StateReady && state != StateRunning {
 		return ErrAgentNotReady
 	}
 	return nil

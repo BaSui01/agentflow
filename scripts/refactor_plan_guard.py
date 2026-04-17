@@ -21,9 +21,24 @@ from typing import Iterable
 
 CHECKBOX_RE = re.compile(r"^\s*[-*]\s+\[( |x|X)\]\s+")
 HEADING_RE = re.compile(r"^\s*##+\s+")
+LABEL_RE = {
+    "验证命令": re.compile(r"验证命令\s*[:：]\s*\S+"),
+    "通过标准": re.compile(r"通过标准\s*[:：]\s*\S+"),
+}
 
 REQUIRED_HEADING_GROUPS = (
     ("执行状态总览",),
+    ("执行计划", "Phase"),
+    ("完成定义", "DoD"),
+)
+TDD_HEADING_GROUP = ("测试策略（TDD）", "测试计划（TDD）")
+TDD_REQUIRED_STEPS = (
+    ("先写失败测试", "失败测试", "红灯"),
+    ("最小实现让测试转绿", "转绿", "绿灯"),
+    ("重构并回归验证", "重构"),
+)
+VERIFIABLE_SECTION_GROUPS = (
+    TDD_HEADING_GROUP,
     ("执行计划", "Phase"),
     ("完成定义", "DoD"),
 )
@@ -43,6 +58,12 @@ class PlanStats:
     errors: list[str]
 
 
+@dataclass(frozen=True)
+class PlanRequirements:
+    require_tdd: bool = False
+    require_verifiable_completion: bool = False
+
+
 def iter_plan_files(root: Path, target: str) -> Iterable[Path]:
     if target == "all":
         files = sorted(root.glob("*.md"))
@@ -55,7 +76,72 @@ def iter_plan_files(root: Path, target: str) -> Iterable[Path]:
         yield path
 
 
-def collect_stats(path: Path) -> PlanStats:
+def collect_sections(lines: list[str]) -> list[tuple[str, list[str]]]:
+    sections: list[tuple[str, list[str]]] = []
+    current_heading: str | None = None
+    current_lines: list[str] = []
+
+    for line in lines:
+        if HEADING_RE.match(line):
+            if current_heading is not None:
+                sections.append((current_heading, current_lines))
+            current_heading = line.strip()
+            current_lines = []
+            continue
+        if current_heading is not None:
+            current_lines.append(line)
+
+    if current_heading is not None:
+        sections.append((current_heading, current_lines))
+    return sections
+
+
+def find_section(
+    sections: list[tuple[str, list[str]]], group: tuple[str, ...]
+) -> tuple[str, list[str]] | None:
+    for heading, content in sections:
+        if any(token in heading for token in group):
+            return heading, content
+    return None
+
+
+def has_label_value(line: str, label: str) -> bool:
+    return LABEL_RE[label].search(line) is not None
+
+
+def validate_tdd_section(lines: list[str]) -> list[str]:
+    errors: list[str] = []
+    checkbox_lines = [line.strip() for line in lines if CHECKBOX_RE.match(line)]
+    if not checkbox_lines:
+        return ["测试策略（TDD）章节缺少任务状态行。"]
+
+    for step_group in TDD_REQUIRED_STEPS:
+        if not any(any(token in line for token in step_group) for line in checkbox_lines):
+            errors.append(
+                "测试策略（TDD）章节缺少关键步骤："
+                + " / ".join(step_group)
+            )
+    return errors
+
+
+def validate_verifiable_section(section_name: str, lines: list[str]) -> list[str]:
+    errors: list[str] = []
+    checkbox_lines = [line.strip() for line in lines if CHECKBOX_RE.match(line)]
+    if not checkbox_lines:
+        return [f"{section_name}章节缺少任务状态行。"]
+
+    for line in checkbox_lines:
+        if not has_label_value(line, "验证命令"):
+            errors.append(f"{section_name}章节存在未声明验证命令的任务：{line}")
+        if not has_label_value(line, "通过标准"):
+            errors.append(f"{section_name}章节存在未声明通过标准的任务：{line}")
+    return errors
+
+
+def collect_stats(
+    path: Path, requirements: PlanRequirements | None = None
+) -> PlanStats:
+    requirements = requirements or PlanRequirements()
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     errors: list[str] = []
@@ -69,13 +155,35 @@ def collect_stats(path: Path) -> PlanStats:
         errors.append("缺少任务状态：至少需要一条 `- [ ]` 或 `- [x]`。")
 
     headings = [line.strip() for line in lines if HEADING_RE.match(line)]
-    for group in REQUIRED_HEADING_GROUPS:
+    required_heading_groups = list(REQUIRED_HEADING_GROUPS)
+    if requirements.require_tdd:
+        required_heading_groups.append(TDD_HEADING_GROUP)
+
+    for group in required_heading_groups:
         if not any(any(token in h for token in group) for h in headings):
             errors.append(
                 "缺少必需章节："
                 + "/".join(group)
-                + "（要求包含执行状态、执行计划、完成定义）"
+                + "（要求包含执行状态、执行计划、完成定义"
+                + ("、测试策略（TDD）" if requirements.require_tdd else "")
+                + "）"
             )
+
+    sections = collect_sections(lines)
+
+    if requirements.require_tdd:
+        tdd_section = find_section(sections, TDD_HEADING_GROUP)
+        if tdd_section is not None:
+            _, tdd_lines = tdd_section
+            errors.extend(validate_tdd_section(tdd_lines))
+
+    if requirements.require_verifiable_completion:
+        for group in VERIFIABLE_SECTION_GROUPS:
+            section = find_section(sections, group)
+            if section is None:
+                continue
+            heading, section_lines = section
+            errors.extend(validate_verifiable_section(heading, section_lines))
 
     return PlanStats(path=path, total=total, done=done, todo=todo, errors=errors)
 
@@ -132,27 +240,41 @@ def build_missing_section(group: tuple[str, ...]) -> str:
             "- [x] 已补齐章节结构\n"
             "- [x] 已补齐任务状态行\n"
         )
+    if primary == "测试策略（TDD）":
+        return (
+            "## 测试策略（TDD，自动补齐）\n\n"
+            "- [ ] 先写失败测试并确认红灯（验证命令：`go test ./path/to/pkg -run TestName`; 通过标准：新增测试先失败，且失败原因与待修问题直接对应）\n"
+            "- [ ] 采用最小实现让测试转绿（验证命令：`go test ./path/to/pkg -run TestName`; 通过标准：目标测试转绿，且未引入兼容分支）\n"
+            "- [ ] 完成重构并执行回归验证（验证命令：`go test ./path/to/pkg`; 通过标准：相关测试全部通过，且旧实现已删除）\n"
+        )
     if primary == "执行计划":
         return (
             "## 执行计划（自动补齐）\n\n"
             "### Phase-A：文档结构补齐\n\n"
-            "- [x] 统一章节结构\n"
-            "- [x] 补齐任务状态行\n"
+            "- [ ] 统一章节结构（验证命令：`python scripts/refactor_plan_guard.py lint --target <计划文件名>`; 通过标准：章节结构满足门禁要求）\n"
+            "- [ ] 补齐任务状态行（验证命令：`python scripts/refactor_plan_guard.py report --target <计划文件名>`; 通过标准：报告可统计全部任务状态）\n"
         )
     return (
         "## 完成定义（DoD，自动补齐）\n\n"
-        "- [x] 已具备 DoD 章节\n"
-        "- [x] 已纳入 gate 校验范围\n"
+        "- [ ] 已具备 DoD 章节（验证命令：`python scripts/refactor_plan_guard.py lint --target <计划文件名>`; 通过标准：DoD 章节存在且结构合法）\n"
+        "- [ ] 已纳入 gate 校验范围（验证命令：`python scripts/refactor_plan_guard.py gate --target <计划文件名>`; 通过标准：所有任务完成后 gate 可通过）\n"
     )
 
 
-def apply_autofix(path: Path) -> tuple[bool, list[str]]:
+def apply_autofix(
+    path: Path, requirements: PlanRequirements | None = None
+) -> tuple[bool, list[str]]:
+    requirements = requirements or PlanRequirements()
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     headings = [line.strip() for line in lines if HEADING_RE.match(line)]
 
     missing_groups: list[tuple[str, ...]] = []
-    for group in REQUIRED_HEADING_GROUPS:
+    required_heading_groups = list(REQUIRED_HEADING_GROUPS)
+    if requirements.require_tdd:
+        required_heading_groups.append(TDD_HEADING_GROUP)
+
+    for group in required_heading_groups:
         if not any(any(token in h for token in group) for h in headings):
             missing_groups.append(group)
 
@@ -175,10 +297,13 @@ def apply_autofix(path: Path) -> tuple[bool, list[str]]:
     return True, ["/".join(g) for g in missing_groups]
 
 
-def run_autofix(files: list[Path]) -> int:
+def run_autofix(
+    files: list[Path], requirements: PlanRequirements | None = None
+) -> int:
+    requirements = requirements or PlanRequirements()
     changed = 0
     for path in files:
-        did_change, sections = apply_autofix(path)
+        did_change, sections = apply_autofix(path, requirements=requirements)
         if did_change:
             changed += 1
             print(f"[FIXED] {path.as_posix()} -> 补齐章节: {', '.join(sections)}")
@@ -202,7 +327,21 @@ def main() -> int:
         default="all",
         help="目标文件名（默认 all）。例如: workflow层重构.md",
     )
+    parser.add_argument(
+        "--require-tdd",
+        action="store_true",
+        help="强制计划包含 TDD 章节，并写出失败测试/转绿/重构节奏。",
+    )
+    parser.add_argument(
+        "--require-verifiable-completion",
+        action="store_true",
+        help="强制测试策略/执行计划/完成定义中的每条任务都包含验证命令与通过标准。",
+    )
     args = parser.parse_args()
+    requirements = PlanRequirements(
+        require_tdd=args.require_tdd,
+        require_verifiable_completion=args.require_verifiable_completion,
+    )
 
     root = Path(args.root)
     if not root.exists():
@@ -214,7 +353,7 @@ def main() -> int:
         print("[ERROR] 未找到可检查的计划文档。")
         return 1
 
-    stats_list = [collect_stats(p) for p in files]
+    stats_list = [collect_stats(p, requirements=requirements) for p in files]
 
     if args.cmd == "report":
         print_report(stats_list)
@@ -222,7 +361,7 @@ def main() -> int:
     if args.cmd == "lint":
         return run_lint(stats_list)
     if args.cmd == "autofix":
-        return run_autofix(files)
+        return run_autofix(files, requirements=requirements)
     return run_gate(stats_list)
 
 

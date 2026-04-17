@@ -76,6 +76,16 @@ type ContextPlan struct {
 	Strategy          string              `json:"strategy"`
 	CompressionReason string              `json:"compression_reason,omitempty"`
 	Breakdown         map[SegmentType]int `json:"breakdown,omitempty"`
+	AppliedLayers     []PromptLayerMeta   `json:"applied_layers,omitempty"`
+}
+
+type PromptLayerMeta struct {
+	ID        string         `json:"id"`
+	Type      SegmentType    `json:"type"`
+	Priority  int            `json:"priority,omitempty"`
+	Sticky    bool           `json:"sticky,omitempty"`
+	TokenCost int            `json:"token_cost,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 type AssembleResult struct {

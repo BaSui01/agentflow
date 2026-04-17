@@ -5,6 +5,26 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-04-17
+
+### Added
+- 新增端到端（e2e）测试套件，覆盖 Agent HTTP 执行链路、并发请求与 Sandbox 代码执行
+- 新增并发压测基准（`benchmarks/agent_concurrency_bench_test.go`），量化 Serial/Concurrent5/Concurrent10 场景下的吞吐与内存分配
+- 新增用户文档：`docs/getting_started.md`（5 分钟快速开始）与 `docs/sandbox_setup.md`（沙箱环境配置指南）
+
+### Changed
+- `BaseAgent` 并发模型优化：将 `sync.Mutex` 替换为 `semaphore.Weighted`，支持通过 `AgentBuilder.WithMaxConcurrency(n)` 配置并发上限；配置锁与执行信号量完全分离
+- `BaseAgent` 状态机支持真正的并发执行：引入 `execCount` 引用计数，首个请求负责 `Ready -> Running` 转换，最后一个请求负责 `Running -> Ready` 回退
+- `EnsureReady()` 现在同时接受 `StateReady` 与 `StateRunning`，避免并发请求在合法执行期间被误判为未就绪
+
+### Fixed
+- 修复 `agent/execution/executor.go` 中 `execCommand.Run()` 的空实现问题，已对接真实 `os/exec.CommandContext`，完整支持 stdout/stderr/exitCode 捕获与错误透传
+- 修复 `agent/execution/execution_test.go` 中 `TestExecCommand` 的预期值，同步为真实命令执行输出
+- 修复 `agent/react.go` 与 `agent/context/assembler.go` 中 `additionalContextText` 的跨包可见性问题
+- 修复 `llm/gateway/gateway.go` 外部 linter 引入的 `providerName` 未定义编译错误
+- 修复 reasoning 包从 `types.ChatProvider` 迁移到 `llmcore.Gateway` 后导致的 `agent/builder.go` 与示例代码编译错误
+- 修复 `agent/multiagent/default_modes.go` 中 `noopProvider` 占位问题，替换为 `safeStubProvider` 返回安全默认值
+
 ## [1.10.1] - 2026-04-17
 
 ### Fixed

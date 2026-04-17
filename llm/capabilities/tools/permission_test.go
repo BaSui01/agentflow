@@ -362,6 +362,58 @@ func TestDefaultPermissionManager_CheckPermission_ApprovalHandlerError(t *testin
 	assert.Contains(t, result.Reason, "approval request failed")
 }
 
+func TestDefaultPermissionManager_CheckPermission_EmitsApprovalRequestedEvent(t *testing.T) {
+	pm := NewPermissionManager(nil)
+	mockHandler := &mockApprovalHandler{approvalID: "approval-123", approved: false}
+	pm.SetApprovalHandler(mockHandler)
+	require.NoError(t, pm.AddRule(&PermissionRule{
+		ID:          "r1",
+		Name:        "needs-approval",
+		ToolPattern: "*",
+		Decision:    PermissionRequireApproval,
+	}))
+
+	var events []PermissionEvent
+	ctx := WithPermissionEventEmitter(context.Background(), func(event PermissionEvent) {
+		events = append(events, event)
+	})
+	result, err := pm.CheckPermission(ctx, &PermissionContext{
+		ToolName: "dangerous",
+		Metadata: map[string]string{"hosted_tool_risk": "requires_approval"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, PermissionRequireApproval, result.Decision)
+	require.Len(t, events, 1)
+	assert.Equal(t, PermissionEventRequested, events[0].Type)
+	assert.Equal(t, "approval-123", events[0].ApprovalID)
+}
+
+func TestDefaultPermissionManager_CheckPermission_EmitsApprovalGrantedEvent(t *testing.T) {
+	pm := NewPermissionManager(nil)
+	mockHandler := &mockApprovalHandler{approvalID: "approval-123", approved: true}
+	pm.SetApprovalHandler(mockHandler)
+	require.NoError(t, pm.AddRule(&PermissionRule{
+		ID:          "r1",
+		Name:        "needs-approval",
+		ToolPattern: "*",
+		Decision:    PermissionRequireApproval,
+	}))
+
+	var events []PermissionEvent
+	ctx := WithPermissionEventEmitter(context.Background(), func(event PermissionEvent) {
+		events = append(events, event)
+	})
+	result, err := pm.CheckPermission(ctx, &PermissionContext{
+		ToolName: "dangerous",
+		Metadata: map[string]string{"hosted_tool_risk": "requires_approval"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, PermissionAllow, result.Decision)
+	require.Len(t, events, 1)
+	assert.Equal(t, PermissionEventGranted, events[0].Type)
+	assert.Equal(t, "approval-123", events[0].ApprovalID)
+}
+
 func TestDefaultPermissionManager_AgentInheritance(t *testing.T) {
 	pm := NewPermissionManager(nil)
 

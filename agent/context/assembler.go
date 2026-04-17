@@ -63,6 +63,7 @@ func (a *Assembler) Assemble(ctx context.Context, req *AssembleRequest) (*Assemb
 			Strategy:          string(a.config.Strategy),
 			CompressionReason: reason,
 			Breakdown:         breakdown,
+			AppliedLayers:     appliedLayerMetadata(kept),
 		},
 	}, nil
 }
@@ -269,6 +270,38 @@ func promptLayers(req *AssembleRequest) []PromptLayer {
 	return layers
 }
 
+func appliedLayerMetadata(segments []ContextSegment) []PromptLayerMeta {
+	layers := make([]PromptLayerMeta, 0, len(segments))
+	for _, seg := range segments {
+		if seg.Type != SegmentEphemeral && seg.Type != SegmentSkill {
+			continue
+		}
+		layers = append(layers, PromptLayerMeta{
+			ID:        seg.ID,
+			Type:      seg.Type,
+			Priority:  seg.Priority,
+			Sticky:    seg.Sticky,
+			TokenCost: seg.TokenCost,
+			Metadata:  cloneMetadataMap(seg.Metadata),
+		})
+	}
+	if len(layers) == 0 {
+		return nil
+	}
+	return layers
+}
+
+func cloneMetadataMap(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 func truncateMessages(msgs []types.Message, maxTokens int, tokenizer types.Tokenizer) []types.Message {
 	result := make([]types.Message, len(msgs))
 	copy(result, msgs)
@@ -294,4 +327,15 @@ func max(aValue, bValue int) int {
 		return aValue
 	}
 	return bValue
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		cloned[k] = v
+	}
+	return cloned
 }

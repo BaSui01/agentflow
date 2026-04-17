@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -114,6 +115,7 @@ func buildE2EAgent(t *testing.T, agentID string, maxConcurrency int) agent.Agent
 		WithMaxConcurrency(maxConcurrency).
 		Build()
 	require.NoError(t, err)
+	require.NoError(t, ag.Init(context.Background()))
 	return ag
 }
 
@@ -209,9 +211,10 @@ func TestE2E_AgentExecute_ConcurrentRequests(t *testing.T) {
 				errs <- err
 				return
 			}
-			defer resp.Body.Close()
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
-				errs <- assert.AnError
+				errs <- fmt.Errorf("status %d: %s", resp.StatusCode, string(bodyBytes))
 				return
 			}
 			errs <- nil

@@ -222,6 +222,7 @@ func (pm *DefaultPermissionManager) CheckPermission(ctx context.Context, permCtx
 				pm.logger.Error("failed to request approval", zap.Error(err))
 				result.Decision = PermissionDeny
 				result.Reason = "approval request failed"
+				emitPermissionEvent(ctx, newPermissionEvent(PermissionEventDenied, permCtx, matchedRule, "", result))
 			} else {
 				result.ApprovalID = approvalID
 				if approvalID != "" {
@@ -231,9 +232,17 @@ func (pm *DefaultPermissionManager) CheckPermission(ctx context.Context, permCtx
 					} else if approved {
 						result.Decision = PermissionAllow
 						result.Reason = fmt.Sprintf("approval granted: %s", approvalID)
+						emitPermissionEvent(ctx, newPermissionEvent(PermissionEventGranted, permCtx, matchedRule, approvalID, result))
+					} else {
+						emitPermissionEvent(ctx, newPermissionEvent(PermissionEventRequested, permCtx, matchedRule, approvalID, result))
 					}
+				} else {
+					emitPermissionEvent(ctx, newPermissionEvent(PermissionEventRequested, permCtx, matchedRule, "", result))
 				}
 			}
+		}
+		if result.Decision == PermissionDeny && matchedRule.Decision != PermissionRequireApproval {
+			emitPermissionEvent(ctx, newPermissionEvent(PermissionEventDenied, permCtx, matchedRule, "", result))
 		}
 
 		result.CheckLatency = time.Since(start)
@@ -627,6 +636,28 @@ type contextKey string
 
 const permissionContextKey contextKey = "permission_context"
 
+const permissionEventEmitterKey contextKey = "permission_event_emitter"
+
+type PermissionEventType string
+
+const (
+	PermissionEventRequested PermissionEventType = "approval_requested"
+	PermissionEventGranted   PermissionEventType = "approval_granted"
+	PermissionEventDenied    PermissionEventType = "approval_denied"
+)
+
+type PermissionEvent struct {
+	Type       PermissionEventType `json:"type"`
+	ToolName   string              `json:"tool_name,omitempty"`
+	ApprovalID string              `json:"approval_id,omitempty"`
+	Decision   PermissionDecision  `json:"decision,omitempty"`
+	Reason     string              `json:"reason,omitempty"`
+	RuleID     string              `json:"rule_id,omitempty"`
+	Metadata   map[string]string   `json:"metadata,omitempty"`
+}
+
+type PermissionEventEmitter func(PermissionEvent)
+
 // With PermissionContext 为上下文添加许可上下文 。
 func WithPermissionContext(ctx context.Context, permCtx *PermissionContext) context.Context {
 	return context.WithValue(ctx, permissionContextKey, permCtx)
@@ -636,4 +667,55 @@ func WithPermissionContext(ctx context.Context, permCtx *PermissionContext) cont
 func GetPermissionContext(ctx context.Context) (*PermissionContext, bool) {
 	permCtx, ok := ctx.Value(permissionContextKey).(*PermissionContext)
 	return permCtx, ok
+}
+
+func WithPermissionEventEmitter(ctx context.Context, emit PermissionEventEmitter) context.Context {
+	if emit == nil {
+		return ctx
+	}
+	if existing, ok := permissionEventEmitterFromContext(ctx); ok {
+		combined := func(event PermissionEvent) {
+			existing(event)
+			emit(event)
+		}
+		return context.WithValue(ctx, permissionEventEmitterKey, PermissionEventEmitter(combined))
+	}
+	return context.WithValue(ctx, permissionEventEmitterKey, emit)
+}
+
+func permissionEventEmitterFromContext(ctx context.Context) (PermissionEventEmitter, bool) {
+	emit, ok := ctx.Value(permissionEventEmitterKey).(PermissionEventEmitter)
+	return emit, ok && emit != nil
+}
+
+func emitPermissionEvent(ctx context.Context, event PermissionEvent) {
+	emit, ok := permissionEventEmitterFromContext(ctx)
+	if !ok {
+		return
+	}
+	emit(event)
+}
+
+func newPermissionEvent(eventType PermissionEventType, permCtx *PermissionContext, rule *PermissionRule, approvalID string, result *PermissionCheckResult) PermissionEvent {
+	event := PermissionEvent{
+		Type:       eventType,
+		ApprovalID: approvalID,
+	}
+	if permCtx != nil {
+		event.ToolName = permCtx.ToolName
+		if len(permCtx.Metadata) > 0 {
+			event.Metadata = make(map[string]string, len(permCtx.Metadata))
+			for key, value := range permCtx.Metadata {
+				event.Metadata[key] = value
+			}
+		}
+	}
+	if rule != nil {
+		event.RuleID = rule.ID
+	}
+	if result != nil {
+		event.Decision = result.Decision
+		event.Reason = result.Reason
+	}
+	return event
 }
