@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agentflow.fullname" . }}
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      environment: {{ .Values.server.environment | quote }}
+      http_port: {{ .Values.server.httpPort }}
+      metrics_port: {{ .Values.server.metricsPort }}
+      metrics_bind_address: {{ include "agentflow.metricsBindAddress" . | quote }}
+      enable_pprof: {{ .Values.server.enablePProf }}
+      allow_no_auth: {{ .Values.server.allowNoAuth }}
+      read_timeout: {{ .Values.server.readTimeout | quote }}
+      write_timeout: {{ .Values.server.writeTimeout | quote }}
+      shutdown_timeout: {{ .Values.server.shutdownTimeout | quote }}
+      api_keys:
+{{ toYaml .Values.server.apiKeys | nindent 8 }}
+      jwt:
+        issuer: {{ .Values.server.jwt.issuer | quote }}
+        audience: {{ .Values.server.jwt.audience | quote }}
+        expiration: {{ .Values.server.jwt.expiration | quote }}
+      cors_allowed_origins:
+{{ toYaml .Values.server.corsAllowedOrigins | nindent 8 }}
+      rate_limit_rps: {{ .Values.server.rateLimitRps }}
+      rate_limit_burst: {{ .Values.server.rateLimitBurst }}
+      tenant_rate_limit_rps: {{ .Values.server.tenantRateLimitRps }}
+      tenant_rate_limit_burst: {{ .Values.server.tenantRateLimitBurst }}
+    agent:
+      name: {{ .Values.agent.name | quote }}
+      model: {{ .Values.agent.model | quote }}
+      max_iterations: {{ .Values.agent.maxIterations }}
+      temperature: {{ .Values.agent.temperature }}
+    log:
+      level: {{ .Values.log.level | quote }}
+      format: {{ .Values.log.format | quote }}
+    llm:
+      default_provider: {{ .Values.llm.defaultProvider | quote }}
+      main_provider_mode: {{ .Values.llm.mainProviderMode | quote }}
+      timeout: {{ .Values.llm.timeout | quote }}
+      max_retries: {{ .Values.llm.maxRetries }}
+    redis:
+      addr: {{ .Values.redis.addr | quote }}
+      db: {{ .Values.redis.db }}
+    database:
+      host: {{ .Values.database.host | quote }}
+      port: {{ .Values.database.port }}
+      user: {{ .Values.database.user | quote }}
+      name: {{ .Values.database.name | quote }}
+      ssl_mode: {{ .Values.database.sslMode | quote }}
+      max_open_conns: {{ .Values.database.maxOpenConns }}
+      max_idle_conns: {{ .Values.database.maxIdleConns }}
+      conn_max_lifetime: {{ .Values.database.connMaxLifetime | quote }}
+    mongodb:
+      host: {{ .Values.mongodb.host | quote }}
+      port: {{ .Values.mongodb.port }}
+      user: {{ .Values.mongodb.user | quote }}
+      database: {{ .Values.mongodb.database | quote }}
+      auth_source: {{ .Values.mongodb.authSource | quote }}
+    qdrant:
+      host: {{ .Values.qdrant.host | quote }}
+      port: {{ .Values.qdrant.port }}
+      collection: {{ .Values.qdrant.collection | quote }}

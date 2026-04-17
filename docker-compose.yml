@@ -28,13 +28,12 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"   # HTTP API
-      - "9090:9090"   # gRPC
       - "9091:9091"   # Prometheus 指标
     environment:
       # 服务配置
       AGENTFLOW_SERVER_HTTP_PORT: "8080"
-      AGENTFLOW_SERVER_GRPC_PORT: "9090"
       AGENTFLOW_SERVER_METRICS_PORT: "9091"
+      AGENTFLOW_SERVER_METRICS_BIND_ADDRESS: "0.0.0.0"
       # Redis 配置
       AGENTFLOW_REDIS_ADDR: "redis:6379"
       AGENTFLOW_REDIS_PASSWORD: ""
