@@ -246,6 +246,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	if len(skillContext) == 0 {
 		skillContext = normalizeInstructionList(skillInstructionsFromCtx(ctx))
 	}
+	publicContext := publicInputContext(input.Context)
 	retrievalItems := retrievalItemsFromInputContext(input.Context)
 	if len(retrievalItems) == 0 && b.retriever != nil {
 		if records, err := b.retriever.Retrieve(ctx, input.Content, 5); err != nil {
@@ -263,7 +264,8 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 	}
 
-	messages, assembled := b.assembleMessages(ctx, systemContent, publicInputContext(input.Context), skillContext, memoryContext, conversation, retrievalItems, toolStates, input.Content)
+	ephemeralLayers := b.buildEphemeralPromptLayers(publicContext, input, systemContent, skillContext, memoryContext, conversation, retrievalItems, toolStates)
+	messages, assembled := b.assembleMessages(ctx, systemContent, ephemeralLayers, skillContext, memoryContext, conversation, retrievalItems, toolStates, input.Content)
 	if assembled != nil {
 		b.logger.Debug("context assembled",
 			zap.Int("tokens_before", assembled.TokensBefore),
@@ -588,7 +590,7 @@ func (b *BaseAgent) collectContextMemory(values map[string]any) []string {
 func (b *BaseAgent) assembleMessages(
 	ctx context.Context,
 	systemPrompt string,
-	additionalContext map[string]any,
+	ephemeralLayers []agentcontext.PromptLayer,
 	skillContext []string,
 	memoryContext []string,
 	conversation []types.Message,
@@ -600,15 +602,15 @@ func (b *BaseAgent) assembleMessages(
 		Assemble(context.Context, *agentcontext.AssembleRequest) (*agentcontext.AssembleResult, error)
 	}); ok {
 		result, err := manager.Assemble(ctx, &agentcontext.AssembleRequest{
-			SystemPrompt:      systemPrompt,
-			AdditionalContext: additionalContext,
-			SkillContext:      skillContext,
-			MemoryContext:     memoryContext,
-			Conversation:      conversation,
-			Retrieval:         retrieval,
-			ToolState:         toolStates,
-			UserInput:         userInput,
-			Query:             userInput,
+			SystemPrompt:    systemPrompt,
+			EphemeralLayers: ephemeralLayers,
+			SkillContext:    skillContext,
+			MemoryContext:   memoryContext,
+			Conversation:    conversation,
+			Retrieval:       retrieval,
+			ToolState:       toolStates,
+			UserInput:       userInput,
+			Query:           userInput,
 		})
 		if err == nil && result != nil && len(result.Messages) > 0 {
 			return result.Messages, result
@@ -618,13 +620,20 @@ func (b *BaseAgent) assembleMessages(
 		}
 	}
 
-	msgCap := 1 + len(skillContext) + len(memoryContext) + len(conversation) + 1
+	msgCap := 1 + len(ephemeralLayers) + len(skillContext) + len(memoryContext) + len(conversation) + 1
 	messages := make([]types.Message, 0, msgCap)
 	if strings.TrimSpace(systemPrompt) != "" {
-		if publicCtx := agentcontext.AdditionalContextText(additionalContext); publicCtx != "" {
-			systemPrompt += "\n\n<additional_context>\n" + publicCtx + "\n</additional_context>"
-		}
 		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
+	}
+	for _, layer := range ephemeralLayers {
+		if strings.TrimSpace(layer.Content) == "" {
+			continue
+		}
+		role := layer.Role
+		if role == "" {
+			role = types.RoleSystem
+		}
+		messages = append(messages, types.Message{Role: role, Content: layer.Content, Metadata: layer.Metadata})
 	}
 	for _, item := range skillContext {
 		if strings.TrimSpace(item) == "" {
@@ -638,6 +647,77 @@ func (b *BaseAgent) assembleMessages(
 	messages = append(messages, conversation...)
 	messages = append(messages, types.Message{Role: types.RoleUser, Content: userInput})
 	return messages, nil
+}
+
+func (b *BaseAgent) buildEphemeralPromptLayers(
+	publicContext map[string]any,
+	input *Input,
+	systemPrompt string,
+	skillContext []string,
+	memoryContext []string,
+	conversation []types.Message,
+	retrieval []agentcontext.RetrievalItem,
+	toolStates []agentcontext.ToolState,
+) []agentcontext.PromptLayer {
+	if b.ephemeralPrompt == nil {
+		return nil
+	}
+	status := b.estimateContextStatus(systemPrompt, skillContext, memoryContext, conversation, retrieval, toolStates, input)
+	checkpointID := ""
+	if input != nil && input.Context != nil {
+		if value, ok := input.Context["checkpoint_id"].(string); ok {
+			checkpointID = strings.TrimSpace(value)
+		}
+	}
+	return b.ephemeralPrompt.Build(EphemeralPromptLayerInput{
+		PublicContext: publicContext,
+		CheckpointID:  checkpointID,
+		ContextStatus: status,
+	})
+}
+
+func (b *BaseAgent) estimateContextStatus(
+	systemPrompt string,
+	skillContext []string,
+	memoryContext []string,
+	conversation []types.Message,
+	retrieval []agentcontext.RetrievalItem,
+	toolStates []agentcontext.ToolState,
+	input *Input,
+) *agentcontext.Status {
+	if b.contextManager == nil {
+		return nil
+	}
+	messages := make([]types.Message, 0, 1+len(skillContext)+len(memoryContext)+len(conversation)+len(retrieval)+len(toolStates)+1)
+	if strings.TrimSpace(systemPrompt) != "" {
+		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
+	}
+	for _, item := range skillContext {
+		if strings.TrimSpace(item) != "" {
+			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+		}
+	}
+	for _, item := range memoryContext {
+		if strings.TrimSpace(item) != "" {
+			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+		}
+	}
+	messages = append(messages, conversation...)
+	for _, item := range retrieval {
+		if strings.TrimSpace(item.Content) != "" {
+			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item.Content})
+		}
+	}
+	for _, item := range toolStates {
+		if strings.TrimSpace(item.Summary) != "" {
+			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item.Summary})
+		}
+	}
+	if input != nil && strings.TrimSpace(input.Content) != "" {
+		messages = append(messages, types.Message{Role: types.RoleUser, Content: input.Content})
+	}
+	status := b.contextManager.GetStatus(messages)
+	return &status
 }
 
 func retrievalItemsFromInputContext(values map[string]any) []agentcontext.RetrievalItem {
