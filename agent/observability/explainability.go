@@ -55,12 +55,13 @@ type Factor struct {
 
 // 理性步骤代表了推理过程的一步.
 type ReasoningStep struct {
-	StepNumber int           `json:"step_number"`
-	Type       string        `json:"type"` // thought, action, observation, decision
-	Content    string        `json:"content"`
-	Decisions  []Decision    `json:"decisions,omitempty"`
-	Timestamp  time.Time     `json:"timestamp"`
-	Duration   time.Duration `json:"duration,omitempty"`
+	StepNumber int            `json:"step_number"`
+	Type       string         `json:"type"` // thought, action, observation, decision
+	Content    string         `json:"content"`
+	Decisions  []Decision     `json:"decisions,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+	Timestamp  time.Time      `json:"timestamp"`
+	Duration   time.Duration  `json:"duration,omitempty"`
 }
 
 // 理由 Trace代表了一个完整的推理追踪.
@@ -146,6 +147,35 @@ func (t *ExplainabilityTracker) StartTrace(sessionID, agentID string) *Reasoning
 	// 清理旧的痕迹
 	t.cleanupOldTraces(agentID)
 
+	return trace
+}
+
+// StartTraceWithID starts or replaces a trace under a caller-provided ID so
+// runtime trace IDs can align with explainability trace IDs.
+func (t *ExplainabilityTracker) StartTraceWithID(traceID, sessionID, agentID string) *ReasoningTrace {
+	if !t.config.Enabled {
+		return nil
+	}
+	if traceID == "" {
+		return t.StartTrace(sessionID, agentID)
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	trace := &ReasoningTrace{
+		ID:        traceID,
+		SessionID: sessionID,
+		AgentID:   agentID,
+		Steps:     make([]ReasoningStep, 0),
+		Decisions: make([]Decision, 0),
+		StartTime: time.Now(),
+		Metadata:  make(map[string]any),
+	}
+
+	t.traces[traceID] = trace
+	t.agentTraces[agentID] = append(t.agentTraces[agentID], traceID)
+	t.cleanupOldTraces(agentID)
 	return trace
 }
 

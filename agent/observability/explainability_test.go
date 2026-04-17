@@ -29,6 +29,18 @@ func TestExplainabilityTracker_StartTrace(t *testing.T) {
 	assert.False(t, trace.StartTime.IsZero())
 }
 
+func TestExplainabilityTracker_StartTraceWithID(t *testing.T) {
+	t.Parallel()
+	tracker := NewExplainabilityTracker(DefaultExplainabilityConfig())
+
+	trace := tracker.StartTraceWithID("trace-fixed", "session-1", "agent-1")
+	require.NotNil(t, trace)
+	assert.Equal(t, "trace-fixed", trace.ID)
+	got := tracker.GetTrace("trace-fixed")
+	require.NotNil(t, got)
+	assert.Equal(t, "session-1", got.SessionID)
+}
+
 func TestExplainabilityTracker_StartTrace_Disabled(t *testing.T) {
 	t.Parallel()
 	cfg := DefaultExplainabilityConfig()

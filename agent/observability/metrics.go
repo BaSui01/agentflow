@@ -26,6 +26,9 @@ type ObservabilitySystem struct {
 	// 追踪器
 	tracer *Tracer
 
+	// 可解释性追踪器
+	explainability *ExplainabilityTracker
+
 	// 评估器
 	evaluator *Evaluator
 
@@ -201,6 +204,7 @@ func NewObservabilitySystem(logger *zap.Logger) *ObservabilitySystem {
 	return &ObservabilitySystem{
 		metricsCollector: NewMetricsCollector(logger),
 		tracer:           NewTracer(logger),
+		explainability:   NewExplainabilityTracker(DefaultExplainabilityConfig()),
 		evaluator:        NewEvaluator(logger),
 		logger:           logger.With(zap.String("component", "observability")),
 	}
@@ -222,6 +226,35 @@ func (o *ObservabilitySystem) EndTrace(traceID, status string, err error) {
 // Satisfies agent.ObservabilityRunner.
 func (o *ObservabilitySystem) RecordTask(agentID string, success bool, duration time.Duration, tokens int, cost, quality float64) {
 	o.metricsCollector.RecordTask(agentID, success, duration, tokens, cost, quality)
+}
+
+// StartExplainabilityTrace satisfies agent.ExplainabilityRecorder.
+func (o *ObservabilitySystem) StartExplainabilityTrace(traceID, sessionID, agentID string) {
+	if o.explainability == nil {
+		return
+	}
+	o.explainability.StartTraceWithID(traceID, sessionID, agentID)
+}
+
+// AddExplainabilityStep satisfies agent.ExplainabilityRecorder.
+func (o *ObservabilitySystem) AddExplainabilityStep(traceID, stepType, content string, metadata map[string]any) {
+	if o.explainability == nil {
+		return
+	}
+	o.explainability.AddStep(traceID, ReasoningStep{
+		Type:      stepType,
+		Content:   content,
+		Metadata:  metadata,
+		Timestamp: time.Now(),
+	})
+}
+
+// EndExplainabilityTrace satisfies agent.ExplainabilityRecorder.
+func (o *ObservabilitySystem) EndExplainabilityTrace(traceID string, success bool, output, errorMsg string) {
+	if o.explainability == nil {
+		return
+	}
+	o.explainability.EndTrace(traceID, success, output, errorMsg)
 }
 
 // NewMetricsCollector 创建指标收集器
