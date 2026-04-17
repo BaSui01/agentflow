@@ -2138,13 +2138,22 @@ func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
 	ag := buildTestAgentWithProvider(t, "trace-synopsis", prov)
 	ag.Init(context.Background())
 	ag.config.Extensions.Observability = &types.ObservabilityConfig{Enabled: true, MetricsEnabled: true, TracingEnabled: true}
-	obs := &mockObservability{latestSynopsis: "layers=session_overlay | approvals=requested:write_file | ended=validation_failed"}
+	obs := &mockObservability{
+		latestSynopsis:       "layers=session_overlay | approvals=requested:write_file | ended=validation_failed",
+		latestHistorySummary: "12 entries;types=approval:4,validation_gate:3",
+		latestHistoryCount:   12,
+	}
 	ag.extensions.EnableObservability(obs)
 
 	output, err := ag.Execute(context.Background(), &Input{
 		TraceID:   "trace-synopsis-1",
 		ChannelID: "session-1",
 		Content:   "continue after failed validation",
+		Context: map[string]any{
+			"checkpoint_id":              "cp-99",
+			"tool_verification_required": true,
+			"acceptance_criteria":        []string{"confirm the recovery plan"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Execute with trace synopsis failed: %v", err)
@@ -2153,16 +2162,114 @@ func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
 		t.Fatal("expected non-nil output")
 	}
 	require.NotNil(t, capturedReq)
-	found := false
+	foundSynopsis := false
+	foundHistory := false
 	for _, msg := range capturedReq.Messages {
 		if strContains(msg.Content, "<trace_synopsis>") && strContains(msg.Content, "ended=validation_failed") {
-			found = true
-			break
+			foundSynopsis = true
+		}
+		if strContains(msg.Content, "<trace_history>") && strContains(msg.Content, "12 earlier timeline events compressed") {
+			foundHistory = true
 		}
 	}
-	if !found {
+	if !foundSynopsis {
 		t.Fatalf("expected trace_synopsis layer in messages, got %#v", capturedReq.Messages)
 	}
+	if !foundHistory {
+		t.Fatalf("expected trace_history layer in messages, got %#v", capturedReq.Messages)
+	}
+}
+
+func TestBaseAgent_Execute_SkipsTraceFeedbackLayersForSimpleRequests(t *testing.T) {
+	var capturedReq *llm.ChatRequest
+	prov := &testProvider{
+		name:           "trace-simple-skip",
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			copied := *req
+			copied.Messages = append([]types.Message(nil), req.Messages...)
+			capturedReq = &copied
+			return &llm.ChatResponse{
+				Provider: "trace-simple-skip",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "trace-simple-skip", prov)
+	ag.Init(context.Background())
+	ag.config.Extensions.Observability = &types.ObservabilityConfig{Enabled: true, MetricsEnabled: true, TracingEnabled: true}
+	obs := &mockObservability{
+		latestSynopsis:       "layers=session_overlay | approvals=requested:write_file | ended=validation_failed",
+		latestHistorySummary: "12 entries;types=approval:4,validation_gate:3",
+		latestHistoryCount:   12,
+	}
+	ag.extensions.EnableObservability(obs)
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID:   "trace-simple-skip-1",
+		ChannelID: "session-1",
+		Content:   "say hello",
+	})
+	if err != nil {
+		t.Fatalf("Execute simple request failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	require.NotNil(t, capturedReq)
+	for _, msg := range capturedReq.Messages {
+		if strContains(msg.Content, "<trace_synopsis>") || strContains(msg.Content, "<trace_history>") {
+			t.Fatalf("did not expect adaptive trace layers for simple request, got %#v", capturedReq.Messages)
+		}
+	}
+}
+
+func TestDecideTraceFeedbackMode(t *testing.T) {
+	snapshot := ExplainabilitySynopsisSnapshot{
+		Synopsis:             "ended=validation_failed",
+		CompressedHistory:    "12 entries;types=approval:4",
+		CompressedEventCount: 12,
+	}
+	selector := NewDefaultTraceFeedbackSelector()
+	mode := selector.Decide(&Input{
+		Content: "continue",
+		Context: map[string]any{
+			"checkpoint_id":              "cp-1",
+			"tool_verification_required": true,
+		},
+	}, &agentcontext.Status{Level: agentcontext.LevelNormal, UsageRatio: 0.5}, snapshot, DefaultTraceFeedbackConfig())
+	if !mode.InjectSynopsis || !mode.InjectHistory {
+		t.Fatalf("expected adaptive mode to inject both layers, got %#v", mode)
+	}
+
+	mode = selector.Decide(&Input{
+		Content: "hello",
+		Context: map[string]any{},
+	}, &agentcontext.Status{Level: agentcontext.LevelNone, UsageRatio: 0.1}, snapshot, DefaultTraceFeedbackConfig())
+	if mode.InjectSynopsis || mode.InjectHistory {
+		t.Fatalf("expected simple mode to skip trace layers, got %#v", mode)
+	}
+}
+
+func TestRecordTraceFeedbackDecision(t *testing.T) {
+	ag := buildTestAgent(t, "trace-feedback-decision")
+	obs := &mockObservability{}
+	ag.extensions.EnableObservability(obs)
+
+	ag.recordTraceFeedbackDecision("trace-1", traceFeedbackMode{
+		InjectSynopsis: true,
+		InjectHistory:  false,
+		Score:          3,
+		Threshold:      2,
+		Reasons:        []string{"resume", "verification_gate"},
+	}, &agentcontext.Status{Level: agentcontext.LevelNormal, UsageRatio: 0.4})
+
+	require.Len(t, obs.timeline, 1)
+	assert.Equal(t, "trace_feedback_decision", obs.timeline[0]["type"])
 }
 
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
@@ -2337,12 +2444,14 @@ func (m *statefulEnhancedMemory) RecordEpisode(_ context.Context, _ *types.Episo
 }
 
 type mockObservability struct {
-	traceStarted   int
-	traceEnded     int
-	taskRecorded   int
-	explainSteps   []map[string]any
-	timeline       []map[string]any
-	latestSynopsis string
+	traceStarted         int
+	traceEnded           int
+	taskRecorded         int
+	explainSteps         []map[string]any
+	timeline             []map[string]any
+	latestSynopsis       string
+	latestHistorySummary string
+	latestHistoryCount   int
 }
 
 func (m *mockObservability) StartTrace(_, _ string) {
@@ -2372,6 +2481,13 @@ func (m *mockObservability) AddExplainabilityTimeline(_ string, entryType, summa
 }
 func (m *mockObservability) GetLatestExplainabilitySynopsis(_, _, _ string) string {
 	return m.latestSynopsis
+}
+func (m *mockObservability) GetLatestExplainabilitySynopsisSnapshot(_, _, _ string) ExplainabilitySynopsisSnapshot {
+	return ExplainabilitySynopsisSnapshot{
+		Synopsis:             m.latestSynopsis,
+		CompressedHistory:    m.latestHistorySummary,
+		CompressedEventCount: m.latestHistoryCount,
+	}
 }
 
 type agentTestApprovalHandler struct {

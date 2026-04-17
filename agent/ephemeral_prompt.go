@@ -19,6 +19,8 @@ type EphemeralPromptLayerInput struct {
 	UserID                   string
 	ChannelID                string
 	TraceSynopsis            string
+	TraceHistorySummary      string
+	TraceHistoryEventCount   int
 	CheckpointID             string
 	AllowedTools             []string
 	ToolsDisabled            bool
@@ -33,11 +35,14 @@ func NewEphemeralPromptLayerBuilder() *EphemeralPromptLayerBuilder {
 }
 
 func (b *EphemeralPromptLayerBuilder) Build(input EphemeralPromptLayerInput) []agentcontext.PromptLayer {
-	layers := make([]agentcontext.PromptLayer, 0, 5)
+	layers := make([]agentcontext.PromptLayer, 0, 6)
 	if layer := buildSessionOverlayLayer(input); layer != nil {
 		layers = append(layers, *layer)
 	}
 	if layer := buildTraceSynopsisLayer(input.TraceSynopsis); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildTraceHistoryLayer(input.TraceHistorySummary, input.TraceHistoryEventCount); layer != nil {
 		layers = append(layers, *layer)
 	}
 	if layer := buildToolGuidanceLayer(input); layer != nil {
@@ -111,6 +116,29 @@ func buildTraceSynopsisLayer(synopsis string) *agentcontext.PromptLayer {
 		Metadata: map[string]any{
 			"layer_kind": "trace_synopsis",
 			"source":     "explainability",
+		},
+	}
+}
+
+func buildTraceHistoryLayer(summary string, eventCount int) *agentcontext.PromptLayer {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return nil
+	}
+	countText := ""
+	if eventCount > 0 {
+		countText = fmt.Sprintf(" (%d earlier timeline events compressed)", eventCount)
+	}
+	return &agentcontext.PromptLayer{
+		ID:       "trace_history",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  "<trace_history>\nCompressed prior execution history" + countText + ": " + summary + "\n</trace_history>",
+		Priority: 84,
+		Sticky:   false,
+		Metadata: map[string]any{
+			"layer_kind":                "trace_history",
+			"source":                    "explainability",
+			"compressed_timeline_count": eventCount,
 		},
 	}
 }

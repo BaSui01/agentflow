@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/agent"
 )
 
 // 决定 类型代表所作决定的类型。
@@ -318,6 +320,12 @@ func (t *ExplainabilityTracker) GetAgentTraces(agentID string) []*ReasoningTrace
 // LatestSynopsis returns the most recent completed non-empty synopsis for the
 // given agent/session, excluding the supplied trace ID when provided.
 func (t *ExplainabilityTracker) LatestSynopsis(sessionID, agentID, excludeTraceID string) string {
+	return t.LatestSynopsisSnapshot(sessionID, agentID, excludeTraceID).Synopsis
+}
+
+// LatestSynopsisSnapshot returns the most recent completed explainability
+// summary bundle for the given agent/session.
+func (t *ExplainabilityTracker) LatestSynopsisSnapshot(sessionID, agentID, excludeTraceID string) agent.ExplainabilitySynopsisSnapshot {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -333,12 +341,16 @@ func (t *ExplainabilityTracker) LatestSynopsis(sessionID, agentID, excludeTraceI
 		if sessionID != "" && trace.SessionID != sessionID {
 			continue
 		}
-		if trace.EndTime.IsZero() || strings.TrimSpace(trace.Synopsis) == "" {
+		if trace.EndTime.IsZero() || (strings.TrimSpace(trace.Synopsis) == "" && strings.TrimSpace(trace.CompressedTimelineSummary) == "") {
 			continue
 		}
-		return trace.Synopsis
+		return agent.ExplainabilitySynopsisSnapshot{
+			Synopsis:             trace.Synopsis,
+			CompressedHistory:    trace.CompressedTimelineSummary,
+			CompressedEventCount: trace.CompressedTimelineCount,
+		}
 	}
-	return ""
+	return agent.ExplainabilitySynopsisSnapshot{}
 }
 
 // 解释决定为决定产生人能读取的解释.

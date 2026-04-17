@@ -712,19 +712,24 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 		return nil
 	}
 	status := b.estimateContextStatus(systemPrompt, skillContext, memoryContext, conversation, retrieval, toolStates, input)
+	snapshot := b.latestTraceSynopsisSnapshot(input)
+	mode := b.selectTraceFeedbackMode(input, status, snapshot)
 	checkpointID := ""
 	if input != nil && input.Context != nil {
 		if value, ok := input.Context["checkpoint_id"].(string); ok {
 			checkpointID = strings.TrimSpace(value)
 		}
 	}
+	b.recordTraceFeedbackDecision(input.TraceID, mode, status)
 	return b.ephemeralPrompt.Build(EphemeralPromptLayerInput{
 		PublicContext:            publicContext,
 		TraceID:                  strings.TrimSpace(input.TraceID),
 		TenantID:                 strings.TrimSpace(input.TenantID),
 		UserID:                   strings.TrimSpace(input.UserID),
 		ChannelID:                strings.TrimSpace(input.ChannelID),
-		TraceSynopsis:            b.latestTraceSynopsis(input),
+		TraceSynopsis:            conditionalTraceSynopsis(mode.InjectSynopsis, snapshot),
+		TraceHistorySummary:      conditionalTraceHistory(mode.InjectHistory, snapshot),
+		TraceHistoryEventCount:   conditionalTraceHistoryCount(mode.InjectHistory, snapshot),
 		CheckpointID:             checkpointID,
 		AllowedTools:             b.effectivePromptToolNames(ctx),
 		ToolsDisabled:            promptToolsDisabled(ctx),
@@ -779,7 +784,34 @@ func (b *BaseAgent) estimateContextStatus(
 	return &status
 }
 
+type traceFeedbackMode struct {
+	InjectSynopsis bool
+	InjectHistory  bool
+	Score          int
+	Threshold      int
+	Reasons        []string
+}
+
+func (b *BaseAgent) selectTraceFeedbackMode(input *Input, status *agentcontext.Status, snapshot ExplainabilitySynopsisSnapshot) traceFeedbackMode {
+	selector := b.traceFeedbackSelector
+	if selector == nil {
+		selector = NewDefaultTraceFeedbackSelector()
+	}
+	decision := selector.Decide(input, status, snapshot, TraceFeedbackConfigFromAgentConfig(b.config))
+	return traceFeedbackMode{
+		InjectSynopsis: decision.InjectSynopsis,
+		InjectHistory:  decision.InjectHistory,
+		Score:          decision.Score,
+		Threshold:      decision.Threshold,
+		Reasons:        cloneStringSlice(decision.Reasons),
+	}
+}
+
 func (b *BaseAgent) latestTraceSynopsis(input *Input) string {
+	snapshot := b.latestTraceSynopsisSnapshot(input)
+	if strings.TrimSpace(snapshot.Synopsis) != "" {
+		return strings.TrimSpace(snapshot.Synopsis)
+	}
 	reader, ok := b.extensions.ObservabilitySystemExt().(ExplainabilitySynopsisReader)
 	if !ok || input == nil {
 		return ""
@@ -789,6 +821,66 @@ func (b *BaseAgent) latestTraceSynopsis(input *Input) string {
 		sessionID = strings.TrimSpace(input.TraceID)
 	}
 	return strings.TrimSpace(reader.GetLatestExplainabilitySynopsis(sessionID, b.ID(), strings.TrimSpace(input.TraceID)))
+}
+
+func (b *BaseAgent) latestTraceHistorySummary(input *Input) string {
+	return strings.TrimSpace(b.latestTraceSynopsisSnapshot(input).CompressedHistory)
+}
+
+func (b *BaseAgent) latestTraceHistoryEventCount(input *Input) int {
+	return b.latestTraceSynopsisSnapshot(input).CompressedEventCount
+}
+
+func (b *BaseAgent) latestTraceSynopsisSnapshot(input *Input) ExplainabilitySynopsisSnapshot {
+	reader, ok := b.extensions.ObservabilitySystemExt().(ExplainabilitySynopsisSnapshotReader)
+	if !ok || input == nil {
+		return ExplainabilitySynopsisSnapshot{}
+	}
+	sessionID := strings.TrimSpace(input.ChannelID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(input.TraceID)
+	}
+	return reader.GetLatestExplainabilitySynopsisSnapshot(sessionID, b.ID(), strings.TrimSpace(input.TraceID))
+}
+
+func conditionalTraceSynopsis(enabled bool, snapshot ExplainabilitySynopsisSnapshot) string {
+	if !enabled {
+		return ""
+	}
+	return strings.TrimSpace(snapshot.Synopsis)
+}
+
+func conditionalTraceHistory(enabled bool, snapshot ExplainabilitySynopsisSnapshot) string {
+	if !enabled {
+		return ""
+	}
+	return strings.TrimSpace(snapshot.CompressedHistory)
+}
+
+func conditionalTraceHistoryCount(enabled bool, snapshot ExplainabilitySynopsisSnapshot) int {
+	if !enabled {
+		return 0
+	}
+	return snapshot.CompressedEventCount
+}
+
+func (b *BaseAgent) recordTraceFeedbackDecision(traceID string, mode traceFeedbackMode, status *agentcontext.Status) {
+	recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityTimelineRecorder)
+	if !ok || strings.TrimSpace(traceID) == "" {
+		return
+	}
+	metadata := map[string]any{
+		"inject_synopsis": mode.InjectSynopsis,
+		"inject_history":  mode.InjectHistory,
+		"score":           mode.Score,
+		"threshold":       mode.Threshold,
+		"reasons":         cloneStringSlice(mode.Reasons),
+	}
+	if status != nil {
+		metadata["usage_ratio"] = status.UsageRatio
+		metadata["pressure_level"] = status.Level.String()
+	}
+	recorder.AddExplainabilityTimeline(traceID, "trace_feedback_decision", "Trace feedback injection decided", metadata)
 }
 
 func (b *BaseAgent) effectivePromptToolNames(ctx context.Context) []string {

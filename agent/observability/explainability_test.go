@@ -159,6 +159,32 @@ func TestExplainabilityTracker_AddTimelineEntry_CompressesLongTimeline(t *testin
 	assert.Contains(t, got.Synopsis, "history=")
 }
 
+func TestExplainabilityTracker_LatestSynopsisSnapshot(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultExplainabilityConfig()
+	cfg.MaxTimelineEntries = 4
+	cfg.PreserveRecentTimeline = 2
+	tracker := NewExplainabilityTracker(cfg)
+	trace := tracker.StartTraceWithID("trace-snapshot", "session-1", "agent-1")
+	require.NotNil(t, trace)
+	for i := 0; i < 6; i++ {
+		tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+			Type:    "approval",
+			Summary: fmt.Sprintf("approval event %d", i),
+			Metadata: map[string]any{
+				"approval_type": "approval_requested",
+				"tool_name":     fmt.Sprintf("tool_%d", i),
+			},
+		})
+	}
+	tracker.EndTrace(trace.ID, true, "done", "")
+
+	snapshot := tracker.LatestSynopsisSnapshot("session-1", "agent-1", "")
+	assert.Contains(t, snapshot.Synopsis, "approvals=requested")
+	assert.Contains(t, snapshot.CompressedHistory, "entries")
+	assert.Equal(t, 3, snapshot.CompressedEventCount)
+}
+
 func TestExplainabilityTracker_StartTrace_Disabled(t *testing.T) {
 	t.Parallel()
 	cfg := DefaultExplainabilityConfig()

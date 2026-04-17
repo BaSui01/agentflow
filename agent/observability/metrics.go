@@ -277,6 +277,15 @@ func (o *ObservabilitySystem) GetLatestExplainabilitySynopsis(sessionID, agentID
 	return o.explainability.LatestSynopsis(sessionID, agentID, excludeTraceID)
 }
 
+// GetLatestExplainabilitySynopsisSnapshot satisfies
+// agent.ExplainabilitySynopsisSnapshotReader.
+func (o *ObservabilitySystem) GetLatestExplainabilitySynopsisSnapshot(sessionID, agentID, excludeTraceID string) agent.ExplainabilitySynopsisSnapshot {
+	if o.explainability == nil {
+		return agent.ExplainabilitySynopsisSnapshot{}
+	}
+	return o.explainability.LatestSynopsisSnapshot(sessionID, agentID, excludeTraceID)
+}
+
 // NewMetricsCollector 创建指标收集器
 func NewMetricsCollector(logger *zap.Logger) *MetricsCollector {
 	return &MetricsCollector{
