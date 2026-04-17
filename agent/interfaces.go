@@ -86,6 +86,14 @@ type ObservabilityRunner interface {
 	RecordTask(agentID string, success bool, duration time.Duration, tokens int, cost, quality float64)
 }
 
+// ExplainabilityRecorder is an optional observability extension for recording
+// structured reasoning steps against the execution trace.
+type ExplainabilityRecorder interface {
+	StartExplainabilityTrace(traceID, sessionID, agentID string)
+	AddExplainabilityStep(traceID, stepType, content string, metadata map[string]any)
+	EndExplainabilityTrace(traceID string, success bool, output, errorMsg string)
+}
+
 // =============================================================================
 // MongoDB Persistence Store Interfaces (required)
 // =============================================================================

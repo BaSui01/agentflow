@@ -297,6 +297,7 @@ type preparedRequest struct {
 	toolProvider llm.Provider // for ReAct loop (may equal chatProvider)
 	hasTools     bool
 	handoffTools map[string]RuntimeHandoffTarget
+	toolRisks    map[string]string
 	maxReActIter int
 	maxLoopIter  int
 }
@@ -384,6 +385,14 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 
 	// 6. Effective ReAct iterations
 	effectiveIter := rc.EffectiveMaxReActIterations(b.maxReActIterations())
+	toolRisks := make(map[string]string, len(req.Tools))
+	for _, tool := range req.Tools {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		toolRisks[name] = classifyToolRiskByName(name)
+	}
 
 	return &preparedRequest{
 		req:          req,
@@ -391,6 +400,7 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		toolProvider: toolProv,
 		hasTools:     len(req.Tools) > 0 && (b.toolManager != nil || len(handoffTargets) > 0),
 		handoffTools: handoffMap,
+		toolRisks:    toolRisks,
 		maxReActIter: effectiveIter,
 		maxLoopIter:  rc.EffectiveMaxLoopIterations(0),
 	}, nil

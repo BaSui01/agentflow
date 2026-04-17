@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	agentcontext "github.com/BaSui01/agentflow/agent/context"
@@ -132,9 +133,12 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		return nil, err
 	}
 
-	// 3. 转换状态到运行中
-	if err := b.Transition(ctx, StateRunning); err != nil {
-		return nil, err
+	// 3. 转换状态到运行中（支持并发：首个请求负责转换，后续请求复用 Running 状态）
+	if atomic.AddInt64(&b.execCount, 1) == 1 {
+		if err := b.Transition(ctx, StateRunning); err != nil {
+			atomic.AddInt64(&b.execCount, -1)
+			return nil, err
+		}
 	}
 
 	// 以下操作修改共享状态（b.promptBundle），必须在 execMu 保护下执行。
@@ -182,8 +186,10 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 			}
 		}
 		// 使用独立 context 确保状态恢复不受原始 ctx 取消影响
-		if err := b.Transition(context.Background(), StateReady); err != nil {
-			b.logger.Error("failed to transition to ready", zap.Error(err))
+		if atomic.AddInt64(&b.execCount, -1) == 0 {
+			if err := b.Transition(context.Background(), StateReady); err != nil {
+				b.logger.Error("failed to transition to ready", zap.Error(err))
+			}
 		}
 	}()
 
@@ -242,6 +248,9 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	}
 
 	systemContent := activeBundle.RenderSystemPromptWithVars(input.Variables)
+	if publicCtx := agentcontext.AdditionalContextText(publicInputContext(input.Context)); publicCtx != "" {
+		systemContent += "\n\n<additional_context>\n" + publicCtx + "\n</additional_context>"
+	}
 	skillContext := skillInstructionsFromInputContext(input.Context)
 	if len(skillContext) == 0 {
 		skillContext = normalizeInstructionList(skillInstructionsFromCtx(ctx))
@@ -264,7 +273,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 	}
 
-	ephemeralLayers := b.buildEphemeralPromptLayers(publicContext, input, systemContent, skillContext, memoryContext, conversation, retrievalItems, toolStates)
+	ephemeralLayers := b.buildEphemeralPromptLayers(ctx, publicContext, input, systemContent, skillContext, memoryContext, conversation, retrievalItems, toolStates)
 	messages, assembled := b.assembleMessages(ctx, systemContent, ephemeralLayers, skillContext, memoryContext, conversation, retrievalItems, toolStates, input.Content)
 	if assembled != nil {
 		b.logger.Debug("context assembled",
@@ -272,8 +281,21 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 			zap.Int("tokens_after", assembled.TokensAfter),
 			zap.String("strategy", assembled.Plan.Strategy),
 			zap.String("compression_reason", assembled.Plan.CompressionReason),
+			zap.Int("applied_layers", len(assembled.Plan.AppliedLayers)),
 		)
+		if emit, ok := runtimeStreamEmitterFromContext(ctx); ok {
+			emitRuntimeStatus(emit, "prompt_layers_built", RuntimeStreamEvent{
+				Timestamp:    time.Now(),
+				CurrentStage: "context",
+				Data: map[string]any{
+					"context_plan":   assembled.Plan,
+					"applied_layers": assembled.Plan.AppliedLayers,
+					"layer_ids":      promptLayerIDs(assembled.Plan.AppliedLayers),
+				},
+			})
+		}
 	}
+	ctx = b.withApprovalExplainability(ctx, input)
 
 	// 7. 执行产出验证和重试支持
 	// 要求2.4:对产出验证失败进行重试
@@ -430,6 +452,11 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		"model":    resp.Model,
 		"provider": resp.Provider,
 	}
+	if assembled != nil {
+		outputMetadata["context_plan"] = assembled.Plan
+		outputMetadata["applied_prompt_layers"] = assembled.Plan.AppliedLayers
+		outputMetadata["applied_prompt_layer_ids"] = promptLayerIDs(assembled.Plan.AppliedLayers)
+	}
 	if extraMetadata, ok := choice.Message.Metadata.(map[string]any); ok {
 		for key, value := range extraMetadata {
 			outputMetadata[key] = value
@@ -445,6 +472,14 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		Duration:         duration,
 		FinishReason:     choice.FinishReason,
 	}, nil
+}
+
+func (b *BaseAgent) withApprovalExplainability(ctx context.Context, input *Input) context.Context {
+	recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder)
+	if !ok || input == nil {
+		return ctx
+	}
+	return withApprovalExplainabilityEmitter(ctx, recorder, strings.TrimSpace(input.TraceID))
 }
 
 // 构建 ValidationFeedBackMessage 为重试创建回馈消息
@@ -650,6 +685,7 @@ func (b *BaseAgent) assembleMessages(
 }
 
 func (b *BaseAgent) buildEphemeralPromptLayers(
+	ctx context.Context,
 	publicContext map[string]any,
 	input *Input,
 	systemPrompt string,
@@ -670,9 +706,18 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 		}
 	}
 	return b.ephemeralPrompt.Build(EphemeralPromptLayerInput{
-		PublicContext: publicContext,
-		CheckpointID:  checkpointID,
-		ContextStatus: status,
+		PublicContext:            publicContext,
+		TraceID:                  strings.TrimSpace(input.TraceID),
+		TenantID:                 strings.TrimSpace(input.TenantID),
+		UserID:                   strings.TrimSpace(input.UserID),
+		ChannelID:                strings.TrimSpace(input.ChannelID),
+		CheckpointID:             checkpointID,
+		AllowedTools:             b.effectivePromptToolNames(ctx),
+		ToolsDisabled:            promptToolsDisabled(ctx),
+		AcceptanceCriteria:       acceptanceCriteriaForValidation(input, nil),
+		ToolVerificationRequired: toolVerificationRequired(input, nil, nil),
+		CodeVerificationRequired: codeTaskRequired(input, nil, nil),
+		ContextStatus:            status,
 	})
 }
 
@@ -718,6 +763,73 @@ func (b *BaseAgent) estimateContextStatus(
 	}
 	status := b.contextManager.GetStatus(messages)
 	return &status
+}
+
+func (b *BaseAgent) effectivePromptToolNames(ctx context.Context) []string {
+	rc := GetRunConfig(ctx)
+	if rc != nil && rc.DisableTools {
+		return nil
+	}
+	var names []string
+	if b.toolManager != nil {
+		for _, schema := range b.toolManager.GetAllowedTools(b.config.Core.ID) {
+			names = append(names, schema.Name)
+		}
+	}
+	if rc != nil && len(rc.ToolWhitelist) > 0 {
+		names = filterStringWhitelist(names, rc.ToolWhitelist)
+	} else if len(b.config.Runtime.Tools) > 0 {
+		names = filterStringWhitelist(names, b.config.Runtime.Tools)
+	}
+	for _, target := range runtimeHandoffTargetsFromContext(ctx, b.config.Core.ID) {
+		names = append(names, runtimeHandoffToolSchema(target).Name)
+	}
+	return normalizeStringSlice(names)
+}
+
+func promptToolsDisabled(ctx context.Context) bool {
+	rc := GetRunConfig(ctx)
+	return rc != nil && rc.DisableTools
+}
+
+func filterStringWhitelist(values []string, whitelist []string) []string {
+	if len(values) == 0 || len(whitelist) == 0 {
+		return normalizeStringSlice(values)
+	}
+	allowed := make(map[string]struct{}, len(whitelist))
+	for _, value := range whitelist {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		allowed[trimmed] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return nil
+	}
+	filtered := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := allowed[strings.TrimSpace(value)]; ok {
+			filtered = append(filtered, value)
+		}
+	}
+	return normalizeStringSlice(filtered)
+}
+
+func promptLayerIDs(layers []agentcontext.PromptLayerMeta) []string {
+	if len(layers) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(layers))
+	for _, layer := range layers {
+		if trimmed := strings.TrimSpace(layer.ID); trimmed != "" {
+			ids = append(ids, trimmed)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }
 
 func retrievalItemsFromInputContext(values map[string]any) []agentcontext.RetrievalItem {

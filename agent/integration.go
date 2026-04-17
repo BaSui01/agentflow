@@ -1925,12 +1925,22 @@ func (b *BaseAgent) observabilityMiddleware(options EnhancedExecutionOptions) Ex
 	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
 		startTime := time.Now()
 		traceID := input.TraceID
+		sessionID := traceID
+		if input != nil && strings.TrimSpace(input.ChannelID) != "" {
+			sessionID = strings.TrimSpace(input.ChannelID)
+		}
 		b.extensions.ObservabilitySystemExt().StartTrace(traceID, b.ID())
+		if recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder); ok {
+			recorder.StartExplainabilityTrace(traceID, sessionID, b.ID())
+		}
 
 		output, err := next(ctx, input)
 
 		if err != nil {
 			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "failed", err)
+			if recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder); ok {
+				recorder.EndExplainabilityTrace(traceID, false, "", err.Error())
+			}
 			return nil, err
 		}
 		duration := time.Since(startTime)
@@ -1940,10 +1950,15 @@ func (b *BaseAgent) observabilityMiddleware(options EnhancedExecutionOptions) Ex
 		if options.RecordTrace {
 			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "completed", nil)
 		}
+		if recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder); ok {
+			recorder.EndExplainabilityTrace(traceID, true, output.Content, "")
+		}
 		b.logger.Info("enhanced execution completed",
 			zap.String("trace_id", input.TraceID),
 			zap.Duration("total_duration", duration),
 			zap.Int("tokens_used", output.TokensUsed),
+			zap.Any("prompt_layer_ids", output.Metadata["applied_prompt_layer_ids"]),
+			zap.Any("context_plan", output.Metadata["context_plan"]),
 		)
 		return output, nil
 	}
