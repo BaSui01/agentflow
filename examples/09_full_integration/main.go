@@ -15,6 +15,7 @@ import (
 	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/types"
@@ -469,7 +470,8 @@ func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
 }
 
 func mustBuildAgent(ctx context.Context, cfg types.AgentConfig, provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
-	ag, err := runtime.NewBuilder(provider, logger).Build(ctx, cfg)
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := runtime.NewBuilder(gateway, logger).Build(ctx, cfg)
 	if err != nil {
 		panic(fmt.Sprintf("build agent %s failed: %v", cfg.Core.ID, err))
 	}

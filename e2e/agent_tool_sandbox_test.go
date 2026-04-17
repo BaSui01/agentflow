@@ -21,6 +21,7 @@ import (
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -140,8 +141,12 @@ func buildSandboxE2EAgent(t *testing.T, agentID string) agent.Agent {
 	exec := execution.NewSandboxExecutor(execution.DefaultSandboxConfig(), backend, logger)
 	tool := execution.NewSandboxTool(exec, logger)
 
-	agBuilder := agentruntime.NewBuilder(provider, logger).
-		WithToolProvider(mocks.NewSuccessProvider("tool reasoning")).
+	toolGateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: mocks.NewSuccessProvider("tool reasoning"),
+		Logger:       logger,
+	})
+	agBuilder := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger}), logger).
+		WithToolGateway(toolGateway).
 		WithOptions(agentruntime.BuildOptions{
 			ToolManager: &simpleToolManager{tool: tool},
 		})

@@ -16,6 +16,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -138,7 +139,8 @@ func runSkillsAndMCP(ctx context.Context, logger *zap.Logger, provider llm.Provi
 		},
 	}
 
-	ag, err := agentruntime.NewBuilder(provider, logger).Build(ctx, cfg)
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := agentruntime.NewBuilder(gateway, logger).Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -327,7 +329,8 @@ func runSubAgentDelegation(ctx context.Context, logger *zap.Logger, provider llm
 		},
 	}
 
-	parent, err := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+	parentGateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	parent, err := agentruntime.NewBuilder(parentGateway, logger).WithOptions(agentruntime.BuildOptions{
 		ToolManager: toolMgr,
 	}).Build(ctx, parentCfg)
 	if err != nil {
@@ -405,7 +408,8 @@ func newLiveBaseAgent(id, name, model, systemPrompt string, provider llm.Provide
 			SystemPrompt: systemPrompt,
 		},
 	}
-	ag, err := agentruntime.NewBuilder(provider, logger).Build(context.Background(), cfg)
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := agentruntime.NewBuilder(gateway, logger).Build(context.Background(), cfg)
 	if err != nil {
 		return nil
 	}

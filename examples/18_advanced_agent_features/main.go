@@ -32,6 +32,7 @@ import (
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/types"
@@ -845,7 +846,7 @@ func demoRunConfigHelpers() {
 	baseCfg := types.AgentConfig{}
 	retrieved.ApplyToRequest(req, baseCfg)
 	effectiveMaxIter := retrieved.EffectiveMaxReActIterations(10)
-	_ = agentruntime.NewBuilder(&demoProvider{}, zap.NewNop()).WithToolScope([]string{"demo_tool"})
+	_ = agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: &demoProvider{}, Logger: zap.NewNop()}), zap.NewNop()).WithToolScope([]string{"demo_tool"})
 
 	fmt.Printf("   Request model: %s\n", req.Model)
 	fmt.Printf("   Request temperature: %.1f\n", req.Temperature)
@@ -944,7 +945,7 @@ func demoRegistryReachability(logger *zap.Logger) {
 	customType := agent.AgentType("custom_demo")
 	reg.Register(customType, func(
 		cfg types.AgentConfig,
-		provider llm.Provider,
+		gateway llmcore.Gateway,
 		memory agent.MemoryManager,
 		toolManager agent.ToolManager,
 		bus agent.EventBus,
@@ -955,27 +956,28 @@ func demoRegistryReachability(logger *zap.Logger) {
 		opts.MemoryManager = memory
 		opts.ToolManager = toolManager
 		opts.EventBus = bus
-		return agentruntime.NewBuilder(provider, logger).WithOptions(opts).Build(context.Background(), cfg)
+		return agentruntime.NewBuilder(gateway, logger).WithOptions(opts).Build(context.Background(), cfg)
 	})
 	fmt.Printf("   Custom type registered: %v\n", reg.IsRegistered(customType))
 	reg.Unregister(customType)
 	fmt.Printf("   Custom type unregistered: %v\n", !reg.IsRegistered(customType))
 
 	provider := &demoProvider{}
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
 	created, err := reg.Create(types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "registry-demo-agent",
 			Name: "Registry Demo Agent",
 			Type: string(agent.TypeGeneric),
 		},
-	}, provider, nil, nil, nil, logger)
+	}, gateway, nil, nil, nil, logger)
 	if err != nil {
 		fmt.Printf("   Registry create error: %v\n\n", err)
 		return
 	}
 	fmt.Printf("   Registry create success: %s\n", created.ID())
 
-	resolver := agent.NewCachingResolver(reg, provider, logger).WithMemory(nil)
+	resolver := agent.NewCachingResolver(reg, gateway, logger).WithMemory(nil)
 	fmt.Printf("   Resolver with memory configured: %v\n", resolver != nil)
 	fmt.Println()
 }

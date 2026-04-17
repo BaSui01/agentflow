@@ -26,6 +26,7 @@ import (
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -81,7 +82,8 @@ func buildRuntimeAgent(
 	if configure != nil {
 		configure(&opts)
 	}
-	return agentruntime.NewBuilder(provider, logger).WithOptions(opts).Build(ctx, cfg)
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	return agentruntime.NewBuilder(gateway, logger).WithOptions(opts).Build(ctx, cfg)
 }
 
 // ─── 工具管理器 ────────────────────────────────────

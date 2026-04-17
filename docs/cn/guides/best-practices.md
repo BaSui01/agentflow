@@ -20,12 +20,14 @@
 
 ```go
 // ✅ 好的设计：通过统一 runtime 入口创建专注于翻译的 Agent
-translatorAgent, _ := runtime.NewBuilder(provider, logger).Build(ctx, types.AgentConfig{
+gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+
+translatorAgent, _ := runtime.NewBuilder(gateway, logger).Build(ctx, types.AgentConfig{
     Core: types.CoreConfig{Name: "translator", Type: "translator"},
 })
 
 // ❌ 避免：一个 Agent 做太多事情
-superAgent, _ := runtime.NewBuilder(provider, logger).Build(ctx, types.AgentConfig{
+superAgent, _ := runtime.NewBuilder(gateway, logger).Build(ctx, types.AgentConfig{
     Core: types.CoreConfig{Name: "super-agent", Type: "assistant"},
     // 同时处理翻译、分析、总结...
 })
@@ -270,7 +272,8 @@ func TestAgent_Integration(t *testing.T) {
         APIKey: os.Getenv("OPENAI_API_KEY"),
     })
 
-    runtimeBuilder := runtime.NewBuilder(provider, zap.NewNop())
+    gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: zap.NewNop()})
+    runtimeBuilder := runtime.NewBuilder(gateway, zap.NewNop())
     agent, _ := runtimeBuilder.Build(ctx, config)
 
     assert.NoError(t, err)

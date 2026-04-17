@@ -11,6 +11,7 @@ import (
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
@@ -130,7 +131,8 @@ func runFaultTimeout(ctx context.Context, logger *zap.Logger) error {
 		},
 	}
 
-	ag, err := agentruntime.NewBuilder(provider, logger).Build(ctx, cfg)
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := agentruntime.NewBuilder(gateway, logger).Build(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("build timeout fault agent: %w", err)
 	}

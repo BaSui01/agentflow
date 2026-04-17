@@ -371,7 +371,9 @@ opts := runtime.DefaultBuildOptions()
 opts.EnableAll = false
 opts.EnableLSP = true
 
-ag, err := runtime.NewBuilder(provider, logger).
+gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+
+ag, err := runtime.NewBuilder(gateway, logger).
     WithOptions(opts).
     Build(ctx, cfg)
 if err != nil {

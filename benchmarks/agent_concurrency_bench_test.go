@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -104,7 +105,8 @@ func buildBenchAgent(agentID string, maxConcurrency int) agent.Agent {
 		Core: types.CoreConfig{ID: agentID, Name: "bench-agent"},
 		LLM:  types.LLMConfig{Model: "test-model"},
 	}
-	ag, _ := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, _ := agentruntime.NewBuilder(gateway, logger).WithOptions(agentruntime.BuildOptions{
 		MaxConcurrency: maxConcurrency,
 	}).Build(context.Background(), cfg)
 	_ = ag.Init(context.Background())

@@ -19,6 +19,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	embeddingcap "github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/rag"
@@ -671,7 +672,8 @@ func runAgentBasic(ctx context.Context, logger *zap.Logger, provider llm.Provide
 		},
 	}
 
-	ag, err := agentruntime.NewBuilder(provider, logger).Build(ctx, cfg)
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := agentruntime.NewBuilder(gateway, logger).Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -720,7 +722,8 @@ func runAgentToolLoop(ctx context.Context, logger *zap.Logger, provider llm.Prov
 		},
 	}
 
-	ag, err := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := agentruntime.NewBuilder(gateway, logger).WithOptions(agentruntime.BuildOptions{
 		ToolManager: toolMgr,
 	}).Build(ctx, cfg)
 	if err != nil {

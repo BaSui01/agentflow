@@ -20,6 +20,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -122,7 +123,8 @@ func buildE2EAgent(t *testing.T, agentID string, maxConcurrency int) agent.Agent
 			Model: "test-model",
 		},
 	}
-	ag, err := agentruntime.NewBuilder(provider, logger).WithOptions(agentruntime.BuildOptions{
+	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
+	ag, err := agentruntime.NewBuilder(gateway, logger).WithOptions(agentruntime.BuildOptions{
 		MaxConcurrency: maxConcurrency,
 	}).Build(context.Background(), cfg)
 	require.NoError(t, err)
