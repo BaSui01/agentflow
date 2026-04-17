@@ -873,14 +873,17 @@ func (b *BaseAgent) recordTraceFeedbackDecision(traceID string, mode traceFeedba
 		"inject_synopsis": mode.InjectSynopsis,
 		"inject_history":  mode.InjectHistory,
 		"score":           mode.Score,
-		"threshold":       mode.Threshold,
+		"synopsis_threshold": mode.SynopsisThreshold,
+		"history_threshold":  mode.HistoryThreshold,
 		"reasons":         cloneStringSlice(mode.Reasons),
+		"selected_layers": cloneStringSlice(mode.SelectedLayers),
+		"suppressed_layers": cloneStringSlice(mode.SuppressedLayers),
 	}
 	if status != nil {
 		metadata["usage_ratio"] = status.UsageRatio
 		metadata["pressure_level"] = status.Level.String()
 	}
-	recorder.AddExplainabilityTimeline(traceID, "trace_feedback_decision", "Trace feedback injection decided", metadata)
+	recorder.AddExplainabilityTimeline(traceID, "trace_feedback_decision", mode.Summary, metadata)
 }
 
 func (b *BaseAgent) effectivePromptToolNames(ctx context.Context) []string {

@@ -11,8 +11,12 @@ type TraceFeedbackMode struct {
 	InjectSynopsis bool
 	InjectHistory  bool
 	Score          int
-	Threshold      int
+	SynopsisThreshold int
+	HistoryThreshold  int
 	Reasons        []string
+	SelectedLayers []string
+	SuppressedLayers []string
+	Summary        string
 }
 
 type TraceFeedbackSelector interface {
@@ -22,6 +26,8 @@ type TraceFeedbackSelector interface {
 type TraceFeedbackConfig struct {
 	Enabled              bool
 	ComplexityThreshold  int
+	SynopsisMinScore     int
+	HistoryMinScore      int
 	HistoryMaxUsageRatio float64
 }
 
@@ -35,6 +41,8 @@ func DefaultTraceFeedbackConfig() TraceFeedbackConfig {
 	return TraceFeedbackConfig{
 		Enabled:              true,
 		ComplexityThreshold:  2,
+		SynopsisMinScore:     2,
+		HistoryMinScore:      3,
 		HistoryMaxUsageRatio: 0.85,
 	}
 }
@@ -48,6 +56,12 @@ func TraceFeedbackConfigFromAgentConfig(cfg types.AgentConfig) TraceFeedbackConf
 	if cfg.Context.TraceFeedbackComplexityThreshold > 0 {
 		out.ComplexityThreshold = cfg.Context.TraceFeedbackComplexityThreshold
 	}
+	if cfg.Context.TraceSynopsisMinScore > 0 {
+		out.SynopsisMinScore = cfg.Context.TraceSynopsisMinScore
+	}
+	if cfg.Context.TraceHistoryMinScore > 0 {
+		out.HistoryMinScore = cfg.Context.TraceHistoryMinScore
+	}
 	if cfg.Context.TraceHistoryMaxUsageRatio > 0 {
 		out.HistoryMaxUsageRatio = cfg.Context.TraceHistoryMaxUsageRatio
 	}
@@ -56,9 +70,11 @@ func TraceFeedbackConfigFromAgentConfig(cfg types.AgentConfig) TraceFeedbackConf
 
 func (s *DefaultTraceFeedbackSelector) Decide(input *Input, status *agentcontext.Status, snapshot ExplainabilitySynopsisSnapshot, cfg TraceFeedbackConfig) TraceFeedbackMode {
 	mode := TraceFeedbackMode{
-		Threshold: cfg.ComplexityThreshold,
+		SynopsisThreshold: cfg.SynopsisMinScore,
+		HistoryThreshold:  cfg.HistoryMinScore,
 	}
 	if !cfg.Enabled || (strings.TrimSpace(snapshot.Synopsis) == "" && strings.TrimSpace(snapshot.CompressedHistory) == "") {
+		mode.Summary = "trace feedback disabled or no prior synopsis available"
 		return mode
 	}
 
@@ -126,15 +142,75 @@ func (s *DefaultTraceFeedbackSelector) Decide(input *Input, status *agentcontext
 		mode.Reasons = append(mode.Reasons, "context_pressure")
 	}
 
-	mode.InjectSynopsis = strings.TrimSpace(snapshot.Synopsis) != "" && mode.Score >= mode.Threshold
+	mode.InjectSynopsis = strings.TrimSpace(snapshot.Synopsis) != "" && mode.Score >= mode.SynopsisThreshold
 	mode.InjectHistory = strings.TrimSpace(snapshot.CompressedHistory) != "" &&
-		mode.Score >= mode.Threshold+1 &&
+		mode.Score >= mode.HistoryThreshold &&
 		(usageRatio == 0 || usageRatio <= cfg.HistoryMaxUsageRatio)
 
 	if pressureLevel >= agentcontext.LevelAggressive {
 		mode.InjectHistory = false
+		mode.SuppressedLayers = append(mode.SuppressedLayers, "trace_history")
 		mode.Reasons = append(mode.Reasons, "history_suppressed_by_pressure")
 	}
 
+	if mode.InjectSynopsis {
+		mode.SelectedLayers = append(mode.SelectedLayers, "trace_synopsis")
+	} else if strings.TrimSpace(snapshot.Synopsis) != "" {
+		mode.SuppressedLayers = append(mode.SuppressedLayers, "trace_synopsis")
+	}
+	if mode.InjectHistory {
+		mode.SelectedLayers = append(mode.SelectedLayers, "trace_history")
+	} else if strings.TrimSpace(snapshot.CompressedHistory) != "" && !containsString(mode.SuppressedLayers, "trace_history") {
+		mode.SuppressedLayers = append(mode.SuppressedLayers, "trace_history")
+	}
+
+	mode.SelectedLayers = normalizeStringSlice(mode.SelectedLayers)
+	mode.SuppressedLayers = normalizeStringSlice(mode.SuppressedLayers)
+	mode.Summary = buildTraceFeedbackSummary(mode, cfg)
+
 	return mode
+}
+
+func buildTraceFeedbackSummary(mode TraceFeedbackMode, cfg TraceFeedbackConfig) string {
+	parts := make([]string, 0, 5)
+	if len(mode.SelectedLayers) > 0 {
+		parts = append(parts, "inject="+strings.Join(mode.SelectedLayers, ","))
+	}
+	if len(mode.SuppressedLayers) > 0 {
+		parts = append(parts, "suppress="+strings.Join(mode.SuppressedLayers, ","))
+	}
+	parts = append(parts, "score="+itoa(mode.Score))
+	parts = append(parts, "thresholds="+itoa(cfg.SynopsisMinScore)+"/"+itoa(cfg.HistoryMinScore))
+	if len(mode.Reasons) > 0 {
+		parts = append(parts, "reasons="+strings.Join(mode.Reasons, ","))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(target) {
+			return true
+		}
+	}
+	return false
+}
+
+func itoa(v int) string {
+	if v == 0 {
+		return "0"
+	}
+	sign := ""
+	if v < 0 {
+		sign = "-"
+		v = -v
+	}
+	var digits [20]byte
+	i := len(digits)
+	for v > 0 {
+		i--
+		digits[i] = byte('0' + (v % 10))
+		v /= 10
+	}
+	return sign + string(digits[i:])
 }
