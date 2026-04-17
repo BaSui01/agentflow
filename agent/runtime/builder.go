@@ -6,8 +6,11 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent"
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	agentlsp "github.com/BaSui01/agentflow/agent/lsp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	agentobs "github.com/BaSui01/agentflow/agent/observability"
+	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
@@ -46,6 +49,7 @@ type BuildOptions struct {
 	// Optional pass-throughs for AgentBuilder runtime controls.
 	MaxReActIterations int
 	MaxLoopIterations  int
+	MaxConcurrency     int
 	MemoryManager      agent.MemoryManager
 	ToolManager        agent.ToolManager
 	RetrievalProvider  agent.RetrievalProvider
@@ -150,6 +154,12 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	if b.logger == nil {
 		panic("runtime.Builder.Build: logger is required and cannot be nil")
 	}
+	if b.provider == nil {
+		return nil, agent.ErrProviderNotSet
+	}
+	if strings.TrimSpace(cfg.LLM.Model) == "" {
+		return nil, agent.NewError(types.ErrInputValidation, "config.Model is required")
+	}
 
 	cfg2 := cfg
 	// Apply tool scope restriction for sub-agent isolation
@@ -161,104 +171,113 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		cfg2.Extensions.Observability = &types.ObservabilityConfig{}
 	}
 	cfg2.Extensions.Observability.Enabled = obsEnabled
-
-	agentBuilder := agent.NewAgentBuilder(cfg2).
-		WithProvider(b.provider).
-		WithLogger(b.logger)
-	if b.ledger != nil {
-		agentBuilder.WithLedger(b.ledger)
-	}
-
 	if opts.MaxReActIterations > 0 {
-		agentBuilder.WithMaxReActIterations(opts.MaxReActIterations)
+		cfg2.Runtime.MaxReActIterations = opts.MaxReActIterations
 	}
 	if opts.MaxLoopIterations > 0 {
-		agentBuilder.WithMaxLoopIterations(opts.MaxLoopIterations)
+		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
-	if opts.MemoryManager != nil {
-		agentBuilder.WithMemory(opts.MemoryManager)
-	}
-	if opts.ToolManager != nil {
-		agentBuilder.WithToolManager(opts.ToolManager)
-	}
-	if opts.RetrievalProvider != nil {
-		agentBuilder.WithRetrievalProvider(opts.RetrievalProvider)
-	}
-	if opts.ToolStateProvider != nil {
-		agentBuilder.WithToolStateProvider(opts.ToolStateProvider)
-	}
-	if opts.EventBus != nil {
-		agentBuilder.WithEventBus(opts.EventBus)
-	}
+
+	ag := agent.NewBaseAgent(
+		cfg2,
+		b.provider,
+		opts.MemoryManager,
+		opts.ToolManager,
+		opts.EventBus,
+		b.logger,
+		b.ledger,
+	)
 	if b.toolProvider != nil {
-		agentBuilder.WithToolProvider(b.toolProvider)
+		ag.SetToolProvider(b.toolProvider)
 	}
-	if opts.PromptStore != nil {
-		agentBuilder.WithPromptStore(opts.PromptStore)
+	if opts.MaxConcurrency > 0 {
+		ag.SetMaxConcurrency(opts.MaxConcurrency)
 	}
-	if opts.ConversationStore != nil {
-		agentBuilder.WithConversationStore(opts.ConversationStore)
+	ag.SetPromptStore(opts.PromptStore)
+	ag.SetConversationStore(opts.ConversationStore)
+	ag.SetRunStore(opts.RunStore)
+	manager := agent.ContextManager(nil)
+	cfgContext := agentcontext.ConfigFromAgentConfig(ag.Config())
+	if cfgContext.Enabled {
+		manager = agentcontext.NewAgentContextManager(cfgContext, b.logger)
 	}
-	if opts.RunStore != nil {
-		agentBuilder.WithRunStore(opts.RunStore)
-	}
-	if opts.Orchestrator != nil {
-		agentBuilder.WithOrchestrator(opts.Orchestrator)
-		if agentBuilder.Orchestrator() == nil {
-			return nil, fmt.Errorf("configure orchestrator: unexpected nil")
-		}
-	}
-	if opts.ReasoningRegistry != nil {
-		agentBuilder.WithReasoning(opts.ReasoningRegistry)
-		if agentBuilder.ReasoningRegistry() == nil {
-			return nil, fmt.Errorf("configure reasoning registry: unexpected nil")
-		}
-	}
+	ag.SetContextManager(manager)
+	ag.SetRetrievalProvider(opts.RetrievalProvider)
+	ag.SetToolStateProvider(opts.ToolStateProvider)
 
 	if enabled(opts.EnableAll, opts.EnableReflection) {
-		agentBuilder.WithReflection(nil)
+		reflectionConfig := reflectionConfigFromTypes(cfg2.Features.Reflection)
+		reflectionExecutor := agent.NewReflectionExecutor(ag, reflectionConfig)
+		ag.EnableReflection(agent.AsReflectionRunner(reflectionExecutor))
 	}
 	if enabled(opts.EnableAll, opts.EnableToolSelection) {
-		agentBuilder.WithToolSelection(nil)
+		toolSelectionConfig := toolSelectionConfigFromTypes(cfg2.Features.ToolSelection)
+		toolSelector := agent.NewDynamicToolSelector(ag, toolSelectionConfig)
+		ag.EnableToolSelection(agent.AsToolSelectorRunner(toolSelector))
 	}
 	if enabled(opts.EnableAll, opts.EnablePromptEnhancer) {
-		agentBuilder.WithPromptEnhancer(nil)
+		promptEnhancerConfig := promptEnhancerConfigFromTypes(cfg2.Features.PromptEnhancer)
+		promptEnhancer := agent.NewPromptEnhancer(promptEnhancerConfig)
+		ag.EnablePromptEnhancer(agent.AsPromptEnhancerRunner(promptEnhancer))
 	}
-
 	if enabled(opts.EnableAll, opts.EnableSkills) {
 		dir := strings.TrimSpace(opts.SkillsDirectory)
-		agentBuilder.WithDefaultSkills(dir, opts.SkillsConfig)
+		cfgSkills := skills.DefaultSkillManagerConfig()
+		if opts.SkillsConfig != nil {
+			cfgSkills = *opts.SkillsConfig
+		}
+		mgr := skills.NewSkillManager(cfgSkills, b.logger)
+		if dir != "" {
+			if err := mgr.ScanDirectory(dir); err != nil {
+				return nil, fmt.Errorf("scan skills directory %q: %w", dir, err)
+			}
+		}
+		ag.EnableSkills(mgr)
 	}
 	if enabled(opts.EnableAll, opts.EnableMCP) {
-		agentBuilder.WithDefaultMCPServer(strings.TrimSpace(opts.MCPServerName), strings.TrimSpace(opts.MCPServerVersion))
+		mcpName := strings.TrimSpace(opts.MCPServerName)
+		if mcpName == "" {
+			mcpName = "agentflow-mcp"
+		}
+		mcpVersion := strings.TrimSpace(opts.MCPServerVersion)
+		if mcpVersion == "" {
+			mcpVersion = "0.1.0"
+		}
+		ag.EnableMCP(mcpproto.NewMCPServer(mcpName, mcpVersion, b.logger))
 	}
 	if opts.LSPClient != nil {
-		agentBuilder.WithLSP(opts.LSPClient)
+		ag.EnableLSP(opts.LSPClient)
 	} else if enabled(opts.EnableAll, opts.EnableLSP) {
-		agentBuilder.WithDefaultLSPServer(strings.TrimSpace(opts.LSPServerName), strings.TrimSpace(opts.LSPServerVersion))
+		lspName := strings.TrimSpace(opts.LSPServerName)
+		if lspName == "" {
+			lspName = "agentflow-lsp"
+		}
+		lspVersion := strings.TrimSpace(opts.LSPServerVersion)
+		if lspVersion == "" {
+			lspVersion = "0.1.0"
+		}
+		lspRuntime := agent.NewManagedLSP(agentlsp.ServerInfo{Name: lspName, Version: lspVersion}, b.logger)
+		ag.EnableLSPWithLifecycle(lspRuntime.Client, lspRuntime)
 	}
 	if enabled(opts.EnableAll, opts.EnableEnhancedMemory) {
-		agentBuilder.WithDefaultEnhancedMemory(opts.EnhancedMemoryConfig)
+		memCfg := memory.DefaultEnhancedMemoryConfig()
+		if opts.EnhancedMemoryConfig != nil {
+			memCfg = *opts.EnhancedMemoryConfig
+		}
+		ag.EnableEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(memCfg, b.logger))
 	}
 	if obsEnabled {
 		if opts.ObservabilitySystem != nil {
-			agentBuilder.WithObservability(opts.ObservabilitySystem)
+			ag.EnableObservability(opts.ObservabilitySystem)
 		} else {
-			agentBuilder.WithObservability(agentobs.NewObservabilitySystem(b.logger))
+			ag.EnableObservability(agentobs.NewObservabilitySystem(b.logger))
 		}
-	}
-
-	if err := agentBuilder.Validate(); err != nil {
-		return nil, err
-	}
-
-	ag, err := agentBuilder.Build()
-	if err != nil {
-		return nil, err
 	}
 
 	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainGateway(), cfg2.LLM.Model, cfg2.Core.ID, opts, b.logger)
 	ag.SetReasoningRegistry(reasoningRegistry)
+	ag.SetReasoningModeSelector(agent.NewDefaultReasoningModeSelector())
+	ag.SetCompletionJudge(agent.NewDefaultCompletionJudge())
 	if opts.CheckpointManager != nil {
 		ag.SetCheckpointManager(opts.CheckpointManager)
 	}
@@ -274,6 +293,45 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	}
 
 	return ag, nil
+}
+
+func reflectionConfigFromTypes(cfg *types.ReflectionConfig) agent.ReflectionExecutorConfig {
+	out := agent.DefaultReflectionConfig()
+	if cfg == nil {
+		return *out
+	}
+	if cfg.MaxIterations > 0 {
+		out.MaxIterations = cfg.MaxIterations
+	}
+	if cfg.MinQuality > 0 {
+		out.MinQuality = cfg.MinQuality
+	}
+	if strings.TrimSpace(cfg.CriticPrompt) != "" {
+		out.CriticPrompt = cfg.CriticPrompt
+	}
+	return *out
+}
+
+func toolSelectionConfigFromTypes(cfg *types.ToolSelectionConfig) agent.ToolSelectionConfig {
+	out := agent.DefaultToolSelectionConfig()
+	if cfg == nil {
+		return *out
+	}
+	if cfg.MaxTools > 0 {
+		out.MaxTools = cfg.MaxTools
+	}
+	if cfg.SimilarityThreshold > 0 {
+		out.MinScore = cfg.SimilarityThreshold
+	}
+	return *out
+}
+
+func promptEnhancerConfigFromTypes(cfg *types.PromptEnhancerConfig) agent.PromptEnhancerConfig {
+	out := agent.DefaultPromptEnhancerConfig()
+	if cfg == nil {
+		return *out
+	}
+	return *out
 }
 
 func resolveRuntimeReasoningRegistry(

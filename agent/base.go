@@ -810,10 +810,11 @@ type BaseAgent struct {
 	logger         *zap.Logger
 
 	// 上下文工程相关
-	contextManager        ContextManager // 上下文管理器（可选）
-	contextEngineEnabled  bool           // 是否启用上下文工程
-	ephemeralPrompt       *EphemeralPromptLayerBuilder
-	traceFeedbackSelector TraceFeedbackSelector
+	contextManager       ContextManager // 上下文管理器（可选）
+	contextEngineEnabled bool           // 是否启用上下文工程
+	ephemeralPrompt      *EphemeralPromptLayerBuilder
+	traceFeedbackPlanner TraceFeedbackPlanner
+	memoryRuntime        MemoryRuntime
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
@@ -850,21 +851,21 @@ func NewBaseAgent(
 	agentLogger := logger.With(zap.String("agent_id", cfg.Core.ID), zap.String("agent_type", cfg.Core.Type))
 
 	ba := &BaseAgent{
-		config:                cfg,
-		promptBundle:          promptBundleFromConfig(cfg),
-		runtimeGuardrailsCfg:  runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
-		state:                 StateInit,
-		provider:              provider,
-		ledger:                ledger,
-		memory:                memory,
-		toolManager:           toolManager,
-		bus:                   bus,
-		logger:                agentLogger,
-		ephemeralPrompt:       NewEphemeralPromptLayerBuilder(),
-		traceFeedbackSelector: NewDefaultTraceFeedbackSelector(),
-		reasoningSelector:     NewDefaultReasoningModeSelector(),
-		completionJudge:       NewDefaultCompletionJudge(),
-		execSem:               semaphore.NewWeighted(1),
+		config:               cfg,
+		promptBundle:         promptBundleFromConfig(cfg),
+		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
+		state:                StateInit,
+		provider:             provider,
+		ledger:               ledger,
+		memory:               memory,
+		toolManager:          toolManager,
+		bus:                  bus,
+		logger:               agentLogger,
+		ephemeralPrompt:      NewEphemeralPromptLayerBuilder(),
+		traceFeedbackPlanner: NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter()),
+		reasoningSelector:    NewDefaultReasoningModeSelector(),
+		completionJudge:      NewDefaultCompletionJudge(),
+		execSem:              semaphore.NewWeighted(1),
 	}
 
 	// Initialize composite sub-managers for pipeline steps
@@ -873,6 +874,7 @@ func NewBaseAgent(
 	ba.guardrails = NewGuardrailsManager(agentLogger)
 	ba.memoryCache = NewMemoryCache(cfg.Core.ID, memory, agentLogger)
 	ba.memoryFacade = NewUnifiedMemoryFacade(memory, nil, agentLogger)
+	ba.memoryRuntime = NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return ba.memoryFacade }, func() MemoryManager { return ba.memory }, agentLogger)
 
 	// 如果配置, 初始化守护栏
 	if ba.runtimeGuardrailsCfg != nil {
@@ -1340,14 +1342,23 @@ func (b *BaseAgent) SetReasoningModeSelector(selector ReasoningModeSelector) {
 	b.reasoningSelector = selector
 }
 
-// SetTraceFeedbackSelector stores the selector used to decide whether recent
+// SetTraceFeedbackPlanner stores the planner used to decide whether recent
 // trace synopsis/history should be injected back into runtime prompt layers.
-func (b *BaseAgent) SetTraceFeedbackSelector(selector TraceFeedbackSelector) {
-	if selector == nil {
-		b.traceFeedbackSelector = NewDefaultTraceFeedbackSelector()
+func (b *BaseAgent) SetTraceFeedbackPlanner(planner TraceFeedbackPlanner) {
+	if planner == nil {
+		b.traceFeedbackPlanner = NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter())
 		return
 	}
-	b.traceFeedbackSelector = selector
+	b.traceFeedbackPlanner = planner
+}
+
+// SetMemoryRuntime stores memory recall/observe runtime used by execute path.
+func (b *BaseAgent) SetMemoryRuntime(runtime MemoryRuntime) {
+	if runtime == nil {
+		b.memoryRuntime = NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return b.memoryFacade }, func() MemoryManager { return b.memory }, b.logger)
+		return
+	}
+	b.memoryRuntime = runtime
 }
 
 // SetCompletionJudge stores the completion judge used by the default loop executor.

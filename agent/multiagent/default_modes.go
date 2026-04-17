@@ -10,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/crews"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -161,16 +162,38 @@ func (m *hierarchicalModeStrategy) Execute(ctx context.Context, agents []agent.A
 		}
 	}
 
-	base := agent.NewBaseAgent(types.AgentConfig{
+	base, err := newHierarchicalModeBaseAgent(supervisor, provider, m.logger)
+	if err != nil {
+		return nil, fmt.Errorf("build hierarchical mode base agent: %w", err)
+	}
+
+	ha := hierarchical.NewHierarchicalAgent(base, supervisor, workers, hierarchical.DefaultHierarchicalConfig(), m.logger)
+	return ha.Execute(ctx, input)
+}
+
+func newHierarchicalModeBaseAgent(supervisor agent.Agent, provider llm.Provider, logger *zap.Logger) (*agent.BaseAgent, error) {
+	model := "hierarchical-mode"
+	if base, ok := supervisor.(*agent.BaseAgent); ok {
+		if configured := strings.TrimSpace(base.Config().LLM.Model); configured != "" {
+			model = configured
+		}
+	}
+	if model == "hierarchical-mode" && provider != nil {
+		if name := strings.TrimSpace(provider.Name()); name != "" {
+			model = name
+		}
+	}
+
+	return agentruntime.NewBuilder(provider, logger).Build(context.Background(), types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "multiagent-hierarchical-mode",
 			Name: "multiagent-hierarchical-mode",
 			Type: string(agent.TypeGeneric),
 		},
-	}, provider, nil, nil, nil, m.logger, nil)
-
-	ha := hierarchical.NewHierarchicalAgent(base, supervisor, workers, hierarchical.DefaultHierarchicalConfig(), m.logger)
-	return ha.Execute(ctx, input)
+		LLM: types.LLMConfig{
+			Model: model,
+		},
+	})
 }
 
 type crewModeStrategy struct {

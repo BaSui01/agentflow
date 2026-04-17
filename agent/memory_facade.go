@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -42,12 +43,15 @@ func (f *UnifiedMemoryFacade) Enhanced() EnhancedMemoryRunner { return f.enhance
 // otherwise the base MemoryManager is used.
 func (f *UnifiedMemoryFacade) SaveInteraction(ctx context.Context, agentID, traceID, userContent, agentContent string) {
 	if f.enhanced != nil {
-		metadata := map[string]any{
-			"trace_id": traceID,
-			"role":     "assistant",
+		if strings.TrimSpace(userContent) != "" {
+			if err := f.enhanced.SaveShortTerm(ctx, agentID, userContent, map[string]any{"trace_id": traceID, "role": "user"}); err != nil {
+				f.logger.Warn("enhanced memory save (user) failed", zap.Error(err))
+			}
 		}
-		if err := f.enhanced.SaveShortTerm(ctx, agentID, agentContent, metadata); err != nil {
-			f.logger.Warn("enhanced memory save failed", zap.Error(err))
+		if strings.TrimSpace(agentContent) != "" {
+			if err := f.enhanced.SaveShortTerm(ctx, agentID, agentContent, map[string]any{"trace_id": traceID, "role": "assistant"}); err != nil {
+				f.logger.Warn("enhanced memory save (assistant) failed", zap.Error(err))
+			}
 		}
 		return
 	}

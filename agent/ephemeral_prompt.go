@@ -18,6 +18,7 @@ type EphemeralPromptLayerInput struct {
 	TenantID                 string
 	UserID                   string
 	ChannelID                string
+	TraceFeedbackPlan        *TraceFeedbackPlan
 	TraceSynopsis            string
 	TraceHistorySummary      string
 	TraceHistoryEventCount   int
@@ -35,8 +36,11 @@ func NewEphemeralPromptLayerBuilder() *EphemeralPromptLayerBuilder {
 }
 
 func (b *EphemeralPromptLayerBuilder) Build(input EphemeralPromptLayerInput) []agentcontext.PromptLayer {
-	layers := make([]agentcontext.PromptLayer, 0, 6)
+	layers := make([]agentcontext.PromptLayer, 0, 7)
 	if layer := buildSessionOverlayLayer(input); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildTraceFeedbackPlanLayer(input.TraceFeedbackPlan); layer != nil {
 		layers = append(layers, *layer)
 	}
 	if layer := buildTraceSynopsisLayer(input.TraceSynopsis); layer != nil {
@@ -100,6 +104,81 @@ func buildSessionOverlayLayer(input EphemeralPromptLayerInput) *agentcontext.Pro
 			"session_fields": sortedKeys(payload),
 		},
 	}
+}
+
+func buildTraceFeedbackPlanLayer(plan *TraceFeedbackPlan) *agentcontext.PromptLayer {
+	if plan == nil || strings.TrimSpace(plan.Summary) == "" {
+		return nil
+	}
+	var body strings.Builder
+	body.WriteString("<trace_feedback_plan>\n")
+	if strings.TrimSpace(plan.Goal) != "" {
+		body.WriteString("Goal: " + plan.Goal + "\n")
+	}
+	if plan.RecommendedAction != "" {
+		body.WriteString("Recommended action: " + string(plan.RecommendedAction) + "\n")
+	}
+	if strings.TrimSpace(plan.PrimaryLayer) != "" {
+		body.WriteString("Primary layer: " + plan.PrimaryLayer + "\n")
+	}
+	if strings.TrimSpace(plan.SecondaryLayer) != "" {
+		body.WriteString("Secondary layer: " + plan.SecondaryLayer + "\n")
+	}
+	if plan.InjectMemoryRecall {
+		body.WriteString("Memory recall: enabled\n")
+	}
+	if strings.TrimSpace(plan.PlannerID) != "" {
+		body.WriteString("Planner: " + plan.PlannerID)
+		if strings.TrimSpace(plan.PlannerVersion) != "" {
+			body.WriteString("@" + plan.PlannerVersion)
+		}
+		body.WriteString("\n")
+	}
+	if plan.Confidence > 0 {
+		body.WriteString("Confidence: " + formatTraceFeedbackFloat(plan.Confidence) + "\n")
+	}
+	if len(plan.Reasons) > 0 {
+		body.WriteString("Reasons: " + strings.Join(plan.Reasons, ", ") + "\n")
+	}
+	body.WriteString("Decision: " + plan.Summary + "\n")
+	body.WriteString("</trace_feedback_plan>")
+	return &agentcontext.PromptLayer{
+		ID:       "trace_feedback_plan",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  body.String(),
+		Priority: 89,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind":           "trace_feedback_plan",
+			"goal":                 plan.Goal,
+			"recommended_action":   string(plan.RecommendedAction),
+			"primary_layer":        plan.PrimaryLayer,
+			"secondary_layer":      plan.SecondaryLayer,
+			"inject_memory_recall": plan.InjectMemoryRecall,
+			"planner_id":           plan.PlannerID,
+			"planner_version":      plan.PlannerVersion,
+			"confidence":           plan.Confidence,
+			"selected_layers":      cloneStringSlice(plan.SelectedLayers),
+			"suppressed_layers":    cloneStringSlice(plan.SuppressedLayers),
+			"score":                plan.Score,
+			"planner_metadata":     cloneAnyMap(plan.Metadata),
+		},
+	}
+}
+
+func formatTraceFeedbackFloat(v float64) string {
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
+}
+
+func cloneAnyMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 func buildTraceSynopsisLayer(synopsis string) *agentcontext.PromptLayer {

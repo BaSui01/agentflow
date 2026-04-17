@@ -2140,6 +2140,9 @@ func (b *BaseAgent) memorySaveMiddleware() ExecutionMiddleware {
 		if err != nil {
 			return nil, err
 		}
+		if b.memoryRuntime != nil {
+			return output, nil
+		}
 		b.logger.Debug("saving to enhanced memory", zap.String("trace_id", input.TraceID))
 		b.extensions.SaveToEnhancedMemory(ctx, b.ID(), input, output, false)
 		return output, nil

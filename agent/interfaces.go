@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 
@@ -116,6 +117,24 @@ type ExplainabilitySynopsisSnapshot struct {
 // returns both the short synopsis and compressed long-history summary.
 type ExplainabilitySynopsisSnapshotReader interface {
 	GetLatestExplainabilitySynopsisSnapshot(sessionID, agentID, excludeTraceID string) ExplainabilitySynopsisSnapshot
+}
+
+type MemoryRecallOptions struct {
+	Query  string
+	Status *agentcontext.Status
+	TopK   int
+}
+
+type MemoryObservationInput struct {
+	TraceID          string
+	UserContent      string
+	AssistantContent string
+	Metadata         map[string]any
+}
+
+type MemoryRuntime interface {
+	RecallForPrompt(ctx context.Context, agentID string, opts MemoryRecallOptions) ([]agentcontext.PromptLayer, error)
+	ObserveTurn(ctx context.Context, agentID string, turn MemoryObservationInput) error
 }
 
 // =============================================================================

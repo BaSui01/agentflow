@@ -273,7 +273,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 	}
 
-	ephemeralLayers := b.buildEphemeralPromptLayers(ctx, publicContext, input, systemContent, skillContext, memoryContext, conversation, retrievalItems, toolStates)
+	ephemeralLayers, traceFeedbackPlan := b.buildEphemeralPromptLayers(ctx, publicContext, input, systemContent, skillContext, memoryContext, conversation, retrievalItems, toolStates)
 	messages, assembled := b.assembleMessages(ctx, systemContent, ephemeralLayers, skillContext, memoryContext, conversation, retrievalItems, toolStates, input.Content)
 	if assembled != nil {
 		b.logger.Debug("context assembled",
@@ -403,28 +403,41 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		break
 	}
 
-	// 8. 保存记忆（如果增强记忆已接管，则跳过基础记忆保存）
-	skipBaseMemory := b.memoryFacade != nil && b.memoryFacade.SkipBaseMemory()
-	if b.memory != nil && !skipBaseMemory {
-		// 保存用户输入
-		if err := b.SaveMemory(ctx, input.Content, MemoryShortTerm, map[string]any{
-			"trace_id": input.TraceID,
-			"role":     "user",
-		}); err != nil {
-			b.logger.Warn("failed to save user input to memory", zap.Error(err))
-		}
+	estimatedCost := defaultCostCalc.Calculate(resp.Provider, resp.Model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 
-		// 保存 Agent 响应
-		if err := b.SaveMemory(ctx, outputContent, MemoryShortTerm, map[string]any{
-			"trace_id": input.TraceID,
-			"role":     "assistant",
+	// 8. 保存记忆/回合观察
+	if b.memoryRuntime != nil {
+		if err := b.memoryRuntime.ObserveTurn(ctx, b.ID(), MemoryObservationInput{
+			TraceID:          input.TraceID,
+			UserContent:      input.Content,
+			AssistantContent: outputContent,
+			Metadata: map[string]any{
+				"tokens":        resp.Usage.TotalTokens,
+				"cost":          estimatedCost,
+				"finish_reason": choice.FinishReason,
+			},
 		}); err != nil {
-			b.logger.Warn("failed to save response to memory", zap.Error(err))
+			b.logger.Warn("memory runtime observe turn failed", zap.Error(err))
+		}
+	} else {
+		skipBaseMemory := b.memoryFacade != nil && b.memoryFacade.SkipBaseMemory()
+		if b.memory != nil && !skipBaseMemory {
+			if err := b.SaveMemory(ctx, input.Content, MemoryShortTerm, map[string]any{
+				"trace_id": input.TraceID,
+				"role":     "user",
+			}); err != nil {
+				b.logger.Warn("failed to save user input to memory", zap.Error(err))
+			}
+			if err := b.SaveMemory(ctx, outputContent, MemoryShortTerm, map[string]any{
+				"trace_id": input.TraceID,
+				"role":     "assistant",
+			}); err != nil {
+				b.logger.Warn("failed to save response to memory", zap.Error(err))
+			}
 		}
 	}
 
 	duration := time.Since(startTime)
-	estimatedCost := defaultCostCalc.Calculate(resp.Provider, resp.Model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 
 	// 9a. ConversationStore: persist conversation
 	b.persistence.PersistConversation(ctx, conversationID, b.config.Core.ID, input.TenantID, input.UserID, input.Content, outputContent)
@@ -457,6 +470,34 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		outputMetadata["context_plan"] = assembled.Plan
 		outputMetadata["applied_prompt_layers"] = assembled.Plan.AppliedLayers
 		outputMetadata["applied_prompt_layer_ids"] = promptLayerIDs(assembled.Plan.AppliedLayers)
+	}
+	outputMetadata["trace_feedback_plan"] = map[string]any{
+		"planner_id":           traceFeedbackPlan.PlannerID,
+		"planner_version":      traceFeedbackPlan.PlannerVersion,
+		"confidence":           traceFeedbackPlan.Confidence,
+		"goal":                 traceFeedbackPlan.Goal,
+		"recommended_action":   string(traceFeedbackPlan.RecommendedAction),
+		"inject_memory_recall": traceFeedbackPlan.InjectMemoryRecall,
+		"primary_layer":        traceFeedbackPlan.PrimaryLayer,
+		"secondary_layer":      traceFeedbackPlan.SecondaryLayer,
+		"selected_layers":      cloneStringSlice(traceFeedbackPlan.SelectedLayers),
+		"suppressed_layers":    cloneStringSlice(traceFeedbackPlan.SuppressedLayers),
+		"reasons":              cloneStringSlice(traceFeedbackPlan.Reasons),
+		"signals": map[string]any{
+			"has_prior_synopsis":        traceFeedbackPlan.Signals.HasPriorSynopsis,
+			"has_compressed_history":    traceFeedbackPlan.Signals.HasCompressedHistory,
+			"resume":                    traceFeedbackPlan.Signals.Resume,
+			"handoff":                   traceFeedbackPlan.Signals.Handoff,
+			"multi_agent":               traceFeedbackPlan.Signals.MultiAgent,
+			"verification":              traceFeedbackPlan.Signals.Verification,
+			"complex_task":              traceFeedbackPlan.Signals.ComplexTask,
+			"context_pressure":          traceFeedbackPlan.Signals.ContextPressure,
+			"usage_ratio":               traceFeedbackPlan.Signals.UsageRatio,
+			"acceptance_criteria_count": traceFeedbackPlan.Signals.AcceptanceCriteriaCount,
+			"compressed_event_count":    traceFeedbackPlan.Signals.CompressedEventCount,
+		},
+		"metadata": cloneAnyMap(traceFeedbackPlan.Metadata),
+		"summary":  traceFeedbackPlan.Summary,
 	}
 	if extraMetadata, ok := choice.Message.Metadata.(map[string]any); ok {
 		for key, value := range extraMetadata {
@@ -707,29 +748,30 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 	conversation []types.Message,
 	retrieval []agentcontext.RetrievalItem,
 	toolStates []agentcontext.ToolState,
-) []agentcontext.PromptLayer {
+) ([]agentcontext.PromptLayer, TraceFeedbackPlan) {
 	if b.ephemeralPrompt == nil {
-		return nil
+		return nil, TraceFeedbackPlan{}
 	}
 	status := b.estimateContextStatus(systemPrompt, skillContext, memoryContext, conversation, retrieval, toolStates, input)
 	snapshot := b.latestTraceSynopsisSnapshot(input)
-	mode := b.selectTraceFeedbackMode(input, status, snapshot)
+	plan := b.selectTraceFeedbackPlan(input, status, snapshot)
 	checkpointID := ""
 	if input != nil && input.Context != nil {
 		if value, ok := input.Context["checkpoint_id"].(string); ok {
 			checkpointID = strings.TrimSpace(value)
 		}
 	}
-	b.recordTraceFeedbackDecision(input.TraceID, mode, status)
-	return b.ephemeralPrompt.Build(EphemeralPromptLayerInput{
+	b.recordTraceFeedbackDecision(input.TraceID, plan, status)
+	layers := b.ephemeralPrompt.Build(EphemeralPromptLayerInput{
 		PublicContext:            publicContext,
 		TraceID:                  strings.TrimSpace(input.TraceID),
 		TenantID:                 strings.TrimSpace(input.TenantID),
 		UserID:                   strings.TrimSpace(input.UserID),
 		ChannelID:                strings.TrimSpace(input.ChannelID),
-		TraceSynopsis:            conditionalTraceSynopsis(mode.InjectSynopsis, snapshot),
-		TraceHistorySummary:      conditionalTraceHistory(mode.InjectHistory, snapshot),
-		TraceHistoryEventCount:   conditionalTraceHistoryCount(mode.InjectHistory, snapshot),
+		TraceFeedbackPlan:        &plan,
+		TraceSynopsis:            conditionalTraceSynopsis(plan.InjectSynopsis, snapshot),
+		TraceHistorySummary:      conditionalTraceHistory(plan.InjectHistory, snapshot),
+		TraceHistoryEventCount:   conditionalTraceHistoryCount(plan.InjectHistory, snapshot),
 		CheckpointID:             checkpointID,
 		AllowedTools:             b.effectivePromptToolNames(ctx),
 		ToolsDisabled:            promptToolsDisabled(ctx),
@@ -738,6 +780,19 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 		CodeVerificationRequired: codeTaskRequired(input, nil, nil),
 		ContextStatus:            status,
 	})
+	if b.memoryRuntime != nil && plan.InjectMemoryRecall {
+		recallLayers, err := b.memoryRuntime.RecallForPrompt(ctx, b.ID(), MemoryRecallOptions{
+			Query:  input.Content,
+			Status: status,
+			TopK:   3,
+		})
+		if err != nil {
+			b.logger.Warn("memory runtime recall failed", zap.Error(err))
+		} else if len(recallLayers) > 0 {
+			layers = append(layers, recallLayers...)
+		}
+	}
+	return layers, plan
 }
 
 func (b *BaseAgent) estimateContextStatus(
@@ -784,27 +839,29 @@ func (b *BaseAgent) estimateContextStatus(
 	return &status
 }
 
-type traceFeedbackMode struct {
-	InjectSynopsis bool
-	InjectHistory  bool
-	Score          int
-	Threshold      int
-	Reasons        []string
-}
-
-func (b *BaseAgent) selectTraceFeedbackMode(input *Input, status *agentcontext.Status, snapshot ExplainabilitySynopsisSnapshot) traceFeedbackMode {
-	selector := b.traceFeedbackSelector
-	if selector == nil {
-		selector = NewDefaultTraceFeedbackSelector()
+func (b *BaseAgent) selectTraceFeedbackPlan(input *Input, status *agentcontext.Status, snapshot ExplainabilitySynopsisSnapshot) TraceFeedbackPlan {
+	planner := b.traceFeedbackPlanner
+	if planner == nil {
+		planner = NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter())
 	}
-	decision := selector.Decide(input, status, snapshot, TraceFeedbackConfigFromAgentConfig(b.config))
-	return traceFeedbackMode{
-		InjectSynopsis: decision.InjectSynopsis,
-		InjectHistory:  decision.InjectHistory,
-		Score:          decision.Score,
-		Threshold:      decision.Threshold,
-		Reasons:        cloneStringSlice(decision.Reasons),
+	sessionID := ""
+	traceID := ""
+	if input != nil {
+		sessionID = strings.TrimSpace(input.ChannelID)
+		traceID = strings.TrimSpace(input.TraceID)
 	}
+	if sessionID == "" {
+		sessionID = traceID
+	}
+	return planner.Plan(&TraceFeedbackPlanningInput{
+		AgentID:   b.ID(),
+		TraceID:   traceID,
+		SessionID: sessionID,
+		UserInput: input,
+		Signals:   collectTraceFeedbackSignals(input, status, snapshot, b.memoryRuntime != nil),
+		Snapshot:  snapshot,
+		Config:    TraceFeedbackConfigFromAgentConfig(b.config),
+	})
 }
 
 func (b *BaseAgent) latestTraceSynopsis(input *Input) string {
@@ -864,26 +921,49 @@ func conditionalTraceHistoryCount(enabled bool, snapshot ExplainabilitySynopsisS
 	return snapshot.CompressedEventCount
 }
 
-func (b *BaseAgent) recordTraceFeedbackDecision(traceID string, mode traceFeedbackMode, status *agentcontext.Status) {
+func (b *BaseAgent) recordTraceFeedbackDecision(traceID string, plan TraceFeedbackPlan, status *agentcontext.Status) {
 	recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityTimelineRecorder)
 	if !ok || strings.TrimSpace(traceID) == "" {
 		return
 	}
 	metadata := map[string]any{
-		"inject_synopsis":    mode.InjectSynopsis,
-		"inject_history":     mode.InjectHistory,
-		"score":              mode.Score,
-		"synopsis_threshold": mode.SynopsisThreshold,
-		"history_threshold":  mode.HistoryThreshold,
-		"reasons":            cloneStringSlice(mode.Reasons),
-		"selected_layers":    cloneStringSlice(mode.SelectedLayers),
-		"suppressed_layers":  cloneStringSlice(mode.SuppressedLayers),
+		"inject_synopsis":         plan.InjectSynopsis,
+		"inject_history":          plan.InjectHistory,
+		"inject_memory_recall":    plan.InjectMemoryRecall,
+		"score":                   plan.Score,
+		"synopsis_threshold":      plan.SynopsisThreshold,
+		"history_threshold":       plan.HistoryThreshold,
+		"memory_recall_threshold": plan.MemoryRecallThreshold,
+		"reasons":                 cloneStringSlice(plan.Reasons),
+		"selected_layers":         cloneStringSlice(plan.SelectedLayers),
+		"suppressed_layers":       cloneStringSlice(plan.SuppressedLayers),
+		"goal":                    plan.Goal,
+		"recommended_action":      string(plan.RecommendedAction),
+		"primary_layer":           plan.PrimaryLayer,
+		"secondary_layer":         plan.SecondaryLayer,
+		"planner_id":              plan.PlannerID,
+		"planner_version":         plan.PlannerVersion,
+		"confidence":              plan.Confidence,
+		"planner_metadata":        cloneAnyMap(plan.Metadata),
+		"signals": map[string]any{
+			"has_prior_synopsis":        plan.Signals.HasPriorSynopsis,
+			"has_compressed_history":    plan.Signals.HasCompressedHistory,
+			"resume":                    plan.Signals.Resume,
+			"handoff":                   plan.Signals.Handoff,
+			"multi_agent":               plan.Signals.MultiAgent,
+			"verification":              plan.Signals.Verification,
+			"complex_task":              plan.Signals.ComplexTask,
+			"context_pressure":          plan.Signals.ContextPressure,
+			"usage_ratio":               plan.Signals.UsageRatio,
+			"acceptance_criteria_count": plan.Signals.AcceptanceCriteriaCount,
+			"compressed_event_count":    plan.Signals.CompressedEventCount,
+		},
 	}
 	if status != nil {
 		metadata["usage_ratio"] = status.UsageRatio
 		metadata["pressure_level"] = status.Level.String()
 	}
-	recorder.AddExplainabilityTimeline(traceID, "trace_feedback_decision", mode.Summary, metadata)
+	recorder.AddExplainabilityTimeline(traceID, "trace_feedback_decision", plan.Summary, metadata)
 }
 
 func (b *BaseAgent) effectivePromptToolNames(ctx context.Context) []string {

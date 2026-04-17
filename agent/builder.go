@@ -52,9 +52,10 @@ type AgentBuilder struct {
 	runStore          RunStoreProvider
 
 	// Orchestration and reasoning (optional)
-	orchestratorInstance  OrchestratorRunner
-	reasoningRegistry     *reasoning.PatternRegistry
-	traceFeedbackSelector TraceFeedbackSelector
+	orchestratorInstance OrchestratorRunner
+	reasoningRegistry    *reasoning.PatternRegistry
+	traceFeedbackPlanner TraceFeedbackPlanner
+	memoryRuntime        MemoryRuntime
 
 	// 并发控制
 	maxConcurrency int
@@ -62,8 +63,9 @@ type AgentBuilder struct {
 	errors []error
 }
 
-// NewAgentBuilder 创建 Agent 构建器
-func NewAgentBuilder(config types.AgentConfig) *AgentBuilder {
+// newAgentBuilder 创建 Agent 构建器。
+// 正式构造入口已收敛到 agent/runtime.Builder，这里仅保留包内构建核心。
+func newAgentBuilder(config types.AgentConfig) *AgentBuilder {
 	ensureAgentType(&config)
 	b := &AgentBuilder{
 		config: config,
@@ -164,6 +166,11 @@ func (b *AgentBuilder) WithRetrievalProvider(provider RetrievalProvider) *AgentB
 
 func (b *AgentBuilder) WithToolStateProvider(provider ToolStateProvider) *AgentBuilder {
 	b.toolState = provider
+	return b
+}
+
+func (b *AgentBuilder) WithMemoryRuntime(runtime MemoryRuntime) *AgentBuilder {
+	b.memoryRuntime = runtime
 	return b
 }
 
@@ -358,10 +365,10 @@ func (b *AgentBuilder) WithReasoning(registry *reasoning.PatternRegistry) *Agent
 	return b
 }
 
-// WithTraceFeedbackSelector overrides the selector that decides whether
+// WithTraceFeedbackPlanner overrides the planner that decides whether
 // trace_synopsis/trace_history should be injected for a given request.
-func (b *AgentBuilder) WithTraceFeedbackSelector(selector TraceFeedbackSelector) *AgentBuilder {
-	b.traceFeedbackSelector = selector
+func (b *AgentBuilder) WithTraceFeedbackPlanner(planner TraceFeedbackPlanner) *AgentBuilder {
+	b.traceFeedbackPlanner = planner
 	return b
 }
 
@@ -489,8 +496,11 @@ func (b *AgentBuilder) finalizeAgent(agent *BaseAgent) {
 	if b.reasoningRegistry != nil {
 		agent.SetReasoningRegistry(b.reasoningRegistry)
 	}
-	if b.traceFeedbackSelector != nil {
-		agent.SetTraceFeedbackSelector(b.traceFeedbackSelector)
+	if b.traceFeedbackPlanner != nil {
+		agent.SetTraceFeedbackPlanner(b.traceFeedbackPlanner)
+	}
+	if b.memoryRuntime != nil {
+		agent.SetMemoryRuntime(b.memoryRuntime)
 	}
 	agent.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
 	agent.SetCompletionJudge(NewDefaultCompletionJudge())

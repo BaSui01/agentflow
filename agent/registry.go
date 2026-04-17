@@ -89,8 +89,44 @@ func newTypedAgentFactory(agentType AgentType) AgentFactory {
 				config.Metadata["skill_categories"] = joinSkillCategories(cats)
 			}
 		}
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil
+		return buildRegistryAgent(config, provider, memory, toolManager, bus, logger)
 	}
+}
+
+func buildRegistryAgent(
+	config types.AgentConfig,
+	provider llm.Provider,
+	memory MemoryManager,
+	toolManager ToolManager,
+	bus EventBus,
+	logger *zap.Logger,
+) (Agent, error) {
+	ag, err := newAgentBuilder(config).
+		WithProvider(provider).
+		WithMemory(memory).
+		WithToolManager(toolManager).
+		WithEventBus(bus).
+		WithLogger(logger).
+		Build()
+	if err != nil {
+		return nil, err
+	}
+
+	// Keep the registry default factory on the same post-build path as runtime.Builder:
+	// inject the default reasoning registry and validate the finalized runtime wiring.
+	ag.SetReasoningRegistry(NewDefaultReasoningRegistry(
+		ag.MainGateway(),
+		ag.Config().LLM.Model,
+		toolManager,
+		ag.ID(),
+		bus,
+		logger,
+	))
+	if err := ag.ValidateConfiguration(); err != nil {
+		return nil, err
+	}
+
+	return ag, nil
 }
 
 // defaultPromptBundleForType returns a pre-configured PromptBundle for each agent type.
@@ -436,9 +472,9 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 				Name: agentID,
 				Type: string(TypeGeneric),
 			},
-		}
-		if r.modelHint != "" {
-			cfg.LLM.Model = r.modelHint
+			LLM: types.LLMConfig{
+				Model: r.defaultResolverModel(),
+			},
 		}
 		toolNames := r.toolNames
 		if len(toolNames) == 0 && r.tools != nil {
@@ -483,6 +519,18 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 		return nil, err
 	}
 	return result.(Agent), nil
+}
+
+func (r *CachingResolver) defaultResolverModel() string {
+	if model := strings.TrimSpace(r.modelHint); model != "" {
+		return model
+	}
+	if r.provider != nil {
+		if name := strings.TrimSpace(r.provider.Name()); name != "" {
+			return name
+		}
+	}
+	return "resolver-default"
 }
 
 // TeardownAll tears down all cached agent instances. Intended to be called
