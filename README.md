@@ -325,7 +325,7 @@ cfg.Context = &types.ContextConfig{
 
 启用 `Skills` / 增强 `Memory` / retrieval / tool-state 注入时，这些信息会作为 context runtime 管理的独立上下文段进入消息组装，而不是直接改写原始用户输入。
 
-请求级 `session_overlay`、`tool_guidance`、`verification_gate`、`context_pressure` 等临时策略层，也会统一通过 ephemeral prompt layer builder 注入，而不是并入稳定 system prompt；其中 `tool_guidance` 会按 `safe_read / requires_approval / unknown` 风险层输出工具提示，审批语义会同时进入 runtime stream 事件与 explainability trace，并进一步汇总进高层 decision timeline（如 `prompt_layers / approval / validation_gate / completion_decision`），最终自动生成可压缩的 `trace synopsis`。
+请求级 `session_overlay`、`trace_synopsis`、`trace_history`、`tool_guidance`、`verification_gate`、`context_pressure` 等临时策略层，也会统一通过 ephemeral prompt layer builder 注入，而不是并入稳定 system prompt；其中 `tool_guidance` 会按 `safe_read / requires_approval / unknown` 风险层输出工具提示，审批语义会同时进入 runtime stream 事件与 explainability trace，并进一步汇总进高层 decision timeline（如 `prompt_layers / approval / validation_gate / completion_decision`），最终生成双层可回灌摘要：短层 `trace_synopsis` 与压缩长层 `trace_history`。
 
 也可以通过 `runtime.Builder` 一键开关：
 
