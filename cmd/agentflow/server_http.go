@@ -56,22 +56,27 @@ func (s *Server) startHTTPServer() error {
 // 📊 Metrics 服务器
 // =============================================================================
 //
-// 已知安全风险 (X-005): Metrics 与 pprof 服务无认证、无限流，暴露于独立端口。
-// 生产环境应通过网络隔离或反向代理限制访问。
+// Metrics 端口默认仅绑定 loopback；若需要外部抓取，必须显式配置
+// server.metrics_bind_address。pprof 默认关闭，仅在 enable_pprof=true 时启用。
 
 // startMetricsServer 启动 Metrics 服务器
 func (s *Server) startMetricsServer() error {
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
-
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
+	mux := buildMetricsMux(s.cfg.Server.EnablePProf)
 	s.metricsManager = server.NewManager(mux, bootstrap.BuildMetricsServerConfig(s.cfg.Server), s.logger)
 	return nil
+}
+
+func buildMetricsMux(enablePProf bool) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	if enablePProf {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	}
+	return mux
 }
 
 // getFirstAPIKey 返回配置中的第一个 API Key，用于配置 API 的独立认证。

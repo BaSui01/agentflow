@@ -132,9 +132,13 @@ func (s *Server) Start() error {
 		return fmt.Errorf("failed to start lifecycle services: %w", err)
 	}
 
+	s.logStartupSummary()
+
 	s.logger.Info("All servers started",
 		zap.Int("http_port", s.cfg.Server.HTTPPort),
 		zap.Int("metrics_port", s.cfg.Server.MetricsPort),
+		zap.String("metrics_bind_address", s.cfg.Server.MetricsBindAddress),
+		zap.Bool("pprof_enabled", s.cfg.Server.EnablePProf),
 		zap.Bool("hot_reload_enabled", s.configPath != ""),
 	)
 

@@ -2,7 +2,9 @@ package bootstrap
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
@@ -88,8 +90,12 @@ func BuildHTTPServerConfig(serverCfg config.ServerConfig) server.Config {
 
 // BuildMetricsServerConfig creates the metrics server manager configuration.
 func BuildMetricsServerConfig(serverCfg config.ServerConfig) server.Config {
+	addr := fmt.Sprintf(":%d", serverCfg.MetricsPort)
+	if serverCfg.MetricsBindAddress != "" {
+		addr = net.JoinHostPort(serverCfg.MetricsBindAddress, strconv.Itoa(serverCfg.MetricsPort))
+	}
 	return server.Config{
-		Addr:            fmt.Sprintf(":%d", serverCfg.MetricsPort),
+		Addr:            addr,
 		ReadTimeout:     serverCfg.ReadTimeout,
 		WriteTimeout:    serverCfg.WriteTimeout,
 		ShutdownTimeout: serverCfg.ShutdownTimeout,
