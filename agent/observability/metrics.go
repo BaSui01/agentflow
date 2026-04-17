@@ -257,6 +257,26 @@ func (o *ObservabilitySystem) EndExplainabilityTrace(traceID string, success boo
 	o.explainability.EndTrace(traceID, success, output, errorMsg)
 }
 
+// AddExplainabilityTimeline satisfies agent.ExplainabilityTimelineRecorder.
+func (o *ObservabilitySystem) AddExplainabilityTimeline(traceID, entryType, summary string, metadata map[string]any) {
+	if o.explainability == nil {
+		return
+	}
+	o.explainability.AddTimelineEntry(traceID, DecisionTimelineEntry{
+		Type:     entryType,
+		Summary:  summary,
+		Metadata: metadata,
+	})
+}
+
+// GetLatestExplainabilitySynopsis satisfies agent.ExplainabilitySynopsisReader.
+func (o *ObservabilitySystem) GetLatestExplainabilitySynopsis(sessionID, agentID, excludeTraceID string) string {
+	if o.explainability == nil {
+		return ""
+	}
+	return o.explainability.LatestSynopsis(sessionID, agentID, excludeTraceID)
+}
+
 // NewMetricsCollector 创建指标收集器
 func NewMetricsCollector(logger *zap.Logger) *MetricsCollector {
 	return &MetricsCollector{

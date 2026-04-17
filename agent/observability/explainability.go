@@ -3,6 +3,8 @@ package observability
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -64,42 +66,58 @@ type ReasoningStep struct {
 	Duration   time.Duration  `json:"duration,omitempty"`
 }
 
+type DecisionTimelineEntry struct {
+	Index     int            `json:"index"`
+	Type      string         `json:"type"`
+	Summary   string         `json:"summary"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
+}
+
 // 理由 Trace代表了一个完整的推理追踪.
 type ReasoningTrace struct {
-	ID          string          `json:"id"`
-	SessionID   string          `json:"session_id"`
-	AgentID     string          `json:"agent_id"`
-	TaskID      string          `json:"task_id,omitempty"`
-	Steps       []ReasoningStep `json:"steps"`
-	Decisions   []Decision      `json:"decisions"`
-	StartTime   time.Time       `json:"start_time"`
-	EndTime     time.Time       `json:"end_time,omitempty"`
-	Duration    time.Duration   `json:"duration,omitempty"`
-	Success     bool            `json:"success"`
-	FinalOutput string          `json:"final_output,omitempty"`
-	Error       string          `json:"error,omitempty"`
-	Metadata    map[string]any  `json:"metadata,omitempty"`
+	ID                        string                  `json:"id"`
+	SessionID                 string                  `json:"session_id"`
+	AgentID                   string                  `json:"agent_id"`
+	TaskID                    string                  `json:"task_id,omitempty"`
+	Steps                     []ReasoningStep         `json:"steps"`
+	Timeline                  []DecisionTimelineEntry `json:"timeline,omitempty"`
+	Synopsis                  string                  `json:"synopsis,omitempty"`
+	CompressedTimelineSummary string                  `json:"compressed_timeline_summary,omitempty"`
+	CompressedTimelineCount   int                     `json:"compressed_timeline_count,omitempty"`
+	Decisions                 []Decision              `json:"decisions"`
+	StartTime                 time.Time               `json:"start_time"`
+	EndTime                   time.Time               `json:"end_time,omitempty"`
+	Duration                  time.Duration           `json:"duration,omitempty"`
+	Success                   bool                    `json:"success"`
+	FinalOutput               string                  `json:"final_output,omitempty"`
+	Error                     string                  `json:"error,omitempty"`
+	Metadata                  map[string]any          `json:"metadata,omitempty"`
 }
 
 // 可解释性 Config 配置可解释性系统.
 type ExplainabilityConfig struct {
-	Enabled            bool          `json:"enabled"`
-	DetailLevel        string        `json:"detail_level"` // minimal, standard, verbose
-	MaxTraceAge        time.Duration `json:"max_trace_age"`
-	MaxTracesPerAgent  int           `json:"max_traces_per_agent"`
-	RecordAlternatives bool          `json:"record_alternatives"`
-	RecordFactors      bool          `json:"record_factors"`
+	Enabled                bool          `json:"enabled"`
+	DetailLevel            string        `json:"detail_level"` // minimal, standard, verbose
+	MaxTraceAge            time.Duration `json:"max_trace_age"`
+	MaxTracesPerAgent      int           `json:"max_traces_per_agent"`
+	MaxTimelineEntries     int           `json:"max_timeline_entries"`
+	PreserveRecentTimeline int           `json:"preserve_recent_timeline"`
+	RecordAlternatives     bool          `json:"record_alternatives"`
+	RecordFactors          bool          `json:"record_factors"`
 }
 
 // 默认解释性 Config 返回明智的默认 。
 func DefaultExplainabilityConfig() ExplainabilityConfig {
 	return ExplainabilityConfig{
-		Enabled:            true,
-		DetailLevel:        "standard",
-		MaxTraceAge:        24 * time.Hour,
-		MaxTracesPerAgent:  100,
-		RecordAlternatives: true,
-		RecordFactors:      true,
+		Enabled:                true,
+		DetailLevel:            "standard",
+		MaxTraceAge:            24 * time.Hour,
+		MaxTracesPerAgent:      100,
+		MaxTimelineEntries:     64,
+		PreserveRecentTimeline: 24,
+		RecordAlternatives:     true,
+		RecordFactors:          true,
 	}
 }
 
@@ -136,6 +154,7 @@ func (t *ExplainabilityTracker) StartTrace(sessionID, agentID string) *Reasoning
 		SessionID: sessionID,
 		AgentID:   agentID,
 		Steps:     make([]ReasoningStep, 0),
+		Timeline:  make([]DecisionTimelineEntry, 0),
 		Decisions: make([]Decision, 0),
 		StartTime: time.Now(),
 		Metadata:  make(map[string]any),
@@ -168,6 +187,7 @@ func (t *ExplainabilityTracker) StartTraceWithID(traceID, sessionID, agentID str
 		SessionID: sessionID,
 		AgentID:   agentID,
 		Steps:     make([]ReasoningStep, 0),
+		Timeline:  make([]DecisionTimelineEntry, 0),
 		Decisions: make([]Decision, 0),
 		StartTime: time.Now(),
 		Metadata:  make(map[string]any),
@@ -196,6 +216,26 @@ func (t *ExplainabilityTracker) AddStep(traceID string, step ReasoningStep) {
 	step.StepNumber = len(trace.Steps) + 1
 	step.Timestamp = time.Now()
 	trace.Steps = append(trace.Steps, step)
+}
+
+func (t *ExplainabilityTracker) AddTimelineEntry(traceID string, entry DecisionTimelineEntry) {
+	if !t.config.Enabled {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	trace, ok := t.traces[traceID]
+	if !ok {
+		return
+	}
+
+	entry.Index = len(trace.Timeline) + 1
+	entry.Timestamp = time.Now()
+	trace.Timeline = append(trace.Timeline, entry)
+	t.maybeCompressTimeline(trace)
+	trace.Synopsis = buildTraceSynopsis(trace)
 }
 
 // 记录决定记录在一处。
@@ -250,6 +290,7 @@ func (t *ExplainabilityTracker) EndTrace(traceID string, success bool, output, e
 	trace.Success = success
 	trace.FinalOutput = output
 	trace.Error = errorMsg
+	trace.Synopsis = buildTraceSynopsis(trace)
 }
 
 // Get Trace通过身份追踪到线索
@@ -272,6 +313,32 @@ func (t *ExplainabilityTracker) GetAgentTraces(agentID string) []*ReasoningTrace
 		}
 	}
 	return traces
+}
+
+// LatestSynopsis returns the most recent completed non-empty synopsis for the
+// given agent/session, excluding the supplied trace ID when provided.
+func (t *ExplainabilityTracker) LatestSynopsis(sessionID, agentID, excludeTraceID string) string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	traceIDs := t.agentTraces[agentID]
+	for i := len(traceIDs) - 1; i >= 0; i-- {
+		trace, ok := t.traces[traceIDs[i]]
+		if !ok || trace == nil {
+			continue
+		}
+		if excludeTraceID != "" && trace.ID == excludeTraceID {
+			continue
+		}
+		if sessionID != "" && trace.SessionID != sessionID {
+			continue
+		}
+		if trace.EndTime.IsZero() || strings.TrimSpace(trace.Synopsis) == "" {
+			continue
+		}
+		return trace.Synopsis
+	}
+	return ""
 }
 
 // 解释决定为决定产生人能读取的解释.
@@ -315,16 +382,19 @@ func (t *ExplainabilityTracker) GenerateAuditReport(traceID string) (*AuditRepor
 	}
 
 	report := &AuditReport{
-		TraceID:         trace.ID,
-		SessionID:       trace.SessionID,
-		AgentID:         trace.AgentID,
-		StartTime:       trace.StartTime,
-		EndTime:         trace.EndTime,
-		Duration:        trace.Duration,
-		Success:         trace.Success,
-		TotalSteps:      len(trace.Steps),
-		TotalDecisions:  len(trace.Decisions),
-		DecisionSummary: make(map[DecisionType]int),
+		TraceID:                   trace.ID,
+		SessionID:                 trace.SessionID,
+		AgentID:                   trace.AgentID,
+		StartTime:                 trace.StartTime,
+		EndTime:                   trace.EndTime,
+		Duration:                  trace.Duration,
+		Success:                   trace.Success,
+		TotalSteps:                len(trace.Steps),
+		TotalDecisions:            len(trace.Decisions),
+		DecisionSummary:           make(map[DecisionType]int),
+		Synopsis:                  trace.Synopsis,
+		CompressedTimelineSummary: trace.CompressedTimelineSummary,
+		CompressedTimelineCount:   trace.CompressedTimelineCount,
 	}
 
 	for _, d := range trace.Decisions {
@@ -380,17 +450,20 @@ func (t *ExplainabilityTracker) cleanupOldTraces(agentID string) {
 
 // 审计报告是一份跟踪审计报告。
 type AuditReport struct {
-	TraceID         string               `json:"trace_id"`
-	SessionID       string               `json:"session_id"`
-	AgentID         string               `json:"agent_id"`
-	StartTime       time.Time            `json:"start_time"`
-	EndTime         time.Time            `json:"end_time"`
-	Duration        time.Duration        `json:"duration"`
-	Success         bool                 `json:"success"`
-	TotalSteps      int                  `json:"total_steps"`
-	TotalDecisions  int                  `json:"total_decisions"`
-	DecisionSummary map[DecisionType]int `json:"decision_summary"`
-	Timeline        []TimelineEvent      `json:"timeline"`
+	TraceID                   string               `json:"trace_id"`
+	SessionID                 string               `json:"session_id"`
+	AgentID                   string               `json:"agent_id"`
+	StartTime                 time.Time            `json:"start_time"`
+	EndTime                   time.Time            `json:"end_time"`
+	Duration                  time.Duration        `json:"duration"`
+	Success                   bool                 `json:"success"`
+	TotalSteps                int                  `json:"total_steps"`
+	TotalDecisions            int                  `json:"total_decisions"`
+	DecisionSummary           map[DecisionType]int `json:"decision_summary"`
+	Synopsis                  string               `json:"synopsis,omitempty"`
+	CompressedTimelineSummary string               `json:"compressed_timeline_summary,omitempty"`
+	CompressedTimelineCount   int                  `json:"compressed_timeline_count,omitempty"`
+	Timeline                  []TimelineEvent      `json:"timeline"`
 }
 
 // 时间线Event代表审计时间表中的一个事件.
@@ -403,4 +476,284 @@ type TimelineEvent struct {
 // 将审计报告出口给JSON。
 func (r *AuditReport) Export() ([]byte, error) {
 	return json.Marshal(r)
+}
+
+func buildTraceSynopsis(trace *ReasoningTrace) string {
+	if trace == nil {
+		return ""
+	}
+	parts := make([]string, 0, 5)
+
+	if summary := strings.TrimSpace(trace.CompressedTimelineSummary); summary != "" {
+		parts = append(parts, "history="+summary)
+	}
+
+	if layers := latestTimelineStrings(trace, "prompt_layers", "layer_ids"); len(layers) > 0 {
+		parts = append(parts, "layers="+strings.Join(layers, ","))
+	}
+
+	requested := timelineToolSet(trace, "approval_requested")
+	granted := timelineToolSet(trace, "approval_granted")
+	denied := timelineToolSet(trace, "approval_denied")
+	approvalParts := make([]string, 0, 3)
+	if len(requested) > 0 {
+		approvalParts = append(approvalParts, "requested:"+strings.Join(requested, ","))
+	}
+	if len(granted) > 0 {
+		approvalParts = append(approvalParts, "granted:"+strings.Join(granted, ","))
+	}
+	if len(denied) > 0 {
+		approvalParts = append(approvalParts, "denied:"+strings.Join(denied, ","))
+	}
+	if len(approvalParts) > 0 {
+		parts = append(parts, "approvals="+strings.Join(approvalParts, ";"))
+	}
+
+	if summary := validationSynopsis(trace); summary != "" {
+		parts = append(parts, "validation="+summary)
+	}
+
+	if ending := completionSynopsis(trace); ending != "" {
+		parts = append(parts, "ended="+ending)
+	}
+
+	if len(parts) == 0 {
+		if trace.Error != "" {
+			return "ended=error:" + strings.TrimSpace(trace.Error)
+		}
+		if trace.Success {
+			return "ended=completed"
+		}
+		return ""
+	}
+	return strings.Join(parts, " | ")
+}
+
+func (t *ExplainabilityTracker) maybeCompressTimeline(trace *ReasoningTrace) {
+	if trace == nil {
+		return
+	}
+	maxEntries := t.config.MaxTimelineEntries
+	if maxEntries <= 0 || len(trace.Timeline) <= maxEntries {
+		return
+	}
+	preserveRecent := t.config.PreserveRecentTimeline
+	if preserveRecent <= 0 {
+		preserveRecent = maxEntries / 2
+	}
+	if preserveRecent >= len(trace.Timeline) {
+		return
+	}
+	cut := len(trace.Timeline) - preserveRecent
+	if cut <= 0 {
+		return
+	}
+	compressed := append([]DecisionTimelineEntry(nil), trace.Timeline[:cut]...)
+	trace.Timeline = append([]DecisionTimelineEntry(nil), trace.Timeline[cut:]...)
+	trace.CompressedTimelineCount += len(compressed)
+	trace.CompressedTimelineSummary = mergeCompressedTimelineSummary(trace.CompressedTimelineSummary, summarizeCompressedTimelineEntries(compressed))
+	for i := range trace.Timeline {
+		trace.Timeline[i].Index = i + 1
+	}
+}
+
+func summarizeCompressedTimelineEntries(entries []DecisionTimelineEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	typeCounts := map[string]int{}
+	approvalTools := map[string]struct{}{}
+	validationStatuses := map[string]struct{}{}
+	for _, entry := range entries {
+		typeCounts[entry.Type]++
+		switch entry.Type {
+		case "approval":
+			tool := strings.TrimSpace(fmt.Sprint(entry.Metadata["tool_name"]))
+			if tool != "" {
+				approvalTools[tool] = struct{}{}
+			}
+		case "validation_gate":
+			status := strings.TrimSpace(fmt.Sprint(entry.Metadata["validation_status"]))
+			if status != "" {
+				validationStatuses[status] = struct{}{}
+			}
+		}
+	}
+	parts := []string{fmt.Sprintf("%d entries", len(entries))}
+	if len(typeCounts) > 0 {
+		parts = append(parts, "types="+formatCountMap(typeCounts))
+	}
+	if len(approvalTools) > 0 {
+		parts = append(parts, "approval_tools="+strings.Join(sortedStringSet(approvalTools), ","))
+	}
+	if len(validationStatuses) > 0 {
+		parts = append(parts, "validation_states="+strings.Join(sortedStringSet(validationStatuses), ","))
+	}
+	return strings.Join(parts, ";")
+}
+
+func mergeCompressedTimelineSummary(existing, next string) string {
+	existing = strings.TrimSpace(existing)
+	next = strings.TrimSpace(next)
+	if existing == "" {
+		return next
+	}
+	if next == "" {
+		return existing
+	}
+	return existing + " || " + next
+}
+
+func formatCountMap(values map[string]int) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s:%d", key, values[key]))
+	}
+	return strings.Join(parts, ",")
+}
+
+func sortedStringSet(values map[string]struct{}) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func latestTimelineStrings(trace *ReasoningTrace, entryType, metadataKey string) []string {
+	if trace == nil {
+		return nil
+	}
+	for i := len(trace.Timeline) - 1; i >= 0; i-- {
+		entry := trace.Timeline[i]
+		if entry.Type != entryType || len(entry.Metadata) == 0 {
+			continue
+		}
+		if values, ok := anyStrings(entry.Metadata[metadataKey]); ok {
+			return values
+		}
+	}
+	return nil
+}
+
+func timelineToolSet(trace *ReasoningTrace, approvalType string) []string {
+	if trace == nil || approvalType == "" {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 2)
+	for _, entry := range trace.Timeline {
+		if entry.Type != "approval" || len(entry.Metadata) == 0 {
+			continue
+		}
+		if value, ok := entry.Metadata["approval_type"]; !ok || strings.TrimSpace(fmt.Sprint(value)) != approvalType {
+			continue
+		}
+		tool := strings.TrimSpace(fmt.Sprint(entry.Metadata["tool_name"]))
+		if tool == "" {
+			continue
+		}
+		if _, exists := seen[tool]; exists {
+			continue
+		}
+		seen[tool] = struct{}{}
+		out = append(out, tool)
+	}
+	return out
+}
+
+func validationSynopsis(trace *ReasoningTrace) string {
+	if trace == nil {
+		return ""
+	}
+	for i := len(trace.Timeline) - 1; i >= 0; i-- {
+		entry := trace.Timeline[i]
+		if entry.Type != "validation_gate" {
+			continue
+		}
+		status := strings.TrimSpace(fmt.Sprint(entry.Metadata["validation_status"]))
+		if status == "" {
+			status = strings.TrimSpace(entry.Summary)
+		}
+		summary := strings.TrimSpace(entry.Summary)
+		unresolved, _ := anyStrings(entry.Metadata["unresolved_items"])
+		risks, _ := anyStrings(entry.Metadata["remaining_risks"])
+		parts := []string{status}
+		if summary != "" && summary != status {
+			parts = append(parts, summary)
+		}
+		if len(unresolved) > 0 {
+			parts = append(parts, "unresolved:"+strings.Join(unresolved, ","))
+		}
+		if len(risks) > 0 {
+			parts = append(parts, "risks:"+strings.Join(risks, ","))
+		}
+		return strings.Join(parts, ";")
+	}
+	return ""
+}
+
+func completionSynopsis(trace *ReasoningTrace) string {
+	if trace == nil {
+		return ""
+	}
+	for i := len(trace.Timeline) - 1; i >= 0; i-- {
+		entry := trace.Timeline[i]
+		if entry.Type != "completion_decision" {
+			continue
+		}
+		stopReason := strings.TrimSpace(fmt.Sprint(entry.Metadata["stop_reason"]))
+		summary := strings.TrimSpace(entry.Summary)
+		if stopReason != "" && summary != "" {
+			return stopReason + ":" + summary
+		}
+		if stopReason != "" {
+			return stopReason
+		}
+		if summary != "" {
+			return summary
+		}
+	}
+	if trace.Error != "" {
+		return "error:" + strings.TrimSpace(trace.Error)
+	}
+	if trace.Success {
+		return "completed"
+	}
+	return ""
+}
+
+func anyStrings(value any) ([]string, bool) {
+	switch typed := value.(type) {
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out, len(out) > 0
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if trimmed := strings.TrimSpace(fmt.Sprint(item)); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out, len(out) > 0
+	default:
+		return nil, false
+	}
 }

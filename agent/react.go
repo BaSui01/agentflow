@@ -294,6 +294,7 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 				},
 			})
 		}
+		b.recordPromptLayerTimeline(input.TraceID, assembled.Plan)
 	}
 	ctx = b.withApprovalExplainability(ctx, input)
 
@@ -480,6 +481,18 @@ func (b *BaseAgent) withApprovalExplainability(ctx context.Context, input *Input
 		return ctx
 	}
 	return withApprovalExplainabilityEmitter(ctx, recorder, strings.TrimSpace(input.TraceID))
+}
+
+func (b *BaseAgent) recordPromptLayerTimeline(traceID string, plan agentcontext.ContextPlan) {
+	recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityTimelineRecorder)
+	if !ok || strings.TrimSpace(traceID) == "" {
+		return
+	}
+	recorder.AddExplainabilityTimeline(traceID, "prompt_layers", "Prompt layers assembled for this request", map[string]any{
+		"context_plan":   plan,
+		"applied_layers": plan.AppliedLayers,
+		"layer_ids":      promptLayerIDs(plan.AppliedLayers),
+	})
 }
 
 // 构建 ValidationFeedBackMessage 为重试创建回馈消息
@@ -711,6 +724,7 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 		TenantID:                 strings.TrimSpace(input.TenantID),
 		UserID:                   strings.TrimSpace(input.UserID),
 		ChannelID:                strings.TrimSpace(input.ChannelID),
+		TraceSynopsis:            b.latestTraceSynopsis(input),
 		CheckpointID:             checkpointID,
 		AllowedTools:             b.effectivePromptToolNames(ctx),
 		ToolsDisabled:            promptToolsDisabled(ctx),
@@ -763,6 +777,18 @@ func (b *BaseAgent) estimateContextStatus(
 	}
 	status := b.contextManager.GetStatus(messages)
 	return &status
+}
+
+func (b *BaseAgent) latestTraceSynopsis(input *Input) string {
+	reader, ok := b.extensions.ObservabilitySystemExt().(ExplainabilitySynopsisReader)
+	if !ok || input == nil {
+		return ""
+	}
+	sessionID := strings.TrimSpace(input.ChannelID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(input.TraceID)
+	}
+	return strings.TrimSpace(reader.GetLatestExplainabilitySynopsis(sessionID, b.ID(), strings.TrimSpace(input.TraceID)))
 }
 
 func (b *BaseAgent) effectivePromptToolNames(ctx context.Context) []string {

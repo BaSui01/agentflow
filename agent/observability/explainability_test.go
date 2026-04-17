@@ -2,6 +2,7 @@ package observability
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -39,6 +40,123 @@ func TestExplainabilityTracker_StartTraceWithID(t *testing.T) {
 	got := tracker.GetTrace("trace-fixed")
 	require.NotNil(t, got)
 	assert.Equal(t, "session-1", got.SessionID)
+}
+
+func TestExplainabilityTracker_AddTimelineEntry(t *testing.T) {
+	t.Parallel()
+	tracker := NewExplainabilityTracker(DefaultExplainabilityConfig())
+	trace := tracker.StartTrace("session-1", "agent-1")
+	require.NotNil(t, trace)
+
+	tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+		Type:    "approval",
+		Summary: "approval requested for write_file",
+		Metadata: map[string]any{
+			"tool_name":     "write_file",
+			"approval_type": "approval_requested",
+		},
+	})
+
+	got := tracker.GetTrace(trace.ID)
+	require.NotNil(t, got)
+	require.Len(t, got.Timeline, 1)
+	assert.Equal(t, "approval", got.Timeline[0].Type)
+	assert.Equal(t, "approval requested for write_file", got.Timeline[0].Summary)
+	assert.Contains(t, got.Synopsis, "approvals=requested:write_file")
+}
+
+func TestExplainabilityTracker_EndTrace_GeneratesSynopsis(t *testing.T) {
+	t.Parallel()
+	tracker := NewExplainabilityTracker(DefaultExplainabilityConfig())
+	trace := tracker.StartTraceWithID("trace-synopsis", "session-1", "agent-1")
+	require.NotNil(t, trace)
+
+	tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+		Type:    "prompt_layers",
+		Summary: "Prompt layers assembled",
+		Metadata: map[string]any{
+			"layer_ids": []string{"session_overlay", "tool_guidance", "verification_gate"},
+		},
+	})
+	tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+		Type:    "approval",
+		Summary: "approval required",
+		Metadata: map[string]any{
+			"approval_type": "approval_requested",
+			"tool_name":     "write_file",
+		},
+	})
+	tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+		Type:    "validation_gate",
+		Summary: "validation pending",
+		Metadata: map[string]any{
+			"validation_status": "pending",
+			"unresolved_items":  []string{"run integration tests"},
+			"remaining_risks":   []string{"edge-case coverage"},
+		},
+	})
+	tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+		Type:    "completion_decision",
+		Summary: "validation pending blocked completion",
+		Metadata: map[string]any{
+			"stop_reason": "validation_failed",
+		},
+	})
+
+	tracker.EndTrace(trace.ID, false, "", "validation pending")
+	got := tracker.GetTrace(trace.ID)
+	require.NotNil(t, got)
+	assert.Contains(t, got.Synopsis, "layers=session_overlay,tool_guidance,verification_gate")
+	assert.Contains(t, got.Synopsis, "approvals=requested:write_file")
+	assert.Contains(t, got.Synopsis, "validation=pending")
+	assert.Contains(t, got.Synopsis, "ended=validation_failed")
+}
+
+func TestExplainabilityTracker_GenerateAuditReport_IncludesSynopsis(t *testing.T) {
+	t.Parallel()
+	tracker := NewExplainabilityTracker(DefaultExplainabilityConfig())
+	trace := tracker.StartTraceWithID("trace-audit", "session-1", "agent-1")
+	require.NotNil(t, trace)
+	tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+		Type:    "completion_decision",
+		Summary: "completed successfully",
+		Metadata: map[string]any{
+			"stop_reason": "solved",
+		},
+	})
+	tracker.EndTrace(trace.ID, true, "done", "")
+
+	report, err := tracker.GenerateAuditReport(trace.ID)
+	require.NoError(t, err)
+	assert.Contains(t, report.Synopsis, "ended=solved")
+}
+
+func TestExplainabilityTracker_AddTimelineEntry_CompressesLongTimeline(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultExplainabilityConfig()
+	cfg.MaxTimelineEntries = 4
+	cfg.PreserveRecentTimeline = 2
+	tracker := NewExplainabilityTracker(cfg)
+	trace := tracker.StartTraceWithID("trace-compress", "session-1", "agent-1")
+	require.NotNil(t, trace)
+
+	for i := 0; i < 6; i++ {
+		tracker.AddTimelineEntry(trace.ID, DecisionTimelineEntry{
+			Type:    "approval",
+			Summary: fmt.Sprintf("approval event %d", i),
+			Metadata: map[string]any{
+				"approval_type": "approval_requested",
+				"tool_name":     fmt.Sprintf("tool_%d", i),
+			},
+		})
+	}
+
+	got := tracker.GetTrace(trace.ID)
+	require.NotNil(t, got)
+	assert.LessOrEqual(t, len(got.Timeline), cfg.MaxTimelineEntries)
+	assert.Equal(t, 3, got.CompressedTimelineCount)
+	assert.Contains(t, got.CompressedTimelineSummary, "entries")
+	assert.Contains(t, got.Synopsis, "history=")
 }
 
 func TestExplainabilityTracker_StartTrace_Disabled(t *testing.T) {
@@ -276,6 +394,8 @@ func TestDefaultExplainabilityConfig(t *testing.T) {
 	assert.Equal(t, "standard", cfg.DetailLevel)
 	assert.Equal(t, 24*time.Hour, cfg.MaxTraceAge)
 	assert.Equal(t, 100, cfg.MaxTracesPerAgent)
+	assert.Equal(t, 64, cfg.MaxTimelineEntries)
+	assert.Equal(t, 24, cfg.PreserveRecentTimeline)
 	assert.True(t, cfg.RecordAlternatives)
 	assert.True(t, cfg.RecordFactors)
 }
