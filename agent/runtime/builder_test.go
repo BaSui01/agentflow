@@ -243,6 +243,47 @@ func TestBuilder_Build_InjectsDefaultReasoningRegistryWhenUnset(t *testing.T) {
 	assert.Equal(t, defaultRuntimeReasoningModes, ag.ReasoningRegistry().List())
 }
 
+func TestBuilder_Build_MatchesRegistryUnifiedCoreForBuiltinFactory(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "typed-agent",
+			Name: "Typed Agent",
+			Type: string(agent.TypeAssistant),
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4o-mini",
+		},
+	}
+	provider := mocks.NewSuccessProvider("hello")
+	logger := zap.NewNop()
+	registry := agent.NewAgentRegistry(logger)
+
+	created, err := registry.Create(cfg, provider, nil, nil, nil, logger)
+	require.NoError(t, err)
+
+	registryAgent, ok := created.(*agent.BaseAgent)
+	require.True(t, ok)
+	require.NotNil(t, registryAgent.ReasoningRegistry())
+
+	runtimeAgent, err := NewBuilder(provider, logger).
+		WithOptions(BuildOptions{}).
+		Build(context.Background(), registryAgent.Config())
+	require.NoError(t, err)
+	require.NotNil(t, runtimeAgent.ReasoningRegistry())
+
+	registryCfg := registryAgent.Config()
+	runtimeCfg := runtimeAgent.Config()
+
+	assert.Equal(t, registryAgent.Config().Core, runtimeAgent.Config().Core)
+	assert.Equal(t, registryAgent.Config().LLM, runtimeAgent.Config().LLM)
+	assert.Equal(t, registryAgent.Config().Runtime.SystemPrompt, runtimeAgent.Config().Runtime.SystemPrompt)
+	assert.Equal(t, registryAgent.Config().Metadata["skill_categories"], runtimeAgent.Config().Metadata["skill_categories"])
+	assert.Equal(t, registryCfg.IsObservabilityEnabled(), runtimeCfg.IsObservabilityEnabled())
+	assert.True(t, registryAgent.Provider() == runtimeAgent.Provider())
+	assert.True(t, registryAgent.ToolProvider() == runtimeAgent.ToolProvider())
+	assert.Equal(t, registryAgent.ReasoningRegistry().List(), runtimeAgent.ReasoningRegistry().List())
+}
+
 func TestBuilder_Build_UsesExplicitReasoningRegistry(t *testing.T) {
 	cfg := types.AgentConfig{
 		Core: types.CoreConfig{

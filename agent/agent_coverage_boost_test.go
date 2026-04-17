@@ -1579,8 +1579,8 @@ func TestUnifiedMemoryFacade_SaveInteraction_Enhanced(t *testing.T) {
 		t.Fatal("expected SkipBaseMemory=true with enhanced")
 	}
 	f.SaveInteraction(context.Background(), "agent1", "t1", "user input", "agent output")
-	if mem.savedCount != 1 {
-		t.Fatalf("expected 1 save, got %d", mem.savedCount)
+	if mem.savedCount < 2 {
+		t.Fatalf("expected at least 2 saves, got %d", mem.savedCount)
 	}
 }
 
@@ -1774,7 +1774,7 @@ func TestBaseAgent_ExecuteEnhanced_WithMemorySave(t *testing.T) {
 	ag.Init(context.Background())
 
 	mem := &mockEnhancedMemory{}
-	ag.extensions.EnableEnhancedMemory(mem)
+	ag.EnableEnhancedMemory(mem)
 
 	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
 		TraceID: "ms1",
@@ -1789,8 +1789,53 @@ func TestBaseAgent_ExecuteEnhanced_WithMemorySave(t *testing.T) {
 	if output == nil {
 		t.Fatal("expected non-nil output")
 	}
-	if mem.savedCount != 1 {
-		t.Fatalf("expected 1 save, got %d", mem.savedCount)
+	if mem.savedCount < 2 {
+		t.Fatalf("expected at least 2 saves, got %d", mem.savedCount)
+	}
+}
+
+func TestDefaultMemoryRuntime_RecallForPrompt(t *testing.T) {
+	baseMem := &mockBaseMemoryWithSearch{
+		results: []MemoryRecord{
+			{Content: "user likes concise answers"},
+			{Content: "project uses MongoDB"},
+		},
+	}
+	runtime := NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return nil }, func() MemoryManager { return baseMem }, zap.NewNop())
+	layers, err := runtime.RecallForPrompt(context.Background(), "agent1", MemoryRecallOptions{
+		Query:  "mongodb",
+		Status: &agentcontext.Status{Level: agentcontext.LevelNormal, UsageRatio: 0.4},
+		TopK:   3,
+	})
+	if err != nil {
+		t.Fatalf("RecallForPrompt failed: %v", err)
+	}
+	if len(layers) != 1 {
+		t.Fatalf("expected 1 recall layer, got %d", len(layers))
+	}
+	if !strContains(layers[0].Content, "project uses MongoDB") {
+		t.Fatalf("expected recall content, got %q", layers[0].Content)
+	}
+}
+
+func TestDefaultMemoryRuntime_ObserveTurn(t *testing.T) {
+	mem := &mockEnhancedMemory{}
+	facade := NewUnifiedMemoryFacade(nil, mem, zap.NewNop())
+	runtime := NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return facade }, func() MemoryManager { return nil }, zap.NewNop())
+	err := runtime.ObserveTurn(context.Background(), "agent1", MemoryObservationInput{
+		TraceID:          "t1",
+		UserContent:      "hello",
+		AssistantContent: "world",
+		Metadata:         map[string]any{"tokens": 10},
+	})
+	if err != nil {
+		t.Fatalf("ObserveTurn failed: %v", err)
+	}
+	if mem.savedCount != 2 {
+		t.Fatalf("expected 2 enhanced saves, got %d", mem.savedCount)
+	}
+	if mem.episodeCount != 1 {
+		t.Fatalf("expected 1 episode, got %d", mem.episodeCount)
 	}
 }
 
@@ -2144,6 +2189,12 @@ func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
 		latestHistoryCount:   12,
 	}
 	ag.extensions.EnableObservability(obs)
+	baseMem := &mockBaseMemoryWithSearch{
+		results: []MemoryRecord{{Content: "remember prior validation fix"}},
+	}
+	ag.memory = baseMem
+	ag.memoryFacade = NewUnifiedMemoryFacade(baseMem, nil, zap.NewNop())
+	ag.SetMemoryRuntime(nil)
 
 	output, err := ag.Execute(context.Background(), &Input{
 		TraceID:   "trace-synopsis-1",
@@ -2164,19 +2215,33 @@ func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
 	require.NotNil(t, capturedReq)
 	foundSynopsis := false
 	foundHistory := false
+	foundPlan := false
+	foundMemoryRecall := false
 	for _, msg := range capturedReq.Messages {
+		if strContains(msg.Content, "<trace_feedback_plan>") && strContains(msg.Content, "Recommended action: synopsis_and_history") {
+			foundPlan = true
+		}
 		if strContains(msg.Content, "<trace_synopsis>") && strContains(msg.Content, "ended=validation_failed") {
 			foundSynopsis = true
 		}
 		if strContains(msg.Content, "<trace_history>") && strContains(msg.Content, "12 earlier timeline events compressed") {
 			foundHistory = true
 		}
+		if strContains(msg.Content, "<memory_recall>") && strContains(msg.Content, "remember prior validation fix") {
+			foundMemoryRecall = true
+		}
 	}
 	if !foundSynopsis {
 		t.Fatalf("expected trace_synopsis layer in messages, got %#v", capturedReq.Messages)
 	}
+	if !foundPlan {
+		t.Fatalf("expected trace_feedback_plan layer in messages, got %#v", capturedReq.Messages)
+	}
 	if !foundHistory {
 		t.Fatalf("expected trace_history layer in messages, got %#v", capturedReq.Messages)
+	}
+	if !foundMemoryRecall {
+		t.Fatalf("expected memory_recall layer in messages, got %#v", capturedReq.Messages)
 	}
 }
 
@@ -2234,33 +2299,135 @@ func TestDecideTraceFeedbackMode(t *testing.T) {
 		CompressedHistory:    "12 entries;types=approval:4",
 		CompressedEventCount: 12,
 	}
-	selector := NewDefaultTraceFeedbackSelector()
-	mode := selector.Decide(&Input{
+	planner := NewRuleBasedTraceFeedbackPlanner()
+	complexInput := &Input{
 		Content: "continue",
 		Context: map[string]any{
 			"checkpoint_id":              "cp-1",
 			"tool_verification_required": true,
 		},
-	}, &agentcontext.Status{Level: agentcontext.LevelNormal, UsageRatio: 0.5}, snapshot, DefaultTraceFeedbackConfig())
-	if !mode.InjectSynopsis || !mode.InjectHistory {
+	}
+	mode := planner.Plan(&TraceFeedbackPlanningInput{
+		AgentID:   "agent-1",
+		TraceID:   "trace-1",
+		SessionID: "session-1",
+		UserInput: complexInput,
+		Signals:   collectTraceFeedbackSignals(complexInput, &agentcontext.Status{Level: agentcontext.LevelNormal, UsageRatio: 0.5}, snapshot, true),
+		Snapshot:  snapshot,
+		Config:    DefaultTraceFeedbackConfig(),
+	})
+	if !mode.InjectSynopsis || !mode.InjectHistory || !mode.InjectMemoryRecall {
 		t.Fatalf("expected adaptive mode to inject both layers, got %#v", mode)
 	}
-	if len(mode.SelectedLayers) != 2 {
+	if mode.PlannerID != "rule_based_trace_feedback_planner" || mode.PlannerVersion != "v1" {
+		t.Fatalf("expected planner identity, got %q@%q", mode.PlannerID, mode.PlannerVersion)
+	}
+	if mode.Confidence <= 0 {
+		t.Fatal("expected planner confidence")
+	}
+	if mode.RecommendedAction != TraceFeedbackSynopsisAndHistory {
+		t.Fatalf("expected synopsis_and_history action, got %#v", mode.RecommendedAction)
+	}
+	if mode.PrimaryLayer != "trace_synopsis" || mode.SecondaryLayer != "trace_history" {
+		t.Fatalf("expected primary/secondary layers to be set, got %#v/%#v", mode.PrimaryLayer, mode.SecondaryLayer)
+	}
+	if len(mode.SelectedLayers) != 3 {
 		t.Fatalf("expected selected layers to be populated, got %#v", mode.SelectedLayers)
 	}
 	if mode.Summary == "" {
 		t.Fatal("expected decision summary")
 	}
 
-	mode = selector.Decide(&Input{
+	simpleInput := &Input{
 		Content: "hello",
 		Context: map[string]any{},
-	}, &agentcontext.Status{Level: agentcontext.LevelNone, UsageRatio: 0.1}, snapshot, DefaultTraceFeedbackConfig())
+	}
+	mode = planner.Plan(&TraceFeedbackPlanningInput{
+		AgentID:   "agent-1",
+		TraceID:   "trace-2",
+		SessionID: "session-1",
+		UserInput: simpleInput,
+		Signals:   collectTraceFeedbackSignals(simpleInput, &agentcontext.Status{Level: agentcontext.LevelNone, UsageRatio: 0.1}, snapshot, true),
+		Snapshot:  snapshot,
+		Config:    DefaultTraceFeedbackConfig(),
+	})
 	if mode.InjectSynopsis || mode.InjectHistory {
 		t.Fatalf("expected simple mode to skip trace layers, got %#v", mode)
 	}
-	if len(mode.SuppressedLayers) == 0 {
+	if mode.RecommendedAction != TraceFeedbackSkip {
+		t.Fatalf("expected skip action, got %#v", mode.RecommendedAction)
+	}
+	if len(mode.SuppressedLayers) == 0 || !containsString(mode.SuppressedLayers, "memory_recall") {
 		t.Fatal("expected suppressed layers for simple mode")
+	}
+}
+
+func TestComposedTraceFeedbackPlanner_HintAdapterForceSkip(t *testing.T) {
+	planner := NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter())
+	plan := planner.Plan(&TraceFeedbackPlanningInput{
+		AgentID:   "agent-1",
+		TraceID:   "trace-1",
+		SessionID: "session-1",
+		UserInput: &Input{
+			Content: "continue",
+			Context: map[string]any{"trace_feedback_force_skip": true},
+		},
+		Signals: TraceFeedbackSignals{
+			HasPriorSynopsis:     true,
+			HasCompressedHistory: true,
+			Resume:               true,
+		},
+		Snapshot: ExplainabilitySynopsisSnapshot{
+			Synopsis:          "ended=validation_failed",
+			CompressedHistory: "12 entries",
+		},
+		Config: DefaultTraceFeedbackConfig(),
+	})
+	if plan.InjectSynopsis || plan.InjectHistory {
+		t.Fatalf("expected force skip to suppress all layers, got %#v", plan)
+	}
+	if plan.RecommendedAction != TraceFeedbackSkip {
+		t.Fatalf("expected skip action, got %#v", plan.RecommendedAction)
+	}
+	if plan.PlannerID != "composed_trace_feedback_planner" {
+		t.Fatalf("expected composed planner id, got %q", plan.PlannerID)
+	}
+	if ids, ok := plan.Metadata["adapter_ids"].([]string); !ok || len(ids) != 1 || ids[0] != "hint_trace_feedback_adapter" {
+		t.Fatalf("expected adapter_ids to include hint adapter, got %#v", plan.Metadata["adapter_ids"])
+	}
+}
+
+func TestComposedTraceFeedbackPlanner_HintAdapterOverridesGoalAndHistory(t *testing.T) {
+	planner := NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter())
+	plan := planner.Plan(&TraceFeedbackPlanningInput{
+		AgentID:   "agent-1",
+		TraceID:   "trace-1",
+		SessionID: "session-1",
+		UserInput: &Input{
+			Content: "continue",
+			Context: map[string]any{
+				"trace_feedback_force_history": true,
+				"trace_feedback_goal":          "recover_prior_context",
+				"trace_feedback_primary_layer": "trace_history",
+			},
+		},
+		Signals: TraceFeedbackSignals{
+			HasCompressedHistory: true,
+			ComplexTask:          true,
+		},
+		Snapshot: ExplainabilitySynopsisSnapshot{
+			CompressedHistory: "12 entries",
+		},
+		Config: DefaultTraceFeedbackConfig(),
+	})
+	if !plan.InjectHistory {
+		t.Fatalf("expected force history to inject history, got %#v", plan)
+	}
+	if plan.Goal != "recover_prior_context" {
+		t.Fatalf("expected overridden goal, got %q", plan.Goal)
+	}
+	if plan.PrimaryLayer != "trace_history" {
+		t.Fatalf("expected overridden primary layer, got %q", plan.PrimaryLayer)
 	}
 }
 
@@ -2269,17 +2436,33 @@ func TestRecordTraceFeedbackDecision(t *testing.T) {
 	obs := &mockObservability{}
 	ag.extensions.EnableObservability(obs)
 
-	ag.recordTraceFeedbackDecision("trace-1", traceFeedbackMode{
-		InjectSynopsis: true,
-		InjectHistory:  false,
-		Score:          3,
-		Threshold:      2,
-		Reasons:        []string{"resume", "verification_gate"},
+	ag.recordTraceFeedbackDecision("trace-1", TraceFeedbackPlan{
+		InjectSynopsis:     true,
+		InjectHistory:      false,
+		InjectMemoryRecall: true,
+		PlannerID:          "rule_based_trace_feedback_planner",
+		PlannerVersion:     "v1",
+		Confidence:         0.8,
+		Metadata:           map[string]any{"planner_kind": "rule_based"},
+		Score:              3,
+		SynopsisThreshold:  2,
+		HistoryThreshold:   3,
+		Reasons:            []string{"resume", "verification_gate"},
+		SelectedLayers:     []string{"trace_synopsis", "memory_recall"},
+		Goal:               "resume_prior_execution",
+		RecommendedAction:  TraceFeedbackSynopsisOnly,
+		PrimaryLayer:       "trace_synopsis",
+		Summary:            "goal=resume_prior_execution | action=synopsis_only | primary=trace_synopsis | inject=trace_synopsis,memory_recall | score=3 | thresholds=2/3/2 | reasons=resume,verification_gate",
 	}, &agentcontext.Status{Level: agentcontext.LevelNormal, UsageRatio: 0.4})
 
 	require.Len(t, obs.timeline, 1)
 	assert.Equal(t, "trace_feedback_decision", obs.timeline[0]["type"])
 	assert.Contains(t, obs.timeline[0]["summary"], "inject=trace_synopsis")
+	assert.Contains(t, obs.timeline[0]["summary"], "action=synopsis_only")
+	meta, ok := obs.timeline[0]["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "rule_based_trace_feedback_planner", meta["planner_id"])
+	assert.Equal(t, true, meta["inject_memory_recall"])
 }
 
 func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
@@ -2403,6 +2586,23 @@ func (m *mockBaseMemory) Search(_ context.Context, _, _ string, _ int) ([]Memory
 func (m *mockBaseMemory) Delete(_ context.Context, _ string) error               { return nil }
 func (m *mockBaseMemory) Clear(_ context.Context, _ string, _ MemoryKind) error  { return nil }
 func (m *mockBaseMemory) Get(_ context.Context, _ string) (*MemoryRecord, error) { return nil, nil }
+
+type mockBaseMemoryWithSearch struct {
+	results []MemoryRecord
+}
+
+func (m *mockBaseMemoryWithSearch) Save(_ context.Context, _ MemoryRecord) error { return nil }
+func (m *mockBaseMemoryWithSearch) LoadRecent(_ context.Context, _ string, _ MemoryKind, _ int) ([]MemoryRecord, error) {
+	return nil, nil
+}
+func (m *mockBaseMemoryWithSearch) Search(_ context.Context, _, _ string, _ int) ([]MemoryRecord, error) {
+	return m.results, nil
+}
+func (m *mockBaseMemoryWithSearch) Delete(_ context.Context, _ string) error              { return nil }
+func (m *mockBaseMemoryWithSearch) Clear(_ context.Context, _ string, _ MemoryKind) error { return nil }
+func (m *mockBaseMemoryWithSearch) Get(_ context.Context, _ string) (*MemoryRecord, error) {
+	return nil, nil
+}
 
 type mockEnhancedMemoryWithData struct {
 	working   []types.MemoryEntry

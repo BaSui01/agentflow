@@ -55,6 +55,43 @@ func TestAgentRegistry_Create(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, agent)
 	assert.Equal(t, "a1", agent.ID())
+
+	baseAgent, ok := agent.(*BaseAgent)
+	require.True(t, ok)
+	assert.NotEmpty(t, baseAgent.Config().Runtime.SystemPrompt)
+	assert.Equal(t, "communication,reasoning", baseAgent.Config().Metadata["skill_categories"])
+	require.NotNil(t, baseAgent.ReasoningRegistry())
+	assert.Equal(t, []string{
+		"dynamic_planner",
+		"plan_and_execute",
+		"reflexion",
+		"rewoo",
+		"tree_of_thought",
+	}, baseAgent.ReasoningRegistry().List())
+}
+
+func TestAgentRegistry_Create_PreservesUnifiedBuildCoreWiring(t *testing.T) {
+	r := NewAgentRegistry(zap.NewNop())
+	provider := &testProvider{name: "test"}
+	mem := &testMemoryManager{}
+	tools := &testToolManager{}
+	bus := &testEventBus{}
+
+	cfg := testAgentConfig("a2", "assistant", "gpt-4o-mini")
+	cfg.Core.Type = string(TypeAssistant)
+
+	created, err := r.Create(cfg, provider, mem, tools, bus, zap.NewNop())
+	require.NoError(t, err)
+
+	baseAgent, ok := created.(*BaseAgent)
+	require.True(t, ok)
+	assert.Same(t, provider, baseAgent.Provider())
+	assert.Same(t, mem, baseAgent.memory)
+	assert.Same(t, tools, baseAgent.toolManager)
+	assert.Same(t, bus, baseAgent.bus)
+	require.NotNil(t, baseAgent.MainGateway())
+	require.NotNil(t, baseAgent.ReasoningRegistry())
+	assert.Equal(t, "communication,reasoning", baseAgent.Config().Metadata["skill_categories"])
 }
 
 func TestAgentRegistry_Create_UnknownType(t *testing.T) {
