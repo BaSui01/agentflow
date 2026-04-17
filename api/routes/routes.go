@@ -179,5 +179,7 @@ func RegisterConfig(mux *http.ServeMux, cfgHandler *config.ConfigAPIHandler, fir
 	mux.HandleFunc("OPTIONS /api/v1/config/fields", withLogging(cfgHandler.HandleFields))
 	mux.HandleFunc("GET /api/v1/config/changes", withLogging(cfgHandler.HandleChanges))
 	mux.HandleFunc("OPTIONS /api/v1/config/changes", withLogging(cfgHandler.HandleChanges))
+	mux.HandleFunc("GET /api/v1/config/snapshots", withLogging(cfgHandler.HandleSnapshots))
+	mux.HandleFunc("OPTIONS /api/v1/config/snapshots", withLogging(cfgHandler.HandleSnapshots))
 	logger.Info("Configuration API registered with authentication")
 }

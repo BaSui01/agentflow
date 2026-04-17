@@ -53,9 +53,11 @@ func (h *ToolRegistryHandler) HandleList(w http.ResponseWriter, r *http.Request)
 	}
 	rows, err := h.svc.List()
 	if err != nil {
+		logToolRequestWarn(h.logger, r, "tool_registry", "list", "failed", "tool registry request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_registry", "list", "success", "tool registry request completed")
 	WriteSuccess(w, rows)
 }
 
@@ -66,9 +68,11 @@ func (h *ToolRegistryHandler) HandleListTargets(w http.ResponseWriter, r *http.R
 	}
 	targets, err := h.svc.ListTargets()
 	if err != nil {
+		logToolRequestWarn(h.logger, r, "tool_registry", "list_targets", "failed", "tool registry request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_registry", "list_targets", "success", "tool registry request completed")
 	WriteSuccess(w, map[string]any{"targets": targets})
 }
 
@@ -90,9 +94,11 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 	}
 	row, svcErr := h.svc.Create(req)
 	if svcErr != nil {
+		logToolRequestWarn(h.logger, r, "tool_registry", "create", "failed", "tool registry request completed", zap.Error(svcErr))
 		WriteError(w, svcErr, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_registry", "create", "success", "tool registry request completed")
 	WriteJSON(w, http.StatusCreated, api.Response{
 		Success:   true,
 		Data:      row,
@@ -120,9 +126,11 @@ func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Reques
 	}
 	row, svcErr := h.svc.Update(r.Context(), id, req)
 	if svcErr != nil {
+		logToolRequestWarn(h.logger, r, "tool_registry", "update", "failed", "tool registry request completed", zap.Error(svcErr))
 		WriteError(w, svcErr, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_registry", "update", "success", "tool registry request completed")
 	WriteSuccess(w, row)
 }
 
@@ -137,9 +145,11 @@ func (h *ToolRegistryHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.Delete(id); err != nil {
+		logToolRequestWarn(h.logger, r, "tool_registry", "delete", "failed", "tool registry request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_registry", "delete", "success", "tool registry request completed")
 	WriteSuccess(w, map[string]string{"message": "tool registration deleted"})
 }
 
@@ -149,9 +159,11 @@ func (h *ToolRegistryHandler) HandleReload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.Reload(); err != nil {
+		logToolRequestWarn(h.logger, r, "tool_registry", "reload", "failed", "tool registry request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_registry", "reload", "success", "tool registry request completed")
 	WriteSuccess(w, map[string]string{"message": "tool runtime reloaded"})
 }
 

@@ -38,9 +38,11 @@ func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request)
 	}
 	rows, err := h.svc.List()
 	if err != nil {
+		logToolRequestWarn(h.logger, r, "tool_provider", "list", "failed", "tool provider request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_provider", "list", "success", "tool provider request completed")
 	WriteSuccess(w, rows)
 }
 
@@ -71,9 +73,11 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 
 	row, svcErr := h.svc.Upsert(provider, req)
 	if svcErr != nil {
+		logToolRequestWarn(h.logger, r, "tool_provider", "upsert", "failed", "tool provider request completed", zap.Error(svcErr))
 		WriteError(w, svcErr, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_provider", "upsert", "success", "tool provider request completed", zap.String("provider", provider))
 	WriteSuccess(w, row)
 }
 
@@ -88,9 +92,11 @@ func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.Delete(provider); err != nil {
+		logToolRequestWarn(h.logger, r, "tool_provider", "delete", "failed", "tool provider request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_provider", "delete", "success", "tool provider request completed", zap.String("provider", provider))
 	WriteSuccess(w, map[string]string{"message": "tool provider deleted"})
 }
 
@@ -100,9 +106,11 @@ func (h *ToolProviderHandler) HandleReload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.svc.Reload(); err != nil {
+		logToolRequestWarn(h.logger, r, "tool_provider", "reload", "failed", "tool provider request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
 	}
+	logToolRequestInfo(h.logger, r, "tool_provider", "reload", "success", "tool provider request completed")
 	WriteSuccess(w, map[string]string{"message": "tool runtime reloaded"})
 }
 
