@@ -8,18 +8,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/BaSui01/agentflow/types"
-
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/types"
 )
-
-// 结构输出输出输出扩展为 llm. 提供商具有结构化输出能力检测.
-// 支持本土结构输出(如OpenAI的JSON模式)的提供商应当执行.
-type StructuredOutputProvider interface {
-	llm.Provider
-	// 如果提供者支持本地结构输出, 则支持StructuredOutput 返回 true 。
-	SupportsStructuredOutput() bool
-}
 
 // ParseResult代表了解析结构化输出的结果.
 type ParseResult[T any] struct {
@@ -37,16 +29,16 @@ func (r *ParseResult[T]) IsValid() bool {
 // LLM 提供者的类型安全输出。
 type StructuredOutput[T any] struct {
 	schema    *JSONSchema
-	provider  llm.Provider
+	gateway   llmcore.Gateway
 	validator SchemaValidator
 	generator *SchemaGenerator
 }
 
 // NewStructuredOutput为T型创建了新的结构化输出处理器.
 // 它从类型参数中自动生成了JSON Schema.
-func NewStructuredOutput[T any](provider llm.Provider) (*StructuredOutput[T], error) {
-	if provider == nil {
-		return nil, fmt.Errorf("provider cannot be nil")
+func NewStructuredOutput[T any](gateway llmcore.Gateway) (*StructuredOutput[T], error) {
+	if gateway == nil {
+		return nil, fmt.Errorf("gateway cannot be nil")
 	}
 
 	generator := NewSchemaGenerator()
@@ -58,16 +50,16 @@ func NewStructuredOutput[T any](provider llm.Provider) (*StructuredOutput[T], er
 
 	return &StructuredOutput[T]{
 		schema:    schema,
-		provider:  provider,
+		gateway:   gateway,
 		validator: NewValidator(),
 		generator: generator,
 	}, nil
 }
 
 // NewStructured Output With Schema 创建了自定义的自定义计划的新结构化输出处理器.
-func NewStructuredOutputWithSchema[T any](provider llm.Provider, schema *JSONSchema) (*StructuredOutput[T], error) {
-	if provider == nil {
-		return nil, fmt.Errorf("provider cannot be nil")
+func NewStructuredOutputWithSchema[T any](gateway llmcore.Gateway, schema *JSONSchema) (*StructuredOutput[T], error) {
+	if gateway == nil {
+		return nil, fmt.Errorf("gateway cannot be nil")
 	}
 	if schema == nil {
 		return nil, fmt.Errorf("schema cannot be nil")
@@ -75,7 +67,7 @@ func NewStructuredOutputWithSchema[T any](provider llm.Provider, schema *JSONSch
 
 	return &StructuredOutput[T]{
 		schema:    schema,
-		provider:  provider,
+		gateway:   gateway,
 		validator: NewValidator(),
 		generator: NewSchemaGenerator(),
 	}, nil
@@ -97,13 +89,9 @@ func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, 
 }
 
 // 生成 Messages 从信件列表中生成结构化输出 。
-// 它使用本地结构输出 如果提供者支持它,
-// 否则会回到即时工程
 func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages []types.Message) (*T, error) {
-	if s.supportsNativeStructuredOutput() {
-		return s.generateNative(ctx, messages)
-	}
-	return s.generateWithPromptEngineering(ctx, messages)
+	value, _, _, err := s.generateWithGatewayDetailed(ctx, messages)
+	return value, err
 }
 
 // 生成 WithParse 生成结构化输出并返回详细解析结果 。
@@ -116,25 +104,9 @@ func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt stri
 
 // 生成与Messages AndParse 从消息中生成结构化输出并返回详细解析结果.
 func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, messages []types.Message) (*ParseResult[T], error) {
-	var raw string
-	var value *T
-	var parseErrors []ParseError
-
-	if s.supportsNativeStructuredOutput() {
-		v, r, err := s.generateNativeWithRaw(ctx, messages)
-		if err != nil {
-			return nil, err
-		}
-		raw = r
-		value = v
-	} else {
-		v, r, errs, err := s.generateWithPromptEngineeringDetailed(ctx, messages)
-		if err != nil {
-			return nil, err
-		}
-		raw = r
-		value = v
-		parseErrors = errs
+	value, raw, parseErrors, err := s.generateWithGatewayDetailed(ctx, messages)
+	if err != nil {
+		return nil, err
 	}
 
 	return &ParseResult[T]{
@@ -144,35 +116,21 @@ func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, 
 	}, nil
 }
 
-// 支持 NativeStructured Output 检查,如果提供者支持本地结构输出。
-func (s *StructuredOutput[T]) supportsNativeStructuredOutput() bool {
-	if sp, ok := s.provider.(StructuredOutputProvider); ok {
-		return sp.SupportsStructuredOutput()
-	}
-	return false
-}
-
-// 生成 Native 使用提供者的本地结构输出能力.
-func (s *StructuredOutput[T]) generateNative(ctx context.Context, messages []types.Message) (*T, error) {
-	value, _, err := s.generateNativeWithRaw(ctx, messages)
-	return value, err
-}
-
-// 生成 NativeWithRaw 使用本地结构输出并返回原始响应。
-func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, messages []types.Message) (*T, string, error) {
+// generateWithGatewayDetailed 通过 llmcore.Gateway 统一入口生成结构化输出。
+func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, messages []types.Message) (*T, string, []ParseError, error) {
 	// 为请求构建 JSON Schema
 	schemaJSON, err := json.Marshal(s.schema)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to marshal schema: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to marshal schema: %w", err)
 	}
 
 	// 将 schema 转换为 map[string]any 用于 ResponseFormat
 	var schemaMap map[string]any
 	if err := json.Unmarshal(schemaJSON, &schemaMap); err != nil {
-		return nil, "", fmt.Errorf("failed to unmarshal schema to map: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to unmarshal schema to map: %w", err)
 	}
 
-	// 添加带有计划指令的系统消息
+	// 添加带有 schema 指令的系统消息
 	systemMsg := types.Message{
 		Role: llm.RoleSystem,
 		Content: fmt.Sprintf(
@@ -197,58 +155,9 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 		},
 	}
 
-	resp, err := s.provider.Completion(ctx, req)
+	resp, err := s.invokeChat(ctx, req)
 	if err != nil {
-		return nil, "", fmt.Errorf("provider completion failed: %w", err)
-	}
-
-	if len(resp.Choices) == 0 {
-		return nil, "", fmt.Errorf("no response choices returned")
-	}
-
-	raw := resp.Choices[0].Message.Content
-
-	// 解析并验证响应
-	value, err := s.parseAndValidate(raw)
-	if err != nil {
-		return nil, raw, err
-	}
-
-	return value, raw, nil
-}
-
-// 生成WithPromptEngineering 使用即时工程来获得结构化输出.
-func (s *StructuredOutput[T]) generateWithPromptEngineering(ctx context.Context, messages []types.Message) (*T, error) {
-	value, _, _, err := s.generateWithPromptEngineeringDetailed(ctx, messages)
-	return value, err
-}
-
-// 生成与Prompt工程 详细使用即时工程并返回详细结果.
-func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.Context, messages []types.Message) (*T, string, []ParseError, error) {
-	// 构建快捷的 JSON 计划
-	schemaJSON, err := s.schema.ToJSONIndent()
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to marshal schema: %w", err)
-	}
-
-	// 为结构化输出创建详细系统提示
-	systemPrompt := s.buildStructuredOutputPrompt(string(schemaJSON))
-
-	systemMsg := types.Message{
-		Role:    llm.RoleSystem,
-		Content: systemPrompt,
-	}
-
-	// 预收系统消息
-	allMessages := append([]types.Message{systemMsg}, messages...)
-
-	req := &llm.ChatRequest{
-		Messages: allMessages,
-	}
-
-	resp, err := s.provider.Completion(ctx, req)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("provider completion failed: %w", err)
+		return nil, "", nil, fmt.Errorf("gateway invoke failed: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
@@ -256,14 +165,31 @@ func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.
 	}
 
 	raw := resp.Choices[0].Message.Content
-
-	// 从响应中提取 JSON( 处理下标记代码块等)
 	jsonStr := s.extractJSON(raw)
 
-	// 解析和验证
 	value, parseErrors := s.parseAndValidateDetailed(jsonStr)
 
 	return value, raw, parseErrors, nil
+}
+
+func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if s.gateway == nil {
+		return nil, fmt.Errorf("gateway is not configured")
+	}
+	resp, err := s.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  req.Model,
+		TraceID:    req.TraceID,
+		Payload:    req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	if !ok || chatResp == nil {
+		return nil, fmt.Errorf("invalid chat response from gateway")
+	}
+	return chatResp, nil
 }
 
 // 构建StructuredOutputPrompt为结构化输出生成创建了详细提示.

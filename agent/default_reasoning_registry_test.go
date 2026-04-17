@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,7 +18,10 @@ func TestNewDefaultReasoningRegistry_RegistersSupportedPatterns(t *testing.T) {
 		},
 	}
 
-	registry := NewDefaultReasoningRegistry(provider, "gpt-4o", toolManager, "agent-1", nil, zap.NewNop())
+	registry := NewDefaultReasoningRegistry(llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       zap.NewNop(),
+	}), "gpt-4o", toolManager, "agent-1", nil, zap.NewNop())
 	require.NotNil(t, registry)
 	require.Equal(t, []string{
 		"dynamic_planner",
