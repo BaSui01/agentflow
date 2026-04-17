@@ -1,10 +1,15 @@
 package sdk
 
 import (
+	"time"
+
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
+	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
+	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
@@ -18,20 +23,57 @@ import (
 type Options struct {
 	Logger *zap.Logger
 
-	// Provider is the main chat provider used by agents and/or RAG adapters.
-	// If you only need workflow/rag without agents, Provider may be nil.
+	// LLM configures how the SDK assembles the main provider/tool provider.
+	// When set, it takes precedence over the legacy Provider/ToolProvider/Ledger fields.
+	LLM *LLMOptions
+
+	// Provider/ToolProvider/Ledger are legacy direct injection fields kept for
+	// compatibility. Prefer using Options.LLM for future integrations.
+	Provider     llm.Provider
+	ToolProvider llm.Provider
+	Ledger       llmobs.Ledger
+
+	Agent    *AgentOptions
+	Workflow *WorkflowOptions
+	RAG      *RAGOptions
+}
+
+// LLMOptions unifies the SDK entrypoint for LLM provider composition.
+//
+// Consumers can either inject a ready llm.Provider directly (Provider),
+// or ask the SDK to build a channel-routed provider (Router).
+type LLMOptions struct {
+	// Provider is a ready-to-use main provider. When set, Router is ignored.
 	Provider llm.Provider
 
 	// ToolProvider is optional. When set, agents may use it for tool calls
 	// while using Provider for final answer generation (dual-model mode).
 	ToolProvider llm.Provider
 
-	// Ledger is optional usage/cost ledger for observability.
-	Ledger llmobs.Ledger
+	// Compose optionally wraps the assembled main provider with retry/cache/budget
+	// middleware via llm/runtime/compose.Build.
+	Compose *llmcompose.Config
 
-	Agent    *AgentOptions
-	Workflow *WorkflowOptions
-	RAG      *RAGOptions
+	// Router optionally builds a channel-routed provider from a store. This is
+	// the SDK-friendly assembly surface for load balancing and model mapping.
+	Router *LLMRouterOptions
+}
+
+type LLMRouterOptions struct {
+	// Name is an optional provider chain name for diagnostics.
+	Name string
+
+	// Store is required. It supplies channels, keys, secrets, and model mappings.
+	Store channelstore.Store
+
+	// ProviderTimeout controls upstream provider timeout (optional).
+	ProviderTimeout time.Duration
+
+	// RetryPolicy is optional and overrides the router's default retry behavior.
+	RetryPolicy llmrouter.ChannelRouteRetryPolicy
+
+	// Logger overrides the build logger (optional).
+	Logger *zap.Logger
 }
 
 type AgentOptions struct {

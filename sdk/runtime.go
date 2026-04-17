@@ -8,6 +8,10 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
+	llmobs "github.com/BaSui01/agentflow/llm/observability"
+	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
+	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
@@ -24,6 +28,8 @@ type Runtime struct {
 
 	// Provider is the primary chat provider (may be nil if not configured).
 	Provider llm.Provider
+	// ToolProvider is an optional dedicated provider for tool calls.
+	ToolProvider llm.Provider
 
 	agentBuilder *runtime.Builder
 
@@ -83,10 +89,14 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 		logger = zap.NewNop()
 	}
 
-	rt := &Runtime{
-		logger:   logger.With(zap.String("component", "sdk_runtime")),
-		Provider: b.opts.Provider,
+	rt := &Runtime{logger: logger.With(zap.String("component", "sdk_runtime"))}
+
+	mainProvider, toolProvider, ledger, err := buildSDKProviders(ctx, b.opts, logger)
+	if err != nil {
+		return nil, err
 	}
+	rt.Provider = mainProvider
+	rt.ToolProvider = toolProvider
 
 	// ------------------------
 	// Agent runtime assembly
@@ -136,11 +146,11 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 		}
 
 		ab := runtime.NewBuilder(rt.Provider, logger).WithOptions(buildOpts)
-		if b.opts.ToolProvider != nil {
-			ab = ab.WithToolProvider(b.opts.ToolProvider)
+		if rt.ToolProvider != nil {
+			ab = ab.WithToolProvider(rt.ToolProvider)
 		}
-		if b.opts.Ledger != nil {
-			ab = ab.WithLedger(b.opts.Ledger)
+		if ledger != nil {
+			ab = ab.WithLedger(ledger)
 		}
 		if len(agentOpts.ToolScope) > 0 {
 			ab = ab.WithToolScope(agentOpts.ToolScope)
@@ -252,4 +262,78 @@ func isZeroAgentBuildOptions(o runtime.BuildOptions) bool {
 	// Treat the struct zero value as "not set".
 	// DefaultBuildOptions() sets EnableAll=true etc.
 	return o == (runtime.BuildOptions{})
+}
+
+func buildSDKProviders(ctx context.Context, opts Options, logger *zap.Logger) (llm.Provider, llm.Provider, llmobs.Ledger, error) {
+	// Priority:
+	// 1) Options.LLM if provided
+	// 2) Legacy fields: Provider/ToolProvider
+	ledger := opts.Ledger
+
+	if opts.LLM == nil {
+		return opts.Provider, opts.ToolProvider, ledger, nil
+	}
+
+	// Direct injection wins.
+	if opts.LLM.Provider != nil {
+		main := opts.LLM.Provider
+		tool := opts.LLM.ToolProvider
+		if opts.LLM.Compose != nil {
+			rt, err := llmcompose.Build(*opts.LLM.Compose, main, logger)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("compose llm runtime: %w", err)
+			}
+			main = rt.Provider
+			if tool == nil {
+				tool = rt.ToolProvider
+			}
+			ledger = rt.Ledger
+		}
+		return main, tool, ledger, nil
+	}
+
+	// Router path
+	if opts.LLM.Router == nil || opts.LLM.Router.Store == nil {
+		return nil, nil, ledger, nil
+	}
+
+	rOpts := opts.LLM.Router
+	rLogger := rOpts.Logger
+	if rLogger == nil {
+		rLogger = logger
+	}
+
+	routedCfg, err := channelstore.ComposeChannelRoutedProviderConfig(channelstore.RoutedProviderOptions{
+		Name:            rOpts.Name,
+		Store:           rOpts.Store,
+		RetryPolicy:     rOpts.RetryPolicy,
+		ProviderTimeout: rOpts.ProviderTimeout,
+		Logger:          rLogger,
+	})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("compose channel routed provider config: %w", err)
+	}
+
+	provider, err := llmrouter.BuildChannelRoutedProvider(routedCfg)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("build channel routed provider: %w", err)
+	}
+
+	main := llm.Provider(provider)
+	tool := opts.LLM.ToolProvider
+
+	if opts.LLM.Compose != nil {
+		rt, err := llmcompose.Build(*opts.LLM.Compose, main, logger)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("compose llm runtime: %w", err)
+		}
+		main = rt.Provider
+		if tool == nil {
+			tool = rt.ToolProvider
+		}
+		ledger = rt.Ledger
+	}
+
+	_ = ctx
+	return main, tool, ledger, nil
 }

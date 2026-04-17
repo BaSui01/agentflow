@@ -7,6 +7,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
+	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -91,6 +92,55 @@ func TestSDK_Build_BoundaryA(t *testing.T) {
 		Core: types.CoreConfig{
 			ID:   "sdk-agent-1",
 			Name: "SDK Agent",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "mock-model",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+}
+
+func TestSDK_Build_WithLLMRouterStore(t *testing.T) {
+	ctx := context.Background()
+	logger := zap.NewNop()
+
+	store := channelstore.NewStaticStore(channelstore.StaticStoreConfig{
+		Channels: []channelstore.Channel{
+			{ID: "ch1", Provider: "openai", BaseURL: "https://example.invalid", Weight: 100},
+		},
+		Keys: []channelstore.Key{
+			{ID: "k1", ChannelID: "ch1", Weight: 100},
+		},
+		Mappings: []channelstore.ModelMapping{
+			{ID: "m1", ChannelID: "ch1", PublicModel: "mock-model", RemoteModel: "mock-model", Provider: "openai", Weight: 100},
+		},
+		Secrets: map[string]channelstore.Secret{
+			"k1": {APIKey: "sk-test"},
+		},
+	})
+
+	rt, err := New(Options{
+		Logger: logger,
+		LLM: &LLMOptions{
+			Router: &LLMRouterOptions{
+				Name:  "sdk-router",
+				Store: store,
+			},
+		},
+		Agent: &AgentOptions{
+			BuildOptions: runtime.DefaultBuildOptions(),
+		},
+	}).Build(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, rt)
+	require.NotNil(t, rt.Provider)
+
+	ag, err := rt.NewAgent(ctx, types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "sdk-agent-router",
+			Name: "SDK Agent Router",
 			Type: "assistant",
 		},
 		LLM: types.LLMConfig{
