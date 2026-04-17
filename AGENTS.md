@@ -47,3 +47,30 @@
 
 - **`CC-Source/` 与 `docs/claude-code/` 仅作外部参考学习资料**：用于借鉴设计与实现思路，不属于当前项目正式实现。
 - **默认排除主项目语境**：做当前项目设计、开发、评审、文档同步、架构守卫判断时，默认排除上述目录；仅在明确要求参考外部实现时再读取或引用。
+
+### 8) 交互语言（强制）
+
+- **默认使用中文交互**：在本仓库作用域内，与用户沟通、汇报进展、总结结果时默认使用中文。
+- **专业术语可保留原文**：专业术语、代码、命令、路径、标识符、原始报错与协议字段可直接保留英文或原文，避免歧义。
+<!-- TRELLIS:START -->
+# Trellis Instructions
+
+These instructions are for AI assistants working in this project.
+
+Use the `/trellis:start` command when starting a new session to:
+- Initialize your developer identity
+- Understand current project context
+- Read relevant guidelines
+
+Use `@/.trellis/` to learn:
+- Development workflow (`workflow.md`)
+- Project structure guidelines (`spec/`)
+- Developer workspace (`workspace/`)
+
+If you're using Codex, project-scoped helpers may also live in:
+- `.agents/skills/` for reusable Trellis skills
+- `.codex/agents/` for optional custom subagents
+
+Keep this managed block so 'trellis update' can refresh the instructions.
+
+<!-- TRELLIS:END -->

@@ -43,3 +43,4 @@ benchmarks/latest.txt
 
 # Temporary files
 .tmp/
+.omx/
