@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
@@ -25,7 +26,7 @@ type WorkflowAgentResolver func(ctx context.Context, agentID string) (agent.Agen
 
 // WorkflowRuntimeOptions carries optional runtime integrations for workflow steps.
 type WorkflowRuntimeOptions struct {
-	LLMProvider             llm.Provider
+	LLMGateway              llmcore.Gateway
 	DefaultModel            string
 	AgentResolver           WorkflowAgentResolver
 	RetrievalStore          ragcore.VectorStore
@@ -45,7 +46,7 @@ func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engi
 	_ = ensureAutoApproveHITL(hitlManager, logger)
 
 	return engine.StepDependencies{
-		Gateway:       newLLMProviderGateway(opts.LLMProvider, opts.DefaultModel),
+		Gateway:       newWorkflowGatewayAdapter(opts.LLMGateway, opts.DefaultModel),
 		ToolRegistry:  hostedToolRegistryAdapter{registry: toolRegistry},
 		ChainRegistry: toolRegistry,
 		HumanHandler:  hitlHumanInputHandler{requester: requester},
@@ -97,21 +98,21 @@ func buildHostedWorkflowTools(opts WorkflowRuntimeOptions, logger *zap.Logger) (
 	return registry, codeTool
 }
 
-type llmProviderGateway struct {
-	provider     llm.Provider
+type workflowGatewayAdapter struct {
+	gateway      llmcore.Gateway
 	defaultModel string
 }
 
-func newLLMProviderGateway(provider llm.Provider, defaultModel string) core.GatewayLike {
-	return &llmProviderGateway{
-		provider:     provider,
+func newWorkflowGatewayAdapter(gateway llmcore.Gateway, defaultModel string) core.GatewayLike {
+	return &workflowGatewayAdapter{
+		gateway:      gateway,
 		defaultModel: defaultModel,
 	}
 }
 
-func (g *llmProviderGateway) Invoke(ctx context.Context, req *core.LLMRequest) (*core.LLMResponse, error) {
-	if g.provider == nil {
-		return nil, fmt.Errorf("workflow LLM provider is not configured")
+func (g *workflowGatewayAdapter) Invoke(ctx context.Context, req *core.LLMRequest) (*core.LLMResponse, error) {
+	if g.gateway == nil {
+		return nil, fmt.Errorf("workflow LLM gateway is not configured")
 	}
 
 	model := req.Model
@@ -132,22 +133,31 @@ func (g *llmProviderGateway) Invoke(ctx context.Context, req *core.LLMRequest) (
 		Metadata:    req.Metadata,
 	}
 
-	resp, err := g.provider.Completion(ctx, completionReq)
+	resp, err := g.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  model,
+		Payload:    completionReq,
+		Metadata:   req.Metadata,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.Choices) == 0 {
+	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	if !ok || chatResp == nil {
+		return nil, fmt.Errorf("workflow gateway returned invalid chat output type %T", resp.Output)
+	}
+	if len(chatResp.Choices) == 0 {
 		return nil, fmt.Errorf("llm response has no choices")
 	}
 
 	out := &core.LLMResponse{
-		Content: resp.Choices[0].Message.Content,
-		Model:   resp.Model,
+		Content: chatResp.Choices[0].Message.Content,
+		Model:   chatResp.Model,
 	}
 	out.Usage = &core.LLMUsage{
-		PromptTokens:     resp.Usage.PromptTokens,
-		CompletionTokens: resp.Usage.CompletionTokens,
-		TotalTokens:      resp.Usage.TotalTokens,
+		PromptTokens:     chatResp.Usage.PromptTokens,
+		CompletionTokens: chatResp.Usage.CompletionTokens,
+		TotalTokens:      chatResp.Usage.TotalTokens,
 	}
 	return out, nil
 }

@@ -297,7 +297,9 @@ func (s *Server) initHandlers() error {
 	}
 
 	var workflowStore bootstrap.WorkflowRuntimeOptions
-	workflowStore.LLMProvider = s.provider
+	if llmRuntime != nil {
+		workflowStore.LLMGateway = llmRuntime.Gateway
+	}
 	workflowStore.DefaultModel = s.cfg.Agent.Model
 	workflowStore.HITLManager = s.currentWorkflowHITLManager()
 	if s.resolver != nil {

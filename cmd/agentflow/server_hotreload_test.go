@@ -301,7 +301,7 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, s.provider, nil)
+	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, nil, nil)
 	s.workflowHandler = handlers.NewWorkflowHandler(workflowRuntime.Facade, workflowRuntime.Parser, s.logger)
 	require.NotNil(t, s.workflowHandler)
 	require.NotNil(t, s.currentWorkflowHITLManager())
