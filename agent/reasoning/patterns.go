@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -149,19 +150,19 @@ func DefaultTreeOfThoughtConfig() TreeOfThoughtConfig {
 // Tree Of Thought 执行思想之树推理模式.
 // 它平行地探索多条推理路径,并选择了最好的一条.
 type TreeOfThought struct {
-	provider     types.ChatProvider
+	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
 	config       TreeOfThoughtConfig
 	logger       *zap.Logger
 }
 
 // NewTreeOfThought创造出"思想理性之树".
-func NewTreeOfThought(provider types.ChatProvider, executor tools.ToolExecutor, config TreeOfThoughtConfig, logger *zap.Logger) *TreeOfThought {
+func NewTreeOfThought(gateway llmcore.Gateway, executor tools.ToolExecutor, config TreeOfThoughtConfig, logger *zap.Logger) *TreeOfThought {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &TreeOfThought{
-		provider:     provider,
+		gateway:      gateway,
 		toolExecutor: executor,
 		config:       config,
 		logger:       logger,
@@ -272,7 +273,7 @@ Generate %d different next steps to continue from the previous step.
 Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, parent.Content, count)
 	}
 
-	resp, err := t.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, t.gateway, &llm.ChatRequest{
 		Model: defaultModel(t.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -361,7 +362,7 @@ Rate this approach on a scale of 0.0 to 1.0 based on:
 
 Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 
-	resp, err := t.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, t.gateway, &llm.ChatRequest{
 		Model: defaultModel(t.config.EvalModel),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},

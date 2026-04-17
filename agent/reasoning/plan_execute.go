@@ -11,6 +11,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -41,7 +42,7 @@ func DefaultPlanExecuteConfig() PlanExecuteConfig {
 // PlanAndExecute执行"计划与执行"推理模式.
 // 与ReWOO不同,它可以根据中间结果来调整计划.
 type PlanAndExecute struct {
-	provider     types.ChatProvider
+	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       PlanExecuteConfig
@@ -63,12 +64,12 @@ const (
 )
 
 // NewPlanAndExecute创建了一个新的"计划"和"执行"推理器.
-func NewPlanAndExecute(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
+func NewPlanAndExecute(gateway llmcore.Gateway, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &PlanAndExecute{
-		provider:     provider,
+		gateway:      gateway,
 		toolExecutor: executor,
 		toolSchemas:  schemas,
 		config:       config,
@@ -247,7 +248,7 @@ Create a detailed plan. Output as JSON:
 
 Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "\n"), task, p.config.MaxPlanSteps)
 
-	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, p.gateway, &llm.ChatRequest{
 		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -362,7 +363,7 @@ Description: %s
 
 Execute this step and provide the result.`, plan.Goal, strings.Join(context, "\n"), step.ID, step.Description)
 
-	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, p.gateway, &llm.ChatRequest{
 		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -409,7 +410,7 @@ Create a new plan to continue from here. Output as JSON:
   "steps": [{"id": "step_N", "description": "...", "tool": "...", "arguments": "..."}]
 }`, task, strings.Join(completedContext, "\n"), failedStep.ID, failedStep.Description, errorMsg)
 
-	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, p.gateway, &llm.ChatRequest{
 		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -458,7 +459,7 @@ Execution results:
 
 Based on these results, provide a clear and complete final answer.`, task, strings.Join(stepResults, "\n"))
 
-	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, p.gateway, &llm.ChatRequest{
 		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},

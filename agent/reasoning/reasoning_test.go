@@ -493,7 +493,7 @@ func TestReWOO_Execute_Success(t *testing.T) {
 		},
 	}
 
-	r := NewReWOO(provider, executor, nil, DefaultReWOOConfig(), zap.NewNop())
+	r := NewReWOO(testGateway(provider), executor, nil, DefaultReWOOConfig(), zap.NewNop())
 	result, err := r.Execute(context.Background(), "find golang info")
 	require.NoError(t, err)
 	assert.Equal(t, "rewoo", result.Pattern)
@@ -532,7 +532,7 @@ func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
 	cfg.MaxDepth = 3
 	cfg.PruneThreshold = 0.3
 	cfg.Timeout = 10 * time.Second
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	result, err := tot.Execute(context.Background(), "solve problem")
 	require.NoError(t, err)
@@ -558,7 +558,7 @@ func TestTreeOfThought_Execute_MaxDepthReached(t *testing.T) {
 	cfg.MaxDepth = 1
 	cfg.PruneThreshold = 0.1
 	cfg.Timeout = 10 * time.Second
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	result, err := tot.Execute(context.Background(), "solve problem")
 	require.NoError(t, err)
@@ -582,7 +582,7 @@ func TestTreeOfThought_GenerateThoughts_WithParent(t *testing.T) {
 
 	cfg := DefaultTreeOfThoughtConfig()
 	cfg.Timeout = 10 * time.Second
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	parent := &ReasoningStep{Content: "parent step"}
 	thoughts, tokens, err := tot.generateThoughts(context.Background(), "task", parent, 1)
@@ -605,7 +605,7 @@ func TestTreeOfThought_GenerateThoughts_FallbackOnBadJSON(t *testing.T) {
 
 	cfg := DefaultTreeOfThoughtConfig()
 	cfg.Timeout = 10 * time.Second
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	thoughts, _, err := tot.generateThoughts(context.Background(), "task", nil, 2)
 	require.NoError(t, err)
@@ -627,7 +627,7 @@ func TestTreeOfThought_EvaluateSequential(t *testing.T) {
 
 	cfg := DefaultTreeOfThoughtConfig()
 	cfg.ParallelEval = false
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	thoughts := []ReasoningStep{{StepID: "a"}, {StepID: "b"}}
 	evaluated, tokens := tot.evaluateSequential(context.Background(), "task", thoughts)
@@ -646,7 +646,7 @@ func TestTreeOfThought_EvaluateSingle_Error(t *testing.T) {
 	}
 
 	cfg := DefaultTreeOfThoughtConfig()
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	score, tokens := tot.evaluateSingle(context.Background(), "task", ReasoningStep{})
 	assert.Equal(t, 0.5, score)
@@ -666,7 +666,7 @@ func TestTreeOfThought_EvaluateSingle_OutOfRange(t *testing.T) {
 	}
 
 	cfg := DefaultTreeOfThoughtConfig()
-	tot := NewTreeOfThought(provider, nil, cfg, zap.NewNop())
+	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
 	score, _ := tot.evaluateSingle(context.Background(), "task", ReasoningStep{})
 	assert.Equal(t, 0.5, score) // out of range defaults to 0.5
@@ -700,7 +700,7 @@ func TestReflexionExecutor_Execute_SuccessOnFirstTrial(t *testing.T) {
 	cfg.MaxTrials = 3
 	cfg.SuccessThreshold = 0.8
 	cfg.Timeout = 10 * time.Second
-	r := NewReflexionExecutor(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	r := NewReflexionExecutor(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := r.Execute(context.Background(), "solve this")
 	require.NoError(t, err)
@@ -756,7 +756,7 @@ func TestReflexionExecutor_Execute_MultipleTrials(t *testing.T) {
 	cfg.MaxTrials = 5
 	cfg.SuccessThreshold = 0.8
 	cfg.Timeout = 10 * time.Second
-	r := NewReflexionExecutor(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	r := NewReflexionExecutor(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := r.Execute(context.Background(), "solve this")
 	require.NoError(t, err)
@@ -798,7 +798,7 @@ func TestReflexionExecutor_Execute_WithToolCalls(t *testing.T) {
 	cfg.MaxTrials = 2
 	cfg.SuccessThreshold = 0.8
 	cfg.Timeout = 10 * time.Second
-	r := NewReflexionExecutor(provider, executor, nil, cfg, zap.NewNop())
+	r := NewReflexionExecutor(testGateway(provider), executor, nil, cfg, zap.NewNop())
 
 	result, err := r.Execute(context.Background(), "use tools")
 	require.NoError(t, err)
@@ -841,7 +841,7 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 
 	cfg := DefaultPlanExecuteConfig()
 	cfg.Timeout = 10 * time.Second
-	pe := NewPlanAndExecute(provider, executor, nil, cfg, zap.NewNop())
+	pe := NewPlanAndExecute(testGateway(provider), executor, nil, cfg, zap.NewNop())
 
 	result, err := pe.Execute(context.Background(), "do something")
 	require.NoError(t, err)
@@ -885,7 +885,7 @@ func TestPlanAndExecute_Execute_LLMStep(t *testing.T) {
 
 	cfg := DefaultPlanExecuteConfig()
 	cfg.Timeout = 10 * time.Second
-	pe := NewPlanAndExecute(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	pe := NewPlanAndExecute(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := pe.Execute(context.Background(), "analyze")
 	require.NoError(t, err)
@@ -941,7 +941,7 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 	cfg.Timeout = 10 * time.Second
 	cfg.AdaptivePlanning = true
 	cfg.MaxReplanAttempts = 2
-	pe := NewPlanAndExecute(provider, executor, nil, cfg, zap.NewNop())
+	pe := NewPlanAndExecute(testGateway(provider), executor, nil, cfg, zap.NewNop())
 
 	result, err := pe.Execute(context.Background(), "do something")
 	require.NoError(t, err)
@@ -979,7 +979,7 @@ func TestPlanAndExecute_Execute_PlanFailed(t *testing.T) {
 	cfg.Timeout = 10 * time.Second
 	cfg.AdaptivePlanning = true
 	cfg.MaxReplanAttempts = 1
-	pe := NewPlanAndExecute(provider, executor, nil, cfg, zap.NewNop())
+	pe := NewPlanAndExecute(testGateway(provider), executor, nil, cfg, zap.NewNop())
 
 	result, err := pe.Execute(context.Background(), "do something")
 	require.NoError(t, err)
@@ -1018,7 +1018,7 @@ func TestPlanAndExecute_CreatePlan_BadJSON(t *testing.T) {
 
 	cfg := DefaultPlanExecuteConfig()
 	cfg.Timeout = 10 * time.Second
-	pe := NewPlanAndExecute(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	pe := NewPlanAndExecute(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := pe.Execute(context.Background(), "do something")
 	require.NoError(t, err)
@@ -1061,7 +1061,7 @@ func TestDynamicPlanner_Execute_Success(t *testing.T) {
 
 	cfg := DefaultDynamicPlannerConfig()
 	cfg.Timeout = 10 * time.Second
-	dp := NewDynamicPlanner(provider, &testToolExecutor{}, nil, cfg, zap.NewNop())
+	dp := NewDynamicPlanner(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
 	result, err := dp.Execute(context.Background(), "what is the answer")
 	require.NoError(t, err)
@@ -1118,7 +1118,7 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 	cfg.MaxDepth = 1
 	cfg.Breadth = 1
 	cfg.MinConfidence = 0.0 // low threshold so it finishes quickly
-	id := NewIterativeDeepening(provider, nil, cfg, zap.NewNop())
+	id := NewIterativeDeepening(testGateway(provider), nil, cfg, zap.NewNop())
 
 	result, err := id.Execute(context.Background(), "research topic")
 	require.NoError(t, err)

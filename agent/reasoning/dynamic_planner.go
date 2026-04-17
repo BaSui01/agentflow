@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -73,7 +74,7 @@ const (
 
 // Dynamic Planner执行动态规划并进行回溯跟踪.
 type DynamicPlanner struct {
-	provider     types.ChatProvider
+	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       DynamicPlannerConfig
@@ -88,12 +89,12 @@ type DynamicPlanner struct {
 }
 
 // NewDynamic Planner创建了新的动态计划.
-func NewDynamicPlanner(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
+func NewDynamicPlanner(gateway llmcore.Gateway, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &DynamicPlanner{
-		provider:     provider,
+		gateway:      gateway,
 		toolExecutor: executor,
 		toolSchemas:  schemas,
 		config:       config,
@@ -205,7 +206,7 @@ Generate 1-3 next steps with alternatives. Output as JSON:
   ]
 }`, joinStrings(toolDescs, "\n"), task, contextInfo)
 
-	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
 		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -404,7 +405,7 @@ func (d *DynamicPlanner) executeLLMNode(ctx context.Context, node *PlanNode) (st
 
 Think through this step and provide your reasoning and conclusion.`, node.Description)
 
-	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
 		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -539,7 +540,7 @@ Execution results:
 
 Synthesize a final answer based on these results.`, task, joinStrings(results, "\n"))
 
-	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
 		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},

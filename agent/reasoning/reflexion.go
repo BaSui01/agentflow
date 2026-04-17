@@ -11,6 +11,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -57,7 +58,7 @@ type MemoryEntry struct {
 
 // ReflexionExecutor执行Reflexion模式.
 type ReflexionExecutor struct {
-	provider     types.ChatProvider
+	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       ReflexionConfig
@@ -66,12 +67,12 @@ type ReflexionExecutor struct {
 }
 
 // 新ReflexionExecutor创建了新的Reflexion执行器.
-func NewReflexionExecutor(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
+func NewReflexionExecutor(gateway llmcore.Gateway, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &ReflexionExecutor{
-		provider: provider, toolExecutor: executor, toolSchemas: schemas, config: config,
+		gateway: gateway, toolExecutor: executor, toolSchemas: schemas, config: config,
 		memory: &ReflexionMemory{entries: make([]MemoryEntry, 0)}, logger: logger,
 	}
 }
@@ -171,7 +172,7 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 	sb.WriteString("\nProvide your best solution.")
 	prompt := sb.String()
 
-	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}},
 		Tools: r.toolSchemas, Temperature: 0.3, MaxTokens: 2000,
 	})
@@ -199,7 +200,7 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 
 func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, trial *Trial) (float64, int, error) {
 	prompt := fmt.Sprintf("Rate this response (0.0-1.0):\nTask: %s\nResponse: %s\nJSON: {\"score\": X}", task, trial.Result)
-	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.1, MaxTokens: 100,
 	})
 	if err != nil {
@@ -223,7 +224,7 @@ func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, tria
 
 func (r *ReflexionExecutor) generateReflection(ctx context.Context, task string, trial *Trial) (*Reflection, int, error) {
 	prompt := fmt.Sprintf("Analyze this attempt:\nTask: %s\nResult: %s\nScore: %.2f\nJSON: {\"analysis\": \"\", \"mistakes\": [], \"next_strategy\": \"\"}", task, trial.Result, trial.Score)
-	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
+	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.3, MaxTokens: 500,
 	})
 	if err != nil {
