@@ -100,7 +100,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesConfiguredLoopBudget(t *tes
 	require.Equal(t, 7, baseAgent.Config().Runtime.MaxLoopIterations)
 }
 
-func TestRegisterDefaultRuntimeAgentFactory_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
+func TestRegisterDefaultRuntimeAgentFactory_PreservesFormalControlLoopBudget(t *testing.T) {
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := &captureBootstrapProvider{content: "hello"}
 	gateway := testBootstrapGateway(provider)
@@ -113,26 +113,16 @@ func TestRegisterDefaultRuntimeAgentFactory_PropagatesTaskLoopBudgetRunConfig(t 
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{Model: "gpt-4"},
+		Control: types.AgentControlOptions{
+			MaxLoopIterations: 5,
+		},
 	}, gateway, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
 
 	baseAgent, ok := created.(*agent.BaseAgent)
 	require.True(t, ok)
-
-	rc := agent.RunConfigFromInputContext(map[string]any{"max_loop_iterations": 5})
-	require.NotNil(t, rc)
-	ctx := agent.WithRunConfig(context.Background(), rc)
-
-	_, err = baseAgent.ChatCompletion(ctx, []types.Message{{
-		Role:    types.RoleUser,
-		Content: "hello",
-	}})
-	require.NoError(t, err)
-	require.NotNil(t, provider.lastRequest)
-	require.NotNil(t, provider.lastRequest.Metadata)
-	assert.Equal(t, "5", provider.lastRequest.Metadata["max_loop_iterations"])
-	_, hasLegacyAlias := provider.lastRequest.Metadata["loop_max_iterations"]
-	assert.False(t, hasLegacyAlias)
+	assert.Equal(t, 5, baseAgent.Config().Control.MaxLoopIterations)
+	assert.Zero(t, baseAgent.Config().Runtime.MaxLoopIterations)
 }
 
 type testEventBus struct{}

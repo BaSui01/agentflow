@@ -57,7 +57,7 @@ func TestBuildLLMHandlerRuntimeFromProvider_ReusesSharedHandlerAssembly(t *testi
 			Content: "hello",
 		}},
 		Tools:      []types.ToolSchema{},
-		ToolChoice: "auto",
+		ToolChoice: types.ParseToolChoiceString("auto"),
 	}
 
 	resp, err := runtime.Provider.Completion(context.Background(), firstReq)
@@ -75,7 +75,7 @@ func TestBuildLLMHandlerRuntimeFromProvider_ReusesSharedHandlerAssembly(t *testi
 			Content: "hello",
 		}},
 		Tools:      []types.ToolSchema{},
-		ToolChoice: "auto",
+		ToolChoice: types.ParseToolChoiceString("auto"),
 	}
 
 	_, err = runtime.Provider.Completion(context.Background(), secondReq)

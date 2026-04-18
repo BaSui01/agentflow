@@ -5,6 +5,15 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.2] - 2026-04-18
+
+### Changed
+- 收口 Agent 三层运行时模型：正式执行选项统一到 `Model / Control / Tools`，请求构造统一经由 `ChatRequestAdapter`
+- 统一 loop / reasoning / tool protocol 运行时边界，新增 `ToolProtocolRuntime`、`RemoteToolTransport` 与独立的 `LoopExecutor` 运行时胶水文件
+
+### Fixed
+- 修复仓库版本面漂移问题：对齐 CLI 版本常量、Swagger 注解与 OpenAPI 文档版本号到 `1.11.2`
+
 ## [1.11.0] - 2026-04-17
 
 ### Added

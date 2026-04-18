@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/config"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -56,9 +55,9 @@ func TestHotReload_DoesNotChangeRuntimeDefaultReasoningWiring(t *testing.T) {
 	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
 }
 
-func TestHotReload_PreservesTaskLoopBudgetRunConfigPath(t *testing.T) {
+func TestHotReload_PreservesFormalControlLoopBudget(t *testing.T) {
 	manager := config.NewHotReloadManager(config.DefaultConfig())
-	provider := &captureBootstrapProvider{content: "hello"}
+	provider := mocks.NewSuccessProvider("hello")
 	cfg := types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "test-agent",
@@ -66,6 +65,9 @@ func TestHotReload_PreservesTaskLoopBudgetRunConfigPath(t *testing.T) {
 			Type: "assistant",
 		},
 		LLM: types.LLMConfig{Model: "gpt-4"},
+		Control: types.AgentControlOptions{
+			MaxLoopIterations: 8,
+		},
 	}
 
 	RegisterHotReloadCallbacks(manager, zap.NewNop(), func(oldConfig, newConfig *config.Config) {
@@ -75,22 +77,9 @@ func TestHotReload_PreservesTaskLoopBudgetRunConfigPath(t *testing.T) {
 		}), zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
 		ag, err := builder.Build(context.Background(), cfg)
 		require.NoError(t, err)
-
-		rc := agent.RunConfigFromInputContext(map[string]any{"max_loop_iterations": 8})
-		require.NotNil(t, rc)
-		ctx := agent.WithRunConfig(context.Background(), rc)
-
-		_, err = ag.ChatCompletion(ctx, []types.Message{{
-			Role:    types.RoleUser,
-			Content: "hello",
-		}})
-		require.NoError(t, err)
+		require.Equal(t, 8, ag.Config().Control.MaxLoopIterations)
+		require.Zero(t, ag.Config().Runtime.MaxLoopIterations)
 	})
 
 	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
-	require.NotNil(t, provider.lastRequest)
-	require.NotNil(t, provider.lastRequest.Metadata)
-	require.Equal(t, "8", provider.lastRequest.Metadata["max_loop_iterations"])
-	_, hasLegacyAlias := provider.lastRequest.Metadata["loop_max_iterations"]
-	require.False(t, hasLegacyAlias)
 }
