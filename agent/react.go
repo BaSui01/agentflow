@@ -55,9 +55,17 @@ Requirements:
 	if err != nil {
 		return nil, err
 	}
+	nativeToolSupport := pr.chatProvider.SupportsNativeFunctionCalling()
+	if !nativeToolSupport && b.mainProviderCompat != nil {
+		nativeToolSupport = b.mainProviderCompat.SupportsNativeFunctionCalling()
+	}
 	pr.req.Tools = []types.ToolSchema{numberedPlanToolSchema()}
 	pr.req.ToolChoice = "required"
-	pr.req.ToolCallMode = types.ToolCallModeNative
+	if nativeToolSupport {
+		pr.req.ToolCallMode = types.ToolCallModeNative
+	} else {
+		pr.req.ToolCallMode = types.ToolCallModeXML
+	}
 
 	resp, err := pr.chatProvider.Completion(ctx, pr.req)
 	if err != nil {
@@ -71,7 +79,7 @@ Requirements:
 	choice := resp.FirstChoice()
 	steps, parseErr := parseNumberedPlanToolCall(choice.Message)
 	if parseErr != nil {
-		return nil, NewErrorWithCause(types.ErrAgentExecution, "plan generation did not return native tool call", parseErr)
+		return nil, NewErrorWithCause(types.ErrAgentExecution, "plan generation did not return tool call", parseErr)
 	}
 	if len(steps) == 0 {
 		return nil, NewError(types.ErrLLMResponseEmpty, "plan generation returned no steps")
@@ -954,8 +962,8 @@ func (b *BaseAgent) effectivePromptToolNames(ctx context.Context) []string {
 	}
 	if rc != nil && len(rc.ToolWhitelist) > 0 {
 		names = filterStringWhitelist(names, rc.ToolWhitelist)
-	} else if len(b.config.Runtime.Tools) > 0 {
-		names = filterStringWhitelist(names, b.config.Runtime.Tools)
+	} else if allowed := b.config.ExecutionOptions().Tools.AllowedTools; len(allowed) > 0 {
+		names = filterStringWhitelist(names, allowed)
 	}
 	for _, target := range runtimeHandoffTargetsFromContext(ctx, b.config.Core.ID) {
 		names = append(names, runtimeHandoffToolSchema(target).Name)

@@ -115,7 +115,7 @@ func buildSpecs() []exampleSpec {
 			Category:    "Agent 增强",
 			Name:        "高级单 Agent",
 			RelPath:     "examples/06_advanced_features",
-			Description: "反射、动态工具选择、提示词工程",
+			Description: "反射、动态工具选择、提示词增强/模板",
 			Tags:        []string{"Reflection", "Prompt", "ToolSelect"},
 			WarnPatterns: []string{
 				"reflection execution failed",

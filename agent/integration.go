@@ -182,7 +182,7 @@ func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc
 		executor := &LoopExecutor{
 			MaxIterations:     maxIterations,
 			ExecutionOptions:  executionOptions,
-			Planner:           b.loopPlanner(),
+			Planner:           b.loopPlanner(executionOptions),
 			StepExecutor:      b.loopStepExecutor(options),
 			Observer:          b.loopObserver(),
 			Judge:             b.completionJudge,
@@ -1154,14 +1154,20 @@ func (b *BaseAgent) loopMaxIterations() int {
 	return 1
 }
 
-func (b *BaseAgent) loopPlanner() LoopPlannerFunc {
+func (b *BaseAgent) loopPlanner(options types.ExecutionOptions) LoopPlannerFunc {
 	return func(ctx context.Context, input *Input, _ *LoopState) (*PlanResult, error) {
-		// Specialist execution tasks may already be decomposed by an upstream
-		// orchestrator, so do not wrap them in another planner prompt.
-		if DisablePlannerEnabled(input, ResolveRunConfig(ctx, input)) {
+		if options.Control.DisablePlanner {
 			return nil, nil
 		}
-		return b.Plan(ctx, input)
+		plan, err := b.Plan(ctx, input)
+		if err != nil && isIgnorableLoopPlanError(err) {
+			b.logger.Warn("loop planner skipped after ignorable plan error",
+				zap.Error(err),
+				zap.String("trace_id", input.TraceID),
+			)
+			return nil, nil
+		}
+		return plan, err
 	}
 }
 
@@ -1413,6 +1419,16 @@ func normalizePlannerDisabledSelection(selection ReasoningSelection, registry *r
 	return buildReasoningSelection(ReasoningModeReact, registry)
 }
 
+func isIgnorableLoopPlanError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(text, "tool call") ||
+		strings.Contains(text, "returned no steps") ||
+		strings.Contains(text, "returned no choices")
+}
+
 type LoopPlannerFunc func(ctx context.Context, input *Input, state *LoopState) (*PlanResult, error)
 type LoopStepExecutorFunc func(ctx context.Context, input *Input, state *LoopState, selection ReasoningSelection) (*Output, error)
 type LoopObserveFunc func(ctx context.Context, feedback *Feedback, state *LoopState) error
@@ -1429,9 +1445,6 @@ func (e *LoopExecutor) initialState(ctx context.Context, input *Input) *LoopStat
 	maxIterations := e.ExecutionOptions.Control.MaxLoopIterations
 	if maxIterations <= 0 {
 		maxIterations = e.maxIterations()
-	}
-	if value, ok := topLevelLoopBudget(input); ok && value > 0 {
-		maxIterations = value
 	}
 	state := NewLoopState(input, maxIterations)
 	if state.AgentID == "" {
@@ -1475,13 +1488,6 @@ func (e *LoopExecutor) maxIterations() int {
 	return 1
 }
 
-func topLevelLoopBudget(input *Input) (int, bool) {
-	if input == nil || len(input.Context) == 0 {
-		return 0, false
-	}
-	return intOverrideFromContext(input.Context, "top_level_loop_budget")
-}
-
 func (e *LoopExecutor) logger() *zap.Logger {
 	if e.Logger != nil {
 		return e.Logger
@@ -1501,10 +1507,14 @@ func (e *LoopExecutor) selector() ReasoningModeSelector {
 }
 
 func (e *LoopExecutor) selectReasoning(ctx context.Context, input *Input, state *LoopState) ReasoningSelection {
+	disablePlanner := e.ExecutionOptions.Control.DisablePlanner
 	if e.ReasoningRuntime != nil {
 		selection := e.ReasoningRuntime.Select(ctx, input, state)
 		if strings.TrimSpace(selection.Mode) == "" {
 			selection.Mode = ReasoningModeReact
+		}
+		if disablePlanner {
+			return normalizePlannerDisabledSelection(selection, e.ReasoningRegistry, input, state, e.ReflectionEnabled)
 		}
 		return selection
 	}
@@ -1515,7 +1525,7 @@ func (e *LoopExecutor) selectReasoning(ctx context.Context, input *Input, state 
 			selection.Mode = ReasoningModeReact
 		}
 	}
-	if e.ExecutionOptions.Control.DisablePlanner {
+	if disablePlanner {
 		return normalizePlannerDisabledSelection(selection, e.ReasoningRegistry, input, state, e.ReflectionEnabled)
 	}
 	return selection
@@ -2072,6 +2082,7 @@ func (b *BaseAgent) ValidateConfiguration() error {
 // GetFeatureMetrics 获取功能使用指标
 func (b *BaseAgent) GetFeatureMetrics() map[string]any {
 	status := b.GetFeatureStatus()
+	executionOptions := b.config.ExecutionOptions()
 
 	metrics := map[string]any{
 		"agent_id":   b.ID(),
@@ -2079,10 +2090,10 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]any {
 		"agent_type": string(b.Type()),
 		"features":   status,
 		"config": map[string]any{
-			"model":       b.config.LLM.Model,
-			"provider":    b.config.LLM.Provider,
-			"max_tokens":  b.config.LLM.MaxTokens,
-			"temperature": b.config.LLM.Temperature,
+			"model":       executionOptions.Model.Model,
+			"provider":    executionOptions.Model.Provider,
+			"max_tokens":  executionOptions.Model.MaxTokens,
+			"temperature": executionOptions.Model.Temperature,
 		},
 	}
 
@@ -2125,13 +2136,17 @@ func normalizeInstructionList(instructions []string) []string {
 
 // ExportConfiguration 导出配置（用于持久化或分享）
 func (b *BaseAgent) ExportConfiguration() map[string]any {
+	executionOptions := b.config.ExecutionOptions()
 	return map[string]any{
-		"id":          b.config.Core.ID,
-		"name":        b.config.Core.Name,
-		"type":        b.config.Core.Type,
-		"description": b.config.Core.Description,
-		"model":       b.config.LLM.Model,
-		"provider":    b.config.LLM.Provider,
+		"id":              b.config.Core.ID,
+		"name":            b.config.Core.Name,
+		"type":            b.config.Core.Type,
+		"description":     b.config.Core.Description,
+		"model":           executionOptions.Model.Model,
+		"provider":        executionOptions.Model.Provider,
+		"runtime_model":   executionOptions.Model,
+		"runtime_control": executionOptions.Control,
+		"runtime_tools":   executionOptions.Tools,
 		"features": map[string]bool{
 			"reflection":      b.config.IsReflectionEnabled(),
 			"tool_selection":  b.config.IsToolSelectionEnabled(),
@@ -2142,7 +2157,7 @@ func (b *BaseAgent) ExportConfiguration() map[string]any {
 			"enhanced_memory": b.config.IsMemoryEnabled(),
 			"observability":   b.config.IsObservabilityEnabled(),
 		},
-		"tools":    b.config.Runtime.Tools,
+		"tools":    executionOptions.Tools.AllowedTools,
 		"metadata": b.config.Metadata,
 	}
 }

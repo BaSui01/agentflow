@@ -90,3 +90,42 @@ func TestParseToolChoiceString(t *testing.T) {
 		assert.Equal(t, "search", choice.ToolName)
 	})
 }
+
+func TestAgentConfigExecutionOptions_PrefersFormalMainFace(t *testing.T) {
+	cfg := AgentConfig{
+		Core: CoreConfig{ID: "agent-1", Name: "Agent", Type: "assistant"},
+		Model: ModelOptions{
+			Model:       "formal-model",
+			Provider:    "formal-provider",
+			MaxTokens:   99,
+			Temperature: 0.2,
+		},
+		Control: AgentControlOptions{
+			SystemPrompt:       "formal prompt",
+			MaxReActIterations: 7,
+		},
+		Tools: ToolProtocolOptions{
+			AllowedTools: []string{"formal-tool"},
+			ToolModel:    "tool-model",
+		},
+		LLM: LLMConfig{
+			Model:       "legacy-model",
+			Provider:    "legacy-provider",
+			MaxTokens:   10,
+			Temperature: 0.9,
+		},
+		Runtime: RuntimeConfig{
+			SystemPrompt: "legacy prompt",
+			Tools:        []string{"legacy-tool"},
+		},
+	}
+
+	options := cfg.ExecutionOptions()
+	assert.Equal(t, "formal-model", options.Model.Model)
+	assert.Equal(t, "formal-provider", options.Model.Provider)
+	assert.Equal(t, 99, options.Model.MaxTokens)
+	assert.Equal(t, "formal prompt", options.Control.SystemPrompt)
+	assert.Equal(t, 7, options.Control.MaxReActIterations)
+	assert.Equal(t, []string{"formal-tool"}, options.Tools.AllowedTools)
+	assert.Equal(t, "tool-model", options.Tools.ToolModel)
+}

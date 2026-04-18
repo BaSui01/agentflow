@@ -111,44 +111,45 @@ func (a summaryFuncAdapter) Summarize(ctx context.Context, messages []types.Mess
 }
 
 func ConfigFromAgentConfig(cfg types.AgentConfig) AgentContextConfig {
-	modelCfg := DefaultAgentContextConfig(cfg.LLM.Model)
-	if cfg.Context == nil {
+	options := cfg.ExecutionOptions()
+	modelCfg := DefaultAgentContextConfig(options.Model.Model)
+	if options.Control.Context == nil {
 		return modelCfg
 	}
 	out := modelCfg
-	out.Enabled = cfg.Context.Enabled
-	if cfg.Context.MaxContextTokens > 0 {
-		out.MaxContextTokens = cfg.Context.MaxContextTokens
+	out.Enabled = options.Control.Context.Enabled
+	if options.Control.Context.MaxContextTokens > 0 {
+		out.MaxContextTokens = options.Control.Context.MaxContextTokens
 	}
-	if cfg.Context.ReserveForOutput > 0 {
-		out.ReserveForOutput = cfg.Context.ReserveForOutput
+	if options.Control.Context.ReserveForOutput > 0 {
+		out.ReserveForOutput = options.Control.Context.ReserveForOutput
 	}
-	if cfg.Context.SoftLimit > 0 {
-		out.SoftLimit = cfg.Context.SoftLimit
+	if options.Control.Context.SoftLimit > 0 {
+		out.SoftLimit = options.Control.Context.SoftLimit
 	}
-	if cfg.Context.WarnLimit > 0 {
-		out.WarnLimit = cfg.Context.WarnLimit
+	if options.Control.Context.WarnLimit > 0 {
+		out.WarnLimit = options.Control.Context.WarnLimit
 	}
-	if cfg.Context.HardLimit > 0 {
-		out.HardLimit = cfg.Context.HardLimit
+	if options.Control.Context.HardLimit > 0 {
+		out.HardLimit = options.Control.Context.HardLimit
 	}
-	if cfg.Context.TargetUsage > 0 {
-		out.TargetUsage = cfg.Context.TargetUsage
+	if options.Control.Context.TargetUsage > 0 {
+		out.TargetUsage = options.Control.Context.TargetUsage
 	}
-	if cfg.Context.KeepLastN > 0 {
-		out.KeepLastN = cfg.Context.KeepLastN
+	if options.Control.Context.KeepLastN > 0 {
+		out.KeepLastN = options.Control.Context.KeepLastN
 	}
-	out.KeepSystem = cfg.Context.KeepSystem || modelCfg.KeepSystem
-	out.EnableMetrics = cfg.Context.EnableMetrics || modelCfg.EnableMetrics
-	out.EnableSummarize = cfg.Context.EnableSummarize || modelCfg.EnableSummarize
-	if cfg.Context.MemoryBudgetRatio > 0 {
-		out.MemoryBudgetRatio = cfg.Context.MemoryBudgetRatio
+	out.KeepSystem = options.Control.Context.KeepSystem || modelCfg.KeepSystem
+	out.EnableMetrics = options.Control.Context.EnableMetrics || modelCfg.EnableMetrics
+	out.EnableSummarize = options.Control.Context.EnableSummarize || modelCfg.EnableSummarize
+	if options.Control.Context.MemoryBudgetRatio > 0 {
+		out.MemoryBudgetRatio = options.Control.Context.MemoryBudgetRatio
 	}
-	if cfg.Context.RetrievalBudgetRatio > 0 {
-		out.RetrievalBudgetRatio = cfg.Context.RetrievalBudgetRatio
+	if options.Control.Context.RetrievalBudgetRatio > 0 {
+		out.RetrievalBudgetRatio = options.Control.Context.RetrievalBudgetRatio
 	}
-	if cfg.Context.ToolStateBudgetRatio > 0 {
-		out.ToolStateBudgetRatio = cfg.Context.ToolStateBudgetRatio
+	if options.Control.Context.ToolStateBudgetRatio > 0 {
+		out.ToolStateBudgetRatio = options.Control.Context.ToolStateBudgetRatio
 	}
 	return out
 }

@@ -158,13 +158,14 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	if b.gateway == nil {
 		return nil, agent.ErrProviderNotSet
 	}
-	if strings.TrimSpace(cfg.LLM.Model) == "" {
+	if strings.TrimSpace(cfg.ExecutionOptions().Model.Model) == "" {
 		return nil, agent.NewError(types.ErrInputValidation, "config.Model is required")
 	}
 
 	cfg2 := cfg
 	// Apply tool scope restriction for sub-agent isolation
 	if len(b.toolScope) > 0 {
+		cfg2.Tools.AllowedTools = append([]string(nil), b.toolScope...)
 		cfg2.Runtime.Tools = b.toolScope
 	}
 	obsEnabled := enabled(opts.EnableAll, opts.EnableObservability)
@@ -173,9 +174,11 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	}
 	cfg2.Extensions.Observability.Enabled = obsEnabled
 	if opts.MaxReActIterations > 0 {
+		cfg2.Control.MaxReActIterations = opts.MaxReActIterations
 		cfg2.Runtime.MaxReActIterations = opts.MaxReActIterations
 	}
 	if opts.MaxLoopIterations > 0 {
+		cfg2.Control.MaxLoopIterations = opts.MaxLoopIterations
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
 
@@ -211,17 +214,17 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	ag.SetToolStateProvider(opts.ToolStateProvider)
 
 	if enabled(opts.EnableAll, opts.EnableReflection) {
-		reflectionConfig := reflectionConfigFromTypes(cfg2.Features.Reflection)
+		reflectionConfig := reflectionConfigFromTypes(cfg2.ExecutionOptions().Control.Reflection)
 		reflectionExecutor := agent.NewReflectionExecutor(ag, reflectionConfig)
 		ag.EnableReflection(agent.AsReflectionRunner(reflectionExecutor))
 	}
 	if enabled(opts.EnableAll, opts.EnableToolSelection) {
-		toolSelectionConfig := toolSelectionConfigFromTypes(cfg2.Features.ToolSelection)
+		toolSelectionConfig := toolSelectionConfigFromTypes(cfg2.ExecutionOptions().Control.ToolSelection)
 		toolSelector := agent.NewDynamicToolSelector(ag, toolSelectionConfig)
 		ag.EnableToolSelection(agent.AsToolSelectorRunner(toolSelector))
 	}
 	if enabled(opts.EnableAll, opts.EnablePromptEnhancer) {
-		promptEnhancerConfig := promptEnhancerConfigFromTypes(cfg2.Features.PromptEnhancer)
+		promptEnhancerConfig := promptEnhancerConfigFromTypes(cfg2.ExecutionOptions().Control.PromptEnhancer)
 		promptEnhancer := agent.NewPromptEnhancer(promptEnhancerConfig)
 		ag.EnablePromptEnhancer(agent.AsPromptEnhancerRunner(promptEnhancer))
 	}
@@ -279,7 +282,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		}
 	}
 
-	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainGateway(), cfg2.LLM.Model, cfg2.Core.ID, opts, b.logger)
+	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainGateway(), cfg2.ExecutionOptions().Model.Model, cfg2.Core.ID, opts, b.logger)
 	ag.SetReasoningRegistry(reasoningRegistry)
 	if opts.ReasoningRuntime == nil {
 		ag.SetReasoningModeSelector(agent.NewDefaultReasoningModeSelector())

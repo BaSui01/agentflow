@@ -55,6 +55,19 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) types.AgentConfig {
 			Type:        def.Type,
 			Description: def.Description,
 		},
+		Model: types.ModelOptions{
+			Model:       def.Model,
+			Provider:    def.Provider,
+			MaxTokens:   def.MaxTokens,
+			Temperature: float32(def.Temperature),
+		},
+		Control: types.AgentControlOptions{
+			SystemPrompt:       def.SystemPrompt,
+			MaxReActIterations: def.Features.MaxReActIterations,
+		},
+		Tools: types.ToolProtocolOptions{
+			AllowedTools: append([]string(nil), def.Tools...),
+		},
 		LLM: types.LLMConfig{
 			Model:       def.Model,
 			Provider:    def.Provider,
@@ -76,15 +89,21 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) types.AgentConfig {
 	}
 
 	if def.Features.EnableReflection || def.Features.MaxReActIterations > 0 {
+		cfg.Control.Reflection = &types.ReflectionConfig{
+			Enabled:       def.Features.EnableReflection,
+			MaxIterations: def.Features.MaxReActIterations,
+		}
 		cfg.Features.Reflection = &types.ReflectionConfig{
 			Enabled:       def.Features.EnableReflection,
 			MaxIterations: def.Features.MaxReActIterations,
 		}
 	}
 	if def.Features.EnableToolSelection {
+		cfg.Control.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
 		cfg.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
 	}
 	if def.Features.EnablePromptEnhancer {
+		cfg.Control.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
 		cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
 	}
 	if def.Features.EnableSkills {
@@ -97,6 +116,12 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) types.AgentConfig {
 		cfg.Extensions.Observability = &types.ObservabilityConfig{Enabled: true}
 	}
 	if def.Guardrails != nil {
+		cfg.Control.Guardrails = &types.GuardrailsConfig{
+			Enabled:         true,
+			MaxRetries:      def.Guardrails.MaxRetries,
+			OnInputFailure:  def.Guardrails.OnInputFailure,
+			OnOutputFailure: def.Guardrails.OnOutputFailure,
+		}
 		cfg.Features.Guardrails = &types.GuardrailsConfig{
 			Enabled:         true,
 			MaxRetries:      def.Guardrails.MaxRetries,
@@ -108,7 +133,7 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) types.AgentConfig {
 	f.logger.Debug("converted agent definition to typed config",
 		zap.String("name", def.Name),
 		zap.String("model", def.Model),
-		zap.Bool("has_runtime_tools", len(cfg.Runtime.Tools) > 0),
+		zap.Bool("has_runtime_tools", len(cfg.ExecutionOptions().Tools.AllowedTools) > 0),
 	)
 
 	return cfg

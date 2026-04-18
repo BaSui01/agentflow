@@ -313,7 +313,20 @@ func buildTestAgent(t *testing.T, id string) *BaseAgent {
 type testMockProvider struct{}
 
 func (p *testMockProvider) Name() string { return "test-mock" }
-func (p *testMockProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *testMockProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if req != nil && req.ToolChoice == "required" && len(req.Tools) == 1 && req.Tools[0].Name == submitNumberedPlanTool {
+		return &llm.ChatResponse{
+			Choices: []llm.ChatChoice{{
+				Message: types.Message{
+					ToolCalls: []types.ToolCall{{
+						ID:        "call_plan",
+						Name:      submitNumberedPlanTool,
+						Arguments: []byte(`{"steps":["inspect","answer"]}`),
+					}},
+				},
+			}},
+		}, nil
+	}
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: types.Message{Content: "mock"}}}}, nil
 }
 func (p *testMockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
@@ -945,6 +958,27 @@ func buildTestAgentWithProvider(t *testing.T, id string, prov llm.Provider) *Bas
 		t.Fatalf("buildTestAgentWithProvider failed: %v", err)
 	}
 	return ag
+}
+
+func completionWithPlanToolCall(
+	fn func(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error),
+) func(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		if req != nil && req.ToolChoice == "required" && len(req.Tools) == 1 && req.Tools[0].Name == submitNumberedPlanTool {
+			return &llm.ChatResponse{
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{
+						ToolCalls: []types.ToolCall{{
+							ID:        "call_plan",
+							Name:      submitNumberedPlanTool,
+							Arguments: []byte(`{"steps":["inspect","answer"]}`),
+						}},
+					},
+				}},
+			}, nil
+		}
+		return fn(ctx, req)
+	}
 }
 
 func stringPtr(s string) *string { return &s }
@@ -1906,7 +1940,7 @@ func TestBaseAgent_Execute_UsesConfiguredExtensions(t *testing.T) {
 	prov := &testProvider{
 		name:           "configured-ext",
 		supportsNative: true,
-		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFn: completionWithPlanToolCall(func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			copied := *req
 			copied.Messages = append([]types.Message(nil), req.Messages...)
 			copied.Tools = append([]types.ToolSchema(nil), req.Tools...)
@@ -1918,7 +1952,7 @@ func TestBaseAgent_Execute_UsesConfiguredExtensions(t *testing.T) {
 					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
 				}},
 			}, nil
-		},
+		}),
 	}
 
 	ag := buildTestAgentWithProvider(t, "exec-configured", prov)
@@ -1959,7 +1993,7 @@ func TestBaseAgent_Execute_InjectsSkillsAsContextSegments(t *testing.T) {
 	prov := &testProvider{
 		name:           "skill-context",
 		supportsNative: true,
-		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFn: completionWithPlanToolCall(func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			copied := *req
 			copied.Messages = append([]types.Message(nil), req.Messages...)
 			capturedReq = &copied
@@ -1970,7 +2004,7 @@ func TestBaseAgent_Execute_InjectsSkillsAsContextSegments(t *testing.T) {
 					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
 				}},
 			}, nil
-		},
+		}),
 	}
 
 	ag := buildTestAgentWithProvider(t, "skill-context", prov)
@@ -2019,7 +2053,7 @@ func TestBaseAgent_Execute_InjectsEphemeralPromptLayers(t *testing.T) {
 	prov := &testProvider{
 		name:           "ephemeral-layers",
 		supportsNative: true,
-		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFn: completionWithPlanToolCall(func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			copied := *req
 			copied.Messages = append([]types.Message(nil), req.Messages...)
 			capturedReq = &copied
@@ -2030,7 +2064,7 @@ func TestBaseAgent_Execute_InjectsEphemeralPromptLayers(t *testing.T) {
 					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
 				}},
 			}, nil
-		},
+		}),
 	}
 
 	ag := buildTestAgentWithProvider(t, "ephemeral-layers", prov)
@@ -2172,7 +2206,7 @@ func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
 	prov := &testProvider{
 		name:           "trace-synopsis",
 		supportsNative: true,
-		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFn: completionWithPlanToolCall(func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			copied := *req
 			copied.Messages = append([]types.Message(nil), req.Messages...)
 			capturedReq = &copied
@@ -2183,7 +2217,7 @@ func TestBaseAgent_Execute_InjectsTraceSynopsisLayer(t *testing.T) {
 					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
 				}},
 			}, nil
-		},
+		}),
 	}
 
 	ag := buildTestAgentWithProvider(t, "trace-synopsis", prov)
@@ -2256,7 +2290,7 @@ func TestBaseAgent_Execute_SkipsTraceFeedbackLayersForSimpleRequests(t *testing.
 	prov := &testProvider{
 		name:           "trace-simple-skip",
 		supportsNative: true,
-		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFn: completionWithPlanToolCall(func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			copied := *req
 			copied.Messages = append([]types.Message(nil), req.Messages...)
 			capturedReq = &copied
@@ -2267,7 +2301,7 @@ func TestBaseAgent_Execute_SkipsTraceFeedbackLayersForSimpleRequests(t *testing.
 					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
 				}},
 			}, nil
-		},
+		}),
 	}
 
 	ag := buildTestAgentWithProvider(t, "trace-simple-skip", prov)
@@ -2476,7 +2510,7 @@ func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
 	prov := &testProvider{
 		name:           "enhanced-memory",
 		supportsNative: true,
-		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFn: completionWithPlanToolCall(func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			copied := *req
 			copied.Messages = append([]types.Message(nil), req.Messages...)
 			capturedReq = &copied
@@ -2487,7 +2521,7 @@ func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
 					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
 				}},
 			}, nil
-		},
+		}),
 	}
 
 	ag := buildTestAgentWithProvider(t, "observe-enhanced", prov)
@@ -3259,9 +3293,9 @@ func TestCachingResolver_StoreSetters(t *testing.T) {
 	resolver.ResetCache(context.Background())
 }
 
-// --- RunConfig.ApplyToRequest more branches (71.4%) ---
+// --- RunConfig.ApplyToExecutionOptions more branches ---
 
-func TestRunConfig_ApplyToRequest_AllFields(t *testing.T) {
+func TestRunConfig_ApplyToExecutionOptions_AllFields(t *testing.T) {
 	model := "gpt-4"
 	provider := "openai"
 	routePolicy := "latency"
@@ -3281,31 +3315,37 @@ func TestRunConfig_ApplyToRequest_AllFields(t *testing.T) {
 		ToolChoice:  &toolChoice,
 	}
 
-	req := &llm.ChatRequest{}
-	rc.ApplyToRequest(req, types.AgentConfig{})
+	opts := types.AgentConfig{}.ExecutionOptions()
+	rc.ApplyToExecutionOptions(&opts)
 
-	if req.Model != "gpt-4" {
-		t.Fatalf("expected model gpt-4, got %s", req.Model)
+	if opts.Model.Model != "gpt-4" {
+		t.Fatalf("expected model gpt-4, got %s", opts.Model.Model)
 	}
-	if req.Temperature != 0.5 {
-		t.Fatalf("expected temp 0.5, got %f", req.Temperature)
+	if opts.Model.Provider != "openai" {
+		t.Fatalf("expected provider openai, got %s", opts.Model.Provider)
 	}
-	if req.MaxTokens != 1000 {
-		t.Fatalf("expected maxTokens 1000, got %d", req.MaxTokens)
+	if opts.Model.RoutePolicy != "latency" {
+		t.Fatalf("expected route policy latency, got %s", opts.Model.RoutePolicy)
 	}
-	if req.TopP != 0.9 {
-		t.Fatalf("expected topP 0.9, got %f", req.TopP)
+	if opts.Model.Temperature != 0.5 {
+		t.Fatalf("expected temp 0.5, got %f", opts.Model.Temperature)
 	}
-	if req.ToolChoice != "auto" {
-		t.Fatalf("expected toolChoice auto, got %s", req.ToolChoice)
+	if opts.Model.MaxTokens != 1000 {
+		t.Fatalf("expected maxTokens 1000, got %d", opts.Model.MaxTokens)
+	}
+	if opts.Model.TopP != 0.9 {
+		t.Fatalf("expected topP 0.9, got %f", opts.Model.TopP)
+	}
+	if opts.Tools.ToolChoice == nil || opts.Tools.ToolChoice.Mode != types.ToolChoiceModeAuto {
+		t.Fatalf("expected toolChoice auto, got %#v", opts.Tools.ToolChoice)
 	}
 }
 
-func TestRunConfig_ApplyToRequest_NilRC(t *testing.T) {
+func TestRunConfig_ApplyToExecutionOptions_NilRC(t *testing.T) {
 	var rc *RunConfig
-	req := &llm.ChatRequest{Model: "original"}
-	rc.ApplyToRequest(req, types.AgentConfig{})
-	if req.Model != "original" {
+	opts := types.ExecutionOptions{Model: types.ModelOptions{Model: "original"}}
+	rc.ApplyToExecutionOptions(&opts)
+	if opts.Model.Model != "original" {
 		t.Fatal("expected no change for nil RunConfig")
 	}
 }

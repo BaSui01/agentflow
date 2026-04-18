@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,7 +60,7 @@ func TestRunConfig_GetRunConfig_NoConfig(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestRunConfig_ApplyToRequest(t *testing.T) {
+func TestRunConfig_ApplyToExecutionOptions(t *testing.T) {
 	baseCfg := types.AgentConfig{
 		Core: types.CoreConfig{ID: "t", Name: "t", Type: string(TypeGeneric)},
 		LLM: types.LLMConfig{
@@ -74,8 +73,8 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 	tests := []struct {
 		name     string
 		rc       *RunConfig
-		initial  llm.ChatRequest
-		expected llm.ChatRequest
+		initial  types.ExecutionOptions
+		expected types.ExecutionOptions
 	}{
 		{
 			name: "override all fields",
@@ -91,21 +90,26 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 				Metadata:          map[string]string{"key": "val"},
 				Tags:              []string{"tag1"},
 			},
-			initial: llm.ChatRequest{
-				Model:       "base-model",
-				MaxTokens:   1024,
-				Temperature: 0.5,
-			},
-			expected: llm.ChatRequest{
-				Model:       "override-model",
-				MaxTokens:   4096,
-				Temperature: 0.9,
-				TopP:        0.95,
-				Stop:        []string{"STOP"},
-				ToolChoice:  "none",
-				Timeout:     60 * time.Second,
-				Metadata:    map[string]string{"key": "val", "max_loop_iterations": "6"},
-				Tags:        []string{"tag1"},
+			initial: baseCfg.ExecutionOptions(),
+			expected: types.ExecutionOptions{
+				Core: baseCfg.Core,
+				Model: types.ModelOptions{
+					Model:       "override-model",
+					MaxTokens:   4096,
+					Temperature: 0.9,
+					TopP:        0.95,
+					Stop:        []string{"STOP"},
+				},
+				Control: types.AgentControlOptions{
+					Timeout:            60 * time.Second,
+					MaxLoopIterations:  6,
+					MaxReActIterations: 0,
+				},
+				Tools: types.ToolProtocolOptions{
+					ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeNone},
+				},
+				Metadata: map[string]string{"key": "val", "max_loop_iterations": "6"},
+				Tags:     []string{"tag1"},
 			},
 		},
 		{
@@ -113,29 +117,27 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 			rc: &RunConfig{
 				Temperature: Float32Ptr(0.1),
 			},
-			initial: llm.ChatRequest{
-				Model:       "base-model",
-				MaxTokens:   1024,
-				Temperature: 0.5,
-			},
-			expected: llm.ChatRequest{
-				Model:       "base-model",
-				MaxTokens:   1024,
-				Temperature: 0.1,
+			initial: baseCfg.ExecutionOptions(),
+			expected: types.ExecutionOptions{
+				Core: baseCfg.Core,
+				Model: types.ModelOptions{
+					Model:       "base-model",
+					MaxTokens:   1024,
+					Temperature: 0.1,
+				},
 			},
 		},
 		{
-			name: "nil RunConfig is no-op",
-			rc:   nil,
-			initial: llm.ChatRequest{
-				Model:       "base-model",
-				MaxTokens:   1024,
-				Temperature: 0.5,
-			},
-			expected: llm.ChatRequest{
-				Model:       "base-model",
-				MaxTokens:   1024,
-				Temperature: 0.5,
+			name:    "nil RunConfig is no-op",
+			rc:      nil,
+			initial: baseCfg.ExecutionOptions(),
+			expected: types.ExecutionOptions{
+				Core: baseCfg.Core,
+				Model: types.ModelOptions{
+					Model:       "base-model",
+					MaxTokens:   1024,
+					Temperature: 0.5,
+				},
 			},
 		},
 		{
@@ -143,12 +145,18 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 			rc: &RunConfig{
 				Metadata: map[string]string{"new": "value"},
 			},
-			initial: llm.ChatRequest{
-				Model:    "base-model",
-				Metadata: map[string]string{"existing": "keep"},
-			},
-			expected: llm.ChatRequest{
-				Model:    "base-model",
+			initial: func() types.ExecutionOptions {
+				opts := baseCfg.ExecutionOptions()
+				opts.Metadata = map[string]string{"existing": "keep"}
+				return opts
+			}(),
+			expected: types.ExecutionOptions{
+				Core: baseCfg.Core,
+				Model: types.ModelOptions{
+					Model:       "base-model",
+					MaxTokens:   1024,
+					Temperature: 0.5,
+				},
 				Metadata: map[string]string{"existing": "keep", "new": "value"},
 			},
 		},
@@ -157,11 +165,14 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 			rc: &RunConfig{
 				Metadata: map[string]string{"key": "val"},
 			},
-			initial: llm.ChatRequest{
-				Model: "base-model",
-			},
-			expected: llm.ChatRequest{
-				Model:    "base-model",
+			initial: baseCfg.ExecutionOptions(),
+			expected: types.ExecutionOptions{
+				Core: baseCfg.Core,
+				Model: types.ModelOptions{
+					Model:       "base-model",
+					MaxTokens:   1024,
+					Temperature: 0.5,
+				},
 				Metadata: map[string]string{"key": "val"},
 			},
 		},
@@ -171,11 +182,15 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 				MaxLoopIterations: IntPtr(4),
 				Metadata:          map[string]string{"max_loop_iterations": "999", "key": "val"},
 			},
-			initial: llm.ChatRequest{
-				Model: "base-model",
-			},
-			expected: llm.ChatRequest{
-				Model:    "base-model",
+			initial: baseCfg.ExecutionOptions(),
+			expected: types.ExecutionOptions{
+				Core: baseCfg.Core,
+				Model: types.ModelOptions{
+					Model:       "base-model",
+					MaxTokens:   1024,
+					Temperature: 0.5,
+				},
+				Control:  types.AgentControlOptions{MaxLoopIterations: 4},
 				Metadata: map[string]string{"max_loop_iterations": "4", "key": "val"},
 			},
 		},
@@ -183,18 +198,17 @@ func TestRunConfig_ApplyToRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := tt.initial
-			tt.rc.ApplyToRequest(&req, baseCfg)
-			assert.Equal(t, tt.expected, req)
+			options := tt.initial.Clone()
+			tt.rc.ApplyToExecutionOptions(&options)
+			assert.Equal(t, tt.expected, options)
 		})
 	}
 }
 
-func TestRunConfig_ApplyToRequest_NilRequest(t *testing.T) {
+func TestRunConfig_ApplyToExecutionOptions_NilOptions(t *testing.T) {
 	rc := &RunConfig{Model: StringPtr("test")}
-	// Should not panic
 	assert.NotPanics(t, func() {
-		rc.ApplyToRequest(nil, types.AgentConfig{})
+		rc.ApplyToExecutionOptions(nil)
 	})
 }
 

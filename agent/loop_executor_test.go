@@ -583,7 +583,8 @@ func TestLoopExecutor_ExecuteDisablePlannerSkipsPlannerAndPlanStage(t *testing.T
 	var plannerCalls int
 
 	executor := &LoopExecutor{
-		MaxIterations: 2,
+		MaxIterations:    2,
+		ExecutionOptions: types.ExecutionOptions{Control: types.AgentControlOptions{DisablePlanner: true}},
 		Planner: func(_ context.Context, _ *Input, _ *LoopState) (*PlanResult, error) {
 			plannerCalls++
 			return &PlanResult{Steps: []string{"should not run"}}, nil
@@ -633,7 +634,8 @@ func TestLoopExecutor_ExecuteHonorsTaskLevelTopLoopBudget(t *testing.T) {
 	var stepCalls int
 
 	executor := &LoopExecutor{
-		MaxIterations: 5,
+		MaxIterations:    5,
+		ExecutionOptions: types.ExecutionOptions{Control: types.AgentControlOptions{MaxLoopIterations: 1}},
 		StepExecutor: func(_ context.Context, input *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
 			stepCalls++
 			if input.Context["max_loop_iterations"] != 1 {
@@ -755,7 +757,8 @@ func TestLoopExecutor_ExecuteHonorsRunConfigMaxLoopIterationsOverride(t *testing
 	var stepCalls int
 
 	executor := &LoopExecutor{
-		MaxIterations: 4,
+		MaxIterations:    4,
+		ExecutionOptions: types.ExecutionOptions{Control: types.AgentControlOptions{MaxLoopIterations: 1}},
 		StepExecutor: func(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
 			stepCalls++
 			return &Output{Content: "candidate"}, nil

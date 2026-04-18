@@ -18,7 +18,7 @@ English | [中文](README.md)
 - **Official Multi-Agent Facade** - `agent/team` with `supervisor / selector / round_robin / swarm`
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
-- **Dual-Model Architecture (toolProvider)** - Cheap model for tool calls, expensive model for content generation, significantly reducing costs
+- **Dual-Model Architecture (toolProvider)** - Cheap model handles tool-call-heavy turns first (native tool calling, with XML tool-calling fallback for non-native providers), while the expensive model focuses on final content generation
 - **Skills System** - Dynamic skill loading
 - **MCP/A2A Protocol** - Complete agent interoperability protocol stack (Google A2A & Anthropic MCP)
 - **Guardrails** - Input/output validation, PII detection, injection protection, custom validation rules
@@ -118,6 +118,12 @@ Entrypoint policy:
 - Repository-level official entry: `sdk.New(opts).Build(ctx)`
 - `agent/runtime.Builder` is only the runtime entry for the `agent` submodule
 - `agent.NewAgentBuilder`, `agent.NewBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths, not peer official entrypoints
+- The Agent runtime main surface follows a three-layer model: `Model / Control / Tools`
+  - `Model` carries model/provider parameters
+  - `Control` carries loop budgets, reasoning mode, overrides, and execution policy
+  - `Tools` carries tool declarations, selection, and protocol wiring
+- `types.AgentConfig` is the public config entry; runtime normalizes it into `ExecutionOptions`, then `ChatRequestAdapter` emits provider-side `ChatRequest`
+- `ChatRequest` is only a gateway/provider adapter DTO, not the Agent runtime config surface
 
 ### Basic Chat
 

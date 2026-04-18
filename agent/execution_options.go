@@ -36,5 +36,11 @@ func (DefaultExecutionOptionsResolver) Resolve(ctx context.Context, cfg types.Ag
 	if rc := ResolveRunConfig(ctx, input); rc != nil {
 		rc.ApplyToExecutionOptions(&options)
 	}
+	if flag, ok := boolOverrideFromContext(inputContext(input), "disable_planner"); ok {
+		options.Control.DisablePlanner = flag
+	}
+	if value, ok := intOverrideFromContext(inputContext(input), "top_level_loop_budget"); ok && value > 0 {
+		options.Control.MaxLoopIterations = value
+	}
 	return options
 }

@@ -18,7 +18,7 @@
 - **官方多 Agent 门面** - `agent/team`，统一 `supervisor / selector / round_robin / swarm`
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
-- **双模型架构 (toolProvider)** - 便宜模型做工具调用，贵模型做内容生成，大幅降低成本
+- **双模型架构 (toolProvider)** - 便宜模型优先承担工具调用链路（原生 tool calling，非原生 provider 自动降级 XML tool-calling），贵模型做内容生成，大幅降低成本
 - **Skills 系统** - 动态技能加载
 - **MCP/A2A 协议** - 完整 Agent 互操作协议栈 (支持 Google A2A & Anthropic MCP)
 - **Guardrails** - 输入/输出验证、PII 检测、注入防护、自定义验证规则
@@ -129,6 +129,12 @@ go get github.com/BaSui01/agentflow
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
 - `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
 - `agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景；其中 builder/registry 已切换到 gateway 注入语义，不再推荐 provider 直入
+- Agent 运行时主面采用三层模型：`Model / Control / Tools`
+  - `Model` 负责模型与 provider 相关参数
+  - `Control` 负责 loop/budget/reasoning/override 等执行控制
+  - `Tools` 负责工具声明、选择与协议装配
+- `types.AgentConfig` 是对外配置入口，运行时会先收口为 `ExecutionOptions`，再由 `ChatRequestAdapter` 生成 provider 侧 `ChatRequest`
+- `ChatRequest` 只是 gateway/provider adapter DTO，不是 Agent 运行时正式配置主面
 
 ### 基础对话
 

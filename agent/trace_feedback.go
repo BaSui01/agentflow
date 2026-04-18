@@ -135,24 +135,25 @@ func DefaultTraceFeedbackConfig() TraceFeedbackConfig {
 
 func TraceFeedbackConfigFromAgentConfig(cfg types.AgentConfig) TraceFeedbackConfig {
 	out := DefaultTraceFeedbackConfig()
-	if cfg.Context == nil {
+	contextCfg := cfg.ExecutionOptions().Control.Context
+	if contextCfg == nil {
 		return out
 	}
-	out.Enabled = cfg.Context.TraceFeedbackEnabled
-	if cfg.Context.TraceFeedbackComplexityThreshold > 0 {
-		out.ComplexityThreshold = cfg.Context.TraceFeedbackComplexityThreshold
+	out.Enabled = contextCfg.TraceFeedbackEnabled
+	if contextCfg.TraceFeedbackComplexityThreshold > 0 {
+		out.ComplexityThreshold = contextCfg.TraceFeedbackComplexityThreshold
 	}
-	if cfg.Context.TraceSynopsisMinScore > 0 {
-		out.SynopsisMinScore = cfg.Context.TraceSynopsisMinScore
+	if contextCfg.TraceSynopsisMinScore > 0 {
+		out.SynopsisMinScore = contextCfg.TraceSynopsisMinScore
 	}
-	if cfg.Context.TraceHistoryMinScore > 0 {
-		out.HistoryMinScore = cfg.Context.TraceHistoryMinScore
+	if contextCfg.TraceHistoryMinScore > 0 {
+		out.HistoryMinScore = contextCfg.TraceHistoryMinScore
 	}
-	if cfg.Context.TraceMemoryRecallMinScore > 0 {
-		out.MemoryRecallMinScore = cfg.Context.TraceMemoryRecallMinScore
+	if contextCfg.TraceMemoryRecallMinScore > 0 {
+		out.MemoryRecallMinScore = contextCfg.TraceMemoryRecallMinScore
 	}
-	if cfg.Context.TraceHistoryMaxUsageRatio > 0 {
-		out.HistoryMaxUsageRatio = cfg.Context.TraceHistoryMaxUsageRatio
+	if contextCfg.TraceHistoryMaxUsageRatio > 0 {
+		out.HistoryMaxUsageRatio = contextCfg.TraceHistoryMaxUsageRatio
 	}
 	return out
 }

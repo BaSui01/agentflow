@@ -694,6 +694,86 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 	}
 }
 
+func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
+	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
+		data, err := os.ReadFile("agent/loop_executor.go")
+		if err != nil {
+			t.Fatalf("read agent/loop_executor.go: %v", err)
+		}
+		src := string(data)
+		for _, needle := range []string{
+			"ResolveRunConfig(",
+			"DisablePlannerEnabled(",
+			"topLevelLoopBudget(",
+		} {
+			if strings.Contains(src, needle) {
+				t.Fatalf("agent/loop_executor.go must not depend on legacy control fallback %q", needle)
+			}
+		}
+	})
+
+	t.Run("chat_request_construction_stays_in_adapter", func(t *testing.T) {
+		requestData, err := os.ReadFile("agent/request.go")
+		if err != nil {
+			t.Fatalf("read agent/request.go: %v", err)
+		}
+		if strings.Contains(string(requestData), "ChatRequest{") {
+			t.Fatal("agent/request.go must not construct ChatRequest directly; use ChatRequestAdapter")
+		}
+
+		adapterData, err := os.ReadFile("agent/chat_request_adapter.go")
+		if err != nil {
+			t.Fatalf("read agent/chat_request_adapter.go: %v", err)
+		}
+		adapterSrc := string(adapterData)
+		if !strings.Contains(adapterSrc, "ChatRequest{") {
+			t.Fatal("agent/chat_request_adapter.go must remain the primary ChatRequest construction surface")
+		}
+		if !strings.Contains(adapterSrc, "func toolChoiceToRequestValue(choice *types.ToolChoice) any") {
+			t.Fatal("agent/chat_request_adapter.go must remain the adapter boundary that lowers ToolChoice into provider request payloads")
+		}
+	})
+
+	t.Run("tool_choice_any_stays_out_of_agent_runtime_surface", func(t *testing.T) {
+		requestData, err := os.ReadFile("agent/request.go")
+		if err != nil {
+			t.Fatalf("read agent/request.go: %v", err)
+		}
+		if !strings.Contains(string(requestData), "types.ParseToolChoiceString(") {
+			t.Fatal("agent/request.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
+		}
+
+		entries, err := os.ReadDir("agent")
+		if err != nil {
+			t.Fatalf("read agent dir: %v", err)
+		}
+
+		var violations []string
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			path := filepath.Join("agent", name)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			src := string(data)
+			if strings.Contains(src, "ToolChoice any") || strings.Contains(src, "ToolChoice interface{}") {
+				violations = append(violations, path)
+			}
+		}
+		if len(violations) > 0 {
+			slices.Sort(violations)
+			t.Fatalf("agent root package must not expose ToolChoice as any outside provider DTOs:\n%s", strings.Join(violations, "\n"))
+		}
+	})
+}
+
 func listProductionGoFiles(dir string) (map[string]struct{}, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

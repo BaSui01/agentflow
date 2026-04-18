@@ -77,8 +77,10 @@ func newTypedAgentFactory(agentType AgentType) AgentFactory {
 	) (Agent, error) {
 		ensureAgentType(&config)
 		// Apply type-specific defaults only if the user hasn't set a PromptBundle
-		if strings.TrimSpace(config.Runtime.SystemPrompt) == "" {
-			config.Runtime.SystemPrompt = defaultPromptBundleForType(agentType).RenderSystemPrompt()
+		if strings.TrimSpace(config.ExecutionOptions().Control.SystemPrompt) == "" {
+			prompt := defaultPromptBundleForType(agentType).RenderSystemPrompt()
+			config.Control.SystemPrompt = prompt
+			config.Runtime.SystemPrompt = prompt
 		}
 		// Apply type-specific skill categories into Metadata for SkillManager discovery
 		if cats := defaultSkillCategoriesForType(agentType); len(cats) > 0 {
@@ -116,7 +118,7 @@ func buildRegistryAgent(
 	// inject the default reasoning registry and validate the finalized runtime wiring.
 	ag.SetReasoningRegistry(NewDefaultReasoningRegistry(
 		ag.MainGateway(),
-		ag.Config().LLM.Model,
+		ag.Config().ExecutionOptions().Model.Model,
 		toolManager,
 		ag.ID(),
 		bus,

@@ -853,7 +853,7 @@ func NewBaseAgent(
 	ba := &BaseAgent{
 		config:               cfg,
 		promptBundle:         promptBundleFromConfig(cfg),
-		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
+		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.ExecutionOptions().Control.Guardrails),
 		state:                StateInit,
 		mainGateway:          gateway,
 		mainProviderCompat:   compatProviderFromGateway(gateway),
@@ -1253,8 +1253,8 @@ func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger o
 
 // maxReActIterations 返回 ReAct 最大迭代次数，默认 10
 func (b *BaseAgent) maxReActIterations() int {
-	if b.config.Runtime.MaxReActIterations > 0 {
-		return b.config.Runtime.MaxReActIterations
+	if value := b.config.ExecutionOptions().Control.MaxReActIterations; value > 0 {
+		return value
 	}
 	return 10
 }

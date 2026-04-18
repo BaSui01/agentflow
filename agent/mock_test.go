@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"sync"
 
 	agentcontext "github.com/BaSui01/agentflow/agent/context"
@@ -24,10 +26,22 @@ type testProvider struct {
 func (p *testProvider) Name() string                        { return p.name }
 func (p *testProvider) SupportsNativeFunctionCalling() bool { return p.supportsNative }
 func (p *testProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	var (
+		resp *llm.ChatResponse
+		err  error
+	)
 	if p.completionFn != nil {
-		return p.completionFn(ctx, req)
+		resp, err = p.completionFn(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if resp != nil {
+			return maybeInjectPlanToolCall(req, resp, p.supportsNative), nil
+		}
 	}
-	return nil, nil
+	return maybeInjectPlanToolCall(req, &llm.ChatResponse{
+		Choices: []llm.ChatChoice{{Message: types.Message{Content: "mock"}}},
+	}, p.supportsNative), nil
 }
 func (p *testProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	if p.streamFn != nil {
@@ -48,6 +62,68 @@ func (p *testProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
 func (p *testProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+func maybeInjectPlanToolCall(req *llm.ChatRequest, resp *llm.ChatResponse, supportsNative bool) *llm.ChatResponse {
+	if resp == nil || req == nil || supportsNative {
+		return resp
+	}
+	if req.ToolCallMode != llm.ToolCallModeXML || req.ToolChoice != "required" {
+		return resp
+	}
+	if !requestMentionsTool(req.Messages, submitNumberedPlanTool) {
+		return resp
+	}
+	if len(resp.Choices) == 0 || len(resp.Choices[0].Message.ToolCalls) > 0 {
+		return resp
+	}
+
+	steps := parseNumberedPlanContent(resp.Choices[0].Message.Content)
+	if len(steps) == 0 {
+		return resp
+	}
+
+	payload, err := json.Marshal(map[string][]string{"steps": steps})
+	if err != nil {
+		return resp
+	}
+	resp.Choices[0].Message.ToolCalls = []types.ToolCall{{
+		ID:        "call_plan",
+		Name:      submitNumberedPlanTool,
+		Arguments: payload,
+	}}
+	return resp
+}
+
+func requestMentionsTool(messages []types.Message, toolName string) bool {
+	for _, msg := range messages {
+		if strings.Contains(msg.Content, toolName) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseNumberedPlanContent(content string) []string {
+	lines := strings.Split(content, "\n")
+	steps := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if len(line) > 2 && (line[0] >= '0' && line[0] <= '9' || line[0] == '-') {
+			if idx := strings.Index(line, "."); idx > 0 && idx < 5 {
+				line = strings.TrimSpace(line[idx+1:])
+			} else if line[0] == '-' {
+				line = strings.TrimSpace(line[1:])
+			}
+		}
+		if line != "" {
+			steps = append(steps, line)
+		}
+	}
+	return steps
+}
 
 // testMemoryManager implements MemoryManager for testing
 type testMemoryManager struct {

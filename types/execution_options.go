@@ -104,7 +104,7 @@ func (o ExecutionOptions) Clone() ExecutionOptions {
 
 // ExecutionOptions returns the runtime execution view derived from AgentConfig.
 func (c AgentConfig) ExecutionOptions() ExecutionOptions {
-	return ExecutionOptions{
+	options := ExecutionOptions{
 		Core: c.Core,
 		Model: ModelOptions{
 			Provider:    c.LLM.Provider,
@@ -132,6 +132,12 @@ func (c AgentConfig) ExecutionOptions() ExecutionOptions {
 		},
 		Metadata: cloneExecutionMetadata(c.Metadata),
 	}
+	if c.hasFormalMainFace() {
+		options.Model = mergeModelOptions(options.Model, c.Model)
+		options.Control = mergeAgentControlOptions(options.Control, c.Control)
+		options.Tools = mergeToolProtocolOptions(options.Tools, c.Tools)
+	}
+	return options
 }
 
 // ParseToolChoiceString converts the existing string-based runtime setting into
@@ -198,6 +204,149 @@ func (o ToolProtocolOptions) clone() ToolProtocolOptions {
 		ParallelToolCalls: cloneExecutionBoolPtr(o.ParallelToolCalls),
 		ToolCallMode:      o.ToolCallMode,
 	}
+}
+
+func (c AgentConfig) hasFormalMainFace() bool {
+	return strings.TrimSpace(c.Model.Model) != "" ||
+		strings.TrimSpace(c.Model.Provider) != "" ||
+		strings.TrimSpace(c.Control.SystemPrompt) != "" ||
+		c.Control.Timeout != 0 ||
+		c.Control.MaxReActIterations != 0 ||
+		c.Control.MaxLoopIterations != 0 ||
+		c.Control.MaxConcurrency != 0 ||
+		c.Control.DisablePlanner ||
+		c.Control.Context != nil ||
+		c.Control.Reflection != nil ||
+		c.Control.Guardrails != nil ||
+		c.Control.Memory != nil ||
+		c.Control.ToolSelection != nil ||
+		c.Control.PromptEnhancer != nil ||
+		len(c.Tools.AllowedTools) > 0 ||
+		len(c.Tools.ToolWhitelist) > 0 ||
+		c.Tools.DisableTools ||
+		len(c.Tools.Handoffs) > 0 ||
+		strings.TrimSpace(c.Tools.ToolModel) != "" ||
+		c.Tools.ToolChoice != nil ||
+		c.Tools.ParallelToolCalls != nil ||
+		c.Tools.ToolCallMode != ""
+}
+
+func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
+	out := base.clone()
+	if strings.TrimSpace(override.Provider) != "" {
+		out.Provider = strings.TrimSpace(override.Provider)
+	}
+	if strings.TrimSpace(override.Model) != "" {
+		out.Model = strings.TrimSpace(override.Model)
+	}
+	if strings.TrimSpace(override.RoutePolicy) != "" {
+		out.RoutePolicy = strings.TrimSpace(override.RoutePolicy)
+	}
+	if override.MaxTokens > 0 {
+		out.MaxTokens = override.MaxTokens
+	}
+	if override.MaxCompletionTokens != nil {
+		out.MaxCompletionTokens = cloneExecutionIntPtr(override.MaxCompletionTokens)
+	}
+	if override.Temperature != 0 {
+		out.Temperature = override.Temperature
+	}
+	if override.TopP != 0 {
+		out.TopP = override.TopP
+	}
+	if len(override.Stop) > 0 {
+		out.Stop = cloneExecutionStrings(override.Stop)
+	}
+	if override.ResponseFormat != nil {
+		out.ResponseFormat = cloneResponseFormat(override.ResponseFormat)
+	}
+	if strings.TrimSpace(override.ReasoningEffort) != "" {
+		out.ReasoningEffort = strings.TrimSpace(override.ReasoningEffort)
+	}
+	if strings.TrimSpace(override.ReasoningSummary) != "" {
+		out.ReasoningSummary = strings.TrimSpace(override.ReasoningSummary)
+	}
+	if strings.TrimSpace(override.ReasoningDisplay) != "" {
+		out.ReasoningDisplay = strings.TrimSpace(override.ReasoningDisplay)
+	}
+	if strings.TrimSpace(override.InferenceSpeed) != "" {
+		out.InferenceSpeed = strings.TrimSpace(override.InferenceSpeed)
+	}
+	if override.WebSearchOptions != nil {
+		out.WebSearchOptions = cloneWebSearchOptions(override.WebSearchOptions)
+	}
+	return out
+}
+
+func mergeAgentControlOptions(base AgentControlOptions, override AgentControlOptions) AgentControlOptions {
+	out := base.clone()
+	if strings.TrimSpace(override.SystemPrompt) != "" {
+		out.SystemPrompt = strings.TrimSpace(override.SystemPrompt)
+	}
+	if override.Timeout != 0 {
+		out.Timeout = override.Timeout
+	}
+	if override.MaxReActIterations > 0 {
+		out.MaxReActIterations = override.MaxReActIterations
+	}
+	if override.MaxLoopIterations > 0 {
+		out.MaxLoopIterations = override.MaxLoopIterations
+	}
+	if override.MaxConcurrency > 0 {
+		out.MaxConcurrency = override.MaxConcurrency
+	}
+	if override.DisablePlanner {
+		out.DisablePlanner = true
+	}
+	if override.Context != nil {
+		out.Context = cloneContextConfig(override.Context)
+	}
+	if override.Reflection != nil {
+		out.Reflection = cloneReflectionConfig(override.Reflection)
+	}
+	if override.Guardrails != nil {
+		out.Guardrails = cloneGuardrailsConfig(override.Guardrails)
+	}
+	if override.Memory != nil {
+		out.Memory = cloneMemoryConfig(override.Memory)
+	}
+	if override.ToolSelection != nil {
+		out.ToolSelection = cloneToolSelectionConfig(override.ToolSelection)
+	}
+	if override.PromptEnhancer != nil {
+		out.PromptEnhancer = clonePromptEnhancerConfig(override.PromptEnhancer)
+	}
+	return out
+}
+
+func mergeToolProtocolOptions(base ToolProtocolOptions, override ToolProtocolOptions) ToolProtocolOptions {
+	out := base.clone()
+	if len(override.AllowedTools) > 0 {
+		out.AllowedTools = cloneExecutionStrings(override.AllowedTools)
+	}
+	if len(override.ToolWhitelist) > 0 {
+		out.ToolWhitelist = cloneExecutionStrings(override.ToolWhitelist)
+	}
+	if override.DisableTools {
+		out.DisableTools = true
+		out.ToolWhitelist = nil
+	}
+	if len(override.Handoffs) > 0 {
+		out.Handoffs = cloneExecutionStrings(override.Handoffs)
+	}
+	if strings.TrimSpace(override.ToolModel) != "" {
+		out.ToolModel = strings.TrimSpace(override.ToolModel)
+	}
+	if override.ToolChoice != nil {
+		out.ToolChoice = cloneToolChoice(override.ToolChoice)
+	}
+	if override.ParallelToolCalls != nil {
+		out.ParallelToolCalls = cloneExecutionBoolPtr(override.ParallelToolCalls)
+	}
+	if override.ToolCallMode != "" {
+		out.ToolCallMode = override.ToolCallMode
+	}
+	return out
 }
 
 func cloneExecutionStrings(values []string) []string {

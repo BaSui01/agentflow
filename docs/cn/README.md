@@ -56,8 +56,8 @@
 - **官方单 Agent 主链**: 默认只走 `react`，`reflection` 作为可选质量增强
 - **高级 / 实验策略**: `Reflexion`、`ReWOO`、`Plan-Execute` 需显式启用；`ToT`、`Dynamic Planner`、`Iterative Deepening` 属于实验能力
 - **多层记忆**: 短期/工作记忆、长期记忆、情节记忆、语义记忆、程序性记忆
-- **工具调用**: 原生 Function Calling + ReAct 循环
-- **双模型架构 (toolProvider)**: 便宜模型做工具调用，贵模型做内容生成
+- **工具调用**: 原生 Function Calling + ReAct 循环；非原生 provider 自动走 XML tool-calling fallback
+- **双模型架构 (toolProvider)**: 便宜模型优先处理工具调用链路，贵模型做内容生成
 - **MCP/A2A 协议**: 完整 Agent 互操作协议栈 (Google A2A & Anthropic MCP)
 - **Guardrails**: 输入/输出验证、PII 检测、注入防护
 - **Skills 系统**: 动态技能加载

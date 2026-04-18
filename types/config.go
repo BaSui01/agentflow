@@ -16,19 +16,20 @@ type AgentConfig struct {
 	// Core configuration (required)
 	Core CoreConfig `json:"core"`
 
-	// LLM configuration
-	LLM LLMConfig `json:"llm"`
+	// Formal runtime surface: model parameters, control parameters, and tool protocol.
+	// New runtime code should prefer these fields.
+	Model   ModelOptions        `json:"model,omitempty"`
+	Control AgentControlOptions `json:"control,omitempty"`
+	Tools   ToolProtocolOptions `json:"tools,omitempty"`
 
-	// Runtime execution behavior configuration
-	Runtime RuntimeConfig `json:"runtime,omitempty"`
-
-	// Context orchestration configuration
-	Context *ContextConfig `json:"context,omitempty"`
-
-	// Feature configurations (optional)
-	Features FeaturesConfig `json:"features,omitempty"`
-
-	// Extension configurations (optional)
+	// Legacy nested runtime surface kept while the repository migrates callers to
+	// the formal main face above.
+	//
+	// New runtime entrypoints should not read these directly; use ExecutionOptions().
+	LLM        LLMConfig        `json:"llm"`
+	Runtime    RuntimeConfig    `json:"runtime,omitempty"`
+	Context    *ContextConfig   `json:"context,omitempty"`
+	Features   FeaturesConfig   `json:"features,omitempty"`
 	Extensions ExtensionsConfig `json:"extensions,omitempty"`
 
 	// Metadata for custom data
@@ -299,16 +300,26 @@ func (c *ObservabilityConfig) IsEnabled() bool { return c != nil && c.Enabled }
 // Configuration Helpers
 // ============================================================
 
-func (c *AgentConfig) IsReflectionEnabled() bool     { return c.Features.Reflection.IsEnabled() }
-func (c *AgentConfig) IsToolSelectionEnabled() bool  { return c.Features.ToolSelection.IsEnabled() }
-func (c *AgentConfig) IsContextEnabled() bool        { return c.Context.IsEnabled() }
-func (c *AgentConfig) IsGuardrailsEnabled() bool     { return c.Features.Guardrails.IsEnabled() }
-func (c *AgentConfig) IsMemoryEnabled() bool         { return c.Features.Memory.IsEnabled() }
-func (c *AgentConfig) IsPromptEnhancerEnabled() bool { return c.Features.PromptEnhancer.IsEnabled() }
-func (c *AgentConfig) IsSkillsEnabled() bool         { return c.Extensions.Skills.IsEnabled() }
-func (c *AgentConfig) IsMCPEnabled() bool            { return c.Extensions.MCP.IsEnabled() }
-func (c *AgentConfig) IsLSPEnabled() bool            { return c.Extensions.LSP.IsEnabled() }
-func (c *AgentConfig) IsObservabilityEnabled() bool  { return c.Extensions.Observability.IsEnabled() }
+func (c *AgentConfig) IsReflectionEnabled() bool {
+	return c.ExecutionOptions().Control.Reflection.IsEnabled()
+}
+func (c *AgentConfig) IsToolSelectionEnabled() bool {
+	return c.ExecutionOptions().Control.ToolSelection.IsEnabled()
+}
+func (c *AgentConfig) IsContextEnabled() bool {
+	return c.ExecutionOptions().Control.Context.IsEnabled()
+}
+func (c *AgentConfig) IsGuardrailsEnabled() bool {
+	return c.ExecutionOptions().Control.Guardrails.IsEnabled()
+}
+func (c *AgentConfig) IsMemoryEnabled() bool { return c.ExecutionOptions().Control.Memory.IsEnabled() }
+func (c *AgentConfig) IsPromptEnhancerEnabled() bool {
+	return c.ExecutionOptions().Control.PromptEnhancer.IsEnabled()
+}
+func (c *AgentConfig) IsSkillsEnabled() bool        { return c.Extensions.Skills.IsEnabled() }
+func (c *AgentConfig) IsMCPEnabled() bool           { return c.Extensions.MCP.IsEnabled() }
+func (c *AgentConfig) IsLSPEnabled() bool           { return c.Extensions.LSP.IsEnabled() }
+func (c *AgentConfig) IsObservabilityEnabled() bool { return c.Extensions.Observability.IsEnabled() }
 
 // Validate validates the configuration.
 func (c *AgentConfig) Validate() error {
@@ -318,7 +329,7 @@ func (c *AgentConfig) Validate() error {
 	if c.Core.Name == "" {
 		return &Error{Code: ErrInvalidRequest, Message: "agent name is required"}
 	}
-	if c.LLM.Model == "" {
+	if c.ExecutionOptions().Model.Model == "" {
 		return &Error{Code: ErrInvalidRequest, Message: "LLM model is required"}
 	}
 	return nil

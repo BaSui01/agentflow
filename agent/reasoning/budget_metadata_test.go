@@ -60,7 +60,16 @@ func TestPlanAndExecute_ExportsInternalBudgetMetadata(t *testing.T) {
 			switch call {
 			case 1:
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"goal":"solve","steps":[{"id":"step_1","description":"do work"}]}`}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_exec_plan",
+							Name: submitExecutionPlanTool,
+							Arguments: []byte(`{
+								"goal":"solve",
+								"steps":[{"id":"step_1","description":"do work"}]
+							}`),
+						}},
+					}}},
 				}, nil
 			case 2:
 				return &llm.ChatResponse{
@@ -107,7 +116,15 @@ func TestDynamicPlanner_ExportsInternalBudgetMetadata(t *testing.T) {
 			switch call {
 			case 1:
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"steps":[{"action":"think","description":"analyze","confidence":0.8}]}`}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_next_steps",
+							Name: submitNextStepsTool,
+							Arguments: []byte(`{
+								"steps":[{"action":"think","description":"analyze","confidence":0.8}]
+							}`),
+						}},
+					}}},
 				}, nil
 			case 2:
 				return &llm.ChatResponse{

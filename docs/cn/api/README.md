@@ -157,6 +157,14 @@ const (
 
 `agent` 子模块的正式 runtime 入口是 `agent/runtime.Builder`；仓库级正式入口则应从 `sdk.New(opts).Build(ctx)` 进入。
 
+Agent 运行时主面采用三层模型：`Model / Control / Tools`。
+
+- `Model` 负责模型与 provider 参数
+- `Control` 负责 loop/budget/reasoning/override 等执行控制
+- `Tools` 负责工具声明、选择与协议装配
+
+`types.AgentConfig` 仍是对外配置入口，但运行时会先收口为 `ExecutionOptions`，再由 `ChatRequestAdapter` 生成 provider 侧 `ChatRequest`。`ChatRequest` 只是 gateway/provider adapter DTO，不是 Agent 运行时正式配置主面。
+
 ```go
 func DefaultBuildOptions() BuildOptions
 func NewBuilder(gateway llmcore.Gateway, logger *zap.Logger) *Builder
@@ -213,6 +221,12 @@ type Provider interface {
 ### ChatRequest
 
 聊天请求。
+
+说明：
+
+- `ChatRequest` 是 `llm/gateway` 与 provider adapter 使用的底层 DTO，不是 Agent 运行时的正式配置主面。
+- Agent 运行时主链优先通过 `types.AgentConfig -> ExecutionOptions -> ChatRequestAdapter` 收口 `Model / Control / Tools` 三层语义，再由 adapter 生成 `ChatRequest`。
+- 直接构造 `ChatRequest` 仍适用于 provider/gateway 级低层调用、测试和示例，但不应替代 Agent 运行时配置。
 
 ```go
 type ChatRequest struct {

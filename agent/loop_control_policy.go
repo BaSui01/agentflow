@@ -31,7 +31,8 @@ func (b *BaseAgent) loopControlPolicy() LoopControlPolicy {
 		QualityThreshold:          defaultQualityThreshold,
 	}
 
-	if reflectionCfg := b.config.Features.Reflection; reflectionCfg != nil {
+	control := b.config.ExecutionOptions().Control
+	if reflectionCfg := control.Reflection; reflectionCfg != nil {
 		if reflectionCfg.MaxIterations > 0 {
 			policy.ReflectionIterationBudget = reflectionCfg.MaxIterations
 		}
@@ -45,12 +46,12 @@ func (b *BaseAgent) loopControlPolicy() LoopControlPolicy {
 	if policy.ReflectionIterationBudget <= 0 {
 		policy.ReflectionIterationBudget = defaultReflectionIterationBudget
 	}
-	if b.config.Runtime.MaxLoopIterations > 0 {
-		policy.LoopIterationBudget = b.config.Runtime.MaxLoopIterations
+	if control.MaxLoopIterations > 0 {
+		policy.LoopIterationBudget = control.MaxLoopIterations
 	}
 	if guardrailsCfg := b.runtimeGuardrailsCfg; guardrailsCfg != nil {
 		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
-	} else if guardrailsCfg := b.config.Features.Guardrails; guardrailsCfg != nil {
+	} else if guardrailsCfg := control.Guardrails; guardrailsCfg != nil {
 		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
 	}
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -46,72 +45,6 @@ func WithRunConfig(ctx context.Context, rc *RunConfig) context.Context {
 func GetRunConfig(ctx context.Context) *RunConfig {
 	rc, _ := ctx.Value(runConfigKey{}).(*RunConfig)
 	return rc
-}
-
-// ApplyToRequest applies RunConfig overrides to a ChatRequest.
-// Fields in baseCfg are used as defaults; only non-nil RunConfig fields override them.
-// If rc is nil, this is a no-op.
-func (rc *RunConfig) ApplyToRequest(req *types.ChatRequest, baseCfg types.AgentConfig) {
-	if rc == nil || req == nil {
-		return
-	}
-
-	if rc.Model != nil {
-		req.Model = *rc.Model
-	}
-	if rc.Provider != nil {
-		provider := strings.TrimSpace(*rc.Provider)
-		if provider != "" {
-			if req.Metadata == nil {
-				req.Metadata = make(map[string]string, 2)
-			}
-			req.Metadata[llmcore.MetadataKeyChatProvider] = provider
-		}
-	}
-	if rc.RoutePolicy != nil {
-		routePolicy := strings.TrimSpace(*rc.RoutePolicy)
-		if routePolicy != "" {
-			if req.Metadata == nil {
-				req.Metadata = make(map[string]string, 2)
-			}
-			req.Metadata["route_policy"] = routePolicy
-		}
-	}
-	if rc.Temperature != nil {
-		req.Temperature = *rc.Temperature
-	}
-	if rc.MaxTokens != nil {
-		req.MaxTokens = *rc.MaxTokens
-	}
-	if rc.TopP != nil {
-		req.TopP = *rc.TopP
-	}
-	if len(rc.Stop) > 0 {
-		req.Stop = rc.Stop
-	}
-	if rc.ToolChoice != nil {
-		req.ToolChoice = *rc.ToolChoice
-	}
-	if rc.Timeout != nil {
-		req.Timeout = *rc.Timeout
-	}
-	if len(rc.Metadata) > 0 {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string, len(rc.Metadata))
-		}
-		for k, v := range rc.Metadata {
-			req.Metadata[k] = v
-		}
-	}
-	if rc.MaxLoopIterations != nil {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string, 1)
-		}
-		req.Metadata["max_loop_iterations"] = strconv.Itoa(*rc.MaxLoopIterations)
-	}
-	if len(rc.Tags) > 0 {
-		req.Tags = rc.Tags
-	}
 }
 
 // ApplyToExecutionOptions applies RunConfig overrides to the provider-agnostic
@@ -175,6 +108,12 @@ func (rc *RunConfig) ApplyToExecutionOptions(opts *types.ExecutionOptions) {
 	}
 	if opts.Control.DisablePlanner {
 		return
+	}
+	if opts.Control.MaxLoopIterations > 0 {
+		if opts.Metadata == nil {
+			opts.Metadata = make(map[string]string, 1)
+		}
+		opts.Metadata["max_loop_iterations"] = strconv.Itoa(opts.Control.MaxLoopIterations)
 	}
 	opts.Control.DisablePlanner = parseBoolString(opts.Metadata["disable_planner"])
 }

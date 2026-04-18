@@ -52,7 +52,7 @@
 
 - **State Management**: Complete lifecycle management
 - **Reflection Mechanism**: Self-evaluation and iterative improvement
-- **Dual-Model Architecture (toolProvider)**: Cheap model for tool calls, expensive model for content generation to reduce cost
+- **Dual-Model Architecture (toolProvider)**: Cheap model handles tool-call-heavy turns first, while the expensive model focuses on final content generation
 - **Skills System**: Dynamic skill loading
 - **MCP/A2A Protocol Support**: Full Agent interoperability stack (Google A2A & Anthropic MCP)
 - **Guardrails**: Input/output validation, PII detection, injection protection, custom validation rules
@@ -65,7 +65,7 @@
 - **Human-in-the-Loop**: Human approval nodes
 - **Thought Signatures**: Reasoning chain signatures for multi-turn continuity
 - **Declarative Agent Loader**: YAML/JSON definition with factory auto-assembly
-- **Tool Calling**: Native Function Calling + ReAct loop
+- **Tool Calling**: Native Function Calling + ReAct loop, with XML tool-calling fallback for non-native providers
 
 ### 📊 Workflow Orchestration
 

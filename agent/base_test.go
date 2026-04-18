@@ -359,7 +359,7 @@ func TestBaseAgent_Plan(t *testing.T) {
 	assert.Contains(t, capturedPrompt, "Prefer tool-first actions when tools are needed")
 }
 
-func TestBaseAgent_Plan_RequiresNativeToolCall(t *testing.T) {
+func TestBaseAgent_Plan_RequiresNativeToolCallWhenProviderSupportsIt(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
 	provider := &testProvider{
@@ -392,7 +392,7 @@ func TestBaseAgent_Plan_RequiresNativeToolCall(t *testing.T) {
 		Content: "Build a web application",
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "native tool call")
+	assert.Contains(t, err.Error(), "tool call")
 }
 
 // BenchmarkBaseAgent_Execute 性能测试

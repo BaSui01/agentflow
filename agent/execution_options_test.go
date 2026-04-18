@@ -69,6 +69,18 @@ func TestExecutionOptionsResolver(t *testing.T) {
 	assert.Equal(t, []string{"unit"}, options.Tags)
 }
 
+func TestExecutionOptionsResolver_ResolvesControlFlagsFromInputContext(t *testing.T) {
+	cfg := testAgentConfig("agent-1", "Agent", "base-model")
+	options := NewDefaultExecutionOptionsResolver().Resolve(context.Background(), cfg, &Input{
+		Context: map[string]any{
+			"disable_planner":       true,
+			"top_level_loop_budget": 1,
+		},
+	})
+	assert.True(t, options.Control.DisablePlanner)
+	assert.Equal(t, 1, options.Control.MaxLoopIterations)
+}
+
 func TestChatRequestAdapter(t *testing.T) {
 	parallel := false
 	disableParallel := true

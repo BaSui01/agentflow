@@ -113,6 +113,7 @@ func (b *AgentBuilder) WithLedger(ledger observability.Ledger) *AgentBuilder {
 // n <= 0 时忽略，使用默认值 10。
 func (b *AgentBuilder) WithMaxReActIterations(n int) *AgentBuilder {
 	if n > 0 {
+		b.config.Control.MaxReActIterations = n
 		b.config.Runtime.MaxReActIterations = n
 	}
 	return b
@@ -122,6 +123,7 @@ func (b *AgentBuilder) WithMaxReActIterations(n int) *AgentBuilder {
 // n <= 0 时忽略，使用框架默认值。
 func (b *AgentBuilder) WithMaxLoopIterations(n int) *AgentBuilder {
 	if n > 0 {
+		b.config.Control.MaxLoopIterations = n
 		b.config.Runtime.MaxLoopIterations = n
 	}
 	return b
@@ -130,6 +132,7 @@ func (b *AgentBuilder) WithMaxLoopIterations(n int) *AgentBuilder {
 // WithHandoffs configures static handoff targets that this agent may delegate to.
 // Empty values are ignored and duplicates are removed.
 func (b *AgentBuilder) WithHandoffs(agentIDs []string) *AgentBuilder {
+	b.config.Tools.Handoffs = normalizeAgentIDList(agentIDs)
 	b.config.Runtime.Handoffs = normalizeAgentIDList(agentIDs)
 	return b
 }
@@ -199,6 +202,12 @@ func (b *AgentBuilder) WithReflection(config *ReflectionExecutorConfig) *AgentBu
 	}
 	b.reflectionConfig = config
 	ensureReflectionEnabled(&b.config)
+	b.config.Control.Reflection = &types.ReflectionConfig{
+		Enabled:       true,
+		MaxIterations: config.MaxIterations,
+		MinQuality:    config.MinQuality,
+		CriticPrompt:  config.CriticPrompt,
+	}
 	b.config.Features.Reflection.MaxIterations = config.MaxIterations
 	b.config.Features.Reflection.MinQuality = config.MinQuality
 	b.config.Features.Reflection.CriticPrompt = config.CriticPrompt
@@ -212,6 +221,10 @@ func (b *AgentBuilder) WithToolSelection(config *ToolSelectionConfig) *AgentBuil
 	}
 	b.toolSelectionConfig = config
 	ensureToolSelectionEnabled(&b.config)
+	b.config.Control.ToolSelection = &types.ToolSelectionConfig{
+		Enabled:  true,
+		MaxTools: config.MaxTools,
+	}
 	return b
 }
 
@@ -222,6 +235,7 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 	}
 	b.promptEnhancerConfig = config
 	ensurePromptEnhancerEnabled(&b.config)
+	b.config.Control.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true, Mode: "basic"}
 	return b
 }
 
@@ -423,7 +437,7 @@ func (b *AgentBuilder) validateBuildInputs() error {
 	if b.gateway == nil {
 		return ErrProviderNotSet
 	}
-	if b.config.LLM.Model == "" {
+	if b.config.ExecutionOptions().Model.Model == "" {
 		return NewError(types.ErrInputValidation, "config.Model is required")
 	}
 	return nil
@@ -612,7 +626,7 @@ func (b *AgentBuilder) Validate() error {
 		return fmt.Errorf("agent name is required")
 	}
 
-	if b.config.LLM.Model == "" {
+	if b.config.ExecutionOptions().Model.Model == "" {
 		return fmt.Errorf("model is required")
 	}
 
@@ -641,6 +655,10 @@ func ensureReflectionEnabled(cfg *types.AgentConfig) {
 		cfg.Features.Reflection = &types.ReflectionConfig{}
 	}
 	cfg.Features.Reflection.Enabled = true
+	if cfg.Control.Reflection == nil {
+		cfg.Control.Reflection = &types.ReflectionConfig{}
+	}
+	cfg.Control.Reflection.Enabled = true
 }
 
 func ensureToolSelectionEnabled(cfg *types.AgentConfig) {
@@ -648,6 +666,10 @@ func ensureToolSelectionEnabled(cfg *types.AgentConfig) {
 		cfg.Features.ToolSelection = &types.ToolSelectionConfig{}
 	}
 	cfg.Features.ToolSelection.Enabled = true
+	if cfg.Control.ToolSelection == nil {
+		cfg.Control.ToolSelection = &types.ToolSelectionConfig{}
+	}
+	cfg.Control.ToolSelection.Enabled = true
 }
 
 func ensurePromptEnhancerEnabled(cfg *types.AgentConfig) {
@@ -655,6 +677,10 @@ func ensurePromptEnhancerEnabled(cfg *types.AgentConfig) {
 		cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{}
 	}
 	cfg.Features.PromptEnhancer.Enabled = true
+	if cfg.Control.PromptEnhancer == nil {
+		cfg.Control.PromptEnhancer = &types.PromptEnhancerConfig{}
+	}
+	cfg.Control.PromptEnhancer.Enabled = true
 }
 
 func ensureSkillsEnabled(cfg *types.AgentConfig) {
@@ -683,6 +709,10 @@ func ensureEnhancedMemoryEnabled(cfg *types.AgentConfig) {
 		cfg.Features.Memory = &types.MemoryConfig{}
 	}
 	cfg.Features.Memory.Enabled = true
+	if cfg.Control.Memory == nil {
+		cfg.Control.Memory = &types.MemoryConfig{}
+	}
+	cfg.Control.Memory.Enabled = true
 }
 
 func ensureObservabilityEnabled(cfg *types.AgentConfig) {
@@ -693,7 +723,7 @@ func ensureObservabilityEnabled(cfg *types.AgentConfig) {
 }
 
 func promptBundleFromConfig(cfg types.AgentConfig) PromptBundle {
-	system := strings.TrimSpace(cfg.Runtime.SystemPrompt)
+	system := strings.TrimSpace(cfg.ExecutionOptions().Control.SystemPrompt)
 	if system == "" {
 		return PromptBundle{}
 	}
