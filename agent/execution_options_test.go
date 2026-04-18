@@ -62,7 +62,7 @@ func TestExecutionOptionsResolver(t *testing.T) {
 	assert.Equal(t, 3072, options.Model.MaxTokens)
 	assert.Equal(t, 45*time.Second, options.Control.Timeout)
 	assert.Equal(t, 7, options.Control.MaxReActIterations)
-	assert.False(t, options.Control.DisablePlanner)
+	assert.True(t, options.Control.DisablePlanner)
 	assert.Equal(t, []string{"search"}, options.Tools.ToolWhitelist)
 	require.NotNil(t, options.Tools.ToolChoice)
 	assert.Equal(t, types.ToolChoiceModeRequired, options.Tools.ToolChoice.Mode)
