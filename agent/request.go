@@ -114,6 +114,71 @@ func (rc *RunConfig) ApplyToRequest(req *types.ChatRequest, baseCfg types.AgentC
 	}
 }
 
+// ApplyToExecutionOptions applies RunConfig overrides to the provider-agnostic
+// execution options consumed by the agent runtime.
+func (rc *RunConfig) ApplyToExecutionOptions(opts *types.ExecutionOptions) {
+	if rc == nil || opts == nil {
+		return
+	}
+
+	if rc.Model != nil {
+		opts.Model.Model = *rc.Model
+	}
+	if rc.Provider != nil {
+		opts.Model.Provider = strings.TrimSpace(*rc.Provider)
+	}
+	if rc.RoutePolicy != nil {
+		opts.Model.RoutePolicy = strings.TrimSpace(*rc.RoutePolicy)
+	}
+	if rc.Temperature != nil {
+		opts.Model.Temperature = *rc.Temperature
+	}
+	if rc.MaxTokens != nil {
+		opts.Model.MaxTokens = *rc.MaxTokens
+	}
+	if rc.TopP != nil {
+		opts.Model.TopP = *rc.TopP
+	}
+	if len(rc.Stop) > 0 {
+		opts.Model.Stop = append([]string(nil), rc.Stop...)
+	}
+	if rc.ToolChoice != nil {
+		opts.Tools.ToolChoice = types.ParseToolChoiceString(strings.TrimSpace(*rc.ToolChoice))
+	}
+	if rc.DisableTools {
+		opts.Tools.DisableTools = true
+		opts.Tools.ToolWhitelist = nil
+	}
+	if len(rc.ToolWhitelist) > 0 {
+		opts.Tools.ToolWhitelist = append([]string(nil), rc.ToolWhitelist...)
+		opts.Tools.DisableTools = false
+	}
+	if rc.Timeout != nil {
+		opts.Control.Timeout = *rc.Timeout
+	}
+	if rc.MaxReActIterations != nil {
+		opts.Control.MaxReActIterations = *rc.MaxReActIterations
+	}
+	if rc.MaxLoopIterations != nil {
+		opts.Control.MaxLoopIterations = *rc.MaxLoopIterations
+	}
+	if len(rc.Metadata) > 0 {
+		if opts.Metadata == nil {
+			opts.Metadata = make(map[string]string, len(rc.Metadata))
+		}
+		for key, value := range rc.Metadata {
+			opts.Metadata[key] = value
+		}
+	}
+	if len(rc.Tags) > 0 {
+		opts.Tags = append([]string(nil), rc.Tags...)
+	}
+	if opts.Control.DisablePlanner {
+		return
+	}
+	opts.Control.DisablePlanner = parseBoolString(opts.Metadata["disable_planner"])
+}
+
 // EffectiveMaxReActIterations returns the RunConfig override if set,
 // otherwise falls back to defaultVal.
 func (rc *RunConfig) EffectiveMaxReActIterations(defaultVal int) int {
@@ -314,6 +379,7 @@ type preparedRequest struct {
 	toolRisks    map[string]string
 	maxReActIter int
 	maxLoopIter  int
+	options      types.ExecutionOptions
 }
 
 // prepareChatRequest builds a ChatRequest from messages, applying context
@@ -329,38 +395,22 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 	}
 
 	chatProv := b.gatewayProvider()
-
-	// 1. Model selection (context override takes precedence over config)
-	model := b.config.LLM.Model
-	if v, ok := types.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
-		model = strings.TrimSpace(v)
+	options := b.executionOptionsResolver().Resolve(ctx, b.config, nil)
+	req, err := b.chatRequestAdapter().Build(options, messages)
+	if err != nil {
+		return nil, err
 	}
 
-	// 2. Build base request
-	req := &types.ChatRequest{
-		Model:       model,
-		Messages:    messages,
-		MaxTokens:   b.config.LLM.MaxTokens,
-		Temperature: b.config.LLM.Temperature,
-	}
-
-	// 3. Apply RunConfig overrides
-	rc := GetRunConfig(ctx)
-	if rc != nil {
-		rc.ApplyToRequest(req, b.config)
-	}
-	applyContextRouteHints(req, ctx)
-
-	// 4. Tool whitelist filtering
+	// 1. Tool whitelist filtering
 	if b.toolManager != nil {
 		allowedTools := b.toolManager.GetAllowedTools(b.config.Core.ID)
 		switch {
-		case rc != nil && rc.DisableTools:
+		case options.Tools.DisableTools:
 			req.Tools = nil
-		case rc != nil && len(rc.ToolWhitelist) > 0:
-			req.Tools = filterToolSchemasByWhitelist(allowedTools, rc.ToolWhitelist)
-		case len(b.config.Runtime.Tools) > 0:
-			req.Tools = filterToolSchemasByWhitelist(allowedTools, b.config.Runtime.Tools)
+		case len(options.Tools.ToolWhitelist) > 0:
+			req.Tools = filterToolSchemasByWhitelist(allowedTools, options.Tools.ToolWhitelist)
+		case len(options.Tools.AllowedTools) > 0:
+			req.Tools = filterToolSchemasByWhitelist(allowedTools, options.Tools.AllowedTools)
 		}
 	}
 	handoffMap := map[string]RuntimeHandoffTarget(nil)
@@ -391,14 +441,17 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		}
 	}
 
-	// 5. 选择执行 provider。工具协议差异（如 XML fallback）统一在 llm/gateway 内处理。
+	// 2. 选择执行 provider。工具协议差异（如 XML fallback）统一在 llm/gateway 内处理。
 	toolProv := chatProv
 	if b.hasDedicatedToolExecutionSurface() {
 		toolProv = b.gatewayToolProvider()
 	}
 
-	// 6. Effective ReAct iterations
-	effectiveIter := rc.EffectiveMaxReActIterations(b.maxReActIterations())
+	// 3. Effective loop budgets
+	effectiveIter := options.Control.MaxReActIterations
+	if effectiveIter <= 0 {
+		effectiveIter = b.maxReActIterations()
+	}
 	toolRisks := make(map[string]string, len(req.Tools))
 	for _, tool := range req.Tools {
 		name := strings.TrimSpace(tool.Name)
@@ -416,7 +469,8 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		handoffTools: handoffMap,
 		toolRisks:    toolRisks,
 		maxReActIter: effectiveIter,
-		maxLoopIter:  rc.EffectiveMaxLoopIterations(0),
+		maxLoopIter:  options.Control.MaxLoopIterations,
+		options:      options,
 	}, nil
 }
 

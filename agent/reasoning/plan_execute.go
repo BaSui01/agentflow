@@ -264,24 +264,11 @@ Rules:
 	if err != nil {
 		return nil, 0, fmt.Errorf("plan creation returned no choices: %w", err)
 	}
-
-	content := choice.Message.Content
 	tokens := resp.Usage.TotalTokens
 
 	plan, err := parseExecutionPlanToolCall(choice.Message)
 	if err != nil {
-		plan, err = parseExecutionPlanText(content)
-		if err != nil {
-			p.logger.Warn("failed to parse plan", zap.Error(err))
-			plan = ExecutionPlan{
-				Goal: task,
-				Steps: []ExecutionStep{{
-					ID:          "step_1",
-					Description: "Attempt to solve the task directly",
-					Status:      stepStatusPending,
-				}},
-			}
-		}
+		return nil, tokens, fmt.Errorf("plan creation did not return native tool call: %w", err)
 	}
 
 	plan.Status = planStatusExecuting
@@ -431,16 +418,11 @@ Rules:
 	if err != nil {
 		return nil, 0, fmt.Errorf("replan returned no choices: %w", err)
 	}
-
-	content := replanChoice.Message.Content
 	tokens := resp.Usage.TotalTokens
 
 	newPlan, err := parseExecutionPlanToolCall(replanChoice.Message)
 	if err != nil {
-		newPlan, err = parseExecutionPlanText(content)
-		if err != nil {
-			return nil, tokens, fmt.Errorf("failed to parse new plan: %w", err)
-		}
+		return nil, tokens, fmt.Errorf("replan did not return native tool call: %w", err)
 	}
 
 	// 保留已完成的步骤
@@ -485,79 +467,4 @@ Based on these results, provide a clear and complete final answer.`, task, strin
 	}
 
 	return synthChoice.Message.Content, resp.Usage.TotalTokens, nil
-}
-
-func extractJSONObject(s string) string {
-	start := strings.Index(s, "{")
-	end := strings.LastIndex(s, "}")
-	if start >= 0 && end > start {
-		return s[start : end+1]
-	}
-	return s
-}
-
-func parseExecutionPlanText(content string) (ExecutionPlan, error) {
-	plan := ExecutionPlan{}
-	lines := strings.Split(content, "\n")
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(strings.ToLower(line), "goal:"):
-			plan.Goal = strings.TrimSpace(line[len("goal:"):])
-		case strings.HasPrefix(strings.ToLower(line), "step "):
-			step, ok := parseExecutionStepLine(line)
-			if ok {
-				plan.Steps = append(plan.Steps, step)
-			}
-		}
-	}
-	if len(plan.Steps) == 0 {
-		return ExecutionPlan{}, fmt.Errorf("no execution steps found")
-	}
-	if strings.TrimSpace(plan.Goal) == "" {
-		plan.Goal = plan.Steps[0].Description
-	}
-	return plan, nil
-}
-
-func parseExecutionStepLine(line string) (ExecutionStep, bool) {
-	parts := strings.Split(line, "|")
-	if len(parts) < 2 {
-		return ExecutionStep{}, false
-	}
-	head := strings.TrimSpace(parts[0])
-	if !strings.HasPrefix(strings.ToLower(head), "step ") {
-		return ExecutionStep{}, false
-	}
-	id := strings.TrimSpace(head[len("step "):])
-	if id == "" {
-		return ExecutionStep{}, false
-	}
-	step := ExecutionStep{
-		ID:          id,
-		Description: strings.TrimSpace(parts[1]),
-	}
-	for _, part := range parts[2:] {
-		segment := strings.TrimSpace(part)
-		lower := strings.ToLower(segment)
-		switch {
-		case strings.HasPrefix(lower, "tool="):
-			value := strings.TrimSpace(segment[len("tool="):])
-			if !strings.EqualFold(value, "none") {
-				step.Tool = value
-			}
-		case strings.HasPrefix(lower, "args="):
-			value := strings.TrimSpace(segment[len("args="):])
-			if !strings.EqualFold(value, "none") {
-				step.Arguments = value
-			}
-		}
-	}
-	if step.Description == "" {
-		return ExecutionStep{}, false
-	}
-	return step, true
 }

@@ -2,7 +2,6 @@ package reasoning
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -45,6 +44,11 @@ type ReasoningStep struct {
 	Children   []ReasoningStep `json:"children,omitempty"`
 	Duration   time.Duration   `json:"duration"`
 	TokensUsed int             `json:"tokens_used,omitempty"`
+}
+
+type thoughtCandidate struct {
+	Thought   string `json:"thought"`
+	Reasoning string `json:"reasoning"`
 }
 
 // ============================================================
@@ -261,8 +265,7 @@ func (t *TreeOfThought) generateThoughts(ctx context.Context, task string, paren
 Generate %d different approaches or next steps to solve this task.
 For each approach, provide a clear reasoning path.
 
-Format your response as JSON array:
-[{"thought": "approach 1", "reasoning": "why this might work"}, ...]`, task, count)
+Return the thought candidates using the provided structured output schema.`, task, count)
 
 	if parent != nil {
 		prompt = fmt.Sprintf(`Task: %s
@@ -270,10 +273,10 @@ Format your response as JSON array:
 Previous step: %s
 
 Generate %d different next steps to continue from the previous step.
-Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, parent.Content, count)
+Return the thought candidates using the provided structured output schema.`, task, parent.Content, count)
 	}
 
-	resp, err := invokeChatGateway(ctx, t.gateway, &llm.ChatRequest{
+	parseResult, err := generateStructured[[]thoughtCandidate](ctx, t.gateway, &llm.ChatRequest{
 		Model: defaultModel(t.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -285,26 +288,8 @@ Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, par
 		return nil, 0, err
 	}
 
-	tokens := resp.Usage.TotalTokens
-	genChoice, err := llm.FirstChoice(resp)
-	if err != nil {
-		return nil, 0, fmt.Errorf("thought generation returned no choices: %w", err)
-	}
-	content := genChoice.Message.Content
-
-	// 从反应中解析想法
-	var thoughtsData []struct {
-		Thought   string `json:"thought"`
-		Reasoning string `json:"reasoning"`
-	}
-	if err := json.Unmarshal([]byte(content), &thoughtsData); err != nil {
-		// 倒计时:将整个反应视为单一想法
-		return []ReasoningStep{{
-			StepID:  fmt.Sprintf("thought_%d", time.Now().UnixNano()),
-			Type:    "thought",
-			Content: content,
-		}}, tokens, nil
-	}
+	tokens := structuredTokens(parseResult)
+	thoughtsData := append([]thoughtCandidate(nil), (*parseResult.Value)...)
 
 	steps := make([]ReasoningStep, len(thoughtsData))
 	for i, td := range thoughtsData {
@@ -359,10 +344,9 @@ Rate this approach on a scale of 0.0 to 1.0 based on:
 - Likelihood of leading to correct solution
 - Logical soundness
 - Completeness
+Return the score using the provided structured output schema.`, task, thought.Content)
 
-Respond with only a number between 0.0 and 1.0`, task, thought.Content)
-
-	resp, err := invokeChatGateway(ctx, t.gateway, &llm.ChatRequest{
+	parseResult, err := generateStructured[reflexionScore](ctx, t.gateway, &llm.ChatRequest{
 		Model: defaultModel(t.config.EvalModel),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
@@ -374,18 +358,11 @@ Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 		return 0.5, 0
 	}
 
-	var score float64
-	evalChoice, choiceErr := llm.FirstChoice(resp)
-	if choiceErr != nil {
-		return 0.5, resp.Usage.TotalTokens
-	}
-	if _, err := fmt.Sscanf(evalChoice.Message.Content, "%f", &score); err != nil {
-		return 0.5, resp.Usage.TotalTokens
-	}
+	score := parseResult.Value.Score
 	if score < 0 || score > 1 {
 		score = 0.5
 	}
-	return score, resp.Usage.TotalTokens
+	return score, structuredTokens(parseResult)
 }
 
 func (t *TreeOfThought) selectTopBranches(thoughts []ReasoningStep, n int) []ReasoningStep {

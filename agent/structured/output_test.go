@@ -114,9 +114,8 @@ func TestStructuredOutput_Generate(t *testing.T) {
 		so, err := NewStructuredOutput[TestTaskResult](provider)
 		require.NoError(t, err)
 
-		result, err := so.Generate(context.Background(), "Generate a task result")
-		require.NoError(t, err)
-		assert.Equal(t, "success", result.Status)
+		_, err = so.Generate(context.Background(), "Generate a task result")
+		require.Error(t, err)
 	})
 
 	t.Run("handles response with extra text", func(t *testing.T) {
@@ -124,9 +123,8 @@ func TestStructuredOutput_Generate(t *testing.T) {
 		so, err := NewStructuredOutput[TestTaskResult](provider)
 		require.NoError(t, err)
 
-		result, err := so.Generate(context.Background(), "Generate a task result")
-		require.NoError(t, err)
-		assert.Equal(t, "success", result.Status)
+		_, err = so.Generate(context.Background(), "Generate a task result")
+		require.Error(t, err)
 	})
 }
 
@@ -283,51 +281,6 @@ func TestStructuredOutput_UsesGatewayStructuredRequest(t *testing.T) {
 	})
 }
 
-func TestStructuredOutput_ExtractJSON(t *testing.T) {
-	provider := &mockProvider{}
-	so, err := NewStructuredOutput[TestTaskResult](provider)
-	require.NoError(t, err)
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "plain JSON",
-			input:    `{"key":"value"}`,
-			expected: `{"key":"value"}`,
-		},
-		{
-			name:     "markdown code block",
-			input:    "```json\n{\"key\":\"value\"}\n```",
-			expected: `{"key":"value"}`,
-		},
-		{
-			name:     "markdown without language",
-			input:    "```\n{\"key\":\"value\"}\n```",
-			expected: `{"key":"value"}`,
-		},
-		{
-			name:     "JSON with surrounding text",
-			input:    "Here is the result: {\"key\":\"value\"} Done.",
-			expected: `{"key":"value"}`,
-		},
-		{
-			name:     "JSON array",
-			input:    "Result: [1,2,3] end",
-			expected: `[1,2,3]`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := so.extractJSON(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestParseResult_IsValid(t *testing.T) {
 	t.Run("valid when value present and no errors", func(t *testing.T) {
 		result := &ParseResult[TestTaskResult]{
@@ -409,17 +362,6 @@ func BenchmarkStructuredOutput_Parse(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = so.Parse(jsonStr)
-	}
-}
-
-func BenchmarkStructuredOutput_ExtractJSON(b *testing.B) {
-	provider := &mockProvider{}
-	so, _ := NewStructuredOutput[TestTaskResult](provider)
-	input := "```json\n{\"status\":\"success\",\"message\":\"OK\",\"score\":75,\"tags\":[\"a\"]}\n```"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = so.extractJSON(input)
 	}
 }
 

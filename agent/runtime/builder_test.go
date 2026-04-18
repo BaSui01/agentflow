@@ -538,3 +538,75 @@ func (p *captureRuntimeProvider) ListModels(context.Context) ([]llm.Model, error
 	return []llm.Model{{ID: "test-model"}}, nil
 }
 func (p *captureRuntimeProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+type builderResolverStub struct {
+	options types.ExecutionOptions
+}
+
+func (s builderResolverStub) Resolve(_ context.Context, _ types.AgentConfig, _ *agent.Input) types.ExecutionOptions {
+	return s.options.Clone()
+}
+
+type builderAdapterStub struct{}
+
+func (builderAdapterStub) Build(options types.ExecutionOptions, messages []types.Message) (*types.ChatRequest, error) {
+	return &types.ChatRequest{
+		Model:    options.Model.Model + "-adapted",
+		Messages: append([]types.Message(nil), messages...),
+	}, nil
+}
+
+type builderReasoningRuntimeStub struct{}
+
+func (builderReasoningRuntimeStub) Select(context.Context, *agent.Input, *agent.LoopState) agent.ReasoningSelection {
+	return agent.ReasoningSelection{Mode: "react"}
+}
+
+func (builderReasoningRuntimeStub) Execute(context.Context, *agent.Input, *agent.LoopState, agent.ReasoningSelection) (*agent.Output, error) {
+	return &agent.Output{Content: "runtime-output"}, nil
+}
+
+func (builderReasoningRuntimeStub) Reflect(context.Context, *agent.Input, *agent.Output, *agent.LoopState) (*agent.LoopReflectionResult, error) {
+	return nil, nil
+}
+
+func TestBuilder_Build_WiresCustomRuntimeComponents(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := &captureRuntimeProvider{content: "hello"}
+
+	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+		WithOptions(BuildOptions{
+			ExecutionOptionsResolver: builderResolverStub{
+				options: types.ExecutionOptions{
+					Model:   types.ModelOptions{Model: "resolver-model"},
+					Control: types.AgentControlOptions{DisablePlanner: true, MaxLoopIterations: 1},
+				},
+			},
+			ChatRequestAdapter: builderAdapterStub{},
+			ReasoningRuntime:   builderReasoningRuntimeStub{},
+		}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NoError(t, ag.Init(context.Background()))
+
+	_, err = ag.ChatCompletion(context.Background(), []types.Message{{
+		Role:    types.RoleUser,
+		Content: "hello",
+	}})
+	require.NoError(t, err)
+	require.NotNil(t, provider.lastRequest)
+	assert.Equal(t, "resolver-model-adapted", provider.lastRequest.Model)
+
+	output, err := ag.Execute(context.Background(), &agent.Input{Content: "hello"})
+	require.NoError(t, err)
+	assert.Equal(t, "runtime-output", output.Content)
+}

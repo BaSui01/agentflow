@@ -298,23 +298,6 @@ func TestJudgeResult(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
-	t.Run("extractJSON", func(t *testing.T) {
-		tests := []struct {
-			input    string
-			expected string
-		}{
-			{`{"key": "value"}`, `{"key": "value"}`},
-			{`Some text {"key": "value"} more text`, `{"key": "value"}`},
-			{`no json here`, ``},
-			{`{incomplete`, ``},
-		}
-
-		for _, tc := range tests {
-			result := extractJSON(tc.input)
-			assert.Equal(t, tc.expected, result)
-		}
-	})
-
 	t.Run("clamp", func(t *testing.T) {
 		assert.Equal(t, 5.0, clamp(5.0, 0.0, 10.0))
 		assert.Equal(t, 0.0, clamp(-5.0, 0.0, 10.0))

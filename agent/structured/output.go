@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"regexp"
-	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -15,9 +13,10 @@ import (
 
 // ParseResult代表了解析结构化输出的结果.
 type ParseResult[T any] struct {
-	Value  *T           `json:"value,omitempty"`
-	Raw    string       `json:"raw"`
-	Errors []ParseError `json:"errors,omitempty"`
+	Value  *T             `json:"value,omitempty"`
+	Raw    string         `json:"raw"`
+	Errors []ParseError   `json:"errors,omitempty"`
+	Usage  *llm.ChatUsage `json:"usage,omitempty"`
 }
 
 // IsValid 如果解析成功且没有出错, 则返回为真 。
@@ -82,29 +81,51 @@ func (s *StructuredOutput[T]) Schema() *JSONSchema {
 // 结构化 schema 约束统一通过 llmcore.Gateway 下发，
 // provider 差异由 llm 层处理。
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
-	messages := []types.Message{
-		{Role: llm.RoleUser, Content: prompt},
-	}
-	return s.GenerateWithMessages(ctx, messages)
+	return s.GenerateWithRequest(ctx, &llm.ChatRequest{
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: prompt},
+		},
+	})
 }
 
 // 生成 Messages 从信件列表中生成结构化输出 。
 func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages []types.Message) (*T, error) {
-	value, _, _, err := s.generateWithGatewayDetailed(ctx, messages)
-	return value, err
+	return s.GenerateWithRequest(ctx, &llm.ChatRequest{
+		Messages: messages,
+	})
+}
+
+// GenerateWithRequest 从完整 ChatRequest 生成结构化输出，并保留调用方的模型与采样参数。
+func (s *StructuredOutput[T]) GenerateWithRequest(ctx context.Context, req *llm.ChatRequest) (*T, error) {
+	result, err := s.GenerateWithRequestAndParse(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if !result.IsValid() {
+		return nil, &ValidationErrors{Errors: result.Errors}
+	}
+	return result.Value, nil
 }
 
 // 生成 WithParse 生成结构化输出并返回详细解析结果 。
 func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt string) (*ParseResult[T], error) {
-	messages := []types.Message{
-		{Role: llm.RoleUser, Content: prompt},
-	}
-	return s.GenerateWithMessagesAndParse(ctx, messages)
+	return s.GenerateWithRequestAndParse(ctx, &llm.ChatRequest{
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: prompt},
+		},
+	})
 }
 
 // 生成与Messages AndParse 从消息中生成结构化输出并返回详细解析结果.
 func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, messages []types.Message) (*ParseResult[T], error) {
-	value, raw, parseErrors, err := s.generateWithGatewayDetailed(ctx, messages)
+	return s.GenerateWithRequestAndParse(ctx, &llm.ChatRequest{
+		Messages: messages,
+	})
+}
+
+// GenerateWithRequestAndParse 从完整 ChatRequest 生成结构化输出并返回详细解析结果。
+func (s *StructuredOutput[T]) GenerateWithRequestAndParse(ctx context.Context, req *llm.ChatRequest) (*ParseResult[T], error) {
+	value, raw, usage, parseErrors, err := s.generateWithGatewayDetailed(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -113,63 +134,53 @@ func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, 
 		Value:  value,
 		Raw:    raw,
 		Errors: parseErrors,
+		Usage:  usage,
 	}, nil
 }
 
 // generateWithGatewayDetailed 通过 llmcore.Gateway 统一入口生成结构化输出。
-func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, messages []types.Message) (*T, string, []ParseError, error) {
+func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, req *llm.ChatRequest) (*T, string, *llm.ChatUsage, []ParseError, error) {
+	if req == nil {
+		return nil, "", nil, nil, fmt.Errorf("chat request cannot be nil")
+	}
+
 	// 为请求构建 JSON Schema
 	schemaJSON, err := json.Marshal(s.schema)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to marshal schema: %w", err)
+		return nil, "", nil, nil, fmt.Errorf("failed to marshal schema: %w", err)
 	}
 
 	// 将 schema 转换为 map[string]any 用于 ResponseFormat
 	var schemaMap map[string]any
 	if err := json.Unmarshal(schemaJSON, &schemaMap); err != nil {
-		return nil, "", nil, fmt.Errorf("failed to unmarshal schema to map: %w", err)
+		return nil, "", nil, nil, fmt.Errorf("failed to unmarshal schema to map: %w", err)
 	}
-
-	// 添加带有 schema 指令的系统消息
-	systemMsg := types.Message{
-		Role: llm.RoleSystem,
-		Content: fmt.Sprintf(
-			"You must respond with valid JSON that conforms to the following JSON Schema:\n%s\n\nRespond only with the JSON object, no additional text.",
-			string(schemaJSON),
-		),
-	}
-
-	// 预收系统消息
-	allMessages := append([]types.Message{systemMsg}, messages...)
 
 	strict := true
-	req := &llm.ChatRequest{
-		Messages: allMessages,
-		ResponseFormat: &llm.ResponseFormat{
-			Type: llm.ResponseFormatJSONSchema,
-			JSONSchema: &llm.JSONSchemaParam{
-				Name:   "structured_output",
-				Schema: schemaMap,
-				Strict: &strict,
-			},
+	reqCopy := *req
+	reqCopy.ResponseFormat = &llm.ResponseFormat{
+		Type: llm.ResponseFormatJSONSchema,
+		JSONSchema: &llm.JSONSchemaParam{
+			Name:   "structured_output",
+			Schema: schemaMap,
+			Strict: &strict,
 		},
 	}
 
-	resp, err := s.invokeChat(ctx, req)
+	resp, err := s.invokeChat(ctx, &reqCopy)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("gateway invoke failed: %w", err)
+		return nil, "", nil, nil, fmt.Errorf("gateway invoke failed: %w", err)
 	}
 
 	if len(resp.Choices) == 0 {
-		return nil, "", nil, fmt.Errorf("no response choices returned")
+		return nil, "", nil, nil, fmt.Errorf("no response choices returned")
 	}
 
 	raw := resp.Choices[0].Message.Content
-	jsonStr := s.extractJSON(raw)
+	value, parseErrors := s.parseAndValidateDetailed(raw)
+	usage := resp.Usage
 
-	value, parseErrors := s.parseAndValidateDetailed(jsonStr)
-
-	return value, raw, parseErrors, nil
+	return value, raw, &usage, parseErrors, nil
 }
 
 func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -190,57 +201,6 @@ func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llm.ChatReque
 		return nil, fmt.Errorf("invalid chat response from gateway")
 	}
 	return chatResp, nil
-}
-
-// 构建StructuredOutputPrompt为结构化输出生成创建了详细提示.
-func (s *StructuredOutput[T]) buildStructuredOutputPrompt(schemaJSON string) string {
-	var sb strings.Builder
-
-	sb.WriteString("You are a helpful assistant that generates structured JSON output.\n\n")
-	sb.WriteString("IMPORTANT INSTRUCTIONS:\n")
-	sb.WriteString("1. You MUST respond with valid JSON that conforms to the schema below.\n")
-	sb.WriteString("2. Do NOT include any text before or after the JSON.\n")
-	sb.WriteString("3. Do NOT wrap the JSON in markdown code blocks.\n")
-	sb.WriteString("4. Ensure all required fields are present and have valid values.\n")
-	sb.WriteString("5. Follow all constraints specified in the schema (enum values, min/max, patterns, etc.).\n\n")
-	sb.WriteString("JSON Schema:\n")
-	sb.WriteString("```json\n")
-	sb.WriteString(schemaJSON)
-	sb.WriteString("\n```\n\n")
-	sb.WriteString("Respond with ONLY the JSON object.")
-
-	return sb.String()
-}
-
-// 取出JSON取出JSON从可能包含平分或其他文字的响应中取出.
-func (s *StructuredOutput[T]) extractJSON(response string) string {
-	response = strings.TrimSpace(response)
-
-	// 尝试从 markdown 代码块提取
-	if strings.Contains(response, "```") {
-		// 火柴・杰森・・・或者・・・・・・
-		re := regexp.MustCompile("(?s)```(?:json)?\\s*\\n?(.*?)\\n?```")
-		matches := re.FindStringSubmatch(response)
-		if len(matches) > 1 {
-			return strings.TrimSpace(matches[1])
-		}
-	}
-
-	// 尝试找到 JSON 对象边界
-	start := strings.Index(response, "{")
-	end := strings.LastIndex(response, "}")
-	if start >= 0 && end > start {
-		return response[start : end+1]
-	}
-
-	// 尝试找到 JSON 阵列边界
-	start = strings.Index(response, "[")
-	end = strings.LastIndex(response, "]")
-	if start >= 0 && end > start {
-		return response[start : end+1]
-	}
-
-	return response
 }
 
 // 解析AndValidate 解析JSON 并验证与计划。

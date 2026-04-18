@@ -170,13 +170,11 @@ Rules:
 	if err != nil {
 		return nil, 0, fmt.Errorf("plan generation returned no choices: %w", err)
 	}
-
-	content := choice.Message.Content
 	tokens := resp.Usage.TotalTokens
 
 	plan, parseErr := parseToolPlanToolCall(choice.Message)
 	if parseErr != nil {
-		plan = r.parsePlanManually(content)
+		return nil, tokens, fmt.Errorf("plan generation did not return native tool call: %w", parseErr)
 	}
 
 	// 构建依赖图
@@ -199,27 +197,6 @@ func (r *ReWOO) extractDependencies(args string) []string {
 		}
 	}
 	return deps
-}
-
-func (r *ReWOO) parsePlanManually(content string) []PlanStep {
-	var plan []PlanStep
-	re := regexp.MustCompile(`(?m)#E(\d+)\s*=\s*([A-Za-z0-9_-]+)\[([^\]]*)\](?:\s*;\s*(.+))?`)
-	matches := re.FindAllStringSubmatch(content, -1)
-	for _, m := range matches {
-		if len(m) >= 4 {
-			reasoning := ""
-			if len(m) >= 5 {
-				reasoning = strings.TrimSpace(m[4])
-			}
-			plan = append(plan, PlanStep{
-				ID:        "#E" + m[1],
-				Tool:      strings.TrimSpace(m[2]),
-				Arguments: strings.TrimSpace(m[3]),
-				Reasoning: reasoning,
-			})
-		}
-	}
-	return plan
 }
 
 func (r *ReWOO) executeSteps(ctx context.Context, plan []PlanStep) (map[string]string, int) {
@@ -331,18 +308,6 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 	}
 
 	return choice.Message.Content, resp.Usage.TotalTokens, nil
-}
-
-// 辅助功能
-
-func extractJSON(s string) string {
-	// 在响应中查找 JSON 阵列
-	start := strings.Index(s, "[")
-	end := strings.LastIndex(s, "]")
-	if start >= 0 && end > start {
-		return s[start : end+1]
-	}
-	return s
 }
 
 func truncate(s string, maxLen int) string {

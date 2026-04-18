@@ -46,15 +46,19 @@ type BuildOptions struct {
 	ObservabilitySystem agent.ObservabilityRunner
 
 	// Optional pass-throughs for AgentBuilder runtime controls.
-	MaxReActIterations int
-	MaxLoopIterations  int
-	MaxConcurrency     int
-	MemoryManager      agent.MemoryManager
-	ToolManager        agent.ToolManager
-	RetrievalProvider  agent.RetrievalProvider
-	ToolStateProvider  agent.ToolStateProvider
-	EventBus           agent.EventBus
-	LSPClient          agent.LSPClientRunner
+	MaxReActIterations       int
+	MaxLoopIterations        int
+	MaxConcurrency           int
+	MemoryManager            agent.MemoryManager
+	ToolManager              agent.ToolManager
+	RetrievalProvider        agent.RetrievalProvider
+	ToolStateProvider        agent.ToolStateProvider
+	EventBus                 agent.EventBus
+	LSPClient                agent.LSPClientRunner
+	ExecutionOptionsResolver agent.ExecutionOptionsResolver
+	ChatRequestAdapter       agent.ChatRequestAdapter
+	ToolProtocolRuntime      agent.ToolProtocolRuntime
+	ReasoningRuntime         agent.ReasoningRuntime
 
 	// Optional pass-throughs for AgentBuilder advanced wiring.
 	PromptStore       agent.PromptStoreProvider
@@ -190,6 +194,10 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	if opts.MaxConcurrency > 0 {
 		ag.SetMaxConcurrency(opts.MaxConcurrency)
 	}
+	ag.SetExecutionOptionsResolver(opts.ExecutionOptionsResolver)
+	ag.SetChatRequestAdapter(opts.ChatRequestAdapter)
+	ag.SetToolProtocolRuntime(opts.ToolProtocolRuntime)
+	ag.SetReasoningRuntime(opts.ReasoningRuntime)
 	ag.SetPromptStore(opts.PromptStore)
 	ag.SetConversationStore(opts.ConversationStore)
 	ag.SetRunStore(opts.RunStore)
@@ -273,7 +281,9 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 
 	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainGateway(), cfg2.LLM.Model, cfg2.Core.ID, opts, b.logger)
 	ag.SetReasoningRegistry(reasoningRegistry)
-	ag.SetReasoningModeSelector(agent.NewDefaultReasoningModeSelector())
+	if opts.ReasoningRuntime == nil {
+		ag.SetReasoningModeSelector(agent.NewDefaultReasoningModeSelector())
+	}
 	ag.SetCompletionJudge(agent.NewDefaultCompletionJudge())
 	if opts.CheckpointManager != nil {
 		ag.SetCheckpointManager(opts.CheckpointManager)

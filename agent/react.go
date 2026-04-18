@@ -71,7 +71,7 @@ Requirements:
 	choice := resp.FirstChoice()
 	steps, parseErr := parseNumberedPlanToolCall(choice.Message)
 	if parseErr != nil {
-		steps = parsePlanSteps(choice.Message.Content)
+		return nil, NewErrorWithCause(types.ErrAgentExecution, "plan generation did not return native tool call", parseErr)
 	}
 	if len(steps) == 0 {
 		return nil, NewError(types.ErrLLMResponseEmpty, "plan generation returned no steps")
@@ -617,40 +617,6 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	)
 
 	return nil
-}
-
-// parsePlanSteps 从 LLM 响应中解析执行步骤
-func parsePlanSteps(content string) []string {
-	var steps []string
-	lines := strings.Split(content, "\n")
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// 匹配 "1. xxx" 或 "- xxx" 格式
-		if len(line) > 2 && (line[0] >= '0' && line[0] <= '9' || line[0] == '-') {
-			// 移除序号
-			if idx := strings.Index(line, "."); idx > 0 && idx < 5 {
-				line = strings.TrimSpace(line[idx+1:])
-			} else if line[0] == '-' {
-				line = strings.TrimSpace(line[1:])
-			}
-
-			if line != "" {
-				steps = append(steps, line)
-			}
-		}
-	}
-
-	// 如果没有解析到步骤，将整个内容作为一个步骤
-	if len(steps) == 0 {
-		steps = append(steps, content)
-	}
-
-	return steps
 }
 
 func (b *BaseAgent) collectContextMemory(values map[string]any) []string {

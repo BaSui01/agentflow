@@ -8,6 +8,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -356,6 +357,42 @@ func TestBaseAgent_Plan(t *testing.T) {
 	assert.Equal(t, "required", capturedReq.ToolChoice)
 	assert.Contains(t, capturedPrompt, submitNumberedPlanTool)
 	assert.Contains(t, capturedPrompt, "Prefer tool-first actions when tools are needed")
+}
+
+func TestBaseAgent_Plan_RequiresNativeToolCall(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	provider := &testProvider{
+		name:           "mock",
+		supportsNative: true,
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return &llm.ChatResponse{
+				ID:       "test-response",
+				Provider: "mock",
+				Model:    "gpt-4",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{
+						Role:    llm.RoleAssistant,
+						Content: "1. Analyze\n2. Implement",
+					},
+				}},
+				Usage: llm.ChatUsage{TotalTokens: 20},
+			}, nil
+		},
+	}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
+
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
+	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+
+	_, err := agent.Plan(context.Background(), &Input{
+		TraceID: "test-trace",
+		Content: "Build a web application",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "native tool call")
 }
 
 // BenchmarkBaseAgent_Execute 性能测试

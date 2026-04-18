@@ -1,9 +1,9 @@
 package router
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 	"time"
 
@@ -77,6 +77,8 @@ func (p *testProvider) Endpoints() llm.ProviderEndpoints {
 func TestSemanticRouter_Route_Success(t *testing.T) {
 	classifier := newTestProvider("classifier")
 	classifier.completionFn = func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+		require.NotNil(t, req.ResponseFormat)
+		assert.Equal(t, llm.ResponseFormatJSONSchema, req.ResponseFormat.Type)
 		return &llm.ChatResponse{
 			Choices: []llm.ChatChoice{{
 				Message: types.Message{Content: `{"intent":"code_generation","confidence":0.9}`},
@@ -154,6 +156,7 @@ func TestSemanticRouter_ClassifyIntent_CachesResult(t *testing.T) {
 	classifier := newTestProvider("classifier")
 	classifier.completionFn = func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 		callCount++
+		require.NotNil(t, req.ResponseFormat)
 		return &llm.ChatResponse{
 			Choices: []llm.ChatChoice{{
 				Message: types.Message{Content: `{"intent":"chat","confidence":0.8}`},
@@ -236,24 +239,6 @@ func TestExtractUserMessage_Empty(t *testing.T) {
 	assert.Equal(t, "", extractUserMessage([]types.Message{{Role: llm.RoleSystem, Content: "sys"}}))
 }
 
-func TestExtractJSONFromResponse(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{`{"intent":"chat"}`, `{"intent":"chat"}`},
-		{`Here is the result: {"intent":"chat"} done`, `{"intent":"chat"}`},
-		{`no json here`, `no json here`},
-		{`{"nested":{"a":1}}`, `{"nested":{"a":1}}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractJSONFromResponse(tt.input))
-		})
-	}
-}
-
 func TestMatchesProvider(t *testing.T) {
 	assert.True(t, matchesProvider("gpt-4o", "openai"))
 	assert.True(t, matchesProvider("claude-3", "anthropic"))
@@ -302,5 +287,3 @@ func TestClassificationCache_Miss(t *testing.T) {
 	cache := newClassificationCache(time.Minute)
 	assert.Nil(t, cache.get("nonexistent"))
 }
-
-

@@ -15,11 +15,8 @@ import (
 func TestNewHierarchicalAgent(t *testing.T) {
 	supervisor := &mockAgent{
 		id: "supervisor",
-		executeFn: func(_ context.Context, input *agent.Input) (*agent.Output, error) {
-			return &agent.Output{
-				TraceID: input.TraceID,
-				Content: `[{"type":"research","description":"gather data","priority":1}]`,
-			}, nil
+		planFn: func(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
+			return &agent.PlanResult{Steps: []string{"gather data"}}, nil
 		},
 	}
 	worker := &mockAgent{
@@ -46,15 +43,11 @@ func TestHierarchicalAgent_Execute_FullFlow(t *testing.T) {
 	callCount := 0
 	supervisor := &mockAgent{
 		id: "supervisor",
-		executeFn: func(_ context.Context, input *agent.Input) (*agent.Output, error) {
+		planFn: func(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
 			callCount++
-			if callCount == 1 {
-				// decompose
-				return &agent.Output{
-					TraceID: input.TraceID,
-					Content: `[{"type":"research","description":"gather data","priority":1}]`,
-				}, nil
-			}
+			return &agent.PlanResult{Steps: []string{"gather data"}}, nil
+		},
+		executeFn: func(_ context.Context, input *agent.Input) (*agent.Output, error) {
 			// aggregate
 			return &agent.Output{
 				TraceID: input.TraceID,
@@ -83,7 +76,7 @@ func TestHierarchicalAgent_Execute_FullFlow(t *testing.T) {
 func TestHierarchicalAgent_Execute_DecomposeError(t *testing.T) {
 	supervisor := &mockAgent{
 		id: "supervisor",
-		executeFn: func(_ context.Context, _ *agent.Input) (*agent.Output, error) {
+		planFn: func(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
 			return nil, assert.AnError
 		},
 	}
@@ -104,12 +97,9 @@ func TestHierarchicalAgent_Execute_WorkerError(t *testing.T) {
 	callCount := 0
 	supervisor := &mockAgent{
 		id: "supervisor",
-		executeFn: func(_ context.Context, input *agent.Input) (*agent.Output, error) {
+		planFn: func(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
 			callCount++
-			return &agent.Output{
-				TraceID: input.TraceID,
-				Content: `[{"type":"task","description":"do it","priority":1}]`,
-			}, nil
+			return &agent.PlanResult{Steps: []string{"do it"}}, nil
 		},
 	}
 	worker := &mockAgent{
@@ -135,15 +125,11 @@ func TestHierarchicalAgent_Execute_AggregateError(t *testing.T) {
 	callCount := 0
 	supervisor := &mockAgent{
 		id: "supervisor",
-		executeFn: func(_ context.Context, input *agent.Input) (*agent.Output, error) {
+		planFn: func(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
 			callCount++
-			if callCount == 1 {
-				return &agent.Output{
-					TraceID: input.TraceID,
-					Content: `[{"type":"task","description":"do it","priority":1}]`,
-				}, nil
-			}
-			// aggregate fails
+			return &agent.PlanResult{Steps: []string{"do it"}}, nil
+		},
+		executeFn: func(_ context.Context, _ *agent.Input) (*agent.Output, error) {
 			return nil, assert.AnError
 		},
 	}
@@ -165,19 +151,17 @@ func TestHierarchicalAgent_Execute_AggregateError(t *testing.T) {
 	assert.Contains(t, err.Error(), "result aggregation failed")
 }
 
-// --- parseSubtasks: code block without language tag ---
+// --- buildTasksFromPlan ---
 
-func TestParseSubtasks_CodeBlockNoLang(t *testing.T) {
+func TestBuildTasksFromPlan_UsesPlanSteps(t *testing.T) {
 	h := &HierarchicalAgent{logger: zap.NewNop()}
 	input := &agent.Input{TraceID: "trace-1", Content: "original"}
+	plan := &agent.PlanResult{Steps: []string{"write code"}}
 
-	content := "Here:\n```\n" +
-		`[{"type":"code","description":"write code","priority":1}]` +
-		"\n```\nDone."
-
-	tasks := h.parseSubtasks(content, input)
+	tasks := h.buildTasksFromPlan(plan, input)
 	require.Len(t, tasks, 1)
-	assert.Equal(t, "code", tasks[0].Type)
+	assert.Equal(t, "subtask", tasks[0].Type)
+	assert.Equal(t, "write code", tasks[0].Input.Content)
 }
 
 // --- SelectWorker strategies: edge cases ---

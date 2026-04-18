@@ -2,7 +2,6 @@ package reasoning
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -325,9 +324,9 @@ Generate queries that explore NEW aspects not covered by previous findings.`, co
 
 	prompt += `
 
-Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
+	Return the research queries using the provided structured output schema.`
 
-	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
+	parseResult, err := generateStructured[[]string](ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -337,29 +336,8 @@ Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
 	if err != nil {
 		return nil, 0, err
 	}
-
-	tokens := resp.Usage.TotalTokens
-	genChoice, choiceErr := llm.FirstChoice(resp)
-	if choiceErr != nil {
-		return nil, tokens, fmt.Errorf("query generation returned no choices: %w", choiceErr)
-	}
-	content := genChoice.Message.Content
-
-	var queries []string
-	jsonStr := extractJSONObject(content)
-	if err := json.Unmarshal([]byte(jsonStr), &queries); err != nil {
-		// 倒置: 被新行分割
-		lines := strings.Split(content, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line != "" && !strings.HasPrefix(line, "[") && !strings.HasPrefix(line, "]") {
-				line = strings.Trim(line, `",-`)
-				if line != "" {
-					queries = append(queries, line)
-				}
-			}
-		}
-	}
+	tokens := structuredTokens(parseResult)
+	queries := append([]string(nil), (*parseResult.Value)...)
 
 	if len(queries) > count {
 		queries = queries[:count]
@@ -374,15 +352,10 @@ func (id *IterativeDeepening) analyzeQuery(ctx context.Context, query string) ([
 
 Query: %s
 
-Provide your analysis as a JSON array of findings:
-[
-  {"finding": "key insight 1", "relevance": 0.9, "source": "reasoning"},
-  {"finding": "key insight 2", "relevance": 0.7, "source": "reasoning"}
-]
+Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 1.0.
+Return the findings using the provided structured output schema.`, query)
 
-Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 1.0.`, query)
-
-	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
+	parseResult, err := generateStructured[[]researchFinding](ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -392,25 +365,8 @@ Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 
 	if err != nil {
 		return nil, 0, err
 	}
-
-	tokens := resp.Usage.TotalTokens
-	analyzeChoice, choiceErr := llm.FirstChoice(resp)
-	if choiceErr != nil {
-		return nil, tokens, fmt.Errorf("query analysis returned no choices: %w", choiceErr)
-	}
-	content := analyzeChoice.Message.Content
-
-	var findings []researchFinding
-	jsonStr := extractJSONObject(content)
-	if err := json.Unmarshal([]byte(jsonStr), &findings); err != nil {
-		// 倒置: 将整个响应视为单一发现
-		findings = []researchFinding{{
-			Query:     query,
-			Finding:   content,
-			Source:    "llm_analysis",
-			Relevance: 0.5,
-		}}
-	}
+	tokens := structuredTokens(parseResult)
+	findings := append([]researchFinding(nil), (*parseResult.Value)...)
 
 	// 用源码查询标记结果
 	for i := range findings {
@@ -440,15 +396,10 @@ Current findings:
 
 Identify %d new research directions. For each, provide a specific search query and rationale.
 
-Respond as JSON array:
-[
-  {"query": "specific search query", "rationale": "why this direction matters", "priority": 0.8},
-  ...
-]
+Priority should be 0.0-1.0 based on how important this direction is.
+Return the directions using the provided structured output schema.`, task, findingsStr.String(), id.config.Breadth)
 
-Priority should be 0.0-1.0 based on how important this direction is.`, task, findingsStr.String(), id.config.Breadth)
-
-	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
+	parseResult, err := generateStructured[[]researchDirection](ctx, id.gateway, &llm.ChatRequest{
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -458,21 +409,7 @@ Priority should be 0.0-1.0 based on how important this direction is.`, task, fin
 	if err != nil {
 		return nil, 0, err
 	}
-
-	tokens := resp.Usage.TotalTokens
-	dirChoice, choiceErr := llm.FirstChoice(resp)
-	if choiceErr != nil {
-		return nil, tokens, fmt.Errorf("direction generation returned no choices: %w", choiceErr)
-	}
-	content := dirChoice.Message.Content
-
-	var directions []researchDirection
-	jsonStr := extractJSONObject(content)
-	if err := json.Unmarshal([]byte(jsonStr), &directions); err != nil {
-		return nil, tokens, fmt.Errorf("failed to parse directions: %w", err)
-	}
-
-	return directions, tokens, nil
+	return append([]researchDirection(nil), (*parseResult.Value)...), structuredTokens(parseResult), nil
 }
 
 // 将所有结论综合为一个全面的最终答案。

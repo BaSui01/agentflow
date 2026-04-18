@@ -2,7 +2,6 @@ package reasoning
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -43,6 +42,10 @@ type Reflection struct {
 	Analysis     string   `json:"analysis"`
 	Mistakes     []string `json:"mistakes"`
 	NextStrategy string   `json:"next_strategy"`
+}
+
+type reflexionScore struct {
+	Score float64 `json:"score"`
 }
 
 // 折射记忆存储过去的经验。
@@ -199,65 +202,23 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 }
 
 func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, trial *Trial) (float64, int, error) {
-	prompt := fmt.Sprintf("Rate this response (0.0-1.0):\nTask: %s\nResponse: %s\nJSON: {\"score\": X}", task, trial.Result)
-	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
+	prompt := fmt.Sprintf("Rate this response on a 0.0-1.0 scale.\nTask: %s\nResponse: %s", task, trial.Result)
+	parseResult, err := generateStructured[reflexionScore](ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.1, MaxTokens: 100,
 	})
 	if err != nil {
 		return 0.5, 0, err
 	}
-
-	if len(resp.Choices) == 0 {
-		return 0.5, resp.Usage.TotalTokens, nil
-	}
-
-	var eval struct {
-		Score float64 `json:"score"`
-	}
-	jsonStr := extractJSONFromContent(resp.Choices[0].Message.Content)
-	if err := json.Unmarshal([]byte(jsonStr), &eval); err != nil {
-		r.logger.Warn("failed to parse evaluation score", zap.Error(err), zap.String("content", jsonStr))
-		return 0.5, resp.Usage.TotalTokens, nil
-	}
-	return eval.Score, resp.Usage.TotalTokens, nil
+	return parseResult.Value.Score, structuredTokens(parseResult), nil
 }
 
 func (r *ReflexionExecutor) generateReflection(ctx context.Context, task string, trial *Trial) (*Reflection, int, error) {
-	prompt := fmt.Sprintf("Analyze this attempt:\nTask: %s\nResult: %s\nScore: %.2f\nJSON: {\"analysis\": \"\", \"mistakes\": [], \"next_strategy\": \"\"}", task, trial.Result, trial.Score)
-	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
+	prompt := fmt.Sprintf("Analyze this attempt.\nTask: %s\nResult: %s\nScore: %.2f", task, trial.Result, trial.Score)
+	parseResult, err := generateStructured[Reflection](ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.3, MaxTokens: 500,
 	})
 	if err != nil {
 		return &Reflection{Analysis: "Error", NextStrategy: "Try again"}, 0, err
 	}
-
-	if len(resp.Choices) == 0 {
-		return &Reflection{Analysis: "No response", NextStrategy: "Try again"}, resp.Usage.TotalTokens, nil
-	}
-
-	var reflection Reflection
-	jsonStr := extractJSONFromContent(resp.Choices[0].Message.Content)
-	if err := json.Unmarshal([]byte(jsonStr), &reflection); err != nil {
-		r.logger.Warn("failed to parse reflection", zap.Error(err), zap.String("content", jsonStr))
-		return &Reflection{Analysis: resp.Choices[0].Message.Content, NextStrategy: "Try again"}, resp.Usage.TotalTokens, nil
-	}
-	return &reflection, resp.Usage.TotalTokens, nil
-}
-
-func extractJSONFromContent(s string) string {
-	start, depth := -1, 0
-	for i, c := range s {
-		if c == '{' {
-			if start == -1 {
-				start = i
-			}
-			depth++
-		} else if c == '}' {
-			depth--
-			if depth == 0 && start != -1 {
-				return s[start : i+1]
-			}
-		}
-	}
-	return s
+	return parseResult.Value, structuredTokens(parseResult), nil
 }

@@ -2,12 +2,12 @@ package evaluation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/structured"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
@@ -63,6 +63,13 @@ type DimensionScore struct {
 	Reasoning string  `json:"reasoning"`
 }
 
+type llmJudgeStructuredResult struct {
+	Dimensions   map[string]DimensionScore `json:"dimensions"`
+	OverallScore float64                   `json:"overall_score"`
+	Reasoning    string                    `json:"reasoning"`
+	Confidence   float64                   `json:"confidence"`
+}
+
 // InputOutputPair 输入输出对，用于批量评判
 type InputOutputPair struct {
 	Input  *EvalInput
@@ -114,20 +121,6 @@ Evaluate the following response based on the specified dimensions.
 3. Calculate an overall score as a weighted average.
 4. Provide overall reasoning summarizing the evaluation.
 5. Rate your confidence in this evaluation from 0.0 to 1.0.
-
-## Output Format
-Respond with a JSON object in the following format:
-{
-  "dimensions": {
-    "<dimension_name>": {
-      "score": <number>,
-      "reasoning": "<string>"
-    }
-  },
-  "overall_score": <number>,
-  "reasoning": "<string>",
-  "confidence": <number>
-}
 
 Ensure all scores are within the range [{{.ScoreMin}}, {{.ScoreMax}}].`
 
@@ -208,20 +201,26 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 		},
 		Temperature: 0.1, // Low temperature for consistent evaluation
 	}
-
-	resp, err := j.invokeChat(ctx, req)
+	so, err := structured.NewStructuredOutput[llmJudgeStructuredResult](j.gateway)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize structured judge output: %w", err)
+	}
+	parseResult, err := so.GenerateWithRequestAndParse(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("LLM invoke failed: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response from LLM")
+	if !parseResult.IsValid() || parseResult.Value == nil {
+		return nil, fmt.Errorf("failed to parse structured judge output: %v", parseResult.Errors)
 	}
 
-	// 解析响应
-	result, err := j.parseResponse(resp.Choices[0].Message.Content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+	result := &JudgeResult{
+		OverallScore: parseResult.Value.OverallScore,
+		Dimensions:   parseResult.Value.Dimensions,
+		Reasoning:    parseResult.Value.Reasoning,
+		Confidence:   parseResult.Value.Confidence,
+	}
+	if j.config.RequireReasoning && result.Reasoning == "" {
+		return nil, fmt.Errorf("reasoning is required but not provided")
 	}
 
 	// 校正和正常的分数
@@ -396,41 +395,6 @@ func (j *LLMJudge) buildPrompt(input *EvalInput, output *EvalOutput) (string, er
 	return prompt, nil
 }
 
-// parseResponse 解析 LLM 响应
-func (j *LLMJudge) parseResponse(content string) (*JudgeResult, error) {
-	// 尝试从响应中提取 JSON
-	jsonStr := extractJSON(content)
-	if jsonStr == "" {
-		return nil, fmt.Errorf("no JSON found in response")
-	}
-
-	// 解析 JSON 响应
-	var rawResult struct {
-		Dimensions   map[string]DimensionScore `json:"dimensions"`
-		OverallScore float64                   `json:"overall_score"`
-		Reasoning    string                    `json:"reasoning"`
-		Confidence   float64                   `json:"confidence"`
-	}
-
-	if err := json.Unmarshal([]byte(jsonStr), &rawResult); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	result := &JudgeResult{
-		OverallScore: rawResult.OverallScore,
-		Dimensions:   rawResult.Dimensions,
-		Reasoning:    rawResult.Reasoning,
-		Confidence:   rawResult.Confidence,
-	}
-
-	// 验证所需字段
-	if j.config.RequireReasoning && result.Reasoning == "" {
-		return nil, fmt.Errorf("reasoning is required but not provided")
-	}
-
-	return result, nil
-}
-
 // normalizeResult 归一化评判结果
 func (j *LLMJudge) normalizeResult(result *JudgeResult) *JudgeResult {
 	minScore := j.config.ScoreRange[0]
@@ -471,26 +435,6 @@ func (j *LLMJudge) GetConfig() LLMJudgeConfig {
 	return j.config
 }
 
-func (j *LLMJudge) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if j.gateway == nil {
-		return nil, fmt.Errorf("gateway is not configured")
-	}
-	resp, err := j.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  req.Model,
-		TraceID:    req.TraceID,
-		Payload:    req,
-	})
-	if err != nil {
-		return nil, err
-	}
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
-	if !ok || chatResp == nil {
-		return nil, fmt.Errorf("invalid chat response from gateway")
-	}
-	return chatResp, nil
-}
-
 // 辅助功能
 
 func removeSection(s, start, end string) string {
@@ -527,18 +471,6 @@ func replaceDimensionsRange(s, dimensions string) string {
 	}
 
 	return s[:startIdx] + dimensions + s[startIdx+len(rangeStart)+endIdx+len(rangeEnd):]
-}
-
-func extractJSON(s string) string {
-	// 查找第一个{和最后一个}
-	start := strings.Index(s, "{")
-	end := strings.LastIndex(s, "}")
-
-	if start == -1 || end == -1 || end <= start {
-		return ""
-	}
-
-	return s[start : end+1]
 }
 
 func clamp(value, min, max float64) float64 {

@@ -1,10 +1,10 @@
 package router
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"sync"
 	"time"
 
@@ -37,6 +37,61 @@ type IntentClassification struct {
 	SubIntents []IntentType      `json:"sub_intents,omitempty"`
 	Entities   map[string]string `json:"entities,omitempty"`
 	Metadata   map[string]any    `json:"metadata,omitempty"`
+}
+
+func intentClassificationResponseFormat() *llm.ResponseFormat {
+	strict := true
+	return &llm.ResponseFormat{
+		Type: llm.ResponseFormatJSONSchema,
+		JSONSchema: &llm.JSONSchemaParam{
+			Name: "intent_classification",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"intent": map[string]any{
+						"type": "string",
+						"enum": []string{
+							string(IntentCodeGeneration),
+							string(IntentCodeReview),
+							string(IntentQA),
+							string(IntentSummarization),
+							string(IntentTranslation),
+							string(IntentCreativeWriting),
+							string(IntentDataAnalysis),
+							string(IntentMath),
+							string(IntentReasoning),
+							string(IntentChat),
+							string(IntentToolUse),
+							string(IntentUnknown),
+						},
+					},
+					"confidence": map[string]any{
+						"type":    "number",
+						"minimum": 0,
+						"maximum": 1,
+					},
+					"sub_intents": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "string",
+						},
+					},
+					"entities": map[string]any{
+						"type": "object",
+						"additionalProperties": map[string]any{
+							"type": "string",
+						},
+					},
+					"metadata": map[string]any{
+						"type": "object",
+					},
+				},
+				"required":             []string{"intent", "confidence"},
+				"additionalProperties": false,
+			},
+			Strict: &strict,
+		},
+	}
 }
 
 // RouteConfig定义了意图的路由配置.
@@ -224,15 +279,16 @@ func (r *SemanticRouter) ClassifyIntent(ctx context.Context, req *llm.ChatReques
 
 User message: %s
 
-Respond with JSON: {"intent": "intent_type", "confidence": 0.0-1.0, "entities": {}}`, userMessage)
+Use the provided response schema for the classification result.`, userMessage)
 
 	resp, err := r.classifier.Completion(ctx, &llm.ChatRequest{
 		Model: r.config.ClassifierModel,
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
-		Temperature: 0.1,
-		MaxTokens:   200,
+		ResponseFormat: intentClassificationResponseFormat(),
+		Temperature:    0.1,
+		MaxTokens:      200,
 	})
 	if err != nil {
 		return nil, err
@@ -245,7 +301,6 @@ Respond with JSON: {"intent": "intent_type", "confidence": 0.0-1.0, "entities": 
 	}
 	var classification IntentClassification
 	content := classifyChoice.Message.Content
-	content = extractJSONFromResponse(content)
 	if err := json.Unmarshal([]byte(content), &classification); err != nil {
 		// 默认为未知
 		classification = IntentClassification{Intent: IntentUnknown, Confidence: 0.5}
@@ -398,23 +453,6 @@ func extractUserMessage(messages []types.Message) string {
 	return ""
 }
 
-func extractJSONFromResponse(s string) string {
-	start := -1
-	end := -1
-	for i, c := range s {
-		if c == '{' && start == -1 {
-			start = i
-		}
-		if c == '}' {
-			end = i
-		}
-	}
-	if start >= 0 && end > start {
-		return s[start : end+1]
-	}
-	return s
-}
-
 func matchesProvider(model, providerName string) bool {
 	modelPrefixes := map[string][]string{
 		"openai":    {"gpt-", "o1", "o3", "davinci", "text-"},
@@ -432,5 +470,3 @@ func matchesProvider(model, providerName string) bool {
 	}
 	return false
 }
-
-

@@ -828,6 +828,10 @@ type BaseAgent struct {
 	reasoningSelector ReasoningModeSelector
 	completionJudge   CompletionJudge
 	checkpointManager *CheckpointManager
+	optionsResolver   ExecutionOptionsResolver
+	requestAdapter    ChatRequestAdapter
+	toolProtocol      ToolProtocolRuntime
+	reasoningRuntime  ReasoningRuntime
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -862,6 +866,9 @@ func NewBaseAgent(
 		traceFeedbackPlanner: NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter()),
 		reasoningSelector:    NewDefaultReasoningModeSelector(),
 		completionJudge:      NewDefaultCompletionJudge(),
+		optionsResolver:      NewDefaultExecutionOptionsResolver(),
+		requestAdapter:       NewDefaultChatRequestAdapter(),
+		toolProtocol:         NewDefaultToolProtocolRuntime(),
 		execSem:              semaphore.NewWeighted(1),
 	}
 
@@ -1340,6 +1347,74 @@ func (b *BaseAgent) ReasoningRegistry() *reasoning.PatternRegistry {
 // SetReasoningModeSelector stores the mode selector used by the default loop executor.
 func (b *BaseAgent) SetReasoningModeSelector(selector ReasoningModeSelector) {
 	b.reasoningSelector = selector
+}
+
+// SetExecutionOptionsResolver stores the resolver used by request preparation.
+func (b *BaseAgent) SetExecutionOptionsResolver(resolver ExecutionOptionsResolver) {
+	if resolver == nil {
+		b.optionsResolver = NewDefaultExecutionOptionsResolver()
+		return
+	}
+	b.optionsResolver = resolver
+}
+
+func (b *BaseAgent) executionOptionsResolver() ExecutionOptionsResolver {
+	if b.optionsResolver == nil {
+		return NewDefaultExecutionOptionsResolver()
+	}
+	return b.optionsResolver
+}
+
+// SetChatRequestAdapter stores the adapter used to build ChatRequest DTOs.
+func (b *BaseAgent) SetChatRequestAdapter(adapter ChatRequestAdapter) {
+	if adapter == nil {
+		b.requestAdapter = NewDefaultChatRequestAdapter()
+		return
+	}
+	b.requestAdapter = adapter
+}
+
+func (b *BaseAgent) chatRequestAdapter() ChatRequestAdapter {
+	if b.requestAdapter == nil {
+		return NewDefaultChatRequestAdapter()
+	}
+	return b.requestAdapter
+}
+
+// SetToolProtocolRuntime stores the runtime that materializes tool execution.
+func (b *BaseAgent) SetToolProtocolRuntime(runtime ToolProtocolRuntime) {
+	if runtime == nil {
+		b.toolProtocol = NewDefaultToolProtocolRuntime()
+		return
+	}
+	b.toolProtocol = runtime
+}
+
+func (b *BaseAgent) toolProtocolRuntime() ToolProtocolRuntime {
+	if b.toolProtocol == nil {
+		return NewDefaultToolProtocolRuntime()
+	}
+	return b.toolProtocol
+}
+
+// SetReasoningRuntime stores the runtime that unifies reasoning selection,
+// execution, and reflection for the default loop executor.
+func (b *BaseAgent) SetReasoningRuntime(runtime ReasoningRuntime) {
+	b.reasoningRuntime = runtime
+}
+
+func (b *BaseAgent) effectiveReasoningRuntime(options types.ExecutionOptions, enhanced EnhancedExecutionOptions) ReasoningRuntime {
+	if b.reasoningRuntime != nil {
+		return b.reasoningRuntime
+	}
+	return NewDefaultReasoningRuntime(
+		options,
+		b.reasoningRegistry,
+		enhanced.UseReflection && b.extensions.ReflectionExecutor() != nil,
+		b.loopSelector(enhanced),
+		b.loopStepExecutor(enhanced),
+		b.loopReflectionStep(enhanced),
+	)
 }
 
 // SetTraceFeedbackPlanner stores the planner used to decide whether recent

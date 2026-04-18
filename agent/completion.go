@@ -74,16 +74,12 @@ func (b *BaseAgent) chatCompletionStreamingWithTools(ctx context.Context, pr *pr
 func (b *BaseAgent) startReactStreaming(ctx context.Context, pr *preparedRequest, steerCh *SteeringChannel, reactIterationBudget int, emit RuntimeStreamEmitter) (*reactStreamingState, <-chan llmtools.ReActStreamEvent, error) {
 	const selectedMode = ReasoningModeReact
 	reactReq := *pr.req
-	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
+	reactReq.Model = effectiveToolModel(pr.req.Model, pr.options.Tools.ToolModel)
 	ctx = withRuntimeApprovalEmitter(ctx, emit, pr)
-	toolExec := newRuntimeHandoffExecutor(
-		b,
-		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
-		runtimeHandoffTargetsFromPreparedRequest(pr),
-	)
+	toolProtocol := b.toolProtocolRuntime().Prepare(b, pr)
 	executor := llmtools.NewReActExecutor(
 		pr.toolProvider,
-		toolExec,
+		toolProtocol.Executor,
 		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 		b.logger,
 	)
@@ -617,16 +613,12 @@ func emitDirectSteeringEvent(emit RuntimeStreamEmitter, steering *SteeringMessag
 func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedRequest) (*types.ChatResponse, error) {
 	ctx = WithRuntimeConversationMessages(ctx, pr.req.Messages)
 	reactReq := *pr.req
-	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
+	reactReq.Model = effectiveToolModel(pr.req.Model, pr.options.Tools.ToolModel)
 	reactIterationBudget := reactToolLoopBudget(pr)
-	toolExec := newRuntimeHandoffExecutor(
-		b,
-		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
-		runtimeHandoffTargetsFromPreparedRequest(pr),
-	)
+	toolProtocol := b.toolProtocolRuntime().Prepare(b, pr)
 	executor := llmtools.NewReActExecutor(
 		pr.toolProvider,
-		toolExec,
+		toolProtocol.Executor,
 		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 		b.logger,
 	)

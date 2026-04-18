@@ -3,10 +3,8 @@ package hierarchical
 import (
 	"context"
 	cryptorand "crypto/rand"
-	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -218,143 +216,59 @@ func (h *HierarchicalAgent) Execute(ctx context.Context, input *agent.Input) (*a
 
 // decomposeTask 分解任务
 func (h *HierarchicalAgent) decomposeTask(ctx context.Context, input *agent.Input) ([]*Task, error) {
-	// 使用 Supervisor 分解任务
-	decompositionPrompt := fmt.Sprintf(`请将以下任务分解为多个子任务：
-
-任务：%s
-
-要求：
-1. 每个子任务应该独立且可并行执行
-2. 子任务之间的依赖关系要明确
-3. 输出格式：JSON 数组，每个元素包含 type, description, priority
-
-示例输出：
-[
-  {"type": "research", "description": "收集相关资料", "priority": 1},
-  {"type": "analysis", "description": "分析数据", "priority": 2}
-]`, input.Content)
-
 	supervisorInput := &agent.Input{
 		TraceID:   input.TraceID,
 		TenantID:  input.TenantID,
 		UserID:    input.UserID,
 		ChannelID: input.ChannelID,
-		Content:   decompositionPrompt,
+		Content:   fmt.Sprintf("请将以下任务拆解为可执行的子任务，优先给出适合层次化执行的明确步骤：\n\n%s", input.Content),
 		Context:   input.Context,
 		Variables: input.Variables,
 		Overrides: input.Overrides,
 	}
 
-	output, err := h.supervisor.Execute(ctx, supervisorInput)
+	plan, err := h.supervisor.Plan(ctx, supervisorInput)
 	if err != nil {
 		return nil, err
 	}
-
-	// 解析子任务（JSON 直解析 -> 代码块提取 -> 回退单任务）
-	subtasks := h.parseSubtasks(output.Content, input)
+	subtasks := h.buildTasksFromPlan(plan, input)
 	subtasks = h.applyTaskLimit(subtasks)
 
 	return subtasks, nil
 }
 
-// subtaskJSON is the JSON structure for parsed subtasks from LLM output.
-type subtaskJSON struct {
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	Priority    int    `json:"priority"`
-}
-
-// parseSubtasks parses subtasks from LLM output content.
-// It tries: 1) direct JSON array parse, 2) extract ```json block, 3) fallback to single task.
-func (h *HierarchicalAgent) parseSubtasks(content string, originalInput *agent.Input) []*Task {
-	// Attempt 1: direct JSON array parse
-	if tasks := h.tryParseSubtaskJSON(content, originalInput); tasks != nil {
-		return tasks
-	}
-
-	// Attempt 2: extract JSON from ```json ... ``` code block
-	if idx := strings.Index(content, "```json"); idx != -1 {
-		start := idx + len("```json")
-		if end := strings.Index(content[start:], "```"); end != -1 {
-			jsonBlock := strings.TrimSpace(content[start : start+end])
-			if tasks := h.tryParseSubtaskJSON(jsonBlock, originalInput); tasks != nil {
-				return tasks
-			}
-		}
-	}
-
-	// Attempt 3: extract JSON from ``` ... ``` code block (no language tag)
-	if idx := strings.Index(content, "```"); idx != -1 {
-		start := idx + len("```")
-		// Skip language tag if present on same line
-		if nlIdx := strings.Index(content[start:], "\n"); nlIdx != -1 {
-			start = start + nlIdx + 1
-		}
-		if end := strings.Index(content[start:], "```"); end != -1 {
-			jsonBlock := strings.TrimSpace(content[start : start+end])
-			if tasks := h.tryParseSubtaskJSON(jsonBlock, originalInput); tasks != nil {
-				return tasks
-			}
-		}
-	}
-
-	// Fallback: create a single task with the original input
-	return []*Task{
-		{
-			ID:       fmt.Sprintf("%s-subtask-1", originalInput.TraceID),
-			Type:     "subtask",
-			Priority: 1,
-			Input: &agent.Input{
-				TraceID:   originalInput.TraceID,
-				TenantID:  originalInput.TenantID,
-				UserID:    originalInput.UserID,
-				ChannelID: originalInput.ChannelID,
-				Content:   originalInput.Content,
-				Context:   originalInput.Context,
-				Variables: originalInput.Variables,
-				Overrides: originalInput.Overrides,
+func (h *HierarchicalAgent) buildTasksFromPlan(plan *agent.PlanResult, originalInput *agent.Input) []*Task {
+	if plan == nil || len(plan.Steps) == 0 {
+		return []*Task{
+			{
+				ID:       fmt.Sprintf("%s-subtask-1", originalInput.TraceID),
+				Type:     "subtask",
+				Priority: 1,
+				Input: &agent.Input{
+					TraceID:   originalInput.TraceID,
+					TenantID:  originalInput.TenantID,
+					UserID:    originalInput.UserID,
+					ChannelID: originalInput.ChannelID,
+					Content:   originalInput.Content,
+					Context:   originalInput.Context,
+					Variables: originalInput.Variables,
+					Overrides: originalInput.Overrides,
+				},
+				Status: TaskStatusPending,
 			},
-			Status: TaskStatusPending,
-		},
-	}
-}
-
-func (h *HierarchicalAgent) applyTaskLimit(tasks []*Task) []*Task {
-	if h.config.MaxWorkers <= 0 || len(tasks) <= h.config.MaxWorkers {
-		return tasks
-	}
-	h.logger.Warn("subtasks exceed max workers, truncating",
-		zap.Int("subtasks", len(tasks)),
-		zap.Int("max_workers", h.config.MaxWorkers),
-	)
-	return tasks[:h.config.MaxWorkers]
-}
-
-// tryParseSubtaskJSON attempts to parse a JSON array of subtasks.
-// Returns nil if parsing fails.
-func (h *HierarchicalAgent) tryParseSubtaskJSON(raw string, originalInput *agent.Input) []*Task {
-	var parsed []subtaskJSON
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil
-	}
-	if len(parsed) == 0 {
-		return nil
-	}
-
-	tasks := make([]*Task, 0, len(parsed))
-	for i, st := range parsed {
-		taskType := st.Type
-		if taskType == "" {
-			taskType = "subtask"
 		}
-		desc := st.Description
+	}
+
+	tasks := make([]*Task, 0, len(plan.Steps))
+	for i, step := range plan.Steps {
+		desc := step
 		if desc == "" {
 			desc = originalInput.Content
 		}
 		tasks = append(tasks, &Task{
 			ID:       fmt.Sprintf("%s-subtask-%d", originalInput.TraceID, i+1),
-			Type:     taskType,
-			Priority: st.Priority,
+			Type:     "subtask",
+			Priority: i + 1,
 			Input: &agent.Input{
 				TraceID:   originalInput.TraceID,
 				TenantID:  originalInput.TenantID,
@@ -369,6 +283,17 @@ func (h *HierarchicalAgent) tryParseSubtaskJSON(raw string, originalInput *agent
 		})
 	}
 	return tasks
+}
+
+func (h *HierarchicalAgent) applyTaskLimit(tasks []*Task) []*Task {
+	if h.config.MaxWorkers <= 0 || len(tasks) <= h.config.MaxWorkers {
+		return tasks
+	}
+	h.logger.Warn("subtasks exceed max workers, truncating",
+		zap.Int("subtasks", len(tasks)),
+		zap.Int("max_workers", h.config.MaxWorkers),
+	)
+	return tasks[:h.config.MaxWorkers]
 }
 
 // aggregateResults 聚合结果

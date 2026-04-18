@@ -15,6 +15,7 @@ import (
 // mockAgent implements agent.Agent with function callbacks for testing.
 type mockAgent struct {
 	id        string
+	planFn    func(ctx context.Context, input *agent.Input) (*agent.PlanResult, error)
 	executeFn func(ctx context.Context, input *agent.Input) (*agent.Output, error)
 }
 
@@ -24,7 +25,10 @@ func (m *mockAgent) Type() agent.AgentType            { return agent.TypeGeneric
 func (m *mockAgent) State() agent.State               { return agent.StateReady }
 func (m *mockAgent) Init(_ context.Context) error     { return nil }
 func (m *mockAgent) Teardown(_ context.Context) error { return nil }
-func (m *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
+func (m *mockAgent) Plan(ctx context.Context, input *agent.Input) (*agent.PlanResult, error) {
+	if m.planFn != nil {
+		return m.planFn(ctx, input)
+	}
 	return &agent.PlanResult{}, nil
 }
 func (m *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error { return nil }
@@ -365,75 +369,51 @@ func TestTaskCoordinator_GetWorkerStatus(t *testing.T) {
 	assert.Equal(t, "idle", status["worker-2"].Status)
 }
 
-func TestParseSubtasks_ValidJSON(t *testing.T) {
+func TestBuildTasksFromPlan_ValidPlan(t *testing.T) {
 	h := &HierarchicalAgent{logger: zap.NewNop()}
 	input := &agent.Input{TraceID: "trace-1", Content: "original task"}
 
-	content := `[
-		{"type": "research", "description": "gather data", "priority": 1},
-		{"type": "analysis", "description": "analyze results", "priority": 2}
-	]`
+	plan := &agent.PlanResult{Steps: []string{"gather data", "analyze results"}}
 
-	tasks := h.parseSubtasks(content, input)
+	tasks := h.buildTasksFromPlan(plan, input)
 	require.Len(t, tasks, 2)
-	assert.Equal(t, "research", tasks[0].Type)
+	assert.Equal(t, "subtask", tasks[0].Type)
 	assert.Equal(t, "gather data", tasks[0].Input.Content)
 	assert.Equal(t, 1, tasks[0].Priority)
-	assert.Equal(t, "analysis", tasks[1].Type)
+	assert.Equal(t, "subtask", tasks[1].Type)
 	assert.Equal(t, "analyze results", tasks[1].Input.Content)
 	assert.Equal(t, 2, tasks[1].Priority)
 	assert.Equal(t, TaskStatusPending, tasks[0].Status)
 }
 
-func TestParseSubtasks_JSONCodeBlock(t *testing.T) {
-	h := &HierarchicalAgent{logger: zap.NewNop()}
-	input := &agent.Input{TraceID: "trace-1", Content: "original"}
-
-	content := "Here are the subtasks:\n```json\n" +
-		`[{"type": "code", "description": "write code", "priority": 1}]` +
-		"\n```\nDone."
-
-	tasks := h.parseSubtasks(content, input)
-	require.Len(t, tasks, 1)
-	assert.Equal(t, "code", tasks[0].Type)
-	assert.Equal(t, "write code", tasks[0].Input.Content)
-}
-
-func TestParseSubtasks_InvalidJSON_Fallback(t *testing.T) {
+func TestBuildTasksFromPlan_EmptyPlanFallback(t *testing.T) {
 	h := &HierarchicalAgent{logger: zap.NewNop()}
 	input := &agent.Input{TraceID: "trace-1", Content: "original task"}
 
-	content := "This is not JSON at all, just plain text."
-
-	tasks := h.parseSubtasks(content, input)
+	tasks := h.buildTasksFromPlan(&agent.PlanResult{}, input)
 	require.Len(t, tasks, 1)
 	assert.Equal(t, "subtask", tasks[0].Type)
 	assert.Equal(t, "original task", tasks[0].Input.Content)
 }
 
-func TestParseSubtasks_EmptyArray_Fallback(t *testing.T) {
+func TestBuildTasksFromPlan_NilPlanFallback(t *testing.T) {
 	h := &HierarchicalAgent{logger: zap.NewNop()}
 	input := &agent.Input{TraceID: "trace-1", Content: "original task"}
 
-	content := "[]"
-
-	tasks := h.parseSubtasks(content, input)
+	tasks := h.buildTasksFromPlan(nil, input)
 	require.Len(t, tasks, 1)
 	assert.Equal(t, "original task", tasks[0].Input.Content)
 }
 
-func TestParseSubtasks_MissingFields(t *testing.T) {
+func TestBuildTasksFromPlan_EmptyStepFallsBackToOriginalContent(t *testing.T) {
 	h := &HierarchicalAgent{logger: zap.NewNop()}
 	input := &agent.Input{TraceID: "trace-1", Content: "original task"}
 
-	// Missing type and description — should use defaults
-	content := `[{"priority": 5}]`
-
-	tasks := h.parseSubtasks(content, input)
+	tasks := h.buildTasksFromPlan(&agent.PlanResult{Steps: []string{""}}, input)
 	require.Len(t, tasks, 1)
 	assert.Equal(t, "subtask", tasks[0].Type)
-	assert.Equal(t, "original task", tasks[0].Input.Content) // falls back to original
-	assert.Equal(t, 5, tasks[0].Priority)
+	assert.Equal(t, "original task", tasks[0].Input.Content)
+	assert.Equal(t, 1, tasks[0].Priority)
 }
 
 func TestHierarchicalAgent_ApplyTaskLimit(t *testing.T) {

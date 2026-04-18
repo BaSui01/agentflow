@@ -72,59 +72,6 @@ func (e *testToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) 
 	return tools.ToolResult{}
 }
 
-// --- helper function tests ---
-
-func TestExtractJSON(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name, input, expected string
-	}{
-		{"plain array", `[{"id":"1"}]`, `[{"id":"1"}]`},
-		{"with prefix", `Here: [{"id":"1"}]`, `[{"id":"1"}]`},
-		{"no brackets", `no json here`, `no json here`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, extractJSON(tt.input))
-		})
-	}
-}
-
-func TestExtractJSONObject(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name, input, expected string
-	}{
-		{"plain object", `{"key":"val"}`, `{"key":"val"}`},
-		{"with prefix", `Result: {"key":"val"}`, `{"key":"val"}`},
-		{"no braces", `no json`, `no json`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, extractJSONObject(tt.input))
-		})
-	}
-}
-
-func TestExtractJSONFromContent(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name, input, expected string
-	}{
-		{"simple", `{"score": 0.8}`, `{"score": 0.8}`},
-		{"nested", `text {"o": {"i": 1}} more`, `{"o": {"i": 1}}`},
-		{"no json", `plain text`, `plain text`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, extractJSONFromContent(tt.input))
-		})
-	}
-}
-
 func TestTruncate(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "short", truncate("short", 10))
@@ -176,19 +123,6 @@ func TestReWOO_ExtractDependencies(t *testing.T) {
 
 	deps = r.extractDependencies("no dependencies")
 	assert.Empty(t, deps)
-}
-
-func TestReWOO_ParsePlanManually(t *testing.T) {
-	t.Parallel()
-	r := NewReWOO(nil, nil, nil, DefaultReWOOConfig(), nil)
-
-	content := "#E1 = search[golang concurrency] ; gather sources\n#E2 = analyze[#E1 results] ; summarize findings"
-	plan := r.parsePlanManually(content)
-	require.Len(t, plan, 2)
-	assert.Equal(t, "#E1", plan[0].ID)
-	assert.Equal(t, "search", plan[0].Tool)
-	assert.Equal(t, "golang concurrency", plan[0].Arguments)
-	assert.Equal(t, "gather sources", plan[0].Reasoning)
 }
 
 func TestReWOO_ExecuteSteps_CircularDependency(t *testing.T) {
@@ -521,6 +455,25 @@ func TestReWOO_Execute_Success(t *testing.T) {
 	assert.Contains(t, firstPrompt, submitToolPlanTool)
 }
 
+func TestReWOO_Execute_RequiresNativeToolCall(t *testing.T) {
+	t.Parallel()
+
+	provider := &testProvider{
+		supportsNative: true,
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return &llm.ChatResponse{
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "#E1 = search[golang]"}}},
+				Usage:   llm.ChatUsage{TotalTokens: 10},
+			}, nil
+		},
+	}
+
+	r := NewReWOO(testGateway(provider), &testToolExecutor{}, nil, DefaultReWOOConfig(), zap.NewNop())
+	_, err := r.Execute(context.Background(), "find golang info")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "native tool call")
+}
+
 // --- TreeOfThought Execute tests ---
 
 func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
@@ -531,7 +484,7 @@ func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			if callCount == 1 {
-				// generateThoughts: return thoughts as JSON
+				// generateThoughts: return thoughts as structured JSON
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `[{"thought":"approach A","reasoning":"good"},{"thought":"approach B","reasoning":"also good"}]`,
@@ -539,9 +492,9 @@ func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
 					Usage: llm.ChatUsage{TotalTokens: 20},
 				}, nil
 			}
-			// evaluateSingle: return high score
+			// evaluateSingle: return structured score
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: types.Message{Content: "0.95"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score":0.95}`}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -564,10 +517,20 @@ func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
 func TestTreeOfThought_Execute_MaxDepthReached(t *testing.T) {
 	t.Parallel()
 
+	callCount := 0
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			callCount++
+			if callCount == 1 {
+				return &llm.ChatResponse{
+					Choices: []llm.ChatChoice{{Message: types.Message{
+						Content: `[{"thought":"approach","reasoning":"keep exploring"}]`,
+					}}},
+					Usage: llm.ChatUsage{TotalTokens: 10},
+				}, nil
+			}
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: types.Message{Content: "0.5"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score":0.5}`}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -611,7 +574,7 @@ func TestTreeOfThought_GenerateThoughts_WithParent(t *testing.T) {
 	assert.Greater(t, tokens, 0)
 }
 
-func TestTreeOfThought_GenerateThoughts_FallbackOnBadJSON(t *testing.T) {
+func TestTreeOfThought_GenerateThoughts_InvalidStructuredOutput(t *testing.T) {
 	t.Parallel()
 
 	provider := &testProvider{
@@ -627,10 +590,8 @@ func TestTreeOfThought_GenerateThoughts_FallbackOnBadJSON(t *testing.T) {
 	cfg.Timeout = 10 * time.Second
 	tot := NewTreeOfThought(testGateway(provider), nil, cfg, zap.NewNop())
 
-	thoughts, _, err := tot.generateThoughts(context.Background(), "task", nil, 2)
-	require.NoError(t, err)
-	require.Len(t, thoughts, 1)
-	assert.Equal(t, "not valid json", thoughts[0].Content)
+	_, _, err := tot.generateThoughts(context.Background(), "task", nil, 2)
+	require.Error(t, err)
 }
 
 func TestTreeOfThought_EvaluateSequential(t *testing.T) {
@@ -639,7 +600,7 @@ func TestTreeOfThought_EvaluateSequential(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: types.Message{Content: "0.75"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score":0.75}`}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -679,7 +640,7 @@ func TestTreeOfThought_EvaluateSingle_OutOfRange(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: types.Message{Content: "5.0"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score":5.0}`}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -1058,30 +1019,13 @@ func TestPlanAndExecute_Execute_PlanFailed(t *testing.T) {
 	assert.Equal(t, "failed", result.Metadata["final_status"])
 }
 
-func TestPlanAndExecute_CreatePlan_BadText(t *testing.T) {
+func TestPlanAndExecute_CreatePlan_RequiresNativeToolCall(t *testing.T) {
 	t.Parallel()
 
-	callCount := 0
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
-			callCount++
-			if callCount == 1 {
-				// createPlan: bad text, should fallback to minimal plan
-				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: types.Message{Content: "not a plan"}}},
-					Usage:   llm.ChatUsage{TotalTokens: 10},
-				}, nil
-			}
-			if callCount == 2 {
-				// executeLLMStep for the fallback step
-				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: types.Message{Content: "direct result"}}},
-					Usage:   llm.ChatUsage{TotalTokens: 10},
-				}, nil
-			}
-			// synthesizeAnswer
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: types.Message{Content: "synthesized"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "not a plan"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 10},
 			}, nil
 		},
@@ -1091,23 +1035,9 @@ func TestPlanAndExecute_CreatePlan_BadText(t *testing.T) {
 	cfg.Timeout = 10 * time.Second
 	pe := NewPlanAndExecute(testGateway(provider), &testToolExecutor{}, nil, cfg, zap.NewNop())
 
-	result, err := pe.Execute(context.Background(), "do something")
-	require.NoError(t, err)
-	assert.Equal(t, "synthesized", result.FinalAnswer)
-}
-
-func TestParseExecutionPlanText(t *testing.T) {
-	t.Parallel()
-
-	plan, err := parseExecutionPlanText("Goal: solve task\nStep step_1 | search docs | tool=search | args=golang\nStep step_2 | summarize findings | tool=none | args=none")
-	require.NoError(t, err)
-	require.Len(t, plan.Steps, 2)
-	assert.Equal(t, "solve task", plan.Goal)
-	assert.Equal(t, "step_1", plan.Steps[0].ID)
-	assert.Equal(t, "search", plan.Steps[0].Tool)
-	assert.Equal(t, "golang", plan.Steps[0].Arguments)
-	assert.Equal(t, "summarize findings", plan.Steps[1].Description)
-	assert.Empty(t, plan.Steps[1].Tool)
+	_, err := pe.Execute(context.Background(), "do something")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "native tool call")
 }
 
 // --- DynamicPlanner Execute test ---
@@ -1178,26 +1108,26 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 			callCount++
 			switch {
 			case callCount == 1:
-				// analyzeQuery
+				// generateQueries
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `{"aspects":["aspect1"],"initial_queries":["query1"],"depth_strategy":"breadth_first"}`,
+						Content: `["query1"]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
 				}, nil
 			case callCount == 2:
-				// generateDirections
+				// analyzeQuery
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `[{"direction":"dir1","query":"q1","priority":0.9}]`,
+						Content: `[{"finding":"found something","relevance":0.9,"source":"test"}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			case callCount == 3:
-				// executeQueries -> generateQueries
+				// generateDirections
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `[{"finding":"found something","relevance":0.9,"source":"test"}]`,
+						Content: `[{"query":"q1","rationale":"follow-up","priority":0.9}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 15},
 				}, nil

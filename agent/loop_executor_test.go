@@ -75,6 +75,31 @@ func (j *loopExecutorJudgeStub) Judge(_ context.Context, _ *LoopState, _ *Output
 	return decision, nil
 }
 
+type loopReasoningRuntimeStub struct {
+	selection     ReasoningSelection
+	output        *Output
+	err           error
+	reflectResult *LoopReflectionResult
+	selectCalls   int
+	executeCalls  int
+	reflectCalls  int
+}
+
+func (s *loopReasoningRuntimeStub) Select(_ context.Context, _ *Input, _ *LoopState) ReasoningSelection {
+	s.selectCalls++
+	return s.selection
+}
+
+func (s *loopReasoningRuntimeStub) Execute(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+	s.executeCalls++
+	return s.output, s.err
+}
+
+func (s *loopReasoningRuntimeStub) Reflect(_ context.Context, _ *Input, _ *Output, _ *LoopState) (*LoopReflectionResult, error) {
+	s.reflectCalls++
+	return s.reflectResult, nil
+}
+
 func TestLoopExecutor_ExecuteSolvedOnFirstIteration(t *testing.T) {
 	var planned bool
 	var observed bool
@@ -325,6 +350,39 @@ func TestLoopExecutor_ExecuteStopsAtIterationBudget(t *testing.T) {
 	}
 	if output.IterationCount != 1 {
 		t.Fatalf("expected iteration count 1, got %d", output.IterationCount)
+	}
+}
+
+func TestLoopExecutor_UsesReasoningRuntimeWhenProvided(t *testing.T) {
+	runtimeStub := &loopReasoningRuntimeStub{
+		selection: ReasoningSelection{Mode: ReasoningModePlanAndExecute},
+		output:    &Output{Content: "runtime-output"},
+	}
+
+	executor := &LoopExecutor{
+		MaxIterations:    2,
+		ReasoningRuntime: runtimeStub,
+		Judge: &loopExecutorJudgeStub{decisions: []*CompletionDecision{
+			{Solved: true, Decision: LoopDecisionDone, StopReason: StopReasonSolved, Reason: "done"},
+		}},
+		Logger: zap.NewNop(),
+	}
+
+	output, err := executor.Execute(context.Background(), &Input{Content: "solve"})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if runtimeStub.selectCalls != 1 {
+		t.Fatalf("expected reasoning runtime Select to be called once, got %d", runtimeStub.selectCalls)
+	}
+	if runtimeStub.executeCalls != 1 {
+		t.Fatalf("expected reasoning runtime Execute to be called once, got %d", runtimeStub.executeCalls)
+	}
+	if output.Content != "runtime-output" {
+		t.Fatalf("expected runtime output, got %q", output.Content)
+	}
+	if output.SelectedReasoningMode != ReasoningModePlanAndExecute {
+		t.Fatalf("expected runtime-selected mode, got %q", output.SelectedReasoningMode)
 	}
 }
 

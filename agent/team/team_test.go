@@ -18,10 +18,12 @@ import (
 // =============================================================================
 
 type mockAgent struct {
-	id     string
-	name   string
-	output string
-	err    error
+	id         string
+	name       string
+	output     string
+	err        error
+	planOutput *agent.PlanResult
+	planErr    error
 }
 
 func (m *mockAgent) ID() string                     { return m.id }
@@ -31,6 +33,12 @@ func (m *mockAgent) State() agent.State             { return agent.StateReady }
 func (m *mockAgent) Init(context.Context) error     { return nil }
 func (m *mockAgent) Teardown(context.Context) error { return nil }
 func (m *mockAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
+	if m.planErr != nil {
+		return nil, m.planErr
+	}
+	if m.planOutput != nil {
+		return m.planOutput, nil
+	}
 	return &agent.PlanResult{}, nil
 }
 func (m *mockAgent) Observe(context.Context, *agent.Feedback) error { return nil }
@@ -247,13 +255,12 @@ func TestSupervisor_SimpleExecute(t *testing.T) {
 }
 
 func TestSupervisor_WithPlanner(t *testing.T) {
-	// Supervisor outputs structured task format
 	sup := &mockAgent{
 		id:   "sup",
 		name: "Supervisor",
-		output: "TASK|t1|coder|Write code|Write the main function\n" +
-			"TASK|t2|tester|Test code|Write unit tests\n" +
-			"DEP|t2|t1",
+		planOutput: &agent.PlanResult{
+			Steps: []string{"Write the main function", "Write unit tests"},
+		},
 	}
 	coder := &mockAgent{id: "c1", name: "Coder", output: "code written"}
 	tester := &mockAgent{id: "t1", name: "Tester", output: "tests passed"}
@@ -273,8 +280,12 @@ func TestSupervisor_WithPlanner(t *testing.T) {
 }
 
 func TestSupervisor_WithPlanner_NoStructuredOutput(t *testing.T) {
-	// Supervisor doesn't output structured tasks — should return supervisor output directly
-	sup := &mockAgent{id: "sup", name: "Supervisor", output: "just a plain response"}
+	sup := &mockAgent{
+		id:      "sup",
+		name:    "Supervisor",
+		output:  "just a plain response",
+		planErr: assert.AnError,
+	}
 	w1 := &mockAgent{id: "w1", name: "Worker"}
 
 	team, err := NewTeamBuilder("sup-plain").
@@ -512,38 +523,36 @@ func TestTeam_Execute_WithMaxRoundsOverride(t *testing.T) {
 // Helper Function Tests
 // =============================================================================
 
-func TestParseSubtasks(t *testing.T) {
-	content := `Here's the plan:
-TASK|t1|coder|Write code|Implement the main function
-TASK|t2|tester|Write tests|Create unit tests for main
-DEP|t2|t1
-TASK|t3|reviewer|Review|Review the code and tests
-DEP|t3|t1
-DEP|t3|t2`
+func TestBuildPlannerTasks(t *testing.T) {
+	plan := &agent.PlanResult{Steps: []string{
+		"Implement the main function",
+		"Create unit tests for main",
+		"Review the code and tests",
+	}}
+	workers := []agent.TeamMember{
+		{Role: "coder"},
+		{Role: "tester"},
+		{Role: "reviewer"},
+	}
 
-	tasks := parseSubtasks(content)
+	tasks := buildPlannerTasks(plan, workers)
 	require.Len(t, tasks, 3)
 
-	assert.Equal(t, "t1", tasks[0].ID)
+	assert.Equal(t, "step_1", tasks[0].ID)
 	assert.Equal(t, "coder", tasks[0].AssignTo)
 	assert.Empty(t, tasks[0].Dependencies)
 
-	assert.Equal(t, "t2", tasks[1].ID)
+	assert.Equal(t, "step_2", tasks[1].ID)
 	assert.Equal(t, "tester", tasks[1].AssignTo)
-	assert.Equal(t, []string{"t1"}, tasks[1].Dependencies)
+	assert.Equal(t, []string{"step_1"}, tasks[1].Dependencies)
 
-	assert.Equal(t, "t3", tasks[2].ID)
-	assert.Equal(t, []string{"t1", "t2"}, tasks[2].Dependencies)
+	assert.Equal(t, "step_3", tasks[2].ID)
+	assert.Equal(t, "reviewer", tasks[2].AssignTo)
+	assert.Equal(t, []string{"step_2"}, tasks[2].Dependencies)
 }
 
-func TestParseSubtasks_Empty(t *testing.T) {
-	tasks := parseSubtasks("no structured output here")
-	assert.Len(t, tasks, 0)
-}
-
-func TestParseSubtasks_PartialLine(t *testing.T) {
-	// Lines with fewer than 5 parts should be skipped
-	tasks := parseSubtasks("TASK|t1|only|three")
+func TestBuildPlannerTasks_Empty(t *testing.T) {
+	tasks := buildPlannerTasks(&agent.PlanResult{}, []agent.TeamMember{{Role: "worker"}})
 	assert.Len(t, tasks, 0)
 }
 

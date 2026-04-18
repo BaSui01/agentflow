@@ -39,28 +39,36 @@ func (m *supervisorMode) Execute(ctx context.Context, members []agent.TeamMember
 
 // executeWithPlanner uses TaskPlanner to decompose and dispatch tasks.
 func (m *supervisorMode) executeWithPlanner(ctx context.Context, supervisor agent.TeamMember, workers []agent.TeamMember, task string) (*agent.Output, error) {
-	// Step 1: Supervisor decomposes the task
-	decompositionPrompt := fmt.Sprintf(
-		"You are a supervisor. Decompose the following task into subtasks for your team members.\n"+
-			"Available workers: %s\n"+
-			"For each subtask, output one line in the format: TASK|<id>|<assign_to>|<title>|<description>\n"+
-			"Use worker roles as assign_to values. Dependencies can be added as: DEP|<task_id>|<depends_on_id>\n\n"+
-			"Task: %s", workerList(workers), task,
-	)
-
-	supOutput, err := supervisor.Agent.Execute(ctx, &agent.Input{Content: decompositionPrompt})
-	if err != nil {
-		return nil, fmt.Errorf("supervisor decomposition failed: %w", err)
+	planInput := &agent.Input{
+		Content: fmt.Sprintf(
+			"Original task:\n%s\n\nAvailable workers: %s\n\nCreate an ordered execution plan that can be distributed across the team. Focus on directly executable steps; the runtime will assign them to workers.",
+			task,
+			workerList(workers),
+		),
 	}
-
-	// Step 2: Parse subtasks from supervisor output
-	taskArgs := parseSubtasks(supOutput.Content)
-	if len(taskArgs) == 0 {
-		// Supervisor didn't produce structured output — return its response directly
+	planResult, err := supervisor.Agent.Plan(ctx, planInput)
+	if err != nil || planResult == nil || len(planResult.Steps) == 0 {
+		m.logger.Warn("supervisor planner unavailable, returning supervisor response directly",
+			zap.Error(err),
+		)
+		supOutput, execErr := supervisor.Agent.Execute(ctx, &agent.Input{
+			Content: fmt.Sprintf("You are a supervisor. Provide instructions for your workers to complete this task: %s", task),
+		})
+		if execErr != nil {
+			if err != nil {
+				return nil, fmt.Errorf("supervisor planning failed: %w", err)
+			}
+			return nil, fmt.Errorf("supervisor failed: %w", execErr)
+		}
 		return supOutput, nil
 	}
 
-	// Step 3: Create plan and execute
+	taskArgs := buildPlannerTasks(planResult, workers)
+	if len(taskArgs) == 0 {
+		return nil, fmt.Errorf("supervisor plan did not include executable steps")
+	}
+
+	// Step 2: Create plan and execute
 	dispatcher := planner.NewDefaultDispatcher(planner.StrategyByRole, m.logger)
 	tp := planner.NewTaskPlanner(dispatcher, m.logger)
 
@@ -84,14 +92,17 @@ func (m *supervisorMode) executeWithPlanner(ctx context.Context, supervisor agen
 		return nil, fmt.Errorf("plan execution failed: %w", err)
 	}
 
+	totalPlanTokens := planResultTokens(planResult)
 	return &agent.Output{
 		Content:    result.Content,
-		TokensUsed: result.TokensUsed + supOutput.TokensUsed,
-		Cost:       result.Cost + supOutput.Cost,
-		Duration:   result.Duration + supOutput.Duration,
+		TokensUsed: result.TokensUsed + totalPlanTokens,
+		Cost:       result.Cost,
+		Duration:   result.Duration,
 		Metadata: map[string]any{
-			"plan_id": plan.ID,
-			"mode":    "supervisor",
+			"plan_id":        plan.ID,
+			"mode":           "supervisor",
+			"planning_steps": len(taskArgs),
+			"plan_source":    "agent_plan",
 		},
 	}, nil
 }
@@ -563,43 +574,53 @@ func formatHistory(history []TurnRecord) string {
 	return sb.String()
 }
 
-// parseSubtasks parses supervisor output into CreateTaskArgs.
-// Expected format: TASK|<id>|<assign_to>|<title>|<description>
-// Optional: DEP|<task_id>|<depends_on_id>
-func parseSubtasks(content string) []planner.CreateTaskArgs {
-	var tasks []planner.CreateTaskArgs
-	deps := make(map[string][]string) // task_id -> dependency IDs
-
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "TASK|") {
-			parts := strings.SplitN(line, "|", 5)
-			if len(parts) < 5 {
-				continue
-			}
-			tasks = append(tasks, planner.CreateTaskArgs{
-				ID:          strings.TrimSpace(parts[1]),
-				AssignTo:    strings.TrimSpace(parts[2]),
-				Title:       strings.TrimSpace(parts[3]),
-				Description: strings.TrimSpace(parts[4]),
-			})
-		} else if strings.HasPrefix(line, "DEP|") {
-			parts := strings.SplitN(line, "|", 3)
-			if len(parts) < 3 {
-				continue
-			}
-			taskID := strings.TrimSpace(parts[1])
-			depID := strings.TrimSpace(parts[2])
-			deps[taskID] = append(deps[taskID], depID)
-		}
+func buildPlannerTasks(plan *agent.PlanResult, workers []agent.TeamMember) []planner.CreateTaskArgs {
+	if plan == nil || len(plan.Steps) == 0 || len(workers) == 0 {
+		return nil
 	}
 
-	// Apply dependencies
-	for i := range tasks {
-		if d, ok := deps[tasks[i].ID]; ok {
-			tasks[i].Dependencies = d
+	tasks := make([]planner.CreateTaskArgs, 0, len(plan.Steps))
+	var prevID string
+	for i, step := range plan.Steps {
+		description := strings.TrimSpace(step)
+		if description == "" {
+			continue
 		}
+		id := fmt.Sprintf("step_%d", i+1)
+		assignTo := workers[i%len(workers)].Role
+		task := planner.CreateTaskArgs{
+			ID:          id,
+			AssignTo:    assignTo,
+			Title:       truncateStr(description, 48),
+			Description: description,
+			Priority:    len(plan.Steps) - i,
+			Metadata: map[string]any{
+				"plan_index": i,
+			},
+		}
+		if prevID != "" {
+			task.Dependencies = []string{prevID}
+		}
+		tasks = append(tasks, task)
+		prevID = id
 	}
-
 	return tasks
+}
+
+func planResultTokens(plan *agent.PlanResult) int {
+	if plan == nil || plan.Metadata == nil {
+		return 0
+	}
+	switch value := plan.Metadata["tokens_used"].(type) {
+	case int:
+		return value
+	case int32:
+		return int(value)
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
 }
