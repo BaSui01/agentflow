@@ -34,20 +34,16 @@ func NewLLMReasoner(gateway llmcore.Gateway, model string, logger *zap.Logger) *
 // Think sends a reasoning prompt to the LLM and returns the response content
 // along with a confidence score extracted from the response.
 func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string, confidence float64, err error) {
-	req := &llm.ChatRequest{
-		Model: r.model,
-		Messages: []types.Message{
-			{
-				Role:    llm.RoleSystem,
-				Content: reasoningSystemPrompt,
-			},
-			{
-				Role:    llm.RoleUser,
-				Content: prompt,
-			},
+	req := newReasonerChatRequest(r.model, []types.Message{
+		{
+			Role:    llm.RoleSystem,
+			Content: reasoningSystemPrompt,
 		},
-		Temperature: 0.3,
-	}
+		{
+			Role:    llm.RoleUser,
+			Content: prompt,
+		},
+	}, 0.3)
 
 	resp, err := r.invokeChat(ctx, req)
 	if err != nil {

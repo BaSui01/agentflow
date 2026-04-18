@@ -151,17 +151,17 @@ Rules:
 - Reference prior results with #E<n>
 - Do not answer with prose outside the tool call`, strings.Join(toolDescs, "\n"), task, submitToolPlanTool, r.config.MaxPlanSteps)
 
-	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
-		Model: defaultModel(r.config.Model),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
+		defaultModel(r.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Tools = []types.ToolSchema{toolPlanToolSchema()}
+			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
+			req.ToolCallMode = llm.ToolCallModeNative
+			req.Temperature = 0.2
+			req.MaxTokens = 2000
 		},
-		Tools:        []types.ToolSchema{toolPlanToolSchema()},
-		ToolChoice:   "required",
-		ToolCallMode: llm.ToolCallModeNative,
-		Temperature:  0.2,
-		MaxTokens:    2000,
-	})
+	))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -290,14 +290,14 @@ Plan execution results:
 
 Based on these results, provide a clear and complete answer to the task.`, task, strings.Join(planSummary, "\n"))
 
-	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
-		Model: defaultModel(r.config.Model),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
+		defaultModel(r.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.3
+			req.MaxTokens = 1000
 		},
-		Temperature: 0.3,
-		MaxTokens:   1000,
-	})
+	))
 	if err != nil {
 		return "", 0, err
 	}

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -643,24 +642,6 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 		return nil, err
 	}
 	return pr.chatProvider.Stream(ctx, pr.req)
-}
-
-func applyContextRouteHints(req *types.ChatRequest, ctx context.Context) {
-	if req == nil {
-		return
-	}
-	if provider, ok := types.LLMProvider(ctx); ok && strings.TrimSpace(provider) != "" {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string, 2)
-		}
-		req.Metadata[llmcore.MetadataKeyChatProvider] = strings.TrimSpace(provider)
-	}
-	if routePolicy, ok := types.LLMRoutePolicy(ctx); ok && strings.TrimSpace(routePolicy) != "" {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string, 2)
-		}
-		req.Metadata["route_policy"] = strings.TrimSpace(routePolicy)
-	}
 }
 
 // =============================================================================

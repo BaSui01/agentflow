@@ -314,7 +314,7 @@ type testMockProvider struct{}
 
 func (p *testMockProvider) Name() string { return "test-mock" }
 func (p *testMockProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if req != nil && req.ToolChoice == "required" && len(req.Tools) == 1 && req.Tools[0].Name == submitNumberedPlanTool {
+	if req != nil && req.ToolChoice != nil && req.ToolChoice.Mode == types.ToolChoiceModeRequired && len(req.Tools) == 1 && req.Tools[0].Name == submitNumberedPlanTool {
 		return &llm.ChatResponse{
 			Choices: []llm.ChatChoice{{
 				Message: types.Message{
@@ -634,28 +634,6 @@ func TestMemoryContext_Missing(t *testing.T) {
 	}
 }
 
-// ═══ Completion applyContextRouteHints 测试 ═══
-
-func TestApplyContextRouteHints(t *testing.T) {
-	req := &llm.ChatRequest{Model: "test"}
-	ctx := context.Background()
-	// 不应 panic
-	applyContextRouteHints(req, ctx)
-}
-
-func TestApplyContextRouteHints_WithRunConfig(t *testing.T) {
-	req := &llm.ChatRequest{Model: "test"}
-	ctx := types.WithLLMProvider(context.Background(), "my-provider")
-	applyContextRouteHints(req, ctx)
-	if req.Metadata == nil || req.Metadata["chat_provider"] != "my-provider" {
-		t.Fatalf("expected metadata chat_provider=my-provider, got %v", req.Metadata)
-	}
-}
-
-func TestApplyContextRouteHints_NilReq(t *testing.T) {
-	applyContextRouteHints(nil, context.Background()) // 不应 panic
-}
-
 // ═══ Integration 辅助函数测试 ═══
 
 func TestShallowCopyInput(t *testing.T) {
@@ -964,7 +942,7 @@ func completionWithPlanToolCall(
 	fn func(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error),
 ) func(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
 	return func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-		if req != nil && req.ToolChoice == "required" && len(req.Tools) == 1 && req.Tools[0].Name == submitNumberedPlanTool {
+		if req != nil && req.ToolChoice != nil && req.ToolChoice.Mode == types.ToolChoiceModeRequired && len(req.Tools) == 1 && req.Tools[0].Name == submitNumberedPlanTool {
 			return &llm.ChatResponse{
 				Choices: []llm.ChatChoice{{
 					Message: types.Message{
@@ -3057,26 +3035,6 @@ func TestEnsureAgentType_EmptyType(t *testing.T) {
 	ensureAgentType(cfg)
 	if cfg.Core.Type != string(TypeGeneric) {
 		t.Fatalf("expected %s, got %s", TypeGeneric, cfg.Core.Type)
-	}
-}
-
-// --- applyContextRouteHints (70%) ---
-
-func TestApplyContextRouteHints_WithProvider(t *testing.T) {
-	req := &llm.ChatRequest{}
-	ctx := types.WithLLMProvider(context.Background(), "anthropic")
-	applyContextRouteHints(req, ctx)
-	if req.Metadata == nil || req.Metadata["chat_provider"] != "anthropic" {
-		t.Fatalf("expected provider in metadata, got: %v", req.Metadata)
-	}
-}
-
-func TestApplyContextRouteHints_WithRoutePolicy(t *testing.T) {
-	req := &llm.ChatRequest{}
-	ctx := types.WithLLMRoutePolicy(context.Background(), "round_robin")
-	applyContextRouteHints(req, ctx)
-	if req.Metadata == nil || req.Metadata["route_policy"] != "round_robin" {
-		t.Fatalf("expected route_policy in metadata, got: %v", req.Metadata)
 	}
 }
 

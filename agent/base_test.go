@@ -354,7 +354,8 @@ func TestBaseAgent_Plan(t *testing.T) {
 	assert.NotNil(t, capturedReq)
 	assert.Len(t, capturedReq.Tools, 1)
 	assert.Equal(t, submitNumberedPlanTool, capturedReq.Tools[0].Name)
-	assert.Equal(t, "required", capturedReq.ToolChoice)
+	require.NotNil(t, capturedReq.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeRequired, capturedReq.ToolChoice.Mode)
 	assert.Contains(t, capturedPrompt, submitNumberedPlanTool)
 	assert.Contains(t, capturedPrompt, "Prefer tool-first actions when tools are needed")
 }

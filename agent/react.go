@@ -60,7 +60,7 @@ Requirements:
 		nativeToolSupport = b.mainProviderCompat.SupportsNativeFunctionCalling()
 	}
 	pr.req.Tools = []types.ToolSchema{numberedPlanToolSchema()}
-	pr.req.ToolChoice = "required"
+	pr.req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
 	if nativeToolSupport {
 		pr.req.ToolCallMode = types.ToolCallModeNative
 	} else {

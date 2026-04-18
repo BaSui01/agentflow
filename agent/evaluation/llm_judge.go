@@ -194,13 +194,9 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 	}
 
 	// 调用 LLM 进行评估
-	req := &llm.ChatRequest{
-		Model: j.config.Model,
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
-		},
-		Temperature: 0.1, // Low temperature for consistent evaluation
-	}
+	req := newJudgeChatRequest(j.config.Model, []types.Message{
+		{Role: llm.RoleUser, Content: prompt},
+	}, 0.1)
 	so, err := structured.NewStructuredOutput[llmJudgeStructuredResult](j.gateway)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize structured judge output: %w", err)

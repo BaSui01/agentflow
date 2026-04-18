@@ -1302,7 +1302,9 @@ func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
 	b.configMu.Lock()
 	defer b.configMu.Unlock()
 	b.runtimeGuardrailsCfg = cfg
-	b.config.Features.Guardrails = typesGuardrailsFromRuntime(cfg)
+	typedCfg := typesGuardrailsFromRuntime(cfg)
+	b.config.Features.Guardrails = typedCfg
+	b.config.Control.Guardrails = typedCfg
 	if cfg == nil {
 		b.guardrailsEnabled = false
 		b.inputValidatorChain = nil
@@ -1411,7 +1413,7 @@ func (b *BaseAgent) effectiveReasoningRuntime(options types.ExecutionOptions, en
 		options,
 		b.reasoningRegistry,
 		enhanced.UseReflection && b.extensions.ReflectionExecutor() != nil,
-		b.loopSelector(enhanced),
+		b.loopSelector(options, enhanced),
 		b.loopStepExecutor(enhanced),
 		b.loopReflectionStep(enhanced),
 	)

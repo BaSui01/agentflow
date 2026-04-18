@@ -108,7 +108,7 @@ func TestRunConfig_ApplyToExecutionOptions(t *testing.T) {
 				Tools: types.ToolProtocolOptions{
 					ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeNone},
 				},
-				Metadata: map[string]string{"key": "val", "max_loop_iterations": "6"},
+				Metadata: map[string]string{"key": "val"},
 				Tags:     []string{"tag1"},
 			},
 		},
@@ -191,7 +191,7 @@ func TestRunConfig_ApplyToExecutionOptions(t *testing.T) {
 					Temperature: 0.5,
 				},
 				Control:  types.AgentControlOptions{MaxLoopIterations: 4},
-				Metadata: map[string]string{"max_loop_iterations": "4", "key": "val"},
+				Metadata: map[string]string{"max_loop_iterations": "999", "key": "val"},
 			},
 		},
 	}
@@ -365,35 +365,6 @@ func TestResolveRunConfig_MergesContextInputContextAndOverrides(t *testing.T) {
 	assert.Equal(t, 4, *resolved.MaxLoopIterations)
 	assert.Equal(t, 6, *resolved.MaxReActIterations)
 	assert.Equal(t, 512, *resolved.MaxTokens)
-}
-
-func TestDisablePlannerEnabled_PrefersInputContextOverRunConfigMetadata(t *testing.T) {
-	input := &Input{
-		Context: map[string]any{
-			"disable_planner": true,
-		},
-		Overrides: &RunConfig{
-			Metadata: map[string]string{
-				"disable_planner": "false",
-			},
-		},
-	}
-
-	resolved := ResolveRunConfig(context.Background(), input)
-	assert.True(t, DisablePlannerEnabled(input, resolved))
-}
-
-func TestDisablePlannerEnabled_FallsBackToRunConfigMetadata(t *testing.T) {
-	input := &Input{
-		Overrides: &RunConfig{
-			Metadata: map[string]string{
-				"disable_planner": "true",
-			},
-		},
-	}
-
-	resolved := ResolveRunConfig(context.Background(), input)
-	assert.True(t, DisablePlannerEnabled(input, resolved))
 }
 
 func TestRunConfigFromInputContext_Empty(t *testing.T) {

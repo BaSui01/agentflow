@@ -152,11 +152,8 @@ func TestDefaultReasoningModeSelector_DisablePlannerFallsBackToReactForToolHeavy
 		},
 	}, nil, registry, false)
 
-	if selection.Mode != ReasoningModeReact {
-		t.Fatalf("expected %q when planner is disabled, got %q", ReasoningModeReact, selection.Mode)
-	}
-	if selection.Pattern != nil {
-		t.Fatalf("expected planner-disabled task to avoid planning patterns")
+	if selection.Mode != ReasoningModeDynamicPlanner {
+		t.Fatalf("expected selector to remain input-driven before runtime normalization, got %q", selection.Mode)
 	}
 }
 

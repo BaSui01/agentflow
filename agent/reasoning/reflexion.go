@@ -175,10 +175,15 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 	sb.WriteString("\nProvide your best solution.")
 	prompt := sb.String()
 
-	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
-		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}},
-		Tools: r.toolSchemas, Temperature: 0.3, MaxTokens: 2000,
-	})
+	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
+		defaultModel(r.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Tools = append([]types.ToolSchema(nil), r.toolSchemas...)
+			req.Temperature = 0.3
+			req.MaxTokens = 2000
+		},
+	))
 	if err != nil {
 		return trial, 0, err
 	}
@@ -203,9 +208,14 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 
 func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, trial *Trial) (float64, int, error) {
 	prompt := fmt.Sprintf("Rate this response on a 0.0-1.0 scale.\nTask: %s\nResponse: %s", task, trial.Result)
-	parseResult, err := generateStructured[reflexionScore](ctx, r.gateway, &llm.ChatRequest{
-		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.1, MaxTokens: 100,
-	})
+	parseResult, err := generateStructured[reflexionScore](ctx, r.gateway, newGatewayChatRequest(
+		defaultModel(r.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.1
+			req.MaxTokens = 100
+		},
+	))
 	if err != nil {
 		return 0.5, 0, err
 	}
@@ -214,9 +224,14 @@ func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, tria
 
 func (r *ReflexionExecutor) generateReflection(ctx context.Context, task string, trial *Trial) (*Reflection, int, error) {
 	prompt := fmt.Sprintf("Analyze this attempt.\nTask: %s\nResult: %s\nScore: %.2f", task, trial.Result, trial.Score)
-	parseResult, err := generateStructured[Reflection](ctx, r.gateway, &llm.ChatRequest{
-		Model: defaultModel(r.config.Model), Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.3, MaxTokens: 500,
-	})
+	parseResult, err := generateStructured[Reflection](ctx, r.gateway, newGatewayChatRequest(
+		defaultModel(r.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.3
+			req.MaxTokens = 500
+		},
+	))
 	if err != nil {
 		return &Reflection{Analysis: "Error", NextStrategy: "Try again"}, 0, err
 	}

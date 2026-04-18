@@ -81,18 +81,14 @@ func (s *StructuredOutput[T]) Schema() *JSONSchema {
 // 结构化 schema 约束统一通过 llmcore.Gateway 下发，
 // provider 差异由 llm 层处理。
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
-	return s.GenerateWithRequest(ctx, &llm.ChatRequest{
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
-		},
-	})
+	return s.GenerateWithRequest(ctx, newStructuredChatRequest([]types.Message{
+		{Role: llm.RoleUser, Content: prompt},
+	}))
 }
 
 // 生成 Messages 从信件列表中生成结构化输出 。
 func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages []types.Message) (*T, error) {
-	return s.GenerateWithRequest(ctx, &llm.ChatRequest{
-		Messages: messages,
-	})
+	return s.GenerateWithRequest(ctx, newStructuredChatRequest(messages))
 }
 
 // GenerateWithRequest 从完整 ChatRequest 生成结构化输出，并保留调用方的模型与采样参数。
@@ -109,18 +105,14 @@ func (s *StructuredOutput[T]) GenerateWithRequest(ctx context.Context, req *llm.
 
 // 生成 WithParse 生成结构化输出并返回详细解析结果 。
 func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt string) (*ParseResult[T], error) {
-	return s.GenerateWithRequestAndParse(ctx, &llm.ChatRequest{
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
-		},
-	})
+	return s.GenerateWithRequestAndParse(ctx, newStructuredChatRequest([]types.Message{
+		{Role: llm.RoleUser, Content: prompt},
+	}))
 }
 
 // 生成与Messages AndParse 从消息中生成结构化输出并返回详细解析结果.
 func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, messages []types.Message) (*ParseResult[T], error) {
-	return s.GenerateWithRequestAndParse(ctx, &llm.ChatRequest{
-		Messages: messages,
-	})
+	return s.GenerateWithRequestAndParse(ctx, newStructuredChatRequest(messages))
 }
 
 // GenerateWithRequestAndParse 从完整 ChatRequest 生成结构化输出并返回详细解析结果。

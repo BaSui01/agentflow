@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"strconv"
 	"strings"
 
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -28,6 +27,7 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 
 	req := &types.ChatRequest{
 		Model:               options.Model.Model,
+		RoutePolicy:         strings.TrimSpace(options.Model.RoutePolicy),
 		Messages:            append([]types.Message(nil), messages...),
 		MaxTokens:           options.Model.MaxTokens,
 		Temperature:         options.Model.Temperature,
@@ -51,20 +51,8 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 		}
 		req.Metadata[llmcore.MetadataKeyChatProvider] = strings.TrimSpace(options.Model.Provider)
 	}
-	if strings.TrimSpace(options.Model.RoutePolicy) != "" {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string, 2)
-		}
-		req.Metadata["route_policy"] = strings.TrimSpace(options.Model.RoutePolicy)
-	}
-	if options.Control.MaxLoopIterations > 0 {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string, 1)
-		}
-		req.Metadata["max_loop_iterations"] = strconv.Itoa(options.Control.MaxLoopIterations)
-	}
 	if options.Tools.ToolChoice != nil {
-		req.ToolChoice = toolChoiceToRequestValue(options.Tools.ToolChoice)
+		req.ToolChoice = cloneAdapterToolChoice(options.Tools.ToolChoice)
 	}
 	if options.Tools.ParallelToolCalls != nil {
 		req.ParallelToolCalls = cloneAdapterBoolPtr(options.Tools.ParallelToolCalls)
@@ -76,36 +64,16 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 	return req, nil
 }
 
-func toolChoiceToRequestValue(choice *types.ToolChoice) any {
+func cloneAdapterToolChoice(choice *types.ToolChoice) *types.ToolChoice {
 	if choice == nil {
 		return nil
 	}
-	switch choice.Mode {
-	case types.ToolChoiceModeAuto:
-		return "auto"
-	case types.ToolChoiceModeNone:
-		return "none"
-	case types.ToolChoiceModeRequired:
-		return "required"
-	case types.ToolChoiceModeSpecific:
-		return strings.TrimSpace(choice.ToolName)
-	case types.ToolChoiceModeAllowed:
-		payload := map[string]any{
-			"type": "allowed",
-		}
-		if len(choice.AllowedTools) > 0 {
-			payload["allowed_function_names"] = append([]string(nil), choice.AllowedTools...)
-		}
-		if choice.DisableParallelToolUse != nil {
-			payload["disable_parallel_tool_use"] = *choice.DisableParallelToolUse
-		}
-		if choice.IncludeServerSideToolInvocations != nil {
-			payload["include_server_side_tool_invocations"] = *choice.IncludeServerSideToolInvocations
-		}
-		return payload
-	default:
-		return nil
-	}
+	cloned := *choice
+	cloned.ToolName = strings.TrimSpace(choice.ToolName)
+	cloned.AllowedTools = append([]string(nil), choice.AllowedTools...)
+	cloned.DisableParallelToolUse = cloneAdapterBoolPtr(choice.DisableParallelToolUse)
+	cloned.IncludeServerSideToolInvocations = cloneAdapterBoolPtr(choice.IncludeServerSideToolInvocations)
+	return &cloned
 }
 
 func cloneAdapterMetadata(values map[string]string) map[string]string {

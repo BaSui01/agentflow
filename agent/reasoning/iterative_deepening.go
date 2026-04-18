@@ -326,13 +326,14 @@ Generate queries that explore NEW aspects not covered by previous findings.`, co
 
 	Return the research queries using the provided structured output schema.`
 
-	parseResult, err := generateStructured[[]string](ctx, id.gateway, &llm.ChatRequest{
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	parseResult, err := generateStructured[[]string](ctx, id.gateway, newGatewayChatRequest(
+		"",
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.7
+			req.MaxTokens = 500
 		},
-		Temperature: 0.7,
-		MaxTokens:   500,
-	})
+	))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -355,13 +356,14 @@ Query: %s
 Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 1.0.
 Return the findings using the provided structured output schema.`, query)
 
-	parseResult, err := generateStructured[[]researchFinding](ctx, id.gateway, &llm.ChatRequest{
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	parseResult, err := generateStructured[[]researchFinding](ctx, id.gateway, newGatewayChatRequest(
+		"",
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.3
+			req.MaxTokens = 800
 		},
-		Temperature: 0.3,
-		MaxTokens:   800,
-	})
+	))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -399,13 +401,14 @@ Identify %d new research directions. For each, provide a specific search query a
 Priority should be 0.0-1.0 based on how important this direction is.
 Return the directions using the provided structured output schema.`, task, findingsStr.String(), id.config.Breadth)
 
-	parseResult, err := generateStructured[[]researchDirection](ctx, id.gateway, &llm.ChatRequest{
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	parseResult, err := generateStructured[[]researchDirection](ctx, id.gateway, newGatewayChatRequest(
+		"",
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.6
+			req.MaxTokens = 600
 		},
-		Temperature: 0.6,
-		MaxTokens:   600,
-	})
+	))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -433,13 +436,14 @@ Synthesize these findings into a clear, comprehensive answer. Include:
 
 Be thorough but concise.`, task, findingsStr.String())
 
-	resp, err := invokeChatGateway(ctx, id.gateway, &llm.ChatRequest{
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	resp, err := invokeChatGateway(ctx, id.gateway, newGatewayChatRequest(
+		"",
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.3
+			req.MaxTokens = 2000
 		},
-		Temperature: 0.3,
-		MaxTokens:   2000,
-	})
+	))
 	if err != nil {
 		return "", 0, err
 	}

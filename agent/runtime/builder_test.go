@@ -483,10 +483,10 @@ func TestBuilder_Build_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	require.NotNil(t, provider.lastRequest)
-	require.NotNil(t, provider.lastRequest.Metadata)
-	assert.Equal(t, "4", provider.lastRequest.Metadata["max_loop_iterations"])
-	_, hasLegacyAlias := provider.lastRequest.Metadata["loop_max_iterations"]
-	assert.False(t, hasLegacyAlias)
+	if provider.lastRequest.Metadata != nil {
+		_, hasLegacyAlias := provider.lastRequest.Metadata["loop_max_iterations"]
+		assert.False(t, hasLegacyAlias)
+	}
 }
 
 type captureRuntimeProvider struct {

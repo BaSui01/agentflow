@@ -199,17 +199,17 @@ Rules:
 - Use "think" only when tool use is not appropriate
 - Do not answer with prose outside the tool call`, joinStrings(toolDescs, "\n"), task, contextInfo, submitNextStepsTool)
 
-	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
-		Model: defaultModel(d.config.Model),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	resp, err := invokeChatGateway(ctx, d.gateway, newGatewayChatRequest(
+		defaultModel(d.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Tools = []types.ToolSchema{nextStepsToolSchema()}
+			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
+			req.ToolCallMode = llm.ToolCallModeNative
+			req.Temperature = 0.4
+			req.MaxTokens = 1500
 		},
-		Tools:        []types.ToolSchema{nextStepsToolSchema()},
-		ToolChoice:   "required",
-		ToolCallMode: llm.ToolCallModeNative,
-		Temperature:  0.4,
-		MaxTokens:    1500,
-	})
+	))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -359,14 +359,14 @@ func (d *DynamicPlanner) executeLLMNode(ctx context.Context, node *PlanNode) (st
 
 Think through this step and provide your reasoning and conclusion.`, node.Description)
 
-	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
-		Model: defaultModel(d.config.Model),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	resp, err := invokeChatGateway(ctx, d.gateway, newGatewayChatRequest(
+		defaultModel(d.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.5
+			req.MaxTokens = 1000
 		},
-		Temperature: 0.5,
-		MaxTokens:   1000,
-	})
+	))
 	if err != nil {
 		return "", 0, err
 	}
@@ -494,14 +494,14 @@ Execution results:
 
 Synthesize a final answer based on these results.`, task, joinStrings(results, "\n"))
 
-	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
-		Model: defaultModel(d.config.Model),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	resp, err := invokeChatGateway(ctx, d.gateway, newGatewayChatRequest(
+		defaultModel(d.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.3
+			req.MaxTokens = 1000
 		},
-		Temperature: 0.3,
-		MaxTokens:   1000,
-	})
+	))
 	if err != nil {
 		return "", 0, err
 	}

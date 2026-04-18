@@ -106,16 +106,6 @@ func (rc *RunConfig) ApplyToExecutionOptions(opts *types.ExecutionOptions) {
 	if len(rc.Tags) > 0 {
 		opts.Tags = append([]string(nil), rc.Tags...)
 	}
-	if opts.Control.DisablePlanner {
-		return
-	}
-	if opts.Control.MaxLoopIterations > 0 {
-		if opts.Metadata == nil {
-			opts.Metadata = make(map[string]string, 1)
-		}
-		opts.Metadata["max_loop_iterations"] = strconv.Itoa(opts.Control.MaxLoopIterations)
-	}
-	opts.Control.DisablePlanner = parseBoolString(opts.Metadata["disable_planner"])
 }
 
 // EffectiveMaxReActIterations returns the RunConfig override if set,
@@ -146,20 +136,6 @@ func ResolveRunConfig(ctx context.Context, input *Input) *RunConfig {
 	rc = MergeRunConfig(rc, RunConfigFromInputContext(input.Context))
 	rc = MergeRunConfig(rc, input.Overrides)
 	return rc
-}
-
-// DisablePlannerEnabled reports whether runtime planner phases should be skipped.
-// This flag exists for specialist execution tasks that an upstream orchestrator has
-// already decomposed, so the runtime does not wrap the subtask into another plan.
-// Input.Context["disable_planner"] has precedence over RunConfig.Metadata.
-func DisablePlannerEnabled(input *Input, rc *RunConfig) bool {
-	if flag, ok := boolOverrideFromContext(inputContext(input), "disable_planner"); ok {
-		return flag
-	}
-	if rc == nil || len(rc.Metadata) == 0 {
-		return false
-	}
-	return parseBoolString(rc.Metadata["disable_planner"])
 }
 
 // MergeRunConfig merges two RunConfigs, preserving base values unless override

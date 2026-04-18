@@ -67,7 +67,7 @@ func maybeInjectPlanToolCall(req *llm.ChatRequest, resp *llm.ChatResponse, suppo
 	if resp == nil || req == nil || supportsNative {
 		return resp
 	}
-	if req.ToolCallMode != llm.ToolCallModeXML || req.ToolChoice != "required" {
+	if req.ToolCallMode != llm.ToolCallModeXML || req.ToolChoice == nil || req.ToolChoice.Mode != types.ToolChoiceModeRequired {
 		return resp
 	}
 	if !requestMentionsTool(req.Messages, submitNumberedPlanTool) {

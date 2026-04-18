@@ -451,7 +451,8 @@ func TestReWOO_Execute_Success(t *testing.T) {
 	require.NotNil(t, firstReq)
 	assert.Len(t, firstReq.Tools, 1)
 	assert.Equal(t, submitToolPlanTool, firstReq.Tools[0].Name)
-	assert.Equal(t, "required", firstReq.ToolChoice)
+	require.NotNil(t, firstReq.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeRequired, firstReq.ToolChoice.Mode)
 	assert.Contains(t, firstPrompt, submitToolPlanTool)
 }
 
@@ -845,7 +846,8 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 	require.NotNil(t, firstReq)
 	assert.Len(t, firstReq.Tools, 1)
 	assert.Equal(t, submitExecutionPlanTool, firstReq.Tools[0].Name)
-	assert.Equal(t, "required", firstReq.ToolChoice)
+	require.NotNil(t, firstReq.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeRequired, firstReq.ToolChoice.Mode)
 	assert.Contains(t, firstPrompt, submitExecutionPlanTool)
 }
 
@@ -1094,7 +1096,8 @@ func TestDynamicPlanner_Execute_Success(t *testing.T) {
 	require.NotNil(t, firstReq)
 	assert.Len(t, firstReq.Tools, 1)
 	assert.Equal(t, submitNextStepsTool, firstReq.Tools[0].Name)
-	assert.Equal(t, "required", firstReq.ToolChoice)
+	require.NotNil(t, firstReq.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeRequired, firstReq.ToolChoice.Mode)
 }
 
 // --- IterativeDeepening Execute test ---

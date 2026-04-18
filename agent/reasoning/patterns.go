@@ -276,14 +276,14 @@ Generate %d different next steps to continue from the previous step.
 Return the thought candidates using the provided structured output schema.`, task, parent.Content, count)
 	}
 
-	parseResult, err := generateStructured[[]thoughtCandidate](ctx, t.gateway, &llm.ChatRequest{
-		Model: defaultModel(t.config.Model),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	parseResult, err := generateStructured[[]thoughtCandidate](ctx, t.gateway, newGatewayChatRequest(
+		defaultModel(t.config.Model),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.8
+			req.MaxTokens = 1000
 		},
-		Temperature: 0.8,
-		MaxTokens:   1000,
-	})
+	))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -346,14 +346,14 @@ Rate this approach on a scale of 0.0 to 1.0 based on:
 - Completeness
 Return the score using the provided structured output schema.`, task, thought.Content)
 
-	parseResult, err := generateStructured[reflexionScore](ctx, t.gateway, &llm.ChatRequest{
-		Model: defaultModel(t.config.EvalModel),
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: prompt},
+	parseResult, err := generateStructured[reflexionScore](ctx, t.gateway, newGatewayChatRequest(
+		defaultModel(t.config.EvalModel),
+		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
+		func(req *llm.ChatRequest) {
+			req.Temperature = 0.1
+			req.MaxTokens = 10
 		},
-		Temperature: 0.1,
-		MaxTokens:   10,
-	})
+	))
 	if err != nil {
 		return 0.5, 0
 	}

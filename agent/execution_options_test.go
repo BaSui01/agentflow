@@ -48,20 +48,21 @@ func TestExecutionOptionsResolver(t *testing.T) {
 		ToolWhitelist:      []string{"search"},
 		Timeout:            DurationPtr(45 * time.Second),
 		MaxReActIterations: IntPtr(7),
-		Metadata: map[string]string{
-			"disable_planner": "true",
-		},
-		Tags: []string{"unit"},
+		Tags:               []string{"unit"},
 	})
 
-	options := NewDefaultExecutionOptionsResolver().Resolve(ctx, cfg, nil)
+	options := NewDefaultExecutionOptionsResolver().Resolve(ctx, cfg, &Input{
+		Context: map[string]any{
+			"disable_planner": true,
+		},
+	})
 	assert.Equal(t, "override-model", options.Model.Model)
 	assert.Equal(t, "openai", options.Model.Provider)
 	assert.Equal(t, "latency_first", options.Model.RoutePolicy)
 	assert.Equal(t, 3072, options.Model.MaxTokens)
 	assert.Equal(t, 45*time.Second, options.Control.Timeout)
 	assert.Equal(t, 7, options.Control.MaxReActIterations)
-	assert.True(t, options.Control.DisablePlanner)
+	assert.False(t, options.Control.DisablePlanner)
 	assert.Equal(t, []string{"search"}, options.Tools.ToolWhitelist)
 	require.NotNil(t, options.Tools.ToolChoice)
 	assert.Equal(t, types.ToolChoiceModeRequired, options.Tools.ToolChoice.Mode)
@@ -114,20 +115,20 @@ func TestChatRequestAdapter(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, req)
 	assert.Equal(t, "gpt-4o", req.Model)
+	assert.Equal(t, "balanced", req.RoutePolicy)
 	assert.Equal(t, 30*time.Second, req.Timeout)
 	assert.Equal(t, types.ToolCallModeNative, req.ToolCallMode)
 	assert.Equal(t, map[string]string{
 		"tenant":        "t1",
 		"chat_provider": "openai",
-		"route_policy":  "balanced",
 	}, req.Metadata)
 	require.NotNil(t, req.ParallelToolCalls)
 	assert.False(t, *req.ParallelToolCalls)
-	choice, ok := req.ToolChoice.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "allowed", choice["type"])
-	assert.Equal(t, []string{"search", "calc"}, choice["allowed_function_names"])
-	assert.Equal(t, true, choice["disable_parallel_tool_use"])
+	require.NotNil(t, req.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeAllowed, req.ToolChoice.Mode)
+	assert.Equal(t, []string{"search", "calc"}, req.ToolChoice.AllowedTools)
+	require.NotNil(t, req.ToolChoice.DisableParallelToolUse)
+	assert.True(t, *req.ToolChoice.DisableParallelToolUse)
 }
 
 func TestPrepareChatRequest_UsesResolvedExecutionOptions(t *testing.T) {
@@ -175,7 +176,9 @@ func TestPrepareChatRequest_UsesResolvedExecutionOptions(t *testing.T) {
 	assert.Equal(t, 4096, prepared.req.MaxTokens)
 	assert.Equal(t, 1, len(prepared.req.Tools))
 	assert.Equal(t, "search", prepared.req.Tools[0].Name)
-	assert.Equal(t, "search", prepared.req.ToolChoice)
+	require.NotNil(t, prepared.req.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeSpecific, prepared.req.ToolChoice.Mode)
+	assert.Equal(t, "search", prepared.req.ToolChoice.ToolName)
 	assert.Equal(t, 8, prepared.maxReActIter)
 	assert.Equal(t, "override-model", prepared.options.Model.Model)
 }

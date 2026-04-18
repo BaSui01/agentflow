@@ -496,6 +496,7 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 			}
 		}
 		if len(toolNames) > 0 {
+			cfg.Tools.AllowedTools = append([]string(nil), toolNames...)
 			cfg.Runtime.Tools = append([]string(nil), toolNames...)
 		}
 		ag, err := r.registry.Create(cfg, r.gateway, r.memory, r.tools, nil, r.logger)
