@@ -236,7 +236,7 @@ type ChatRequest struct {
     Temperature                      float32         `json:"temperature,omitempty"`
     TopP                             float32         `json:"top_p,omitempty"`
     Tools                            []ToolSchema    `json:"tools,omitempty"`
-    ToolChoice                       any             `json:"tool_choice,omitempty"`
+    ToolChoice                       *ToolChoice     `json:"tool_choice,omitempty"`
     ReasoningEffort                  string          `json:"reasoning_effort,omitempty"`
     ReasoningSummary                 string          `json:"reasoning_summary,omitempty"`
     ReasoningDisplay                 string          `json:"reasoning_display,omitempty"`
