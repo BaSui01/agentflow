@@ -37,7 +37,9 @@ type TurnRecord struct {
 	Round   int
 }
 
-// AgentTeam implements the agent.Team interface with multiple collaboration modes.
+// AgentTeam is the official multi-agent facade for AgentFlow. Other
+// orchestration packages remain available as advanced or legacy surfaces, but
+// new integrations should prefer team.
 type AgentTeam struct {
 	id       string
 	name     string

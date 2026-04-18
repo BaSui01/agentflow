@@ -15,8 +15,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// HierarchicalAgent 层次化 Agent
-// 实现 Supervisor-Worker 模式
+// HierarchicalAgent 是 legacy Supervisor-Worker surface。
+// 新接入优先使用 agent/team 中的 supervisor mode。
 type HierarchicalAgent struct {
 	*agent.BaseAgent
 

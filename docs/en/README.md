@@ -31,7 +31,7 @@
 | [🖼️ Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | Image, audio, video processing | ⭐⭐⭐ |
 | [🎬 Multimodal Framework API](./tutorials/21.MultimodalFrameworkAPI.md) | Capability-layer multimodal HTTP API | ⭐⭐⭐ |
 | [🔍 RAG](./tutorials/07.RAG.md) | Vector storage and knowledge retrieval | ⭐⭐⭐⭐ |
-| [👥 Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Multi-agent coordination | ⭐⭐⭐⭐ |
+| [👥 Team & Legacy Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Official team facade plus legacy coordination surfaces | ⭐⭐⭐⭐ |
 
 ---
 
@@ -56,7 +56,8 @@
 - **Skills System**: Dynamic skill loading
 - **MCP/A2A Protocol Support**: Full Agent interoperability stack (Google A2A & Anthropic MCP)
 - **Guardrails**: Input/output validation, PII detection, injection protection, custom validation rules
-- **Multiple Reasoning Modes**: ReAct, Reflexion, ReWOO, Plan-Execute, Tree of Thoughts (ToT), Dynamic Planner
+- **Official Agent Path**: `react` is the only default runtime path, with `reflection` as an optional quality enhancement
+- **Advanced / Experimental Strategies**: `Reflexion`, `ReWOO`, `Plan-Execute` are explicit opt-ins; `ToT`, `Dynamic Planner`, `Iterative Deepening` are experimental
 - **Default Closed Loop with Validation Gate**: `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`, with acceptance/verification required before a task is considered solved
 - **Dedicated Top-Level Loop Budget**: Independent `max_loop_iterations` control for the task loop, separate from reflection/reasoning internal budgets
 - **Multi-Layer Memory**: Short-term (working), long-term, episodic, semantic, procedural memory

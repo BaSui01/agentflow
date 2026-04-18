@@ -31,7 +31,7 @@
 | [🖼️ 多模态处理](./tutorials/06.多模态处理.md) | 图像、音频、视频处理 | ⭐⭐⭐ |
 | [🎬 多模态框架 API](./tutorials/21.多模态框架API.md) | 能力层多模态 HTTP 接口 | ⭐⭐⭐ |
 | [🔍 检索增强 RAG](./tutorials/07.检索增强RAG.md) | 向量存储和知识检索 | ⭐⭐⭐⭐ |
-| [👥 多 Agent 协作](./tutorials/08.多Agent协作.md) | 多智能体协同工作 | ⭐⭐⭐⭐ |
+| [👥 Team 与 Legacy 多 Agent 协作](./tutorials/08.多Agent协作.md) | 官方 team 门面与 legacy 协作面 | ⭐⭐⭐⭐ |
 | [🔗 Hosted 工具与 MCP](./tutorials/09.Hosted工具与MCP.md) | 托管工具和 MCP 协议集成 | ⭐⭐⭐ |
 | [📊 工作流编排进阶](./tutorials/10.工作流编排进阶.md) | 高级工作流模式与 DSL | ⭐⭐⭐⭐ |
 | [💰 成本追踪](./tutorials/11.成本追踪.md) | Token 计数与成本管理 | ⭐⭐ |
@@ -53,7 +53,8 @@
 ### 🤖 智能 Agent 系统
 - **状态管理**: 完整的生命周期管理
 - **Reflection 机制**: 自我评估与迭代改进
-- **推理模式**: ReAct、ReWOO、Plan-Execute、Tree of Thoughts (ToT)
+- **官方单 Agent 主链**: 默认只走 `react`，`reflection` 作为可选质量增强
+- **高级 / 实验策略**: `Reflexion`、`ReWOO`、`Plan-Execute` 需显式启用；`ToT`、`Dynamic Planner`、`Iterative Deepening` 属于实验能力
 - **多层记忆**: 短期/工作记忆、长期记忆、情节记忆、语义记忆、程序性记忆
 - **工具调用**: 原生 Function Calling + ReAct 循环
 - **双模型架构 (toolProvider)**: 便宜模型做工具调用，贵模型做内容生成

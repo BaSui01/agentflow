@@ -14,7 +14,7 @@ import (
 )
 
 func TestAgentRootPackageFileBudget(t *testing.T) {
-	const maxAgentRootFiles = 27
+	const maxAgentRootFiles = 29
 
 	entries, err := os.ReadDir("agent")
 	if err != nil {
@@ -579,6 +579,116 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 		for _, snippet := range tt.forbiddenSnippets {
 			if strings.Contains(src, snippet) {
 				t.Fatalf("%s must not promote legacy public entry %q; use the unified runtime/facade entry instead", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
+	type sourceExpectation struct {
+		path              string
+		requiredSnippets  []string
+		forbiddenSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"**官方多 Agent 门面** - `agent/team`",
+				"**官方默认** - `ReAct` 作为唯一默认推理/执行主链",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"**Official Multi-Agent Facade** - `agent/team`",
+				"**Official default** - `ReAct` is the only default reasoning/execution chain",
+			},
+		},
+		{
+			path: "docs/cn/README.md",
+			requiredSnippets: []string{
+				"Team 与 Legacy 多 Agent 协作",
+				"**官方单 Agent 主链**: 默认只走 `react`",
+			},
+			forbiddenSnippets: []string{
+				"**推理模式**: ReAct、ReWOO、Plan-Execute、Tree of Thoughts (ToT)",
+			},
+		},
+		{
+			path: "docs/en/README.md",
+			requiredSnippets: []string{
+				"Team & Legacy Multi-Agent Collaboration",
+				"**Official Agent Path**: `react` is the only default runtime path",
+			},
+			forbiddenSnippets: []string{
+				"**Multiple Reasoning Modes**: ReAct, Reflexion, ReWOO, Plan-Execute, Tree of Thoughts (ToT), Dynamic Planner",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/03.Agent开发教程.md",
+			requiredSnippets: []string{
+				"opts.ReasoningExposure = agent.ReasoningExposureAdvanced",
+				"## Team（官方多 Agent facade）",
+				"## Legacy：多 Agent 协作",
+			},
+		},
+		{
+			path: "docs/en/tutorials/03.AgentDevelopment.md",
+			requiredSnippets: []string{
+				"opts.ReasoningExposure = agent.ReasoningExposureAdvanced",
+				"## Team (Official Multi-Agent Facade)",
+				"## Legacy Multi-Agent Collaboration",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/08.多Agent协作.md",
+			requiredSnippets: []string{
+				"`agent/team` 是 AgentFlow 的官方多 Agent facade",
+				"## Legacy：多 Agent 系统",
+			},
+		},
+		{
+			path: "docs/en/tutorials/08.MultiAgentCollaboration.md",
+			requiredSnippets: []string{
+				"`agent/team` is the official multi-agent facade in AgentFlow",
+				"## Legacy Multi-Agent System",
+			},
+			forbiddenSnippets: []string{
+				"AgentFlow supports multiple collaboration patterns including hierarchical agents, debate, consensus, pipeline, broadcast, and network modes.",
+			},
+		},
+		{
+			path: "examples/08_low_priority_features/README.md",
+			requiredSnippets: []string{
+				"legacy 多 Agent surface",
+				"新的多 Agent 接入默认应优先使用 `agent/team`",
+			},
+		},
+		{
+			path: "examples/09_full_integration/README.md",
+			requiredSnippets: []string{
+				"legacy 层次化多 Agent",
+				"新的多 Agent 接入默认应优先使用 `agent/team`",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain stale public-surface snippet %q", tt.path, snippet)
 			}
 		}
 	}

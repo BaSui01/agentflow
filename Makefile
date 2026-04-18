@@ -463,6 +463,12 @@ docs-api-drift: ## 检查文档中是否残留已废弃的 API 引用
 		echo "✅ No stale API references found"; \
 	fi
 
+.PHONY: docs-surface-check
+docs-surface-check: ## 检查 README/docs/examples 的官方/legacy 产品面口径一致性
+	@echo "🔍 Checking public product-surface docs/examples consistency..."
+	@$(GO) test -run "TestPublicProductSurfaceDocsExamplesConsistency$$" . -count=1
+	@echo "✅ Product-surface docs/examples consistency check complete"
+
 .PHONY: docs-examples-check
 docs-examples-check: ## 提取文档中 Go 代码块做编译检查
 	@echo "🔍 Extracting and compiling Go examples from docs..."

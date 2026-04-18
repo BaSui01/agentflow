@@ -26,7 +26,8 @@ const (
 	PatternNetwork   CollaborationPattern = "network"   // 网络模式
 )
 
-// MultiAgentSystem 多 Agent 系统
+// MultiAgentSystem 是 legacy 多 Agent 协作 surface。新接入优先使用
+// agent/team 作为统一官方 facade。
 type MultiAgentSystem struct {
 	agents  map[string]agent.Agent
 	pattern CollaborationPattern

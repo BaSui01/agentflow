@@ -14,6 +14,8 @@ English | [中文](README.md)
 
 ### 🤖 Agent Framework
 
+- **Official Single-Agent Path** - `react + native tool calling + checkpoint/session/guardrails`
+- **Official Multi-Agent Facade** - `agent/team` with `supervisor / selector / round_robin / swarm`
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
 - **Dual-Model Architecture (toolProvider)** - Cheap model for tool calls, expensive model for content generation, significantly reducing costs
@@ -41,13 +43,10 @@ English | [中文](README.md)
 - **Context Runtime** - Unified assembly of conversation, memory, retrieval, and tool-state under one token budget
 
 ### 🧩 Reasoning Patterns
-- **ReAct** - Reasoning and action alternation
-- **Reflexion** - Self-reflection improvement
-- **ReWOO** - Reasoning without observation
-- **Plan-Execute** - Planning and execution mode
-- **Tree of Thoughts (ToT)** - Multi-path branching search with heuristic evaluation
-- **Dynamic Planner** - Dynamic planning
-- **Iterative Deepening** - Recursive deepening research pattern with breadth-first queries + depth-first exploration (inspired by deep-research)
+- **Official default** - `ReAct` is the only default reasoning/execution chain
+- **Advanced opt-in** - `Reflexion`, `ReWOO`, `Plan-Execute`
+- **Experimental** - `Tree of Thoughts (ToT)`, `Dynamic Planner`, `Iterative Deepening`
+- **Unified rule** - advanced and experimental strategies are no longer injected into the runtime by default
 
 ### 🔄 Workflow Engine
 
@@ -519,14 +518,14 @@ agentflow/
 │   │   ├── executor.go       # Topological sort + parallel execution
 │   │   ├── dispatcher.go     # 3 dispatch strategies (by_role/by_capability/round_robin)
 │   │   └── tools.go          # Built-in tool schemas (create/update/get_plan)
-│   ├── team/                 # AgentTeam multi-agent collaboration
+│   ├── team/                 # Official multi-agent facade
 │   │   ├── team.go           # AgentTeam implementation
 │   │   ├── modes.go          # 4 modes (Supervisor/RoundRobin/Selector/Swarm)
 │   │   └── builder.go        # Fluent builder
 │   ├── declarative/          # Declarative Agent loader (YAML/JSON)
 │   ├── plugins/              # Plugin system & lifecycle
-│   ├── collaboration/        # Multi-agent collaboration
-│   ├── crews/                # Agent crews
+│   ├── collaboration/        # Legacy multi-agent collaboration surface
+│   ├── crews/                # Legacy crew orchestration
 │   ├── federation/           # Agent federation & service discovery
 │   ├── hitl/                 # Human-in-the-Loop
 │   ├── artifacts/            # Artifact management

@@ -103,6 +103,9 @@ jobs:
       - name: Check docs API drift
         run: make docs-api-drift
 
+      - name: Check public docs/examples product surface consistency
+        run: make docs-surface-check
+
   # ── Performance Regression Detection ──────────────────────────────────
   # This job runs Go benchmarks and compares against the checked-in baseline.
   #

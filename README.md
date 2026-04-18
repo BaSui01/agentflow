@@ -14,6 +14,8 @@
 
 ### 🤖 Agent 框架
 
+- **官方单 Agent 主链** - `react + native tool calling + checkpoint/session/guardrails`
+- **官方多 Agent 门面** - `agent/team`，统一 `supervisor / selector / round_robin / swarm`
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
 - **双模型架构 (toolProvider)** - 便宜模型做工具调用，贵模型做内容生成，大幅降低成本
@@ -42,13 +44,10 @@
 
 ### 🧩 推理模式
 
-- **ReAct** - 推理与行动交替 (Reasoning and Acting)
-- **Reflexion** - 通过自我反思进行闭环改进
-- **ReWOO** - 推理与观察解耦，预规划工具调用
-- **Plan-Execute** - 计划与执行分离模式
-- **Tree of Thoughts (ToT)** - 多路径分支搜索与启发式评估
-- **Dynamic Planner** - 针对复杂任务的动态规划器
-- **Iterative Deepening** - 递归深化研究模式，广度优先查询 + 深度优先探索（灵感来自 deep-research）
+- **官方默认** - `ReAct` 作为唯一默认推理/执行主链
+- **高级显式启用** - `Reflexion`、`ReWOO`、`Plan-Execute`
+- **实验能力** - `Tree of Thoughts (ToT)`、`Dynamic Planner`、`Iterative Deepening`
+- **统一约束** - 高级与实验模式不再默认注入 runtime，需显式 opt-in
 
 ### 🔄 工作流引擎
 
@@ -525,14 +524,14 @@ agentflow/
 │   │   ├── executor.go       # 拓扑排序 + 并行执行
 │   │   ├── dispatcher.go     # 3 种分派策略（by_role/by_capability/round_robin）
 │   │   └── tools.go          # 内置工具 Schema（create/update/get_plan）
-│   ├── team/                 # AgentTeam 多 Agent 协作
+│   ├── team/                 # 官方多 Agent facade
 │   │   ├── team.go           # AgentTeam 实现
 │   │   ├── modes.go          # 4 种模式（Supervisor/RoundRobin/Selector/Swarm）
 │   │   └── builder.go        # 流式构建器
 │   ├── declarative/          # 声明式 Agent 加载器（YAML/JSON）
 │   ├── plugins/              # 插件系统（注册表、生命周期）
-│   ├── collaboration/        # 多 Agent 协作
-│   ├── crews/                # Crew 编排
+│   ├── collaboration/        # legacy 多 Agent 协作 surface
+│   ├── crews/                # legacy Crew 编排
 │   ├── federation/           # Agent 联邦/服务发现
 │   ├── hitl/                 # Human-in-the-Loop 审批
 │   ├── artifacts/            # Artifact 管理
@@ -651,7 +650,7 @@ agentflow/
 - [工作流编排](docs/cn/tutorials/05.工作流编排.md)
 - [多模态处理](docs/cn/tutorials/06.多模态处理.md)
 - [检索增强 RAG](docs/cn/tutorials/07.检索增强RAG.md)
-- [多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
+- [Team 与 Legacy 多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
 - [Hosted 工具与 MCP](docs/cn/tutorials/09.Hosted工具与MCP.md)
 - [工作流编排进阶](docs/cn/tutorials/10.工作流编排进阶.md)
 - [成本追踪](docs/cn/tutorials/11.成本追踪.md)
