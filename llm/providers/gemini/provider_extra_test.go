@@ -154,41 +154,40 @@ func TestNormalizeFinishReason(t *testing.T) {
 func TestConvertToolChoice(t *testing.T) {
 	assert.Nil(t, convertToolChoice(nil, nil))
 
-	tc := convertToolChoice("auto", nil)
+	tc := convertToolChoice(&types.ToolChoice{Mode: types.ToolChoiceModeAuto}, nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "AUTO", tc.FunctionCallingConfig.Mode)
 
-	tc = convertToolChoice("required", nil)
+	tc = convertToolChoice(&types.ToolChoice{Mode: types.ToolChoiceModeRequired}, nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "ANY", tc.FunctionCallingConfig.Mode)
 
-	tc = convertToolChoice("none", nil)
+	tc = convertToolChoice(&types.ToolChoice{Mode: types.ToolChoiceModeNone}, nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "NONE", tc.FunctionCallingConfig.Mode)
 
-	// OpenAI-style specific function
-	tc = convertToolChoice(map[string]any{
-		"type":     "function",
-		"function": map[string]any{"name": "get_weather"},
+	tc = convertToolChoice(&types.ToolChoice{
+		Mode:     types.ToolChoiceModeSpecific,
+		ToolName: "get_weather",
 	}, nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "ANY", tc.FunctionCallingConfig.Mode)
 	assert.Equal(t, []string{"get_weather"}, tc.FunctionCallingConfig.AllowedFunctionNames)
 
-	tc = convertToolChoice(map[string]any{
-		"mode":                                 "validated",
-		"allowed_function_names":               []any{"weather_lookup"},
-		"include_server_side_tool_invocations": true,
+	includeServerSide := true
+	tc = convertToolChoice(&types.ToolChoice{
+		Mode:                             types.ToolChoiceModeAllowed,
+		AllowedTools:                     []string{"weather_lookup"},
+		IncludeServerSideToolInvocations: &includeServerSide,
 	}, nil)
 	require.NotNil(t, tc)
 	require.NotNil(t, tc.FunctionCallingConfig)
-	assert.Equal(t, "VALIDATED", tc.FunctionCallingConfig.Mode)
+	assert.Equal(t, "ANY", tc.FunctionCallingConfig.Mode)
 	assert.Equal(t, []string{"weather_lookup"}, tc.FunctionCallingConfig.AllowedFunctionNames)
 	require.NotNil(t, tc.IncludeServerSideToolInvocations)
 	assert.True(t, *tc.IncludeServerSideToolInvocations)
 
-	// Unknown string
-	assert.Nil(t, convertToolChoice("unknown_value", nil))
+	assert.Nil(t, convertToolChoice(&types.ToolChoice{}, nil))
 }
 
 // --- checkPromptFeedback ---
@@ -277,7 +276,7 @@ func TestGeminiProvider_Completion_PreservesCachedContentWithToolConfig(t *testi
 			Description: "Lookup weather",
 			Parameters:  json.RawMessage(`{"type":"object"}`),
 		}},
-		ToolChoice:    "required",
+		ToolChoice:    &types.ToolChoice{Mode: types.ToolChoiceModeRequired},
 		CachedContent: "cachedContents/abc",
 	})
 	require.NoError(t, err)

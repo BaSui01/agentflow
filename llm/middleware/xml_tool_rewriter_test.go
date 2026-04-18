@@ -64,7 +64,7 @@ func TestXMLToolRewriter_XMLMode_InjectsSystemPrompt(t *testing.T) {
 			{Role: types.RoleUser, Content: "What is the weather?"},
 		},
 		Tools:      tools,
-		ToolChoice: "auto",
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeAuto},
 	}
 
 	result, err := rw.Rewrite(context.Background(), req)
@@ -131,7 +131,7 @@ func TestXMLToolRewriter_InputImmutability(t *testing.T) {
 			{Role: types.RoleUser, Content: originalUserContent},
 		},
 		Tools:      tools,
-		ToolChoice: "auto",
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeAuto},
 	}
 
 	// 保存原始 Messages slice 的长度和内容
@@ -147,7 +147,8 @@ func TestXMLToolRewriter_InputImmutability(t *testing.T) {
 	// 原始 req 不应被修改
 	assert.Len(t, req.Messages, origMsgLen, "原始 Messages 长度不应改变")
 	assert.Len(t, req.Tools, origToolsLen, "原始 Tools 不应被清除")
-	assert.Equal(t, "auto", req.ToolChoice, "原始 ToolChoice 不应被清除")
+	require.NotNil(t, req.ToolChoice)
+	assert.Equal(t, types.ToolChoiceModeAuto, req.ToolChoice.Mode, "原始 ToolChoice 不应被清除")
 	assert.Equal(t, originalSystemContent, req.Messages[0].Content,
 		"原始 system message 内容不应被修改")
 	assert.Equal(t, originalUserContent, req.Messages[1].Content,

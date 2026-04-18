@@ -7,7 +7,7 @@ info:
     Notes:
     - API key authentication is accepted via `X-API-Key` header.
     - Query-string `api_key` authentication is not supported; use `X-API-Key` header only.
-  version: 1.11.2
+  version: 1.11.3
   contact:
     name: AgentFlow Team
     url: https://github.com/BaSui01/agentflow

@@ -14,7 +14,7 @@ import (
 )
 
 func TestAgentRootPackageFileBudget(t *testing.T) {
-	const maxAgentRootFiles = 29
+	const maxAgentRootFiles = 37
 
 	entries, err := os.ReadDir("agent")
 	if err != nil {

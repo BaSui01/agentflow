@@ -62,7 +62,7 @@ func TestOpenAIProvider_CountTokens_MapsToolChoiceParallelAndWebSearch(t *testin
 
 	resp, err := p.CountTokens(context.Background(), &llm.ChatRequest{
 		Model:             "gpt-5.2",
-		ToolChoice:        "required",
+		ToolChoice:        &types.ToolChoice{Mode: types.ToolChoiceModeRequired},
 		ParallelToolCalls: &parallel,
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "find docs then search web"},
@@ -79,7 +79,10 @@ func TestOpenAIProvider_CountTokens_MapsToolChoiceParallelAndWebSearch(t *testin
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, 21, resp.InputTokens)
-	assert.Equal(t, "required", capturedBody["tool_choice"])
+	toolChoice, ok := capturedBody["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "allowed_tools", toolChoice["type"])
+	assert.Equal(t, "required", toolChoice["mode"])
 	assert.Equal(t, true, capturedBody["parallel_tool_calls"])
 
 	toolsAny, ok := capturedBody["tools"].([]any)
@@ -87,7 +90,7 @@ func TestOpenAIProvider_CountTokens_MapsToolChoiceParallelAndWebSearch(t *testin
 	require.Len(t, toolsAny, 2)
 }
 
-func TestOpenAIProvider_CountTokens_SpecificMapToolChoicePreservesName(t *testing.T) {
+func TestOpenAIProvider_CountTokens_SpecificToolChoiceUsesStructuredPayload(t *testing.T) {
 	var capturedBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
@@ -106,11 +109,9 @@ func TestOpenAIProvider_CountTokens_SpecificMapToolChoicePreservesName(t *testin
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "weather"},
 		},
-		ToolChoice: map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name": "get_weather",
-			},
+		ToolChoice: &types.ToolChoice{
+			Mode:     types.ToolChoiceModeSpecific,
+			ToolName: "get_weather",
 		},
 		Tools: []types.ToolSchema{
 			{Name: "get_weather", Parameters: json.RawMessage(`{"type":"object"}`)},

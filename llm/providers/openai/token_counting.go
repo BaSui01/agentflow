@@ -91,7 +91,9 @@ func buildSDKInputTokenToolChoice(choice any, tools []any) responses.InputTokenC
 	if choice == nil {
 		return responses.InputTokenCountParamsToolChoiceUnion{}
 	}
-	if _, ok := choice.(map[string]any); !ok {
+	switch choice.(type) {
+	case map[string]any, *types.ToolChoice, types.ToolChoice, string:
+	default:
 		return decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](choice)
 	}
 	normalized := providerbase.NormalizeToolChoice(choice)
@@ -109,7 +111,7 @@ func buildSDKInputTokenToolChoice(choice any, tools []any) responses.InputTokenC
 		return responses.InputTokenCountParamsToolChoiceUnion{
 			OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: name},
 		}
-	case "any":
+	case "any", "validated":
 		allowedTools := buildAllowedToolsChoice(tools)
 		if len(allowedTools) == 0 {
 			return decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](choice)

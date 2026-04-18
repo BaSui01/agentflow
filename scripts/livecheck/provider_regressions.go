@@ -83,7 +83,7 @@ func runOpenAIResponsesWebSearchRegression(ctx context.Context, logger *zap.Logg
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "check web search mapping"},
 		},
-		ToolChoice: "auto",
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeAuto},
 		Tools: []types.ToolSchema{
 			{
 				Name:        "web_search",
@@ -109,7 +109,7 @@ func runOpenAIResponsesWebSearchRegression(ctx context.Context, logger *zap.Logg
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "stream check web search mapping"},
 		},
-		ToolChoice: "auto",
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeAuto},
 		Tools: []types.ToolSchema{
 			{
 				Name:       "web_search_preview",

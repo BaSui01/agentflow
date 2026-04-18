@@ -113,7 +113,7 @@ func TestBuild_ReusesMainProviderAndSharedAssembly(t *testing.T) {
 			Content: "hello",
 		}},
 		Tools:      []types.ToolSchema{},
-		ToolChoice: "auto",
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeAuto},
 	}
 
 	resp, err := runtime.Provider.Completion(context.Background(), firstReq)
@@ -131,7 +131,7 @@ func TestBuild_ReusesMainProviderAndSharedAssembly(t *testing.T) {
 			Content: "hello",
 		}},
 		Tools:      []types.ToolSchema{},
-		ToolChoice: "auto",
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeAuto},
 	}
 
 	_, err = runtime.Provider.Completion(context.Background(), secondReq)

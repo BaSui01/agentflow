@@ -322,11 +322,12 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 	// 执行和等待
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, handoff.Timeout)
 	defer timeoutCancel()
-	go m.executeHandoff(ctx, targetAgent, handoff, resultCh)
+	go m.executeHandoff(timeoutCtx, targetAgent, handoff, resultCh)
 
 	select {
 	case result := <-resultCh:
 		handoff.Result = result
+		m.cleanupPending(handoff.ID, resultCh)
 		return handoff, nil
 	case <-timeoutCtx.Done():
 		handoff.mu.Lock()

@@ -447,7 +447,7 @@ func testToolCalling(parent context.Context, scenario providerScenario) {
 				Parameters:  json.RawMessage(`{"type":"object","properties":{"city":{"type":"string","description":"城市名称"}},"required":["city"]}`),
 			},
 		},
-		ToolChoice:  "required",
+		ToolChoice:  &types.ToolChoice{Mode: types.ToolChoiceModeRequired},
 		MaxTokens:   256,
 		Temperature: 0.1,
 	})

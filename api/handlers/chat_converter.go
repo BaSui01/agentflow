@@ -5,7 +5,6 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
-	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -90,7 +89,7 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 		TopLogProbs:                      req.TopLogProbs,
 		Stop:                             req.Stop,
 		Tools:                            tools,
-		ToolChoice:                       convertAPIToolChoice(req.ToolChoice),
+		ToolChoice:                       api.ParseToolChoice(req.ToolChoice),
 		ResponseFormat:                   convertAPIResponseFormat(req.ResponseFormat),
 		ParallelToolCalls:                req.ParallelToolCalls,
 		ServiceTier:                      req.ServiceTier,
@@ -199,46 +198,6 @@ func convertAPIResponseFormat(in *api.ResponseFormat) *llm.ResponseFormat {
 		}
 	}
 	return out
-}
-
-func convertAPIToolChoice(in any) *types.ToolChoice {
-	spec := providerbase.NormalizeToolChoice(in)
-	switch spec.Mode {
-	case "":
-		return nil
-	case "auto":
-		return &types.ToolChoice{
-			Mode:                             types.ToolChoiceModeAuto,
-			DisableParallelToolUse:           spec.DisableParallelToolUse,
-			IncludeServerSideToolInvocations: spec.IncludeServerSideToolUse,
-		}
-	case "none":
-		return &types.ToolChoice{
-			Mode:                             types.ToolChoiceModeNone,
-			DisableParallelToolUse:           spec.DisableParallelToolUse,
-			IncludeServerSideToolInvocations: spec.IncludeServerSideToolUse,
-		}
-	case "tool":
-		return &types.ToolChoice{
-			Mode:                             types.ToolChoiceModeSpecific,
-			ToolName:                         spec.SpecificName,
-			DisableParallelToolUse:           spec.DisableParallelToolUse,
-			IncludeServerSideToolInvocations: spec.IncludeServerSideToolUse,
-		}
-	case "any", "validated":
-		mode := types.ToolChoiceModeRequired
-		if len(spec.AllowedFunctionNames) > 0 {
-			mode = types.ToolChoiceModeAllowed
-		}
-		return &types.ToolChoice{
-			Mode:                             mode,
-			AllowedTools:                     append([]string(nil), spec.AllowedFunctionNames...),
-			DisableParallelToolUse:           spec.DisableParallelToolUse,
-			IncludeServerSideToolInvocations: spec.IncludeServerSideToolUse,
-		}
-	default:
-		return nil
-	}
 }
 
 func convertAPIStreamOptions(in *api.StreamOptions) *llm.StreamOptions {

@@ -190,13 +190,16 @@ func TestOpenAIProvider_Completion_ResponsesAPI_MapsWebSearchAndToolChoice(t *te
 	p := NewOpenAIProvider(providers.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL}, UseResponsesAPI: true}, zap.NewNop())
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
 		Messages:          []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
-		ToolChoice:        "required",
+		ToolChoice:        &types.ToolChoice{Mode: types.ToolChoiceModeRequired},
 		ParallelToolCalls: &parallel,
 		Tools:             []types.ToolSchema{{Name: "web_search"}, {Name: "get_weather", Parameters: json.RawMessage(`{"type":"object"}`)}},
 		WebSearchOptions:  &llm.WebSearchOptions{SearchContextSize: "high"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "required", raw["tool_choice"])
+	toolChoice, ok := raw["tool_choice"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "allowed_tools", toolChoice["type"])
+	assert.Equal(t, "required", toolChoice["mode"])
 	assert.Equal(t, true, raw["parallel_tool_calls"])
 	tools, ok := raw["tools"].([]any)
 	require.True(t, ok)

@@ -842,9 +842,15 @@ func demoRunConfigHelpers() {
 		return
 	}
 
-	req := &llm.ChatRequest{Model: "default-model"}
 	baseCfg := types.AgentConfig{}
-	retrieved.ApplyToRequest(req, baseCfg)
+	options := agent.NewDefaultExecutionOptionsResolver().Resolve(ctx, baseCfg, nil)
+	req, err := agent.NewDefaultChatRequestAdapter().Build(options, []types.Message{
+		{Role: llm.RoleUser, Content: "demo request"},
+	})
+	if err != nil {
+		fmt.Printf("   Build request error: %v\n\n", err)
+		return
+	}
 	effectiveMaxIter := retrieved.EffectiveMaxReActIterations(10)
 	_ = agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: &demoProvider{}, Logger: zap.NewNop()}), zap.NewNop()).WithToolScope([]string{"demo_tool"})
 

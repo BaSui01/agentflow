@@ -430,7 +430,9 @@ func buildSDKResponseToolChoice(choice any, tools []any) responses.ResponseNewPa
 	if choice == nil {
 		return responses.ResponseNewParamsToolChoiceUnion{}
 	}
-	if _, ok := choice.(map[string]any); !ok {
+	switch choice.(type) {
+	case map[string]any, *types.ToolChoice, types.ToolChoice, string:
+	default:
 		return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
 	}
 	normalized := providerbase.NormalizeToolChoice(choice)
@@ -448,7 +450,7 @@ func buildSDKResponseToolChoice(choice any, tools []any) responses.ResponseNewPa
 		return responses.ResponseNewParamsToolChoiceUnion{
 			OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: name},
 		}
-	case "any":
+	case "any", "validated":
 		allowedTools := buildAllowedToolsChoice(tools)
 		if len(allowedTools) == 0 {
 			return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)

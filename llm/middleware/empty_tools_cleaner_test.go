@@ -5,9 +5,14 @@ import (
 	"testing"
 
 	llmpkg "github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func testAutoToolChoice() *types.ToolChoice {
+	return &types.ToolChoice{Mode: types.ToolChoiceModeAuto}
+}
 
 func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 	cleaner := NewEmptyToolsCleaner()
@@ -22,7 +27,7 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 			name: "空工具数组应清除 tool_choice",
 			req: &llmpkg.ChatRequest{
 				Tools:      []llmpkg.ToolSchema{},
-				ToolChoice: "auto",
+				ToolChoice: testAutoToolChoice(),
 			},
 			expectedChoice: nil,
 			description:    "当 Tools 为空数组时，ToolChoice 应被清空",
@@ -31,7 +36,7 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 			name: "nil 工具列表应清除 tool_choice",
 			req: &llmpkg.ChatRequest{
 				Tools:      nil,
-				ToolChoice: "auto",
+				ToolChoice: testAutoToolChoice(),
 			},
 			expectedChoice: nil,
 			description:    "当 Tools 为 nil 时，ToolChoice 应被清空",
@@ -42,9 +47,9 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 				Tools: []llmpkg.ToolSchema{
 					{Name: "test_tool", Description: "Test tool"},
 				},
-				ToolChoice: "auto",
+				ToolChoice: testAutoToolChoice(),
 			},
-			expectedChoice: "auto",
+			expectedChoice: testAutoToolChoice(),
 			description:    "当 Tools 非空时，ToolChoice 应保持不变",
 		},
 		{
@@ -71,7 +76,11 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 			assert.NoError(t, err, "Rewrite 不应返回错误")
 
 			if tt.req != nil {
-				assert.Equal(t, tt.expectedChoice, result.ToolChoice, tt.description)
+				if tt.expectedChoice == nil {
+					assert.True(t, result.ToolChoice == nil, tt.description)
+				} else {
+					assert.Equal(t, tt.expectedChoice, result.ToolChoice, tt.description)
+				}
 			} else {
 				assert.Nil(t, result, "nil 请求应返回 nil")
 			}
@@ -97,7 +106,7 @@ func TestRewriterChain_Execute(t *testing.T) {
 			rewriters: []RequestRewriter{},
 			req: &llmpkg.ChatRequest{
 				Tools:      []llmpkg.ToolSchema{},
-				ToolChoice: "auto",
+				ToolChoice: testAutoToolChoice(),
 			},
 			expectedErr: false,
 			description: "空改写器链应直接返回原请求",
@@ -109,7 +118,7 @@ func TestRewriterChain_Execute(t *testing.T) {
 			},
 			req: &llmpkg.ChatRequest{
 				Tools:      []llmpkg.ToolSchema{},
-				ToolChoice: "auto",
+				ToolChoice: testAutoToolChoice(),
 			},
 			expectedErr: false,
 			description: "单个改写器应正常执行",
@@ -122,7 +131,7 @@ func TestRewriterChain_Execute(t *testing.T) {
 			},
 			req: &llmpkg.ChatRequest{
 				Tools:      []llmpkg.ToolSchema{},
-				ToolChoice: "auto",
+				ToolChoice: testAutoToolChoice(),
 			},
 			expectedErr: false,
 			description: "多个改写器应按顺序执行",
@@ -154,4 +163,3 @@ func TestRewriterChain_AddRewriter(t *testing.T) {
 	chain.AddRewriter(NewEmptyToolsCleaner())
 	assert.Equal(t, 2, len(chain.GetRewriters()), "再次添加后链长度应为 2")
 }
-

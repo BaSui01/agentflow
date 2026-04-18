@@ -170,8 +170,8 @@ func main() {
 	req := &llm.ChatRequest{
 		Model:       model,
 		Messages:    messages,
-		Tools:       registry.List(), // 将所有已注册工具的 Schema 传给 LLM
-		ToolChoice:  "auto",          // 让 LLM 自动决定是否调用工具
+		Tools:       registry.List(),                                   // 将所有已注册工具的 Schema 传给 LLM
+		ToolChoice:  &types.ToolChoice{Mode: types.ToolChoiceModeAuto}, // 让 LLM 自动决定是否调用工具
 		MaxTokens:   500,
 		Temperature: 0.7,
 	}
