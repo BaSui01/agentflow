@@ -51,8 +51,12 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 		}
 		req.Metadata[llmcore.MetadataKeyChatProvider] = strings.TrimSpace(options.Model.Provider)
 	}
-	if options.Tools.ToolChoice != nil {
-		req.ToolChoice = cloneAdapterToolChoice(options.Tools.ToolChoice)
+	if toolChoiceValue := toolChoiceToRequestValue(options.Tools.ToolChoice); toolChoiceValue != nil {
+		typedChoice, ok := toolChoiceValue.(*types.ToolChoice)
+		if !ok {
+			return nil, NewError(types.ErrInputValidation, "tool choice adapter produced unsupported request payload")
+		}
+		req.ToolChoice = typedChoice
 	}
 	if options.Tools.ParallelToolCalls != nil {
 		req.ParallelToolCalls = cloneAdapterBoolPtr(options.Tools.ParallelToolCalls)
@@ -74,6 +78,13 @@ func cloneAdapterToolChoice(choice *types.ToolChoice) *types.ToolChoice {
 	cloned.DisableParallelToolUse = cloneAdapterBoolPtr(choice.DisableParallelToolUse)
 	cloned.IncludeServerSideToolInvocations = cloneAdapterBoolPtr(choice.IncludeServerSideToolInvocations)
 	return &cloned
+}
+
+func toolChoiceToRequestValue(choice *types.ToolChoice) any {
+	if choice == nil {
+		return nil
+	}
+	return cloneAdapterToolChoice(choice)
 }
 
 func cloneAdapterMetadata(values map[string]string) map[string]string {
