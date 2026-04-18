@@ -519,6 +519,58 @@ func TestLoopExecutor_ExecuteEmitsClosedLoopStatusEvents(t *testing.T) {
 	}
 }
 
+func TestLoopExecutor_ExecuteDisablePlannerSkipsPlannerAndPlanStage(t *testing.T) {
+	recorder := &loopRuntimeEventRecorder{}
+	ctx := WithRuntimeStreamEmitter(context.Background(), recorder.emit)
+	var plannerCalls int
+
+	executor := &LoopExecutor{
+		MaxIterations: 2,
+		Planner: func(_ context.Context, _ *Input, _ *LoopState) (*PlanResult, error) {
+			plannerCalls++
+			return &PlanResult{Steps: []string{"should not run"}}, nil
+		},
+		StepExecutor: func(_ context.Context, _ *Input, state *LoopState, selection ReasoningSelection) (*Output, error) {
+			if selection.Mode != ReasoningModeReact {
+				t.Fatalf("expected react mode when planner is disabled, got %q", selection.Mode)
+			}
+			if len(state.Plan) != 0 {
+				t.Fatalf("expected no loop plan when planner is disabled, got %#v", state.Plan)
+			}
+			if state.CurrentStage != LoopStageAct {
+				t.Fatalf("expected act stage, got %q", state.CurrentStage)
+			}
+			return &Output{Content: "done"}, nil
+		},
+		Selector: loopExecutorSelectorStub{mode: ReasoningModePlanAndExecute},
+		Judge: &loopExecutorJudgeStub{decisions: []*CompletionDecision{
+			{Solved: true, Decision: LoopDecisionDone, StopReason: StopReasonSolved, Reason: "complete"},
+		}},
+		Logger: zap.NewNop(),
+	}
+
+	output, err := executor.Execute(ctx, &Input{
+		Content: "specialist task",
+		Context: map[string]any{
+			"disable_planner": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if plannerCalls != 0 {
+		t.Fatalf("expected planner to be skipped, got %d calls", plannerCalls)
+	}
+	if output.SelectedReasoningMode != ReasoningModeReact {
+		t.Fatalf("expected react output mode, got %q", output.SelectedReasoningMode)
+	}
+	for _, event := range recorder.events {
+		if event.CurrentStage == string(LoopStagePlan) {
+			t.Fatalf("did not expect plan stage status event when planner is disabled")
+		}
+	}
+}
+
 func TestLoopExecutor_ExecuteHonorsTaskLevelTopLoopBudget(t *testing.T) {
 	var stepCalls int
 

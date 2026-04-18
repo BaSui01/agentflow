@@ -353,6 +353,35 @@ func TestResolveRunConfig_MergesContextInputContextAndOverrides(t *testing.T) {
 	assert.Equal(t, 512, *resolved.MaxTokens)
 }
 
+func TestDisablePlannerEnabled_PrefersInputContextOverRunConfigMetadata(t *testing.T) {
+	input := &Input{
+		Context: map[string]any{
+			"disable_planner": true,
+		},
+		Overrides: &RunConfig{
+			Metadata: map[string]string{
+				"disable_planner": "false",
+			},
+		},
+	}
+
+	resolved := ResolveRunConfig(context.Background(), input)
+	assert.True(t, DisablePlannerEnabled(input, resolved))
+}
+
+func TestDisablePlannerEnabled_FallsBackToRunConfigMetadata(t *testing.T) {
+	input := &Input{
+		Overrides: &RunConfig{
+			Metadata: map[string]string{
+				"disable_planner": "true",
+			},
+		},
+	}
+
+	resolved := ResolveRunConfig(context.Background(), input)
+	assert.True(t, DisablePlannerEnabled(input, resolved))
+}
+
 func TestRunConfigFromInputContext_Empty(t *testing.T) {
 	assert.Nil(t, RunConfigFromInputContext(nil))
 	assert.Nil(t, RunConfigFromInputContext(map[string]any{"tenant": "t1"}))

@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/persistence"
 	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -253,7 +254,11 @@ func demoRolePipeline(logger *zap.Logger) {
 }
 
 func mustBuildDemoAgent(ctx context.Context, cfg types.AgentConfig, logger *zap.Logger) *agent.BaseAgent {
-	ag, err := runtime.NewBuilder(noopProvider{}, logger).Build(ctx, cfg)
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: noopProvider{},
+		Logger:       logger,
+	})
+	ag, err := runtime.NewBuilder(gateway, logger).Build(ctx, cfg)
 	if err != nil {
 		panic(fmt.Sprintf("build demo agent %s failed: %v", cfg.Core.ID, err))
 	}

@@ -63,6 +63,9 @@ type BuildOptions struct {
 	CheckpointManager *agent.CheckpointManager
 	Orchestrator      agent.OrchestratorRunner
 	ReasoningRegistry *reasoning.PatternRegistry
+	// ReasoningExposure controls which non-default reasoning strategies are
+	// registered into the runtime when ReasoningRegistry is not provided.
+	ReasoningExposure agent.ReasoningExposureLevel
 
 	// InitAgent在接线后呼叫Init(ctx).
 	InitAgent bool
@@ -84,6 +87,7 @@ func DefaultBuildOptions() BuildOptions {
 		MCPServerVersion:     "0.1.0",
 		LSPServerName:        "agentflow-lsp",
 		LSPServerVersion:     "0.1.0",
+		ReasoningExposure:    agent.ReasoningExposureOfficial,
 		InitAgent:            false,
 	}
 }
@@ -100,13 +104,7 @@ type Builder struct {
 	toolScope   []string // tool whitelist for sub-agent isolation (empty = all tools)
 }
 
-var defaultRuntimeReasoningModes = []string{
-	"dynamic_planner",
-	"plan_and_execute",
-	"reflexion",
-	"rewoo",
-	"tree_of_thought",
-}
+var defaultRuntimeReasoningModes = []string{}
 
 // NewBuilder 创建 runtime builder。logger 为必选参数，nil 时 panic。
 func NewBuilder(gateway llmcore.Gateway, logger *zap.Logger) *Builder {
@@ -343,12 +341,13 @@ func resolveRuntimeReasoningRegistry(
 	if opts.ReasoningRegistry != nil {
 		return opts.ReasoningRegistry
 	}
-	return agent.NewDefaultReasoningRegistry(
+	return agent.NewReasoningRegistryForExposure(
 		gateway,
 		model,
 		opts.ToolManager,
 		agentID,
 		opts.EventBus,
+		opts.ReasoningExposure,
 		logger,
 	)
 }

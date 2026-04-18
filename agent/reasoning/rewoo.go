@@ -136,28 +136,31 @@ func (r *ReWOO) generatePlan(ctx context.Context, task string) ([]PlanStep, int,
 		toolDescs = append(toolDescs, fmt.Sprintf("- %s: %s", t.Name, t.Description))
 	}
 
-	prompt := fmt.Sprintf(`You are a planner. Given a task, create a step-by-step plan using available tools.
-Each step should be in format: #E[n] = Tool[arguments]
-You can reference previous step results using #E[n] in arguments.
+	prompt := fmt.Sprintf(`Plan a tool-first execution path for this task.
 
 Available tools:
 %s
 
 Task: %s
 
-Create a plan (max %d steps). Output as JSON array:
-[
-  {"id": "#E1", "tool": "tool_name", "arguments": "arg string", "reasoning": "why needed"},
-  {"id": "#E2", "tool": "tool_name", "arguments": "use #E1 result", "reasoning": "why needed"}
-]`, strings.Join(toolDescs, "\n"), task, r.config.MaxPlanSteps)
+Use the %s tool to return the plan.
+
+Rules:
+- Use at most %d steps
+- Prefer the fewest useful tool calls
+- Reference prior results with #E<n>
+- Do not answer with prose outside the tool call`, strings.Join(toolDescs, "\n"), task, submitToolPlanTool, r.config.MaxPlanSteps)
 
 	resp, err := invokeChatGateway(ctx, r.gateway, &llm.ChatRequest{
 		Model: defaultModel(r.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
-		Temperature: 0.2,
-		MaxTokens:   2000,
+		Tools:        []types.ToolSchema{toolPlanToolSchema()},
+		ToolChoice:   "required",
+		ToolCallMode: llm.ToolCallModeNative,
+		Temperature:  0.2,
+		MaxTokens:    2000,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -171,13 +174,8 @@ Create a plan (max %d steps). Output as JSON array:
 	content := choice.Message.Content
 	tokens := resp.Usage.TotalTokens
 
-	// 从回应中提取 JSON
-	content = extractJSON(content)
-
-	var plan []PlanStep
-	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		r.logger.Warn("failed to parse plan JSON", zap.Error(err), zap.String("content", content))
-		// 尝试手动分析
+	plan, parseErr := parseToolPlanToolCall(choice.Message)
+	if parseErr != nil {
 		plan = r.parsePlanManually(content)
 	}
 
@@ -205,14 +203,19 @@ func (r *ReWOO) extractDependencies(args string) []string {
 
 func (r *ReWOO) parsePlanManually(content string) []PlanStep {
 	var plan []PlanStep
-	re := regexp.MustCompile(`#E(\d+)\s*=\s*(\w+)\[([^\]]*)\]`)
+	re := regexp.MustCompile(`(?m)#E(\d+)\s*=\s*([A-Za-z0-9_-]+)\[([^\]]*)\](?:\s*;\s*(.+))?`)
 	matches := re.FindAllStringSubmatch(content, -1)
 	for _, m := range matches {
 		if len(m) >= 4 {
+			reasoning := ""
+			if len(m) >= 5 {
+				reasoning = strings.TrimSpace(m[4])
+			}
 			plan = append(plan, PlanStep{
 				ID:        "#E" + m[1],
-				Tool:      m[2],
-				Arguments: m[3],
+				Tool:      strings.TrimSpace(m[2]),
+				Arguments: strings.TrimSpace(m[3]),
+				Reasoning: reasoning,
 			})
 		}
 	}

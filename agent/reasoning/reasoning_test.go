@@ -18,7 +18,8 @@ import (
 // --- mock provider (satisfies llm.Provider) ---
 
 type testProvider struct {
-	completionFn func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
+	completionFn   func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
+	supportsNative bool
 }
 
 func (p *testProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -36,7 +37,7 @@ func (p *testProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
 func (p *testProvider) Name() string                        { return "test" }
-func (p *testProvider) SupportsNativeFunctionCalling() bool { return false }
+func (p *testProvider) SupportsNativeFunctionCalling() bool { return p.supportsNative }
 func (p *testProvider) ListModels(context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
@@ -181,12 +182,13 @@ func TestReWOO_ParsePlanManually(t *testing.T) {
 	t.Parallel()
 	r := NewReWOO(nil, nil, nil, DefaultReWOOConfig(), nil)
 
-	content := "#E1 = search[golang concurrency]\n#E2 = analyze[#E1 results]"
+	content := "#E1 = search[golang concurrency] ; gather sources\n#E2 = analyze[#E1 results] ; summarize findings"
 	plan := r.parsePlanManually(content)
 	require.Len(t, plan, 2)
 	assert.Equal(t, "#E1", plan[0].ID)
 	assert.Equal(t, "search", plan[0].Tool)
 	assert.Equal(t, "golang concurrency", plan[0].Arguments)
+	assert.Equal(t, "gather sources", plan[0].Reasoning)
 }
 
 func TestReWOO_ExecuteSteps_CircularDependency(t *testing.T) {
@@ -466,15 +468,28 @@ func TestReWOO_Execute_Success(t *testing.T) {
 	t.Parallel()
 
 	callCount := 0
+	var firstPrompt string
+	var firstReq *llm.ChatRequest
 	provider := &testProvider{
-		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			switch {
 			case callCount == 1:
+				firstReq = req
+				firstPrompt = req.Messages[0].Content
 				// Plan generation
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `[{"id":"#E1","tool":"search","arguments":"golang","reasoning":"find info"}]`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_tool_plan",
+							Name: submitToolPlanTool,
+							Arguments: json.RawMessage(`{
+								"steps": [
+									{"id":"#E1","tool":"search","arguments":"golang","reasoning":"find info"}
+								]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 50},
 				}, nil
@@ -499,6 +514,11 @@ func TestReWOO_Execute_Success(t *testing.T) {
 	assert.Equal(t, "rewoo", result.Pattern)
 	assert.Equal(t, "final answer", result.FinalAnswer)
 	assert.Greater(t, result.TotalTokens, 0)
+	require.NotNil(t, firstReq)
+	assert.Len(t, firstReq.Tools, 1)
+	assert.Equal(t, submitToolPlanTool, firstReq.Tools[0].Name)
+	assert.Equal(t, "required", firstReq.ToolChoice)
+	assert.Contains(t, firstPrompt, submitToolPlanTool)
 }
 
 // --- TreeOfThought Execute tests ---
@@ -811,15 +831,27 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 	t.Parallel()
 
 	callCount := 0
+	var firstPrompt string
+	var firstReq *llm.ChatRequest
 	provider := &testProvider{
-		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			switch callCount {
 			case 1:
+				firstReq = req
+				firstPrompt = req.Messages[0].Content
 				// createPlan
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `{"goal":"solve","steps":[{"id":"step_1","description":"do thing","tool":"search","arguments":"query"}]}`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_exec_plan",
+							Name: submitExecutionPlanTool,
+							Arguments: json.RawMessage(`{
+								"goal":"solve",
+								"steps":[{"id":"step_1","description":"do thing","tool":"search","arguments":"query"}]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 30},
 				}, nil
@@ -849,6 +881,11 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 	assert.Equal(t, "final synthesis", result.FinalAnswer)
 	assert.Equal(t, 0.8, result.Confidence)
 	assert.Equal(t, "completed", result.Metadata["final_status"])
+	require.NotNil(t, firstReq)
+	assert.Len(t, firstReq.Tools, 1)
+	assert.Equal(t, submitExecutionPlanTool, firstReq.Tools[0].Name)
+	assert.Equal(t, "required", firstReq.ToolChoice)
+	assert.Contains(t, firstPrompt, submitExecutionPlanTool)
 }
 
 func TestPlanAndExecute_Execute_LLMStep(t *testing.T) {
@@ -856,6 +893,7 @@ func TestPlanAndExecute_Execute_LLMStep(t *testing.T) {
 
 	callCount := 0
 	provider := &testProvider{
+		supportsNative: true,
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			switch callCount {
@@ -863,7 +901,14 @@ func TestPlanAndExecute_Execute_LLMStep(t *testing.T) {
 				// createPlan: step without tool
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `{"goal":"think","steps":[{"id":"step_1","description":"analyze the problem"}]}`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_exec_plan",
+							Name: submitExecutionPlanTool,
+							Arguments: json.RawMessage(`{
+								"goal":"think",
+								"steps":[{"id":"step_1","description":"analyze the problem"}]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
 				}, nil
@@ -897,6 +942,7 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 
 	callCount := 0
 	provider := &testProvider{
+		supportsNative: true,
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			switch callCount {
@@ -904,7 +950,17 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 				// createPlan: two steps, first will fail
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `{"goal":"do","steps":[{"id":"step_1","description":"fail step","tool":"bad_tool","arguments":"x"},{"id":"step_2","description":"next","tool":"good_tool","arguments":"y"}]}`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_exec_plan",
+							Name: submitExecutionPlanTool,
+							Arguments: json.RawMessage(`{
+								"goal":"do",
+								"steps":[
+									{"id":"step_1","description":"fail step","tool":"bad_tool","arguments":"x"},
+									{"id":"step_2","description":"next","tool":"good_tool","arguments":"y"}
+								]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
 				}, nil
@@ -912,7 +968,14 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 				// replan: new plan with one step
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `{"goal":"retry","steps":[{"id":"step_r1","description":"retry step","tool":"good_tool","arguments":"z"}]}`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_exec_replan",
+							Name: submitExecutionPlanTool,
+							Arguments: json.RawMessage(`{
+								"goal":"retry",
+								"steps":[{"id":"step_r1","description":"retry step","tool":"good_tool","arguments":"z"}]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 15},
 				}, nil
@@ -954,13 +1017,21 @@ func TestPlanAndExecute_Execute_PlanFailed(t *testing.T) {
 
 	callCount := 0
 	provider := &testProvider{
+		supportsNative: true,
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			if callCount == 1 {
 				// createPlan
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `{"goal":"do","steps":[{"id":"step_1","description":"fail","tool":"bad","arguments":"x"}]}`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_exec_plan",
+							Name: submitExecutionPlanTool,
+							Arguments: json.RawMessage(`{
+								"goal":"do",
+								"steps":[{"id":"step_1","description":"fail","tool":"bad","arguments":"x"}]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
 				}, nil
@@ -987,7 +1058,7 @@ func TestPlanAndExecute_Execute_PlanFailed(t *testing.T) {
 	assert.Equal(t, "failed", result.Metadata["final_status"])
 }
 
-func TestPlanAndExecute_CreatePlan_BadJSON(t *testing.T) {
+func TestPlanAndExecute_CreatePlan_BadText(t *testing.T) {
 	t.Parallel()
 
 	callCount := 0
@@ -995,9 +1066,9 @@ func TestPlanAndExecute_CreatePlan_BadJSON(t *testing.T) {
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			if callCount == 1 {
-				// createPlan: bad JSON, should fallback to minimal plan
+				// createPlan: bad text, should fallback to minimal plan
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: types.Message{Content: "not json"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "not a plan"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
@@ -1025,21 +1096,44 @@ func TestPlanAndExecute_CreatePlan_BadJSON(t *testing.T) {
 	assert.Equal(t, "synthesized", result.FinalAnswer)
 }
 
+func TestParseExecutionPlanText(t *testing.T) {
+	t.Parallel()
+
+	plan, err := parseExecutionPlanText("Goal: solve task\nStep step_1 | search docs | tool=search | args=golang\nStep step_2 | summarize findings | tool=none | args=none")
+	require.NoError(t, err)
+	require.Len(t, plan.Steps, 2)
+	assert.Equal(t, "solve task", plan.Goal)
+	assert.Equal(t, "step_1", plan.Steps[0].ID)
+	assert.Equal(t, "search", plan.Steps[0].Tool)
+	assert.Equal(t, "golang", plan.Steps[0].Arguments)
+	assert.Equal(t, "summarize findings", plan.Steps[1].Description)
+	assert.Empty(t, plan.Steps[1].Tool)
+}
+
 // --- DynamicPlanner Execute test ---
 
 func TestDynamicPlanner_Execute_Success(t *testing.T) {
 	t.Parallel()
 
 	callCount := 0
+	var firstReq *llm.ChatRequest
 	provider := &testProvider{
-		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			callCount++
 			switch callCount {
 			case 1:
+				firstReq = req
 				// generateNextSteps: initial plan
 				return &llm.ChatResponse{
 					Choices: []llm.ChatChoice{{Message: types.Message{
-						Content: `[{"action":"search","description":"find info","confidence":0.8}]`,
+						ToolCalls: []types.ToolCall{{
+							ID:   "call_next_steps",
+							Name: submitNextStepsTool,
+							Arguments: json.RawMessage(`{
+								"steps":[{"action":"search","description":"find info","confidence":0.8}]
+							}`),
+						}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
 				}, nil
@@ -1067,6 +1161,10 @@ func TestDynamicPlanner_Execute_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "dynamic_planner", result.Pattern)
 	assert.NotEmpty(t, result.FinalAnswer)
+	require.NotNil(t, firstReq)
+	assert.Len(t, firstReq.Tools, 1)
+	assert.Equal(t, submitNextStepsTool, firstReq.Tools[0].Name)
+	assert.Equal(t, "required", firstReq.ToolChoice)
 }
 
 // --- IterativeDeepening Execute test ---

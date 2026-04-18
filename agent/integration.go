@@ -1066,7 +1066,17 @@ type DefaultReasoningModeSelector struct{}
 
 func NewDefaultReasoningModeSelector() ReasoningModeSelector { return DefaultReasoningModeSelector{} }
 
-func (DefaultReasoningModeSelector) Select(_ context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+func (DefaultReasoningModeSelector) Select(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+	runConfig := ResolveRunConfig(ctx, input)
+	if DisablePlannerEnabled(input, runConfig) {
+		if selection, ok := selectResumedReasoningMode(state, registry, reflectionEnabled); ok && selection.Mode == ReasoningModeReflection {
+			return selection
+		}
+		if shouldUseReflection(input, state, registry, reflectionEnabled) {
+			return buildReasoningSelection(ReasoningModeReflection, registry)
+		}
+		return buildReasoningSelection(ReasoningModeReact, registry)
+	}
 	if selection, ok := selectResumedReasoningMode(state, registry, reflectionEnabled); ok {
 		return selection
 	}
@@ -1122,6 +1132,9 @@ func (b *BaseAgent) loopSelector(options EnhancedExecutionOptions) ReasoningMode
 	}
 	return reasoningModeSelectorFunc(func(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
 		selection := base.Select(ctx, input, state, registry, reflectionEnabled)
+		if DisablePlannerEnabled(input, ResolveRunConfig(ctx, input)) {
+			return selection
+		}
 		if strings.TrimSpace(selection.Mode) == "" || selection.Mode == ReasoningModeReact {
 			selection.Mode = ReasoningModeReflection
 		}
@@ -1139,6 +1152,11 @@ func (b *BaseAgent) loopMaxIterations() int {
 
 func (b *BaseAgent) loopPlanner() LoopPlannerFunc {
 	return func(ctx context.Context, input *Input, _ *LoopState) (*PlanResult, error) {
+		// Specialist execution tasks may already be decomposed by an upstream
+		// orchestrator, so do not wrap them in another planner prompt.
+		if DisablePlannerEnabled(input, ResolveRunConfig(ctx, input)) {
+			return nil, nil
+		}
 		return b.Plan(ctx, input)
 	}
 }
@@ -1384,6 +1402,13 @@ func contentContainsAny(input *Input, terms ...string) bool {
 	return false
 }
 
+func normalizePlannerDisabledSelection(selection ReasoningSelection, registry *reasoning.PatternRegistry, input *Input, state *LoopState, reflectionEnabled bool) ReasoningSelection {
+	if normalizeReasoningMode(selection.Mode) == ReasoningModeReflection && shouldUseReflection(input, state, registry, reflectionEnabled) {
+		return buildReasoningSelection(ReasoningModeReflection, registry)
+	}
+	return buildReasoningSelection(ReasoningModeReact, registry)
+}
+
 type LoopPlannerFunc func(ctx context.Context, input *Input, state *LoopState) (*PlanResult, error)
 type LoopStepExecutorFunc func(ctx context.Context, input *Input, state *LoopState, selection ReasoningSelection) (*Output, error)
 type LoopObserveFunc func(ctx context.Context, feedback *Feedback, state *LoopState) error
@@ -1425,7 +1450,8 @@ func (e *LoopExecutor) Execute(ctx context.Context, input *Input) (*Output, erro
 	logger := e.logger()
 	selector := e.selector()
 	judge := e.judge()
-	needPlan := e.Planner != nil
+	runConfig := ResolveRunConfig(ctx, input)
+	needPlan := e.Planner != nil && !DisablePlannerEnabled(input, runConfig)
 	e.emitStatus(ctx, state, RuntimeStreamStatus, nil)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -1450,6 +1476,9 @@ func (e *LoopExecutor) Execute(ctx context.Context, input *Input) (*Output, erro
 			if strings.TrimSpace(selection.Mode) == "" {
 				selection.Mode = ReasoningModeReact
 			}
+		}
+		if DisablePlannerEnabled(input, runConfig) {
+			selection = normalizePlannerDisabledSelection(selection, e.ReasoningRegistry, input, state, e.ReflectionEnabled)
 		}
 		state.SelectedReasoningMode = selection.Mode
 		state.AddObservation(LoopObservation{Stage: LoopStageAnalyze, Content: selection.Mode, Iteration: state.Iteration, Metadata: map[string]any{"reasoning_mode": selection.Mode}})

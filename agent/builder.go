@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"go.uber.org/zap"
@@ -743,7 +744,10 @@ func typesGuardrailsFromRuntime(cfg *guardrails.GuardrailsConfig) *types.Guardra
 }
 
 // NewDefaultReasoningRegistry constructs the default reasoning registry used by
-// runtime.Builder when the caller does not inject one explicitly.
+// runtime.Builder and registry-backed creation paths when the caller does not
+// inject one explicitly. The default product surface keeps advanced and
+// experimental strategies out of the runtime unless they are explicitly
+// enabled.
 func NewDefaultReasoningRegistry(
 	gateway llmcore.Gateway,
 	model string,
@@ -752,32 +756,36 @@ func NewDefaultReasoningRegistry(
 	bus EventBus,
 	logger *zap.Logger,
 ) *reasoning.PatternRegistry {
+	return NewReasoningRegistryForExposure(
+		gateway,
+		model,
+		toolManager,
+		agentID,
+		bus,
+		ReasoningExposureOfficial,
+		logger,
+	)
+}
+
+// NewReasoningRegistryForExposure constructs a reasoning registry for the given
+// public runtime exposure level.
+func NewReasoningRegistryForExposure(
+	gateway llmcore.Gateway,
+	model string,
+	toolManager ToolManager,
+	agentID string,
+	bus EventBus,
+	level ReasoningExposureLevel,
+	logger *zap.Logger,
+) *reasoning.PatternRegistry {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	level = normalizeReasoningExposureLevel(level)
 	registry := reasoning.NewPatternRegistry()
 	toolExecutor := newToolManagerExecutor(toolManager, agentID, nil, bus)
 	toolSchemas := reasoningToolSchemas(toolManager, agentID)
-
-	totCfg := reasoning.DefaultTreeOfThoughtConfig()
-	totCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(gateway, toolExecutor, totCfg, logger), logger)
-
-	rewooCfg := reasoning.DefaultReWOOConfig()
-	rewooCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(gateway, toolExecutor, toolSchemas, rewooCfg, logger), logger)
-
-	peCfg := reasoning.DefaultPlanExecuteConfig()
-	peCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(gateway, toolExecutor, toolSchemas, peCfg, logger), logger)
-
-	dpCfg := reasoning.DefaultDynamicPlannerConfig()
-	dpCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(gateway, toolExecutor, toolSchemas, dpCfg, logger), logger)
-
-	refCfg := reasoning.DefaultReflexionConfig()
-	refCfg.Model = model
-	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(gateway, toolExecutor, toolSchemas, refCfg, logger), logger)
+	registerReasoningPatternsForExposure(registry, gateway, model, toolExecutor, toolSchemas, level, logger)
 	return registry
 }
 
@@ -792,4 +800,46 @@ func reasoningToolSchemas(toolManager ToolManager, agentID string) []types.ToolS
 		return nil
 	}
 	return toolManager.GetAllowedTools(agentID)
+}
+
+func registerReasoningPatternsForExposure(
+	registry *reasoning.PatternRegistry,
+	gateway llmcore.Gateway,
+	model string,
+	toolExecutor llmtools.ToolExecutor,
+	toolSchemas []types.ToolSchema,
+	level ReasoningExposureLevel,
+	logger *zap.Logger,
+) {
+	level = normalizeReasoningExposureLevel(level)
+	if level == ReasoningExposureOfficial {
+		return
+	}
+
+	refCfg := reasoning.DefaultReflexionConfig()
+	refCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(gateway, toolExecutor, toolSchemas, refCfg, logger), logger)
+
+	rewooCfg := reasoning.DefaultReWOOConfig()
+	rewooCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(gateway, toolExecutor, toolSchemas, rewooCfg, logger), logger)
+
+	peCfg := reasoning.DefaultPlanExecuteConfig()
+	peCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(gateway, toolExecutor, toolSchemas, peCfg, logger), logger)
+
+	if level != ReasoningExposureAll {
+		return
+	}
+
+	dpCfg := reasoning.DefaultDynamicPlannerConfig()
+	dpCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(gateway, toolExecutor, toolSchemas, dpCfg, logger), logger)
+
+	totCfg := reasoning.DefaultTreeOfThoughtConfig()
+	totCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(gateway, toolExecutor, totCfg, logger), logger)
+
+	idCfg := reasoning.DefaultIterativeDeepeningConfig()
+	registerDefaultReasoningPattern(registry, reasoning.NewIterativeDeepening(gateway, toolExecutor, idCfg, logger), logger)
 }

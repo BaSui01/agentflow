@@ -230,31 +230,31 @@ func (p *PlanAndExecute) createPlan(ctx context.Context, task string) (*Executio
 		toolDescs = append(toolDescs, fmt.Sprintf("- %s: %s", t.Name, t.Description))
 	}
 
-	prompt := fmt.Sprintf(`You are a planning agent. Create a step-by-step plan to accomplish the given task.
+	prompt := fmt.Sprintf(`Plan the execution of this task.
 
 Available tools:
 %s
 
 Task: %s
 
-Create a detailed plan. Output as JSON:
-{
-  "goal": "restate the goal",
-  "steps": [
-    {"id": "step_1", "description": "what to do", "tool": "tool_name", "arguments": "args"},
-    {"id": "step_2", "description": "what to do", "tool": "tool_name", "arguments": "args"}
-  ]
-}
+Use the %s tool to return the goal and ordered steps.
 
-Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "\n"), task, p.config.MaxPlanSteps)
+Rules:
+- Use at most %d steps
+- Keep each step concrete and executable
+- Prefer tool calls when they materially help
+- Do not answer with prose outside the tool call`, strings.Join(toolDescs, "\n"), task, submitExecutionPlanTool, p.config.MaxPlanSteps)
 
 	resp, err := invokeChatGateway(ctx, p.gateway, &llm.ChatRequest{
 		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
-		Temperature: 0.3,
-		MaxTokens:   2000,
+		Tools:        []types.ToolSchema{executionPlanToolSchema()},
+		ToolChoice:   "required",
+		ToolCallMode: llm.ToolCallModeNative,
+		Temperature:  0.3,
+		MaxTokens:    2000,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -267,19 +267,20 @@ Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "
 
 	content := choice.Message.Content
 	tokens := resp.Usage.TotalTokens
-	content = extractJSONObject(content)
 
-	var plan ExecutionPlan
-	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		p.logger.Warn("failed to parse plan", zap.Error(err))
-		// 创建最小计划
-		plan = ExecutionPlan{
-			Goal: task,
-			Steps: []ExecutionStep{{
-				ID:          "step_1",
-				Description: "Attempt to solve the task directly",
-				Status:      stepStatusPending,
-			}},
+	plan, err := parseExecutionPlanToolCall(choice.Message)
+	if err != nil {
+		plan, err = parseExecutionPlanText(content)
+		if err != nil {
+			p.logger.Warn("failed to parse plan", zap.Error(err))
+			plan = ExecutionPlan{
+				Goal: task,
+				Steps: []ExecutionStep{{
+					ID:          "step_1",
+					Description: "Attempt to solve the task directly",
+					Status:      stepStatusPending,
+				}},
+			}
 		}
 	}
 
@@ -394,7 +395,7 @@ func (p *PlanAndExecute) replan(ctx context.Context, task string, currentPlan *E
 
 	failedStep := currentPlan.Steps[currentPlan.CurrentStep]
 
-	prompt := fmt.Sprintf(`The current plan has failed. Create a new plan to continue.
+	prompt := fmt.Sprintf(`The current execution plan failed. Continue from the latest useful state.
 
 Original task: %s
 
@@ -404,19 +405,23 @@ Completed steps:
 Failed step: %s - %s
 Error: %s
 
-Create a new plan to continue from here. Output as JSON:
-{
-  "goal": "updated goal",
-  "steps": [{"id": "step_N", "description": "...", "tool": "...", "arguments": "..."}]
-}`, task, strings.Join(completedContext, "\n"), failedStep.ID, failedStep.Description, errorMsg)
+Use the %s tool to return the updated goal and only the remaining steps.
+
+Rules:
+- Do not repeat completed work
+- Only include the remaining steps
+- Do not answer with prose outside the tool call`, task, strings.Join(completedContext, "\n"), failedStep.ID, failedStep.Description, errorMsg, submitExecutionPlanTool)
 
 	resp, err := invokeChatGateway(ctx, p.gateway, &llm.ChatRequest{
 		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
-		Temperature: 0.4,
-		MaxTokens:   1500,
+		Tools:        []types.ToolSchema{executionPlanToolSchema()},
+		ToolChoice:   "required",
+		ToolCallMode: llm.ToolCallModeNative,
+		Temperature:  0.4,
+		MaxTokens:    1500,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -427,12 +432,15 @@ Create a new plan to continue from here. Output as JSON:
 		return nil, 0, fmt.Errorf("replan returned no choices: %w", err)
 	}
 
-	content := extractJSONObject(replanChoice.Message.Content)
+	content := replanChoice.Message.Content
 	tokens := resp.Usage.TotalTokens
 
-	var newPlan ExecutionPlan
-	if err := json.Unmarshal([]byte(content), &newPlan); err != nil {
-		return nil, tokens, fmt.Errorf("failed to parse new plan: %w", err)
+	newPlan, err := parseExecutionPlanToolCall(replanChoice.Message)
+	if err != nil {
+		newPlan, err = parseExecutionPlanText(content)
+		if err != nil {
+			return nil, tokens, fmt.Errorf("failed to parse new plan: %w", err)
+		}
 	}
 
 	// 保留已完成的步骤
@@ -486,4 +494,70 @@ func extractJSONObject(s string) string {
 		return s[start : end+1]
 	}
 	return s
+}
+
+func parseExecutionPlanText(content string) (ExecutionPlan, error) {
+	plan := ExecutionPlan{}
+	lines := strings.Split(content, "\n")
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(strings.ToLower(line), "goal:"):
+			plan.Goal = strings.TrimSpace(line[len("goal:"):])
+		case strings.HasPrefix(strings.ToLower(line), "step "):
+			step, ok := parseExecutionStepLine(line)
+			if ok {
+				plan.Steps = append(plan.Steps, step)
+			}
+		}
+	}
+	if len(plan.Steps) == 0 {
+		return ExecutionPlan{}, fmt.Errorf("no execution steps found")
+	}
+	if strings.TrimSpace(plan.Goal) == "" {
+		plan.Goal = plan.Steps[0].Description
+	}
+	return plan, nil
+}
+
+func parseExecutionStepLine(line string) (ExecutionStep, bool) {
+	parts := strings.Split(line, "|")
+	if len(parts) < 2 {
+		return ExecutionStep{}, false
+	}
+	head := strings.TrimSpace(parts[0])
+	if !strings.HasPrefix(strings.ToLower(head), "step ") {
+		return ExecutionStep{}, false
+	}
+	id := strings.TrimSpace(head[len("step "):])
+	if id == "" {
+		return ExecutionStep{}, false
+	}
+	step := ExecutionStep{
+		ID:          id,
+		Description: strings.TrimSpace(parts[1]),
+	}
+	for _, part := range parts[2:] {
+		segment := strings.TrimSpace(part)
+		lower := strings.ToLower(segment)
+		switch {
+		case strings.HasPrefix(lower, "tool="):
+			value := strings.TrimSpace(segment[len("tool="):])
+			if !strings.EqualFold(value, "none") {
+				step.Tool = value
+			}
+		case strings.HasPrefix(lower, "args="):
+			value := strings.TrimSpace(segment[len("args="):])
+			if !strings.EqualFold(value, "none") {
+				step.Arguments = value
+			}
+		}
+	}
+	if step.Description == "" {
+		return ExecutionStep{}, false
+	}
+	return step, true
 }

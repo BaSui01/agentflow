@@ -55,6 +55,25 @@ func TestBaseAgent_Execute_WithRuntimeHandoff_EmitsSDKEvents(t *testing.T) {
 	sourceProvider := &testProvider{
 		name:           "source",
 		supportsNative: true,
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return &llm.ChatResponse{
+				ID:       "src-plan-1",
+				Provider: "source",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{
+						Role: llm.RoleAssistant,
+						ToolCalls: []types.ToolCall{{
+							ID:        "call_source_plan",
+							Name:      submitNumberedPlanTool,
+							Arguments: json.RawMessage(`{"steps":["delegate to the target agent"]}`),
+						}},
+					},
+					FinishReason: "tool_calls",
+				}},
+				Usage: llm.ChatUsage{CompletionTokens: 5, TotalTokens: 5},
+			}, nil
+		},
 		streamFn: func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 			ch := make(chan llm.StreamChunk, 1)
 			go func() {
@@ -81,6 +100,25 @@ func TestBaseAgent_Execute_WithRuntimeHandoff_EmitsSDKEvents(t *testing.T) {
 	targetProvider := &testProvider{
 		name:           "target",
 		supportsNative: true,
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return &llm.ChatResponse{
+				ID:       "target-plan-1",
+				Provider: "target",
+				Model:    "gpt-4.1",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{
+						Role: llm.RoleAssistant,
+						ToolCalls: []types.ToolCall{{
+							ID:        "call_target_plan",
+							Name:      submitNumberedPlanTool,
+							Arguments: json.RawMessage(`{"steps":["produce the delegated answer"]}`),
+						}},
+					},
+					FinishReason: "tool_calls",
+				}},
+				Usage: llm.ChatUsage{CompletionTokens: 5, TotalTokens: 5},
+			}, nil
+		},
 		streamFn: func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 			ch := make(chan llm.StreamChunk, 1)
 			go func() {

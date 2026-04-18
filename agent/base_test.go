@@ -284,6 +284,8 @@ func TestBaseAgent_Observe(t *testing.T) {
 // TestBaseAgent_Plan 测试生成执行计划
 func TestBaseAgent_Plan(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
+	var capturedPrompt string
+	var capturedReq *llm.ChatRequest
 
 	// Mock LLM 与计划的反应
 	mockResponse := &llm.ChatResponse{
@@ -296,9 +298,17 @@ func TestBaseAgent_Plan(t *testing.T) {
 				FinishReason: "stop",
 				Message: types.Message{
 					Role: llm.RoleAssistant,
-					Content: `1. First step: Analyze the problem
-2. Second step: Design solution
-3. Third step: Implement and test`,
+					ToolCalls: []types.ToolCall{{
+						ID:   "call_plan",
+						Name: submitNumberedPlanTool,
+						Arguments: []byte(`{
+							"steps": [
+								"Analyze the problem",
+								"Design solution",
+								"Implement and test"
+							]
+						}`),
+					}},
 				},
 			},
 		},
@@ -308,8 +318,13 @@ func TestBaseAgent_Plan(t *testing.T) {
 	}
 
 	provider := &testProvider{
-		name: "mock",
+		name:           "mock",
+		supportsNative: true,
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			capturedReq = req
+			if len(req.Messages) > 1 {
+				capturedPrompt = req.Messages[1].Content
+			}
 			return mockResponse, nil
 		},
 	}
@@ -335,6 +350,12 @@ func TestBaseAgent_Plan(t *testing.T) {
 	assert.NotNil(t, plan)
 	assert.Greater(t, len(plan.Steps), 0)
 	assert.Contains(t, plan.Steps[0], "Analyze")
+	assert.NotNil(t, capturedReq)
+	assert.Len(t, capturedReq.Tools, 1)
+	assert.Equal(t, submitNumberedPlanTool, capturedReq.Tools[0].Name)
+	assert.Equal(t, "required", capturedReq.ToolChoice)
+	assert.Contains(t, capturedPrompt, submitNumberedPlanTool)
+	assert.Contains(t, capturedPrompt, "Prefer tool-first actions when tools are needed")
 }
 
 // BenchmarkBaseAgent_Execute 性能测试

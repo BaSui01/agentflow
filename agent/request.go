@@ -144,6 +144,20 @@ func ResolveRunConfig(ctx context.Context, input *Input) *RunConfig {
 	return rc
 }
 
+// DisablePlannerEnabled reports whether runtime planner phases should be skipped.
+// This flag exists for specialist execution tasks that an upstream orchestrator has
+// already decomposed, so the runtime does not wrap the subtask into another plan.
+// Input.Context["disable_planner"] has precedence over RunConfig.Metadata.
+func DisablePlannerEnabled(input *Input, rc *RunConfig) bool {
+	if flag, ok := boolOverrideFromContext(inputContext(input), "disable_planner"); ok {
+		return flag
+	}
+	if rc == nil || len(rc.Metadata) == 0 {
+		return false
+	}
+	return parseBoolString(rc.Metadata["disable_planner"])
+}
+
 // MergeRunConfig merges two RunConfigs, preserving base values unless override
 // explicitly provides a replacement. The returned config is always a deep copy.
 func MergeRunConfig(base *RunConfig, override *RunConfig) *RunConfig {
@@ -472,6 +486,44 @@ func intOverrideFromContext(values map[string]any, key string) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func boolOverrideFromContext(values map[string]any, key string) (bool, bool) {
+	if len(values) == 0 {
+		return false, false
+	}
+	raw, ok := values[key]
+	if !ok {
+		return false, false
+	}
+	switch typed := raw.(type) {
+	case bool:
+		return typed, true
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return false, false
+		}
+		parsed, err := strconv.ParseBool(text)
+		if err != nil {
+			return false, false
+		}
+		return parsed, true
+	default:
+		return false, false
+	}
+}
+
+func parseBoolString(value string) bool {
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	return err == nil && parsed
+}
+
+func inputContext(input *Input) map[string]any {
+	if input == nil {
+		return nil
+	}
+	return input.Context
 }
 
 // lastUserQuery extracts the content of the last user message.

@@ -44,13 +44,7 @@ func TestRegisterDefaultRuntimeAgentFactory_InjectsRuntimeDefaults(t *testing.T)
 	baseAgent, ok := created.(*agent.BaseAgent)
 	require.True(t, ok)
 	require.NotNil(t, baseAgent.ReasoningRegistry())
-	require.Equal(t, []string{
-		"dynamic_planner",
-		"plan_and_execute",
-		"reflexion",
-		"rewoo",
-		"tree_of_thought",
-	}, baseAgent.ReasoningRegistry().List())
+	require.Empty(t, baseAgent.ReasoningRegistry().List())
 
 	field := reflect.ValueOf(baseAgent).Elem().FieldByName("checkpointManager")
 	require.True(t, field.IsValid())

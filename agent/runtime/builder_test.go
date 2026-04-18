@@ -52,6 +52,7 @@ func TestDefaultBuildOptions(t *testing.T) {
 	assert.Equal(t, "0.1.0", opts.MCPServerVersion)
 	assert.Equal(t, "agentflow-lsp", opts.LSPServerName)
 	assert.Equal(t, "0.1.0", opts.LSPServerVersion)
+	assert.Equal(t, agent.ReasoningExposureOfficial, opts.ReasoningExposure)
 	assert.False(t, opts.InitAgent)
 }
 
@@ -388,6 +389,45 @@ func TestResolveRuntimeReasoningRegistry_UsesRuntimeDefaultModesOnly(t *testing.
 
 	require.NotNil(t, resolved)
 	assert.Equal(t, defaultRuntimeReasoningModes, resolved.List())
+}
+
+func TestResolveRuntimeReasoningRegistry_UsesAdvancedExposureModes(t *testing.T) {
+	resolved := resolveRuntimeReasoningRegistry(
+		llmgateway.New(llmgateway.Config{
+			ChatProvider: mocks.NewSuccessProvider("hello"),
+			Logger:       zap.NewNop(),
+		}),
+		"gpt-4",
+		"agent-1",
+		BuildOptions{ReasoningExposure: agent.ReasoningExposureAdvanced},
+		zap.NewNop(),
+	)
+
+	require.NotNil(t, resolved)
+	assert.Equal(t, []string{"plan_and_execute", "reflexion", "rewoo"}, resolved.List())
+}
+
+func TestResolveRuntimeReasoningRegistry_UsesAllExposureModes(t *testing.T) {
+	resolved := resolveRuntimeReasoningRegistry(
+		llmgateway.New(llmgateway.Config{
+			ChatProvider: mocks.NewSuccessProvider("hello"),
+			Logger:       zap.NewNop(),
+		}),
+		"gpt-4",
+		"agent-1",
+		BuildOptions{ReasoningExposure: agent.ReasoningExposureAll},
+		zap.NewNop(),
+	)
+
+	require.NotNil(t, resolved)
+	assert.Equal(t, []string{
+		"dynamic_planner",
+		"iterative_deepening",
+		"plan_and_execute",
+		"reflexion",
+		"rewoo",
+		"tree_of_thought",
+	}, resolved.List())
 }
 
 func TestBuilder_Build_InjectsCheckpointManagerWhenProvided(t *testing.T) {

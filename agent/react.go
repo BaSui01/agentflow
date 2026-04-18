@@ -27,22 +27,19 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	}
 
 	// 构建规划提示词
-	planPrompt := fmt.Sprintf(`你是一个任务规划专家。请为以下任务制定详细的执行计划。
+	planPrompt := fmt.Sprintf(`Plan the execution of this task for another agent.
 
-任务描述：
+Task:
 %s
 
-请按照以下格式输出执行计划：
-1. 第一步：[步骤描述]
-2. 第二步：[步骤描述]
-3. ...
+Use the %s tool to return the plan.
 
-要求：
-- 步骤要具体、可执行
-- 考虑可能的风险和依赖关系
-- 估算每个步骤的复杂度`, input.Content)
+Requirements:
+- Keep each step directly executable
+- Prefer tool-first actions when tools are needed
+- Mention dependencies or risks only when they affect execution
+- Do not answer with prose outside the tool call`, input.Content, submitNumberedPlanTool)
 
-	// 构建消息
 	messages := []types.Message{
 		{
 			Role:    types.RoleSystem,
@@ -54,8 +51,15 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 		},
 	}
 
-	// 调用 LLM
-	resp, err := b.ChatCompletion(ctx, messages)
+	pr, err := b.prepareChatRequest(ctx, messages)
+	if err != nil {
+		return nil, err
+	}
+	pr.req.Tools = []types.ToolSchema{numberedPlanToolSchema()}
+	pr.req.ToolChoice = "required"
+	pr.req.ToolCallMode = types.ToolCallModeNative
+
+	resp, err := pr.chatProvider.Completion(ctx, pr.req)
 	if err != nil {
 		return nil, NewErrorWithCause(types.ErrAgentExecution, "plan generation failed", err)
 	}
@@ -65,8 +69,13 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 		return nil, NewError(types.ErrLLMResponseEmpty, "plan generation returned no choices")
 	}
 	choice := resp.FirstChoice()
-	planContent := choice.Message.Content
-	steps := parsePlanSteps(planContent)
+	steps, parseErr := parseNumberedPlanToolCall(choice.Message)
+	if parseErr != nil {
+		steps = parsePlanSteps(choice.Message.Content)
+	}
+	if len(steps) == 0 {
+		return nil, NewError(types.ErrLLMResponseEmpty, "plan generation returned no steps")
+	}
 
 	b.logger.Info("plan generated",
 		zap.Int("steps", len(steps)),

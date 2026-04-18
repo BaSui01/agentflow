@@ -50,13 +50,7 @@ func TestHotReload_DoesNotChangeRuntimeDefaultReasoningWiring(t *testing.T) {
 		ag, err := builder.Build(t.Context(), cfg)
 		require.NoError(t, err)
 		require.NotNil(t, ag.ReasoningRegistry())
-		require.Equal(t, []string{
-			"dynamic_planner",
-			"plan_and_execute",
-			"reflexion",
-			"rewoo",
-			"tree_of_thought",
-		}, ag.ReasoningRegistry().List())
+		require.Empty(t, ag.ReasoningRegistry().List())
 	})
 
 	require.NoError(t, manager.UpdateField("Log.Level", "debug"))

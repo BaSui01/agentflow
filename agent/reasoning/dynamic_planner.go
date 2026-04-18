@@ -192,27 +192,23 @@ Available tools:
 
 Task: %s%s
 
-Generate 1-3 next steps with alternatives. Output as JSON:
-{
-  "steps": [
-    {
-      "action": "tool_name or 'think'",
-      "description": "what to do",
-      "confidence": 0.8,
-      "alternatives": [
-        {"action": "alt_tool", "description": "alternative approach", "confidence": 0.6}
-      ]
-    }
-  ]
-}`, joinStrings(toolDescs, "\n"), task, contextInfo)
+Use the %s tool to return the next 1-3 steps and any useful alternatives.
+
+Rules:
+- Prefer concrete executable actions
+- Use "think" only when tool use is not appropriate
+- Do not answer with prose outside the tool call`, joinStrings(toolDescs, "\n"), task, contextInfo, submitNextStepsTool)
 
 	resp, err := invokeChatGateway(ctx, d.gateway, &llm.ChatRequest{
 		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
-		Temperature: 0.4,
-		MaxTokens:   1500,
+		Tools:        []types.ToolSchema{nextStepsToolSchema()},
+		ToolChoice:   "required",
+		ToolCallMode: llm.ToolCallModeNative,
+		Temperature:  0.4,
+		MaxTokens:    1500,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -222,54 +218,12 @@ Generate 1-3 next steps with alternatives. Output as JSON:
 	if choiceErr != nil {
 		return nil, resp.Usage.TotalTokens, fmt.Errorf("plan generation returned no choices: %w", choiceErr)
 	}
-	content := extractJSONObject(stepChoice.Message.Content)
 	tokens := resp.Usage.TotalTokens
-
-	var planData struct {
-		Steps []struct {
-			Action       string  `json:"action"`
-			Description  string  `json:"description"`
-			Confidence   float64 `json:"confidence"`
-			Alternatives []struct {
-				Action      string  `json:"action"`
-				Description string  `json:"description"`
-				Confidence  float64 `json:"confidence"`
-			} `json:"alternatives"`
-		} `json:"steps"`
-	}
-
-	if err := json.Unmarshal([]byte(content), &planData); err != nil {
-		d.logger.Warn("failed to parse plan", zap.Error(err))
+	nodes, err := d.parseNextStepsToolCall(stepChoice.Message)
+	if err != nil {
+		d.logger.Warn("failed to parse next steps tool call", zap.Error(err))
 		return nil, tokens, nil
 	}
-
-	var nodes []*PlanNode
-	for _, step := range planData.Steps {
-		node := &PlanNode{
-			ID:          d.nextNodeID(),
-			Action:      step.Action,
-			Description: step.Description,
-			Status:      NodeStatusPending,
-			Confidence:  step.Confidence,
-			CreatedAt:   time.Now(),
-		}
-
-		// 添加替代品
-		for _, alt := range step.Alternatives {
-			altNode := &PlanNode{
-				ID:          d.nextNodeID(),
-				Action:      alt.Action,
-				Description: alt.Description,
-				Status:      NodeStatusPending,
-				Confidence:  alt.Confidence,
-				CreatedAt:   time.Now(),
-			}
-			node.Alternatives = append(node.Alternatives, altNode)
-		}
-
-		nodes = append(nodes, node)
-	}
-
 	return nodes, tokens, nil
 }
 

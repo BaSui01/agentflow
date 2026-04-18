@@ -130,6 +130,49 @@ func TestDefaultReasoningModeSelector_SelectsReWOOForToolHeavyTask(t *testing.T)
 	}
 }
 
+func TestDefaultReasoningModeSelector_DisablePlannerFallsBackToReactForToolHeavyTask(t *testing.T) {
+	registry := reasoning.NewPatternRegistry()
+	if err := registry.Register(selectorPatternStub{name: ReasoningModeReWOO}); err != nil {
+		t.Fatalf("register pattern: %v", err)
+	}
+	if err := registry.Register(selectorPatternStub{name: ReasoningModePlanAndExecute}); err != nil {
+		t.Fatalf("register pattern: %v", err)
+	}
+	if err := registry.Register(selectorPatternStub{name: ReasoningModeDynamicPlanner}); err != nil {
+		t.Fatalf("register pattern: %v", err)
+	}
+
+	selection := DefaultReasoningModeSelector{}.Select(context.Background(), &Input{
+		Content: "search multiple APIs and retrieve supporting data",
+		Context: map[string]any{
+			"disable_planner": true,
+			"tool_intensive":  true,
+			"multi_step":      true,
+			"blocked":         true,
+		},
+	}, nil, registry, false)
+
+	if selection.Mode != ReasoningModeReact {
+		t.Fatalf("expected %q when planner is disabled, got %q", ReasoningModeReact, selection.Mode)
+	}
+	if selection.Pattern != nil {
+		t.Fatalf("expected planner-disabled task to avoid planning patterns")
+	}
+}
+
+func TestDefaultReasoningModeSelector_DisablePlannerPreservesReflectionDecision(t *testing.T) {
+	selection := DefaultReasoningModeSelector{}.Select(context.Background(), &Input{
+		Content: "reflect on prior attempt",
+		Context: map[string]any{
+			"disable_planner": true,
+		},
+	}, &LoopState{Decision: LoopDecisionReflect}, nil, true)
+
+	if selection.Mode != ReasoningModeReflection {
+		t.Fatalf("expected %q, got %q", ReasoningModeReflection, selection.Mode)
+	}
+}
+
 func TestDefaultReasoningModeSelector_SelectsVerificationCapableModeDuringValidationStage(t *testing.T) {
 	registry := reasoning.NewPatternRegistry()
 	if err := registry.Register(selectorPatternStub{name: ReasoningModeReWOO}); err != nil {

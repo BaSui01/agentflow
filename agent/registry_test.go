@@ -66,13 +66,7 @@ func TestAgentRegistry_Create(t *testing.T) {
 	assert.NotEmpty(t, baseAgent.Config().Runtime.SystemPrompt)
 	assert.Equal(t, "communication,reasoning", baseAgent.Config().Metadata["skill_categories"])
 	require.NotNil(t, baseAgent.ReasoningRegistry())
-	assert.Equal(t, []string{
-		"dynamic_planner",
-		"plan_and_execute",
-		"reflexion",
-		"rewoo",
-		"tree_of_thought",
-	}, baseAgent.ReasoningRegistry().List())
+	assert.Empty(t, baseAgent.ReasoningRegistry().List())
 }
 
 func TestAgentRegistry_Create_PreservesUnifiedBuildCoreWiring(t *testing.T) {

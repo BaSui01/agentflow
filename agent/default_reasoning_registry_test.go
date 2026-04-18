@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestNewDefaultReasoningRegistry_RegistersSupportedPatterns(t *testing.T) {
+func TestNewDefaultReasoningRegistry_RegistersOfficialSurfaceOnly(t *testing.T) {
 	provider := &testProvider{name: "test-provider"}
 	toolManager := &testToolManager{
 		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
@@ -23,11 +23,38 @@ func TestNewDefaultReasoningRegistry_RegistersSupportedPatterns(t *testing.T) {
 		Logger:       zap.NewNop(),
 	}), "gpt-4o", toolManager, "agent-1", nil, zap.NewNop())
 	require.NotNil(t, registry)
+	require.Empty(t, registry.List())
+}
+
+func TestNewReasoningRegistryForExposure_RegistersAdvancedAndExperimentalPatterns(t *testing.T) {
+	provider := &testProvider{name: "test-provider"}
+	toolManager := &testToolManager{
+		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
+			require.Equal(t, "agent-1", agentID)
+			return []types.ToolSchema{{Name: "search"}}
+		},
+	}
+
+	advanced := NewReasoningRegistryForExposure(llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       zap.NewNop(),
+	}), "gpt-4o", toolManager, "agent-1", nil, ReasoningExposureAdvanced, zap.NewNop())
+	require.Equal(t, []string{
+		"plan_and_execute",
+		"reflexion",
+		"rewoo",
+	}, advanced.List())
+
+	all := NewReasoningRegistryForExposure(llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       zap.NewNop(),
+	}), "gpt-4o", toolManager, "agent-1", nil, ReasoningExposureAll, zap.NewNop())
 	require.Equal(t, []string{
 		"dynamic_planner",
+		"iterative_deepening",
 		"plan_and_execute",
 		"reflexion",
 		"rewoo",
 		"tree_of_thought",
-	}, registry.List())
+	}, all.List())
 }
