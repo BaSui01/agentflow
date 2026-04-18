@@ -1118,14 +1118,12 @@ func mergeChatRoutingMetadata(req *llmcore.UnifiedRequest, chatReq *llm.ChatRequ
 	}
 
 	routePolicy := normalizeRoutePolicy(firstNonEmpty(
+		strings.TrimSpace(chatReq.RoutePolicy),
 		strings.TrimSpace(chatReq.Metadata["route_policy"]),
 		string(req.RoutePolicy),
 	))
 	if routePolicy != "" {
-		if chatReq.Metadata == nil {
-			chatReq.Metadata = make(map[string]string, 1)
-		}
-		chatReq.Metadata["route_policy"] = string(routePolicy)
+		chatReq.RoutePolicy = string(routePolicy)
 		req.RoutePolicy = routePolicy
 	}
 
@@ -1170,7 +1168,7 @@ func buildUnifiedChatRequest(req *llm.ChatRequest) *llmcore.UnifiedRequest {
 		Capability:   llmcore.CapabilityChat,
 		ProviderHint: providerHint,
 		ModelHint:    req.Model,
-		RoutePolicy:  normalizeRoutePolicy(firstNonEmpty(strings.TrimSpace(metadata["route_policy"]), "balanced")),
+		RoutePolicy:  normalizeRoutePolicy(firstNonEmpty(strings.TrimSpace(req.RoutePolicy), strings.TrimSpace(metadata["route_policy"]), "balanced")),
 		TraceID:      req.TraceID,
 		Hints: llmcore.CapabilityHints{
 			ChatProvider: providerHint,

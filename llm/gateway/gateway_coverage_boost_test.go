@@ -943,7 +943,7 @@ func TestMergeChatRoutingMetadata_RoutePolicyFromReq(t *testing.T) {
 	chatReq := &llm.ChatRequest{}
 	mergeChatRoutingMetadata(req, chatReq)
 	assert.Equal(t, llmcore.RoutePolicyBalanced, req.RoutePolicy)
-	assert.Equal(t, "balanced", chatReq.Metadata["route_policy"])
+	assert.Equal(t, "balanced", chatReq.RoutePolicy)
 }
 
 func TestMergeChatRoutingMetadata_MetadataNilInit(t *testing.T) {

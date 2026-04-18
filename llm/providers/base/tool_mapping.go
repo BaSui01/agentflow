@@ -38,6 +38,28 @@ func IsSearchToolPlaceholder(name string) bool {
 func NormalizeToolChoice(choice any) NormalizedToolChoice {
 	var normalized NormalizedToolChoice
 	switch v := choice.(type) {
+	case *types.ToolChoice:
+		if v == nil {
+			return normalized
+		}
+		switch v.Mode {
+		case types.ToolChoiceModeAuto:
+			normalized.Mode = "auto"
+		case types.ToolChoiceModeRequired:
+			normalized.Mode = "any"
+		case types.ToolChoiceModeNone:
+			normalized.Mode = "none"
+		case types.ToolChoiceModeSpecific:
+			normalized.Mode = "tool"
+			normalized.SpecificName = strings.TrimSpace(v.ToolName)
+		case types.ToolChoiceModeAllowed:
+			normalized.Mode = "any"
+			normalized.AllowedFunctionNames = NormalizeUniqueStrings(v.AllowedTools)
+		}
+		normalized.DisableParallelToolUse = v.DisableParallelToolUse
+		normalized.IncludeServerSideToolUse = v.IncludeServerSideToolInvocations
+	case types.ToolChoice:
+		return NormalizeToolChoice(&v)
 	case string:
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "auto":

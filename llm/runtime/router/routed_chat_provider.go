@@ -255,7 +255,10 @@ func extractRoutingStrategy(req *ChatRequest, defaultStrategy RoutingStrategy) R
 	if req == nil || len(req.Metadata) == 0 {
 		return defaultStrategy
 	}
-	raw := strings.ToLower(strings.TrimSpace(req.Metadata["route_policy"]))
+	raw := strings.ToLower(strings.TrimSpace(req.RoutePolicy))
+	if raw == "" {
+		raw = strings.ToLower(strings.TrimSpace(req.Metadata["route_policy"]))
+	}
 	switch raw {
 	case "", "balanced":
 		return defaultStrategy

@@ -10,6 +10,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func testToolChoicePtr(value string) *types.ToolChoice {
+	return types.ParseToolChoiceString(value)
+}
+
+func comparableToolChoice(choice *types.ToolChoice) any {
+	if choice == nil {
+		return nil
+	}
+	switch choice.Mode {
+	case types.ToolChoiceModeAuto:
+		return "auto"
+	case types.ToolChoiceModeNone:
+		return "none"
+	case types.ToolChoiceModeRequired:
+		return "required"
+	case types.ToolChoiceModeSpecific:
+		return choice.ToolName
+	case types.ToolChoiceModeAllowed:
+		return append([]string(nil), choice.AllowedTools...)
+	default:
+		return nil
+	}
+}
+
 // 特性:多提供者支持,属性 18:工具选择保存
 // ** 参数:要求11.2**
 //
@@ -292,7 +316,7 @@ func testOpenAICompatibleToolChoice(t *testing.T, toolChoice, provider, requirem
 				Parameters:  json.RawMessage(`{"type":"object"}`),
 			},
 		},
-		ToolChoice: toolChoice,
+		ToolChoice: testToolChoicePtr(toolChoice),
 	}
 
 	// 转换为 OpenAI 格式
@@ -322,7 +346,7 @@ func testMiniMaxToolChoice(t *testing.T, toolChoice, provider, requirement, desc
 				Parameters:  json.RawMessage(`{"type":"object"}`),
 			},
 		},
-		ToolChoice: toolChoice,
+		ToolChoice: testToolChoicePtr(toolChoice),
 	}
 
 	// 转换为 MiniMax 格式
@@ -386,7 +410,7 @@ func TestProperty18_ToolChoiceWithoutTools(t *testing.T) {
 						{Role: llm.RoleUser, Content: "Test message"},
 					},
 					Tools:      []types.ToolSchema{}, // No tools
-					ToolChoice: toolChoice,
+					ToolChoice: testToolChoicePtr(toolChoice),
 				}
 
 				// 即使没有工具,如果指定了 ToolChoice , 也应保留它
@@ -429,7 +453,7 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 				Tools: []types.ToolSchema{
 					{Name: "search", Parameters: json.RawMessage(`{}`)},
 				},
-				ToolChoice: tc.toolChoice,
+				ToolChoice: testToolChoicePtr(tc.toolChoice),
 			}
 
 			// 测试 OpenAI 格式
@@ -477,7 +501,7 @@ func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithTool
 
 	// 非空时保留工具选择
 	if req.ToolChoice != nil {
-		result.ToolChoice = req.ToolChoice
+		result.ToolChoice = comparableToolChoice(req.ToolChoice)
 	}
 
 	return result
@@ -500,7 +524,7 @@ func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithTo
 
 	// 非空时保留工具选择
 	if req.ToolChoice != nil {
-		result.ToolChoice = req.ToolChoice
+		result.ToolChoice = comparableToolChoice(req.ToolChoice)
 	}
 
 	return result

@@ -560,7 +560,11 @@ func normalizeChannelRoutePolicy(req *ChatRequest) string {
 	if req == nil || len(req.Metadata) == 0 {
 		return "balanced"
 	}
-	switch raw := strings.ToLower(strings.TrimSpace(req.Metadata["route_policy"])); raw {
+	raw := strings.ToLower(strings.TrimSpace(req.RoutePolicy))
+	if raw == "" {
+		raw = strings.ToLower(strings.TrimSpace(req.Metadata["route_policy"]))
+	}
+	switch raw {
 	case "", "balanced":
 		return "balanced"
 	case "cost", "cost_first":

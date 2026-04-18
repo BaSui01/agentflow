@@ -35,32 +35,33 @@ type ChatProvider interface {
 
 // ChatRequest 表示聊天补全请求。
 type ChatRequest struct {
-	TraceID        string             `json:"trace_id"`
-	TenantID       string             `json:"tenant_id,omitempty"`
-	UserID         string             `json:"user_id,omitempty"`
-	Model          string             `json:"model"`
-	Messages       []Message          `json:"messages"`
-	MaxTokens      int                `json:"max_tokens,omitempty"`
-	Temperature    float32            `json:"temperature,omitempty"`
-	TopP           float32            `json:"top_p,omitempty"`
-	Stop           []string           `json:"stop,omitempty"`
-	Tools          []ToolSchema       `json:"tools,omitempty"`
-	ToolChoice     any                `json:"tool_choice,omitempty"`
-	ResponseFormat *ResponseFormat    `json:"response_format,omitempty"`
-	Timeout        time.Duration      `json:"timeout,omitempty"`
-	Metadata       map[string]string  `json:"metadata,omitempty"`
-	Tags           []string           `json:"tags,omitempty"`
+	TraceID        string            `json:"trace_id"`
+	TenantID       string            `json:"tenant_id,omitempty"`
+	UserID         string            `json:"user_id,omitempty"`
+	Model          string            `json:"model"`
+	RoutePolicy    string            `json:"route_policy,omitempty"`
+	Messages       []Message         `json:"messages"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
+	Temperature    float32           `json:"temperature,omitempty"`
+	TopP           float32           `json:"top_p,omitempty"`
+	Stop           []string          `json:"stop,omitempty"`
+	Tools          []ToolSchema      `json:"tools,omitempty"`
+	ToolChoice     *ToolChoice       `json:"tool_choice,omitempty"`
+	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
+	Timeout        time.Duration     `json:"timeout,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	Tags           []string          `json:"tags,omitempty"`
 
 	// 采样参数
-	FrequencyPenalty  *float32 `json:"frequency_penalty,omitempty"`
-	PresencePenalty   *float32 `json:"presence_penalty,omitempty"`
-	RepetitionPenalty *float32 `json:"repetition_penalty,omitempty"`
-	N                 *int     `json:"n,omitempty"`
-	LogProbs          *bool    `json:"logprobs,omitempty"`
-	TopLogProbs       *int     `json:"top_logprobs,omitempty"`
-	ParallelToolCalls *bool    `json:"parallel_tool_calls,omitempty"`
-	ServiceTier       *string  `json:"service_tier,omitempty"`
-	User              string   `json:"user,omitempty"`
+	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
+	PresencePenalty   *float32       `json:"presence_penalty,omitempty"`
+	RepetitionPenalty *float32       `json:"repetition_penalty,omitempty"`
+	N                 *int           `json:"n,omitempty"`
+	LogProbs          *bool          `json:"logprobs,omitempty"`
+	TopLogProbs       *int           `json:"top_logprobs,omitempty"`
+	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
+	ServiceTier       *string        `json:"service_tier,omitempty"`
+	User              string         `json:"user,omitempty"`
 	StreamOptions     *StreamOptions `json:"stream_options,omitempty"`
 
 	// OpenAI 扩展参数

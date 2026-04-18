@@ -802,7 +802,7 @@ func TestProperty21_ToolCallingWithToolChoice(t *testing.T) {
 					Tools: []types.ToolSchema{
 						{Name: "search", Parameters: json.RawMessage(`{}`)},
 					},
-					ToolChoice: toolChoice,
+					ToolChoice: types.ParseToolChoiceString(toolChoice),
 				}
 
 				if isStream {

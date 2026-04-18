@@ -11,6 +11,39 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func providerTestToolChoice(value any) *types.ToolChoice {
+	switch v := value.(type) {
+	case nil:
+		return nil
+	case string:
+		return types.ParseToolChoiceString(v)
+	case *types.ToolChoice:
+		return v
+	default:
+		return nil
+	}
+}
+
+func comparableProviderTestToolChoice(choice *types.ToolChoice) any {
+	if choice == nil {
+		return nil
+	}
+	switch choice.Mode {
+	case types.ToolChoiceModeAuto:
+		return "auto"
+	case types.ToolChoiceModeNone:
+		return "none"
+	case types.ToolChoiceModeRequired:
+		return "required"
+	case types.ToolChoiceModeSpecific:
+		return choice.ToolName
+	case types.ToolChoiceModeAllowed:
+		return append([]string(nil), choice.AllowedTools...)
+	default:
+		return nil
+	}
+}
+
 // 特性:多提供者支持, 属性 8: 重写Chain 应用程序
 // ** 参数:要求7.1、7.4**
 //
@@ -234,7 +267,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 					{Role: llm.RoleUser, Content: "test message"},
 				},
 				Tools:      tc.inputTools,
-				ToolChoice: tc.inputToolChoice,
+				ToolChoice: providerTestToolChoice(tc.inputToolChoice),
 			}
 
 			// 用空工具清除器创建重写Chain
@@ -261,7 +294,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			}
 
 			// 校验工具  选择处理
-			assert.Equal(t, tc.expectedToolChoice, rewrittenReq.ToolChoice,
+			assert.Equal(t, tc.expectedToolChoice, comparableProviderTestToolChoice(rewrittenReq.ToolChoice),
 				"ToolChoice should be '%s' (Requirement %s): %s",
 				tc.expectedToolChoice, tc.requirement, tc.description)
 
@@ -329,7 +362,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 				Model:      "test-model",
 				Messages:   []types.Message{{Role: llm.RoleUser, Content: "test"}},
 				Tools:      tc.tools,
-				ToolChoice: tc.toolChoice,
+				ToolChoice: providerTestToolChoice(tc.toolChoice),
 			}
 
 			chain := middleware.NewRewriterChain(
@@ -345,7 +378,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 					"ToolChoice should be cleared when tools are empty (Requirement %s)", tc.requirement)
 			} else {
 				// 当工具不是空的时, 工具选择应当保存
-				assert.Equal(t, tc.toolChoice, rewrittenReq.ToolChoice,
+				assert.Equal(t, tc.toolChoice, comparableProviderTestToolChoice(rewrittenReq.ToolChoice),
 					"ToolChoice should be preserved when tools are not empty (Requirement %s)", tc.requirement)
 			}
 		})
@@ -372,7 +405,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 			name: "Request with nil tools and tool_choice",
 			inputReq: &llm.ChatRequest{
 				Tools:      nil,
-				ToolChoice: "auto",
+				ToolChoice: providerTestToolChoice("auto"),
 			},
 			expectedToolChoice: nil,
 			description:        "Should clear tool_choice when tools is nil",
@@ -381,7 +414,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 			name: "Request with empty tools array and tool_choice",
 			inputReq: &llm.ChatRequest{
 				Tools:      []types.ToolSchema{},
-				ToolChoice: "required",
+				ToolChoice: providerTestToolChoice("required"),
 			},
 			expectedToolChoice: nil,
 			description:        "Should clear tool_choice when tools is empty array",
@@ -392,7 +425,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				Tools: []types.ToolSchema{
 					{Name: "test", Description: "Test", Parameters: []byte(`{"type":"object"}`)},
 				},
-				ToolChoice: "auto",
+				ToolChoice: providerTestToolChoice("auto"),
 			},
 			expectedToolChoice: "auto",
 			description:        "Should preserve tool_choice when tools exist",
@@ -420,7 +453,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				assert.Nil(t, result, "Should return nil for nil input")
 			} else {
 				assert.NotNil(t, result, "Should return non-nil result")
-				assert.Equal(t, tc.expectedToolChoice, result.ToolChoice,
+				assert.Equal(t, tc.expectedToolChoice, comparableProviderTestToolChoice(result.ToolChoice),
 					"%s", tc.description)
 			}
 		})
