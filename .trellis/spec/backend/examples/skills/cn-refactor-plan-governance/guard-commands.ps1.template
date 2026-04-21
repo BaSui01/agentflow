@@ -1,0 +1,72 @@
+# 守卫命令集成示例（PowerShell）
+# 用于在重构计划中集成 refactor_plan_guard.py 守卫脚本
+
+param(
+    [string]$PlanFile = "my-refactor-plan-2026-04-22.md"
+)
+
+$ErrorActionPreference = "Stop"
+
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "重构计划守卫检查" -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "计划文件: $PlanFile" -ForegroundColor White
+Write-Host ""
+
+# 1. 格式检查（lint）
+Write-Host "[1/4] 运行格式检查..." -ForegroundColor Yellow
+try {
+    python scripts/refactor_plan_guard.py lint `
+        --target "$PlanFile" `
+        --require-tdd `
+        --require-verifiable-completion
+    Write-Host "✓ 格式检查通过" -ForegroundColor Green
+} catch {
+    Write-Host "✗ 格式检查失败" -ForegroundColor Red
+    exit 1
+}
+Write-Host ""
+
+# 2. 进度报告（report）
+Write-Host "[2/4] 生成进度报告..." -ForegroundColor Yellow
+try {
+    python scripts/refactor_plan_guard.py report `
+        --target "$PlanFile" `
+        --require-tdd `
+        --require-verifiable-completion
+    Write-Host "✓ 进度报告生成成功" -ForegroundColor Green
+} catch {
+    Write-Host "✗ 进度报告生成失败" -ForegroundColor Red
+    exit 1
+}
+Write-Host ""
+
+# 3. 门禁检查（gate）
+Write-Host "[3/4] 运行门禁检查..." -ForegroundColor Yellow
+try {
+    python scripts/refactor_plan_guard.py gate `
+        --target "$PlanFile" `
+        --require-tdd `
+        --require-verifiable-completion
+    Write-Host "✓ 门禁检查通过 - 计划可以收尾" -ForegroundColor Green
+} catch {
+    Write-Host "✗ 门禁检查未通过 - 计划尚未完成" -ForegroundColor Red
+    Write-Host "提示：存在未完成任务或验证标准未满足" -ForegroundColor Yellow
+    exit 1
+}
+Write-Host ""
+
+# 4. 审计计划（audit）
+Write-Host "[4/4] 运行计划审计..." -ForegroundColor Yellow
+try {
+    python .agents/skills/cn-refactor-plan-governance/scripts/audit_plan.py "$PlanFile"
+    Write-Host "✓ 计划审计完成" -ForegroundColor Green
+} catch {
+    Write-Host "✗ 计划审计发现问题" -ForegroundColor Red
+    exit 1
+}
+Write-Host ""
+
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "所有守卫检查通过！" -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Cyan

@@ -1,0 +1,139 @@
+# 示例：通用功能重构计划
+
+> 文档类型：可执行重构计划
+> 创建日期：2026-04-22
+> 状态规则：任务必须使用 `- [ ]` / `- [x]`
+> 测试规则：TDD（Red-Green-Refactor）
+> 停止规则：存在 `- [ ]` 或验证未通过时不得宣布完成
+
+---
+
+## 0. 执行状态总览
+
+- [x] 完成现状盘点
+- [x] 完成目标架构定义
+- [ ] 完成执行计划拆分
+- [ ] 完成守卫与测试验收
+
+---
+
+## 1. 重构目标
+
+### 1.1 业务目标
+
+- [ ] 统一 Agent 构造入口，降低调用方选择成本
+- [ ] 提升 Builder 模式可测试性
+
+### 1.2 架构目标
+
+- [ ] 收口到 `agent.Builder` 单一入口
+- [ ] 删除 `agent/factory.go` 和 `agent/runtime/legacy.go` 旧实现
+
+---
+
+## 2. 现状问题（证据）
+
+- [x] 问题 1：存在 3 个并行构造入口（证据：`agent/builder.go:15`, `agent/factory.go:20`, `agent/runtime/legacy.go:30`）
+- [x] 问题 2：调用方不清楚应该用哪个入口（证据：`cmd/agentflow/main.go:45` 混用多个入口）
+
+---
+
+## 3. 测试策略（TDD）
+
+- [ ] 先写失败测试并确认红灯
+  - 验证命令：`go test ./agent -run TestUniqueBuilderEntry -count=1`
+  - 通过标准：测试失败，错误信息显示"发现多个构造入口"
+
+- [ ] 采用最小实现让测试转绿
+  - 验证命令：`go test ./agent -run TestUniqueBuilderEntry -count=1`
+  - 通过标准：测试通过，只保留 `agent.Builder` 单一入口
+
+- [ ] 完成重构并执行回归验证
+  - 验证命令：`go test ./agent -count=1`
+  - 通过标准：所有测试通过，旧入口已删除
+
+---
+
+## 4. 执行计划（Phase）
+
+### Phase-0：冻结与基线
+
+- [x] 冻结非重构改动
+  - 验证命令：`git status --short`
+  - 通过标准：仅保留本次重构相关改动
+
+- [x] 固化基线测试
+  - 验证命令：`go test ./agent -count=1`
+  - 通过标准：当前基线测试全部通过
+
+### Phase-1：失败测试先落地
+
+- [ ] 补充唯一入口守卫测试（先失败）
+  - 验证命令：`go test ./agent -run TestUniqueBuilderEntry -count=1`
+  - 通过标准：测试失败，准确检测到多入口问题
+
+### Phase-2：最小实现转绿
+
+- [ ] 迁移 `factory.go` 功能到 `builder.go`
+  - 验证命令：`go test ./agent -run TestUniqueBuilderEntry -count=1`
+  - 通过标准：测试转绿
+
+- [ ] 更新所有调用方使用 `agent.Builder`
+  - 验证命令：`rg "factory.New|legacy.New" cmd/ api/`
+  - 通过标准：0 命中
+
+### Phase-3：删除旧实现
+
+- [ ] 删除 `agent/factory.go`
+  - 验证命令：`Test-Path agent/factory.go`
+  - 通过标准：文件不存在
+
+- [ ] 删除 `agent/runtime/legacy.go`
+  - 验证命令：`Test-Path agent/runtime/legacy.go`
+  - 通过标准：文件不存在
+
+### Phase-4：验收与收尾
+
+- [ ] 相关测试通过
+  - 验证命令：`go test ./agent -count=1`
+  - 通过标准：退出码为 0
+
+- [ ] 文档同步完成
+  - 验证命令：`rg "factory.New|legacy.New" README.md README_EN.md docs/`
+  - 通过标准：0 命中
+
+---
+
+## 5. 删除清单
+
+- [ ] 删除 `agent/factory.go`
+  - 验证命令：`rg "factory.New" agent/`
+  - 通过标准：0 命中
+
+- [ ] 删除 `agent/runtime/legacy.go`
+  - 验证命令：`rg "legacy.New" agent/`
+  - 通过标准：0 命中
+
+- [ ] 删除旧文档口径
+  - 验证命令：`rg "factory|legacy" README.md README_EN.md`
+  - 通过标准：0 命中
+
+---
+
+## 6. 完成定义（DoD）
+
+- [ ] 无并行旧路径残留
+  - 验证命令：`rg "factory.New|legacy.New" .`
+  - 通过标准：0 命中
+
+- [ ] 唯一正式入口已收口
+  - 验证命令：`rg "agent.Builder" README.md`
+  - 通过标准：文档明确说明唯一入口
+
+- [ ] 新增与回归测试全部通过
+  - 验证命令：`go test ./agent -count=1`
+  - 通过标准：退出码为 0
+
+- [ ] 所有任务状态均为 `[x]`
+  - 验证命令：`python scripts/refactor_plan_guard.py gate --target "general-refactor-plan.md"`
+  - 通过标准：退出码为 0，允许停止

@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# 守卫命令集成示例
+# 用于在重构计划中集成 refactor_plan_guard.py 守卫脚本
+
+set -e
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# 计划文件名（从参数获取或使用默认值）
+PLAN_FILE="${1:-my-refactor-plan-2026-04-22.md}"
+
+echo "=========================================="
+echo "重构计划守卫检查"
+echo "=========================================="
+echo "计划文件: ${PLAN_FILE}"
+echo ""
+
+# 1. 格式检查（lint）
+echo -e "${YELLOW}[1/4] 运行格式检查...${NC}"
+if python scripts/refactor_plan_guard.py lint \
+    --target "${PLAN_FILE}" \
+    --require-tdd \
+    --require-verifiable-completion; then
+    echo -e "${GREEN}✓ 格式检查通过${NC}"
+else
+    echo -e "${RED}✗ 格式检查失败${NC}"
+    exit 1
+fi
+echo ""
+
+# 2. 进度报告（report）
+echo -e "${YELLOW}[2/4] 生成进度报告...${NC}"
+if python scripts/refactor_plan_guard.py report \
+    --target "${PLAN_FILE}" \
+    --require-tdd \
+    --require-verifiable-completion; then
+    echo -e "${GREEN}✓ 进度报告生成成功${NC}"
+else
+    echo -e "${RED}✗ 进度报告生成失败${NC}"
+    exit 1
+fi
+echo ""
+
+# 3. 门禁检查（gate）
+echo -e "${YELLOW}[3/4] 运行门禁检查...${NC}"
+if python scripts/refactor_plan_guard.py gate \
+    --target "${PLAN_FILE}" \
+    --require-tdd \
+    --require-verifiable-completion; then
+    echo -e "${GREEN}✓ 门禁检查通过 - 计划可以收尾${NC}"
+else
+    echo -e "${RED}✗ 门禁检查未通过 - 计划尚未完成${NC}"
+    echo -e "${YELLOW}提示：存在未完成任务或验证标准未满足${NC}"
+    exit 1
+fi
+echo ""
+
+# 4. 审计计划（audit）
+echo -e "${YELLOW}[4/4] 运行计划审计...${NC}"
+if python .agents/skills/cn-refactor-plan-governance/scripts/audit_plan.py "${PLAN_FILE}"; then
+    echo -e "${GREEN}✓ 计划审计完成${NC}"
+else
+    echo -e "${RED}✗ 计划审计发现问题${NC}"
+    exit 1
+fi
+echo ""
+
+echo "=========================================="
+echo -e "${GREEN}所有守卫检查通过！${NC}"
+echo "=========================================="
