@@ -44,6 +44,17 @@
 | [🗂️ 近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 统一近 12 个月 chat / image / video / TTS / STT 主流模型口径 | ⭐ |
 | [✅ 最佳实践](./guides/best-practices.md) | AgentFlow 使用建议与常见设计约束 | ⭐⭐ |
 
+### 🧭 文档分层导航
+
+| 层次 | 先看什么 | 适用场景 |
+|------|----------|----------|
+| 官方主流模型 | [近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 需要确认最新一年的主流 chat / image / video / speech 模型 |
+| 项目统一总览 | [`../模型与媒体端点参考.md`](../模型与媒体端点参考.md) | 需要看 provider `/models`、chat / image / video / speech 总览 |
+| 当前代码能力 | [`../多模态能力端点参考.md`](../多模态能力端点参考.md) | 需要确认项目当前真正已实现哪些多模态能力 |
+| 厂商接入与配置 | [`../视频与图像厂商及端点说明.md`](../视频与图像厂商及端点说明.md) | 需要接入图像 / 视频厂商、看共享 key / endpoint / 配置关系 |
+| 教程示例 | [Provider 配置指南](./tutorials/02.Provider配置指南.md) / [多模态处理](./tutorials/06.多模态处理.md) | 需要复制示例、快速上手 |
+| 历史背景 | [`../多模态实现总结.md`](../多模态实现总结.md) / [`../多模态功能实现报告.md`](../多模态功能实现报告.md) | 需要追溯历史设计与阶段性实现背景 |
+
 ---
 
 ## 🌟 核心特性
@@ -95,9 +106,9 @@
 ### 🖼️ 多模态能力
 - **输入理解**: 图像、音频、视频分析
 - **Embedding**: OpenAI、Gemini、Cohere、Jina、Voyage
-- **Image**: DALL-E、Flux、Gemini
-- **Video**: Runway、Veo、Sora、Gemini、MiniMax
-- **Audio**: OpenAI TTS/STT、ElevenLabs、Deepgram
+- **Image**: `gpt-image-1`、Imagen 4、Flux、Stability、Ideogram、通义万相、智谱、文心一格、豆包、腾讯混元、可灵
+- **Video**: `sora-2`、Runway Gen-4.5 / `gen4_turbo`、Veo 3.1、Gemini、可灵、Luma、MiniMax、即梦 Seedance
+- **Audio**: `gpt-4o-mini-tts`、`gpt-4o-transcribe`、ElevenLabs、Deepgram
 - **Music**: Suno、MiniMax
 - **3D**: Meshy、Tripo
 - **Rerank**: Cohere、Qwen、GLM
@@ -158,7 +169,7 @@ func main() {
     provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
         BaseProviderConfig: providers.BaseProviderConfig{
             APIKey: os.Getenv("OPENAI_API_KEY"),
-            Model:  "gpt-4o-mini",
+            Model:  "gpt-5.4",
         },
     }, logger)
 

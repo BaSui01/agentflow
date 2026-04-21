@@ -1,0 +1,4 @@
+interface:
+  display_name: "重构计划治理"
+  short_description: "维护中文重构计划文档，强制 TDD 测试计划与严格完成标准闭环验收"
+  default_prompt: "请先用严格门禁校验重构计划格式与状态；如涉及测试计划，必须按 TDD 写出失败测试、转绿条件和回归步骤；每项完成定义都要写验证命令与通过标准，只有全部通过后才允许收尾。优先使用 ./scripts/run_guard.ps1 -RequireTDD -RequireVerifiableCompletion。"
