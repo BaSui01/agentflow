@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -307,7 +308,7 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
 	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, nil, nil)
-	s.workflowHandler = handlers.NewWorkflowHandler(workflowRuntime.Facade, workflowRuntime.Parser, s.logger)
+	s.workflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), s.logger)
 	require.NotNil(t, s.workflowHandler)
 	require.NotNil(t, s.currentWorkflowHITLManager())
 

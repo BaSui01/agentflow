@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,12 +13,10 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/storage"
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -144,11 +141,6 @@ func BuildMultimodalRuntime(
 		Logger:        logger,
 	})
 
-	var structuredProvider llm.Provider
-	if chatProvider != nil {
-		structuredProvider = llmgateway.NewChatProviderAdapter(gateway, chatProvider)
-	}
-
 	referenceMaxSize := cfg.Multimodal.ReferenceMaxSizeBytes
 	if referenceMaxSize <= 0 {
 		referenceMaxSize = defaultMultimodalReferenceBytes
@@ -172,6 +164,8 @@ func BuildMultimodalRuntime(
 			ReferenceStore:       referenceStore,
 			ReferenceTTL:         referenceTTL,
 			ReferenceMaxSize:     referenceMaxSize,
+			ChatEnabled:          chatProvider != nil,
+			DefaultChatModel:     defaultChatModel,
 		},
 	)
 
@@ -184,13 +178,10 @@ func BuildMultimodalRuntime(
 		ReferenceMaxSize:     referenceMaxSize,
 		ReferenceTTL:         referenceTTL,
 		ReferenceStore:       referenceStore,
-		DefaultChatModel:     defaultChatModel,
-		StructuredChat:       structuredProvider != nil,
-		StructuredProvider:   structuredProvider,
+		ChatEnabled:          chatProvider != nil,
 		ResolveImageProvider: newMultimodalImageProviderResolver(router, defaultImageProvider),
 		ResolveVideoProvider: newMultimodalVideoProviderResolver(router, defaultVideoProvider),
 		ImageStreamProvider:  newMultimodalStreamingImageProviderLookup(router),
-		InvokeChat:           newMultimodalChatInvoker(gateway),
 	})
 
 	return &MultimodalRuntime{
@@ -244,27 +235,5 @@ func newMultimodalStreamingImageProviderLookup(router *multimodal.Router) func(s
 		}
 		sp, ok := p.(image.StreamingProvider)
 		return sp, ok
-	}
-}
-
-func newMultimodalChatInvoker(gateway llmcore.Gateway) func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-		if gateway == nil {
-			return nil, types.NewServiceUnavailableError("llm gateway is not configured")
-		}
-		resp, err := gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-			Capability: llmcore.CapabilityChat,
-			ModelHint:  req.Model,
-			TraceID:    req.TraceID,
-			Payload:    req,
-		})
-		if err != nil {
-			return nil, err
-		}
-		chatResp, ok := resp.Output.(*llm.ChatResponse)
-		if !ok || chatResp == nil {
-			return nil, types.NewInternalError("invalid chat gateway response")
-		}
-		return chatResp, nil
 	}
 }

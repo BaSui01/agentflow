@@ -79,11 +79,11 @@ func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
 	assert.ErrorContains(t, err, "multimodal.reference_store_backend must be redis")
 }
 
-func TestInitHandlers_RequiresLLMRuntime(t *testing.T) {
+func TestInitHandlers_WithoutLLMRuntimeLeavesChatDisabled(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.Multimodal.Enabled = false
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
-	err := s.initHandlers()
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to initialize llm runtime")
+	require.NoError(t, s.initHandlers())
+	assert.Nil(t, s.chatHandler)
 }

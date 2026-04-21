@@ -1,37 +1,27 @@
 package handlers
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/structured"
 	"github.com/BaSui01/agentflow/api"
-	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/capabilities"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
-	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
-	"github.com/BaSui01/agentflow/llm/capabilities/video"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
-	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
-	"github.com/BaSui01/agentflow/llm/observability"
-	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultReferenceBytes    = 8 << 20 // 8MB
-	defaultReferenceTTL      = 2 * time.Hour
-	defaultChatModelFallback = "gpt-4o-mini"
-	defaultNegativeText      = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
+	defaultReferenceBytes = 8 << 20 // 8MB
+	defaultReferenceTTL   = 2 * time.Hour
 )
 
 var (
@@ -40,237 +30,102 @@ var (
 	validImageStyles    = []string{"vivid", "natural"}
 )
 
-type MultimodalHandlerConfig struct {
-	ChatProvider         llm.Provider
-	PolicyManager        *llmpolicy.Manager
-	Ledger               observability.Ledger
-	OpenAIAPIKey         string
-	OpenAIBaseURL        string
-	GoogleAPIKey         string
-	GoogleBaseURL        string
-	FluxAPIKey           string
-	FluxBaseURL          string
-	StabilityAPIKey      string
-	StabilityBaseURL     string
-	IdeogramAPIKey       string
-	IdeogramBaseURL      string
-	TongyiAPIKey         string
-	TongyiBaseURL        string
-	ZhipuAPIKey          string
-	ZhipuBaseURL         string
-	BaiduAPIKey          string
-	BaiduSecretKey       string
-	BaiduBaseURL         string
-	DoubaoAPIKey         string
-	DoubaoBaseURL        string
-	TencentSecretId      string
-	TencentSecretKey     string
-	TencentBaseURL       string
-	RunwayAPIKey         string
-	RunwayBaseURL        string
-	VeoAPIKey            string
-	VeoBaseURL           string
-	SoraAPIKey           string
-	SoraBaseURL          string
-	KlingAPIKey          string
-	KlingBaseURL         string
-	LumaAPIKey           string
-	LumaBaseURL          string
-	MiniMaxAPIKey        string
-	MiniMaxBaseURL       string
-	SeedanceAPIKey       string
-	SeedanceBaseURL      string
+type MultimodalHandlerRuntimeDeps struct {
 	DefaultImageProvider string
 	DefaultVideoProvider string
+	ImageProviders       []string
+	VideoProviders       []string
 	ReferenceMaxSize     int64
 	ReferenceTTL         time.Duration
 	ReferenceStore       storage.ReferenceStore
-	Pipeline             multimodal.PromptPipeline
-	DefaultChatModel     string
+	ChatEnabled          bool
+	ResolveImageProvider usecase.MultimodalProviderResolver
+	ResolveVideoProvider usecase.MultimodalProviderResolver
+	ImageStreamProvider  func(string) (image.StreamingProvider, bool)
 }
 
 type MultimodalHandler struct {
-	logger      *zap.Logger
-	router      *multimodal.Router
-	gateway     llmcore.Gateway
-	chatEnabled bool
-	pipeline    multimodal.PromptPipeline
-	service     multimodalService
+	mu sync.RWMutex
+
+	logger  *zap.Logger
+	service usecase.MultimodalService
 
 	defaultImageProvider string
 	defaultVideoProvider string
 	imageProviders       []string
 	videoProviders       []string
+	referenceMaxSize     int64
+	referenceTTL         time.Duration
+	referenceStore       storage.ReferenceStore
+	chatEnabled          bool
 
-	promptEnhancer  *agent.PromptEnhancer
-	promptOptimizer *agent.PromptOptimizer
-
-	referenceMaxSize int64
-	referenceTTL     time.Duration
-	referenceStore   storage.ReferenceStore
-
-	defaultChatModel string
+	resolveImageProviderFn usecase.MultimodalProviderResolver
+	resolveVideoProviderFn usecase.MultimodalProviderResolver
+	imageStreamProviderFn  func(string) (image.StreamingProvider, bool)
 }
 
-func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Logger) *MultimodalHandler {
+func NewMultimodalHandler(service usecase.MultimodalService, logger *zap.Logger) *MultimodalHandler {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("api.MultimodalHandler: logger is required and cannot be nil")
 	}
-
-	providerSet := multimodal.BuildProvidersFromConfig(multimodal.ProviderBuilderConfig{
-		OpenAIAPIKey:         cfg.OpenAIAPIKey,
-		OpenAIBaseURL:        cfg.OpenAIBaseURL,
-		GoogleAPIKey:         cfg.GoogleAPIKey,
-		GoogleBaseURL:        cfg.GoogleBaseURL,
-		FluxAPIKey:           cfg.FluxAPIKey,
-		FluxBaseURL:          cfg.FluxBaseURL,
-		StabilityAPIKey:      cfg.StabilityAPIKey,
-		StabilityBaseURL:     cfg.StabilityBaseURL,
-		IdeogramAPIKey:       cfg.IdeogramAPIKey,
-		IdeogramBaseURL:      cfg.IdeogramBaseURL,
-		TongyiAPIKey:         cfg.TongyiAPIKey,
-		TongyiBaseURL:        cfg.TongyiBaseURL,
-		ZhipuAPIKey:          cfg.ZhipuAPIKey,
-		ZhipuBaseURL:         cfg.ZhipuBaseURL,
-		BaiduAPIKey:          cfg.BaiduAPIKey,
-		BaiduSecretKey:       cfg.BaiduSecretKey,
-		BaiduBaseURL:         cfg.BaiduBaseURL,
-		DoubaoAPIKey:         cfg.DoubaoAPIKey,
-		DoubaoBaseURL:        cfg.DoubaoBaseURL,
-		TencentSecretId:      cfg.TencentSecretId,
-		TencentSecretKey:     cfg.TencentSecretKey,
-		TencentBaseURL:       cfg.TencentBaseURL,
-		RunwayAPIKey:         cfg.RunwayAPIKey,
-		RunwayBaseURL:        cfg.RunwayBaseURL,
-		VeoAPIKey:            cfg.VeoAPIKey,
-		VeoBaseURL:           cfg.VeoBaseURL,
-		SoraAPIKey:           cfg.SoraAPIKey,
-		SoraBaseURL:          cfg.SoraBaseURL,
-		KlingAPIKey:          cfg.KlingAPIKey,
-		KlingBaseURL:         cfg.KlingBaseURL,
-		LumaAPIKey:           cfg.LumaAPIKey,
-		LumaBaseURL:          cfg.LumaBaseURL,
-		MiniMaxAPIKey:        cfg.MiniMaxAPIKey,
-		MiniMaxBaseURL:       cfg.MiniMaxBaseURL,
-		SeedanceAPIKey:       cfg.SeedanceAPIKey,
-		SeedanceBaseURL:      cfg.SeedanceBaseURL,
-		DefaultImageProvider: cfg.DefaultImageProvider,
-		DefaultVideoProvider: cfg.DefaultVideoProvider,
-	}, logger)
-
-	return NewMultimodalHandlerWithProviders(
-		cfg.ChatProvider,
-		cfg.PolicyManager,
-		cfg.Ledger,
-		providerSet.ImageProviders,
-		providerSet.VideoProviders,
-		providerSet.DefaultImage,
-		providerSet.DefaultVideo,
-		cfg.Pipeline,
-		cfg.ReferenceMaxSize,
-		cfg.ReferenceTTL,
-		cfg.ReferenceStore,
-		cfg.DefaultChatModel,
-		logger,
-	)
+	return &MultimodalHandler{
+		logger:           logger.With(zap.String("handler", "multimodal")),
+		service:          service,
+		referenceMaxSize: defaultReferenceBytes,
+		referenceTTL:     defaultReferenceTTL,
+		referenceStore:   storage.NewMemoryReferenceStore(),
+	}
 }
 
-// NewMultimodalHandlerWithProviders 使用已构建的 image/video providers 创建 Handler。
-// referenceStore 为 nil 时使用内存实现，仅建议在测试或开发环境使用；生产环境应由组合根注入 Redis 等持久化实现。
-func NewMultimodalHandlerWithProviders(
-	chatProvider llm.Provider,
-	policyManager *llmpolicy.Manager,
-	ledger observability.Ledger,
-	imageProviders map[string]image.Provider,
-	videoProviders map[string]video.Provider,
-	defaultImage string,
-	defaultVideo string,
-	pipeline multimodal.PromptPipeline,
-	referenceMaxSize int64,
-	referenceTTL time.Duration,
-	referenceStore storage.ReferenceStore,
-	defaultChatModel string,
-	logger *zap.Logger,
-) *MultimodalHandler {
-	if logger == nil {
-		logger = zap.NewNop()
+func (h *MultimodalHandler) UpdateService(service usecase.MultimodalService) {
+	if h == nil {
+		return
 	}
-	if pipeline == nil {
-		pipeline = &multimodal.DefaultPromptPipeline{}
-	}
-	if referenceMaxSize <= 0 {
-		referenceMaxSize = defaultReferenceBytes
-	}
-	if referenceTTL <= 0 {
-		referenceTTL = defaultReferenceTTL
-	}
-	if referenceStore == nil {
-		referenceStore = storage.NewMemoryReferenceStore()
-	}
-	if defaultChatModel == "" {
-		defaultChatModel = defaultChatModelFallback
-	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.service = service
+}
 
-	router := multimodal.NewRouter()
-	imageNames := make([]string, 0, len(imageProviders))
-	videoNames := make([]string, 0, len(videoProviders))
+func (h *MultimodalHandler) ApplyRuntimeDeps(deps MultimodalHandlerRuntimeDeps) {
+	if h == nil {
+		return
+	}
+	if deps.ReferenceMaxSize <= 0 {
+		deps.ReferenceMaxSize = defaultReferenceBytes
+	}
+	if deps.ReferenceTTL <= 0 {
+		deps.ReferenceTTL = defaultReferenceTTL
+	}
+	if deps.ReferenceStore == nil {
+		deps.ReferenceStore = storage.NewMemoryReferenceStore()
+	}
+	deps.ImageProviders = append([]string(nil), deps.ImageProviders...)
+	deps.VideoProviders = append([]string(nil), deps.VideoProviders...)
+	sort.Strings(deps.ImageProviders)
+	sort.Strings(deps.VideoProviders)
 
-	for name := range imageProviders {
-		imageNames = append(imageNames, name)
-	}
-	sort.Strings(imageNames)
-	if defaultImage == "" && len(imageNames) > 0 {
-		defaultImage = imageNames[0]
-	}
-	for _, name := range imageNames {
-		router.RegisterImage(name, imageProviders[name], name == defaultImage)
-	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.defaultImageProvider = strings.TrimSpace(deps.DefaultImageProvider)
+	h.defaultVideoProvider = strings.TrimSpace(deps.DefaultVideoProvider)
+	h.imageProviders = deps.ImageProviders
+	h.videoProviders = deps.VideoProviders
+	h.referenceMaxSize = deps.ReferenceMaxSize
+	h.referenceTTL = deps.ReferenceTTL
+	h.referenceStore = deps.ReferenceStore
+	h.chatEnabled = deps.ChatEnabled
+	h.resolveImageProviderFn = deps.ResolveImageProvider
+	h.resolveVideoProviderFn = deps.ResolveVideoProvider
+	h.imageStreamProviderFn = deps.ImageStreamProvider
+}
 
-	for name := range videoProviders {
-		videoNames = append(videoNames, name)
+func (h *MultimodalHandler) currentService() usecase.MultimodalService {
+	if h == nil {
+		return nil
 	}
-	sort.Strings(videoNames)
-	if defaultVideo == "" && len(videoNames) > 0 {
-		defaultVideo = videoNames[0]
-	}
-	for _, name := range videoNames {
-		router.RegisterVideo(name, videoProviders[name], name == defaultVideo)
-	}
-
-	gw := llmgateway.New(llmgateway.Config{
-		ChatProvider:  chatProvider,
-		Capabilities:  capabilities.NewEntry(router),
-		PolicyManager: policyManager,
-		Ledger:        ledger,
-		Logger:        logger,
-	})
-
-	handler := &MultimodalHandler{
-		logger:               logger.With(zap.String("handler", "multimodal")),
-		router:               router,
-		gateway:              gw,
-		chatEnabled:          chatProvider != nil,
-		pipeline:             pipeline,
-		defaultImageProvider: defaultImage,
-		defaultVideoProvider: defaultVideo,
-		imageProviders:       imageNames,
-		videoProviders:       videoNames,
-		promptEnhancer:       agent.NewPromptEnhancer(*agent.DefaultPromptEnhancerConfig()),
-		promptOptimizer:      agent.NewPromptOptimizer(),
-		referenceMaxSize:     referenceMaxSize,
-		referenceTTL:         referenceTTL,
-		referenceStore:       referenceStore,
-		defaultChatModel:     defaultChatModel,
-	}
-	handler.service = newDefaultMultimodalService(
-		handler.gateway,
-		handler.pipeline,
-		handler.resolveImageProvider,
-		handler.resolveVideoProvider,
-		handler.getReference,
-		handler.referenceMaxSize,
-	)
-	return handler
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.service
 }
 
 func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -278,22 +133,31 @@ func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Re
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
+
+	h.mu.RLock()
+	imageProviders := append([]string(nil), h.imageProviders...)
+	videoProviders := append([]string(nil), h.videoProviders...)
+	defaultImageProvider := h.defaultImageProvider
+	defaultVideoProvider := h.defaultVideoProvider
+	chatEnabled := h.chatEnabled
+	h.mu.RUnlock()
+
 	WriteSuccess(w, map[string]any{
-		"image_providers":        h.imageProviders,
-		"video_providers":        h.videoProviders,
-		"default_image_provider": h.defaultImageProvider,
-		"default_video_provider": h.defaultVideoProvider,
+		"image_providers":        imageProviders,
+		"video_providers":        videoProviders,
+		"default_image_provider": defaultImageProvider,
+		"default_video_provider": defaultVideoProvider,
 		"features": map[string]bool{
-			"reference_upload": len(h.imageProviders) > 0 || len(h.videoProviders) > 0,
-			"text_to_image":    len(h.imageProviders) > 0,
-			"image_to_image":   len(h.imageProviders) > 0,
-			"image_stream":     len(h.imageProviders) > 0,
-			"text_to_video":    len(h.videoProviders) > 0,
-			"image_to_video":   len(h.videoProviders) > 0,
+			"reference_upload": len(imageProviders) > 0 || len(videoProviders) > 0,
+			"text_to_image":    len(imageProviders) > 0,
+			"image_to_image":   len(imageProviders) > 0,
+			"image_stream":     len(imageProviders) > 0,
+			"text_to_video":    len(videoProviders) > 0,
+			"image_to_video":   len(videoProviders) > 0,
 			"advanced_prompt":  true,
-			"chat":             h.chatEnabled,
-			"agent_mode":       h.chatEnabled,
-			"plan_generation":  h.chatEnabled,
+			"chat":             chatEnabled,
+			"agent_mode":       chatEnabled,
+			"plan_generation":  chatEnabled,
 		},
 	})
 }
@@ -303,7 +167,13 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if err := r.ParseMultipartForm(h.referenceMaxSize + (1 << 20)); err != nil {
+
+	h.mu.RLock()
+	referenceMaxSize := h.referenceMaxSize
+	referenceStore := h.referenceStore
+	h.mu.RUnlock()
+
+	if err := r.ParseMultipartForm(referenceMaxSize + (1 << 20)); err != nil {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid multipart form", h.logger)
 		return
 	}
@@ -315,7 +185,7 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(io.LimitReader(file, h.referenceMaxSize+1))
+	data, err := io.ReadAll(io.LimitReader(file, referenceMaxSize+1))
 	if err != nil {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "failed to read uploaded file", h.logger)
 		return
@@ -324,8 +194,8 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "uploaded file is empty", h.logger)
 		return
 	}
-	if int64(len(data)) > h.referenceMaxSize {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, fmt.Sprintf("file too large (max %d bytes)", h.referenceMaxSize), h.logger)
+	if int64(len(data)) > referenceMaxSize {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, fmt.Sprintf("file too large (max %d bytes)", referenceMaxSize), h.logger)
 		return
 	}
 
@@ -352,7 +222,7 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 	}
 
 	h.cleanupReferences(time.Now())
-	if err := h.referenceStore.Save(ref); err != nil {
+	if err := referenceStore.Save(ref); err != nil {
 		h.logger.Error("failed to persist multimodal reference", zap.Error(err))
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "failed to persist reference", h.logger)
 		return
@@ -367,24 +237,6 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 	})
 }
 
-type multimodalImageRequest struct {
-	Prompt            string   `json:"prompt"`
-	NegativePrompt    string   `json:"negative_prompt,omitempty"`
-	Model             string   `json:"model,omitempty"`
-	Provider          string   `json:"provider,omitempty"`
-	N                 int      `json:"n,omitempty"`
-	Size              string   `json:"size,omitempty"`
-	Quality           string   `json:"quality,omitempty"`
-	Style             string   `json:"style,omitempty"`
-	ResponseFormat    string   `json:"response_format,omitempty"`
-	Advanced          bool     `json:"advanced,omitempty"`
-	Stream            bool     `json:"stream,omitempty"`
-	StyleTokens       []string `json:"style_tokens,omitempty"`
-	QualityTokens     []string `json:"quality_tokens,omitempty"`
-	ReferenceID       string   `json:"reference_id,omitempty"`
-	ReferenceImageURL string   `json:"reference_image_url,omitempty"`
-}
-
 func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
@@ -394,7 +246,7 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var req multimodalImageRequest
+	var req usecase.MultimodalImageRequest
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
@@ -406,7 +258,6 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "n must be non-negative", h.logger)
 		return
 	}
-	// V-015: Size/Quality/Style enum validation
 	if req.Size != "" && !ValidateEnum(req.Size, validImageSizes) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "size must be one of: 256x256, 512x512, 1024x1024, 1024x768, 768x1024, 1536x1024, 1024x1536, 1536x1536, 1792x1024, 1024x1792", h.logger)
 		return
@@ -419,7 +270,11 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "style must be one of: vivid, natural", h.logger)
 		return
 	}
-	if len(h.imageProviders) == 0 {
+
+	h.mu.RLock()
+	hasProviders := len(h.imageProviders) > 0
+	h.mu.RUnlock()
+	if !hasProviders {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "no image provider configured", h.logger)
 		return
 	}
@@ -429,9 +284,16 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := h.service.GenerateImage(r.Context(), req)
+	service := h.currentService()
+	if service == nil {
+		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+		return
+	}
+
+	result, err := service.GenerateImage(r.Context(), req)
 	if err != nil {
-		WriteErrorMessage(w, toHTTPStatus(err), errorCodeFrom(err, types.ErrUpstreamError), strings.TrimSpace(err.Error()), h.logger)
+		status, code := multimodalHTTPStatusAndCodeFrom(err)
+		WriteErrorMessage(w, status, code, strings.TrimSpace(err.Error()), h.logger)
 		return
 	}
 
@@ -444,14 +306,7 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// handleImageStream 以 SSE 流式返回图片生成结果，事件命名与 payload 对齐 OpenAI 官方规范：
-// image_generation.started -> [image_generation.thinking]* -> image_generation.completed (每张) -> image_generation.done -> [DONE]
-// 参考: https://platform.openai.com/docs/api-reference/images-streaming
-//
-// 对于实现了 image.StreamingProvider 的 provider（如 Gemini），会走原生 SSE 流式路径，
-// 在图像生成过程中实时推送 image_generation.thinking 文字事件；
-// 其余 provider 走同步生成路径（阻塞直到图像就绪后一次性推送）。
-func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Request, req multimodalImageRequest) {
+func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Request, req usecase.MultimodalImageRequest) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -459,38 +314,44 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 		flusher.Flush()
 	}
 
-	// 尝试解析 provider，检查是否支持原生流式
 	providerName, resolveErr := h.resolveImageProvider(req.Provider)
 	if resolveErr == nil {
-		if p, routerErr := h.router.Image(providerName); routerErr == nil {
-			if sp, ok := p.(image.StreamingProvider); ok {
+		h.mu.RLock()
+		lookup := h.imageStreamProviderFn
+		h.mu.RUnlock()
+		if lookup != nil {
+			if sp, ok := lookup(providerName); ok {
 				h.handleImageNativeStream(w, r, req, providerName, sp)
 				return
 			}
 		}
 	}
 
-	// 回退：同步生成后包装为 SSE
-	result, err := h.service.GenerateImage(r.Context(), req)
+	service := h.currentService()
+	if service == nil {
+		_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{"type": "error", "code": types.ErrServiceUnavailable, "message": "multimodal service is not configured"})
+		_ = writeMultimodalSSE(w, []byte("data: [DONE]\n\n"))
+		return
+	}
+
+	result, err := service.GenerateImage(r.Context(), req)
 	if err != nil {
-		code := errorCodeFrom(err, types.ErrUpstreamError)
-		_ = writeSSEEventJSON(w, "error", map[string]any{
+		_, code := multimodalHTTPStatusAndCodeFrom(err)
+		_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{
 			"type":    "error",
 			"code":    code,
 			"message": strings.TrimSpace(err.Error()),
 		})
-		_ = writeSSE(w, []byte("data: [DONE]\n\n"))
+		_ = writeMultimodalSSE(w, []byte("data: [DONE]\n\n"))
 		return
 	}
 	h.flushImageResult(w, req, result)
 }
 
-// handleImageNativeStream 使用 image.StreamingProvider 原生 SSE 流式生成，
-// 在图像生成过程中实时推送文字 token（image_generation.thinking 事件）。
 func (h *MultimodalHandler) handleImageNativeStream(
 	w http.ResponseWriter,
 	r *http.Request,
-	req multimodalImageRequest,
+	req usecase.MultimodalImageRequest,
 	providerName string,
 	sp image.StreamingProvider,
 ) {
@@ -506,7 +367,7 @@ func (h *MultimodalHandler) handleImageNativeStream(
 		ResponseFormat: req.ResponseFormat,
 	}
 
-	_ = writeSSEEventJSON(w, "image_generation.started", map[string]any{
+	_ = writeMultimodalSSEEventJSON(w, "image_generation.started", map[string]any{
 		"type":     "image_generation.started",
 		"provider": providerName,
 		"mode":     "text_to_image",
@@ -523,8 +384,8 @@ func (h *MultimodalHandler) handleImageNativeStream(
 	streamErr := sp.GenerateStream(r.Context(), genReq, func(chunk image.StreamChunk) {
 		switch {
 		case chunk.Err != nil:
-			code := errorCodeFrom(chunk.Err, types.ErrUpstreamError)
-			_ = writeSSEEventJSON(w, "error", map[string]any{
+			_, code := multimodalHTTPStatusAndCodeFrom(chunk.Err)
+			_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{
 				"type":    "error",
 				"code":    code,
 				"message": strings.TrimSpace(chunk.Err.Error()),
@@ -533,7 +394,7 @@ func (h *MultimodalHandler) handleImageNativeStream(
 				flusher.Flush()
 			}
 		case chunk.Text != "":
-			_ = writeSSEEventJSON(w, "image_generation.thinking", map[string]any{
+			_ = writeMultimodalSSEEventJSON(w, "image_generation.thinking", map[string]any{
 				"type": "image_generation.thinking",
 				"text": chunk.Text,
 			})
@@ -555,13 +416,13 @@ func (h *MultimodalHandler) handleImageNativeStream(
 			if chunk.Image.B64JSON != "" {
 				payload["b64_json"] = chunk.Image.B64JSON
 			}
-			_ = writeSSEEventJSON(w, "image_generation.completed", payload)
+			_ = writeMultimodalSSEEventJSON(w, "image_generation.completed", payload)
 			if canFlush {
 				flusher.Flush()
 			}
 			imageIndex++
 		case chunk.Done:
-			_ = writeSSEEventJSON(w, "image_generation.done", map[string]any{
+			_ = writeMultimodalSSEEventJSON(w, "image_generation.done", map[string]any{
 				"type":     "image_generation.done",
 				"provider": providerName,
 				"usage": image.ImageUsage{
@@ -575,17 +436,16 @@ func (h *MultimodalHandler) handleImageNativeStream(
 	})
 
 	if streamErr != nil && r.Context().Err() == nil {
-		h.logger.Warn("gemini stream error", zap.Error(streamErr))
+		h.logger.Warn("multimodal image stream error", zap.Error(streamErr))
 	}
-	_ = writeSSE(w, []byte("data: [DONE]\n\n"))
+	_ = writeMultimodalSSE(w, []byte("data: [DONE]\n\n"))
 	if canFlush {
 		flusher.Flush()
 	}
 }
 
-// flushImageResult 将同步生成的 result 包装成 SSE 事件推送给客户端.
-func (h *MultimodalHandler) flushImageResult(w http.ResponseWriter, req multimodalImageRequest, result *multimodalImageResult) {
-	_ = writeSSEEventJSON(w, "image_generation.started", map[string]any{
+func (h *MultimodalHandler) flushImageResult(w http.ResponseWriter, req usecase.MultimodalImageRequest, result *usecase.MultimodalImageResult) {
+	_ = writeMultimodalSSEEventJSON(w, "image_generation.started", map[string]any{
 		"type":             "image_generation.started",
 		"mode":             result.Mode,
 		"provider":         result.Provider,
@@ -635,43 +495,23 @@ func (h *MultimodalHandler) flushImageResult(w http.ResponseWriter, req multimod
 			if i == len(result.Response.Images)-1 && result.Response.Usage.ImagesGenerated > 0 {
 				payload["usage"] = result.Response.Usage
 			}
-			_ = writeSSEEventJSON(w, "image_generation.completed", payload)
+			_ = writeMultimodalSSEEventJSON(w, "image_generation.completed", payload)
 		}
 
-		_ = writeSSEEventJSON(w, "image_generation.done", map[string]any{
+		_ = writeMultimodalSSEEventJSON(w, "image_generation.done", map[string]any{
 			"type":     "image_generation.done",
 			"mode":     result.Mode,
 			"provider": result.Provider,
 			"usage":    result.Response.Usage,
 		})
 	} else {
-		_ = writeSSEEventJSON(w, "image_generation.done", map[string]any{
+		_ = writeMultimodalSSEEventJSON(w, "image_generation.done", map[string]any{
 			"type":     "image_generation.done",
 			"mode":     result.Mode,
 			"provider": result.Provider,
 		})
 	}
-	_ = writeSSE(w, []byte("data: [DONE]\n\n"))
-}
-
-type multimodalVideoRequest struct {
-	Prompt            string   `json:"prompt"`
-	NegativePrompt    string   `json:"negative_prompt,omitempty"`
-	Model             string   `json:"model,omitempty"`
-	Provider          string   `json:"provider,omitempty"`
-	Duration          float64  `json:"duration,omitempty"`
-	AspectRatio       string   `json:"aspect_ratio,omitempty"`
-	Resolution        string   `json:"resolution,omitempty"`
-	FPS               int      `json:"fps,omitempty"`
-	Seed              int64    `json:"seed,omitempty"`
-	ResponseFormat    string   `json:"response_format,omitempty"`
-	Advanced          bool     `json:"advanced,omitempty"`
-	CallbackURL       string   `json:"callback_url,omitempty"` // 可灵等异步视频：任务完成后回调地址
-	StyleTokens       []string `json:"style_tokens,omitempty"`
-	Camera            string   `json:"camera,omitempty"`
-	Mood              string   `json:"mood,omitempty"`
-	ReferenceID       string   `json:"reference_id,omitempty"`
-	ReferenceImageURL string   `json:"reference_image_url,omitempty"`
+	_ = writeMultimodalSSE(w, []byte("data: [DONE]\n\n"))
 }
 
 func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) {
@@ -683,7 +523,7 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var req multimodalVideoRequest
+	var req usecase.MultimodalVideoRequest
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
@@ -691,7 +531,6 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "prompt is required", h.logger)
 		return
 	}
-	// V-012: Duration >0 and <=300, FPS >0 and <=60
 	if req.Duration != 0 && (req.Duration <= 0 || req.Duration > 300) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "duration must be >0 and <=300", h.logger)
 		return
@@ -700,14 +539,25 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "fps must be >0 and <=60", h.logger)
 		return
 	}
-	if len(h.videoProviders) == 0 {
+
+	h.mu.RLock()
+	hasProviders := len(h.videoProviders) > 0
+	h.mu.RUnlock()
+	if !hasProviders {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "no video provider configured", h.logger)
 		return
 	}
 
-	result, err := h.service.GenerateVideo(r.Context(), req)
+	service := h.currentService()
+	if service == nil {
+		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+		return
+	}
+
+	result, err := service.GenerateVideo(r.Context(), req)
 	if err != nil {
-		WriteErrorMessage(w, toHTTPStatus(err), errorCodeFrom(err, types.ErrUpstreamError), strings.TrimSpace(err.Error()), h.logger)
+		status, code := multimodalHTTPStatusAndCodeFrom(err)
+		WriteErrorMessage(w, status, code, strings.TrimSpace(err.Error()), h.logger)
 		return
 	}
 
@@ -719,26 +569,6 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-type multimodalPlanRequest struct {
-	Prompt    string `json:"prompt"`
-	ShotCount int    `json:"shot_count,omitempty"`
-	Advanced  bool   `json:"advanced,omitempty"`
-}
-
-type visualPlan struct {
-	Goal  string       `json:"goal"`
-	Shots []visualShot `json:"shots"`
-}
-
-type visualShot struct {
-	ID          int    `json:"id"`
-	Purpose     string `json:"purpose"`
-	Visual      string `json:"visual"`
-	Action      string `json:"action"`
-	Camera      string `json:"camera"`
-	DurationSec int    `json:"duration_sec"`
-}
-
 func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
@@ -747,12 +577,16 @@ func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
-	if !h.chatEnabled {
+
+	h.mu.RLock()
+	chatEnabled := h.chatEnabled
+	h.mu.RUnlock()
+	if !chatEnabled {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "chat provider is not configured", h.logger)
 		return
 	}
 
-	var req multimodalPlanRequest
+	var req usecase.MultimodalPlanRequest
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
@@ -760,54 +594,23 @@ func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "prompt is required", h.logger)
 		return
 	}
-	if req.ShotCount <= 0 {
-		req.ShotCount = 6
-	}
 	if req.ShotCount > 12 {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "shot_count must be <= 12", h.logger)
 		return
 	}
 
-	prompt := fmt.Sprintf(`Create a visual production plan with %d shots.
-User intent: %s
-
-Requirements:
-1. Output concise, production-ready shots.
-2. Keep character/style continuity across shots.
-3. Each shot needs purpose, visual, action, camera and duration_sec.
-4. duration_sec should be 1-8.`, req.ShotCount, strings.TrimSpace(req.Prompt))
-	if req.Advanced {
-		prompt = h.promptEnhancer.EnhanceUserPrompt(prompt, "")
+	service := h.currentService()
+	if service == nil {
+		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+		return
 	}
-	prompt = h.promptOptimizer.OptimizePrompt(prompt)
 
-	so, err := structured.NewStructuredOutput[visualPlan](h.gateway)
+	result, err := service.GeneratePlan(r.Context(), req)
 	if err != nil {
 		h.writeProviderError(w, err)
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
-	defer cancel()
-	out, err := so.Generate(ctx, prompt)
-	if err != nil {
-		h.writeProviderError(w, err)
-		return
-	}
-	if out == nil {
-		WriteErrorMessage(w, http.StatusBadGateway, types.ErrUpstreamError, "empty plan result", h.logger)
-		return
-	}
-	for i := range out.Shots {
-		if out.Shots[i].ID <= 0 {
-			out.Shots[i].ID = i + 1
-		}
-		if out.Shots[i].DurationSec <= 0 {
-			out.Shots[i].DurationSec = 3
-		}
-	}
-
-	WriteSuccess(w, map[string]any{"plan": out})
+	WriteSuccess(w, map[string]any{"plan": result.Plan})
 }
 
 type multimodalChatRequest struct {
@@ -828,7 +631,11 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
-	if !h.chatEnabled {
+
+	h.mu.RLock()
+	chatEnabled := h.chatEnabled
+	h.mu.RUnlock()
+	if !chatEnabled {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "chat provider is not configured", h.logger)
 		return
 	}
@@ -847,160 +654,71 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		messages = []api.Message{{Role: "user", Content: strings.TrimSpace(req.Message)}}
 	}
 
-	llmMessages := convertAPIMessages(messages)
-	if req.Advanced {
-		sys := strings.TrimSpace(req.SystemPrompt)
-		if sys == "" {
-			sys = "You are a multimodal agent framework assistant. Produce clear, executable and structured outputs."
-		}
-		llmMessages = append([]types.Message{{Role: types.RoleSystem, Content: sys}}, llmMessages...)
-	}
-
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = h.defaultChatModel
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
-	defer cancel()
-
-	if !req.AgentMode {
-		resp, err := h.invokeChat(ctx, &llm.ChatRequest{
-			Model:       model,
-			Messages:    llmMessages,
-			Temperature: req.Temperature,
-		})
-		if err != nil {
-			h.writeProviderError(w, err)
-			return
-		}
-		WriteSuccess(w, map[string]any{
-			"mode":     "single",
-			"response": resp,
-		})
+	service := h.currentService()
+	if service == nil {
+		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
 		return
 	}
 
-	userText := latestUserText(messages)
-	planResp, err := h.invokeChat(ctx, &llm.ChatRequest{
-		Model: model,
-		Messages: []types.Message{
-			{
-				Role:    types.RoleSystem,
-				Content: "You are an orchestration planner. Return 3-6 concise action steps.",
-			},
-			{
-				Role:    types.RoleUser,
-				Content: userText,
-			},
-		},
-		Temperature: 0.2,
+	result, err := service.Chat(r.Context(), usecase.MultimodalChatRequest{
+		Model:        req.Model,
+		Messages:     convertAPIMessages(messages),
+		SystemPrompt: req.SystemPrompt,
+		Temperature:  req.Temperature,
+		Advanced:     req.Advanced,
+		AgentMode:    req.AgentMode,
 	})
 	if err != nil {
 		h.writeProviderError(w, err)
 		return
 	}
 
-	planText := firstChoice(planResp)
-	finalMessages := append([]types.Message{
-		{
-			Role:    types.RoleSystem,
-			Content: "You are an executor agent. Execute the provided plan and produce final answer.",
-		},
-	}, llmMessages...)
-	finalMessages = append(finalMessages, types.Message{
-		Role:    types.RoleUser,
-		Content: "Planner output:\n" + planText,
-	})
-
-	finalResp, err := h.invokeChat(ctx, &llm.ChatRequest{
-		Model:       model,
-		Messages:    finalMessages,
-		Temperature: req.Temperature,
-	})
-	if err != nil {
-		h.writeProviderError(w, err)
-		return
+	payload := map[string]any{"mode": result.Mode}
+	if result.Mode == "agent" {
+		payload["planner_output"] = result.PlannerOutput
+		payload["final_response"] = result.FinalResponse
+		payload["final_text"] = result.FinalText
+	} else {
+		payload["response"] = result.Response
 	}
-
-	WriteSuccess(w, map[string]any{
-		"mode":           "agent",
-		"planner_output": planText,
-		"final_response": finalResp,
-		"final_text":     firstChoice(finalResp),
-	})
-}
-
-func (h *MultimodalHandler) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if h.gateway == nil {
-		return nil, types.NewServiceUnavailableError("llm gateway is not configured")
-	}
-
-	resp, err := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  req.Model,
-		TraceID:    req.TraceID,
-		Payload:    req,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
-	if !ok || chatResp == nil {
-		return nil, types.NewInternalError("invalid chat gateway response")
-	}
-	return chatResp, nil
+	WriteSuccess(w, payload)
 }
 
 func (h *MultimodalHandler) resolveImageProvider(provider string) (string, error) {
-	name := strings.TrimSpace(provider)
-	if name == "" {
-		name = h.defaultImageProvider
+	h.mu.RLock()
+	resolver := h.resolveImageProviderFn
+	h.mu.RUnlock()
+	if resolver == nil {
+		return "", fmt.Errorf("image provider resolver is not configured")
 	}
-	if name == "" {
-		return "", fmt.Errorf("no default image provider available")
-	}
-	if _, err := h.router.Image(name); err != nil {
-		return "", fmt.Errorf("image provider %q not found", name)
-	}
-	return name, nil
+	return resolver(provider)
 }
 
 func (h *MultimodalHandler) resolveVideoProvider(provider string) (string, error) {
-	name := strings.TrimSpace(provider)
-	if name == "" {
-		name = h.defaultVideoProvider
+	h.mu.RLock()
+	resolver := h.resolveVideoProviderFn
+	h.mu.RUnlock()
+	if resolver == nil {
+		return "", fmt.Errorf("video provider resolver is not configured")
 	}
-	if name == "" {
-		return "", fmt.Errorf("no default video provider available")
-	}
-	if _, err := h.router.Video(name); err != nil {
-		return "", fmt.Errorf("video provider %q not found", name)
-	}
-	return name, nil
+	return resolver(provider)
 }
 
 func (h *MultimodalHandler) writeProviderError(w http.ResponseWriter, err error) {
 	msg := strings.TrimSpace(err.Error())
-	status, code := httpStatusAndCodeFrom(err)
+	status, code := multimodalHTTPStatusAndCodeFrom(err)
 	WriteErrorMessage(w, status, code, msg, h.logger)
 }
 
-func (h *MultimodalHandler) getReference(id string) ([]byte, string, bool) {
-	ref, ok := h.referenceStore.Get(id)
-	if !ok || ref == nil {
-		return nil, "", false
-	}
-	if time.Since(ref.CreatedAt) > h.referenceTTL {
-		h.referenceStore.Delete(id)
-		return nil, "", false
-	}
-	return append([]byte(nil), ref.Data...), ref.MimeType, true
-}
-
 func (h *MultimodalHandler) cleanupReferences(now time.Time) {
-	h.referenceStore.Cleanup(now.Add(-h.referenceTTL))
+	h.mu.RLock()
+	referenceTTL := h.referenceTTL
+	referenceStore := h.referenceStore
+	h.mu.RUnlock()
+	if referenceStore == nil {
+		return
+	}
+	referenceStore.Cleanup(now.Add(-referenceTTL))
 }
 
 func convertAPIMessages(messages []api.Message) []types.Message {
@@ -1020,7 +738,7 @@ func convertAPIMessages(messages []api.Message) []types.Message {
 			ToolCalls:        msg.ToolCalls,
 			ToolCallID:       msg.ToolCallID,
 			IsToolError:      msg.IsToolError,
-			Images:           convertAPIImagesToTypes(msg.Images),
+			Images:           convertMultimodalAPIImagesToTypes(msg.Images),
 			Videos:           msg.Videos,
 			Annotations:      msg.Annotations,
 			Metadata:         msg.Metadata,
@@ -1030,21 +748,73 @@ func convertAPIMessages(messages []api.Message) []types.Message {
 	return out
 }
 
-func latestUserText(messages []api.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" && strings.TrimSpace(messages[i].Content) != "" {
-			return messages[i].Content
-		}
+func convertMultimodalAPIImagesToTypes(images []api.ImageContent) []types.ImageContent {
+	if len(images) == 0 {
+		return nil
 	}
-	if len(messages) == 0 {
-		return ""
+	result := make([]types.ImageContent, len(images))
+	for i, img := range images {
+		result[i] = types.ImageContent{Type: img.Type, URL: img.URL, Data: img.Data}
 	}
-	return messages[len(messages)-1].Content
+	return result
 }
 
-func firstChoice(resp *llm.ChatResponse) string {
-	if resp == nil || len(resp.Choices) == 0 {
-		return ""
+func multimodalHTTPStatusAndCodeFrom(err error) (int, types.ErrorCode) {
+	if typed, ok := types.AsError(err); ok {
+		status := typed.HTTPStatus
+		if status <= 0 {
+			status = multimodalErrorCodeToHTTPStatus(typed.Code)
+		}
+		if status <= 0 {
+			status = http.StatusBadGateway
+		}
+		code := typed.Code
+		if code == "" {
+			code = types.ErrUpstreamError
+		}
+		return status, code
 	}
-	return strings.TrimSpace(resp.Choices[0].Message.Content)
+	return http.StatusBadGateway, types.ErrUpstreamError
+}
+
+func multimodalErrorCodeToHTTPStatus(code types.ErrorCode) int {
+	switch code {
+	case types.ErrInvalidRequest, types.ErrInputValidation, types.ErrOutputValidation:
+		return http.StatusBadRequest
+	case types.ErrUnauthorized, types.ErrAuthentication:
+		return http.StatusUnauthorized
+	case types.ErrForbidden:
+		return http.StatusForbidden
+	case types.ErrModelNotFound:
+		return http.StatusNotFound
+	case types.ErrRateLimit, types.ErrQuotaExceeded:
+		return http.StatusTooManyRequests
+	case types.ErrTimeout, types.ErrUpstreamTimeout:
+		return http.StatusGatewayTimeout
+	case types.ErrServiceUnavailable, types.ErrProviderUnavailable, types.ErrRoutingUnavailable, types.ErrModelOverloaded:
+		return http.StatusServiceUnavailable
+	case types.ErrInternalError:
+		return http.StatusInternalServerError
+	case types.ErrContentFiltered:
+		return http.StatusUnprocessableEntity
+	default:
+		return http.StatusBadGateway
+	}
+}
+
+func writeMultimodalSSE(w http.ResponseWriter, parts ...[]byte) error {
+	for _, part := range parts {
+		if _, err := w.Write(part); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeMultimodalSSEEventJSON(w http.ResponseWriter, event string, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return writeMultimodalSSE(w, []byte("event: "), []byte(event), []byte("\n"), []byte("data: "), body, []byte("\n\n"))
 }

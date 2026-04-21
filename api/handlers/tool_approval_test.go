@@ -247,7 +247,7 @@ func TestToolApprovalHandler_ListHistory(t *testing.T) {
 func TestToolApprovalHandler_Resolve_AuditLogFields(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
 	core, observed := observer.New(zap.InfoLevel)
-	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{manager: manager}, "tool_approval", zap.New(core))
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval"), zap.New(core))
 
 	interrupt, err := manager.CreatePendingInterrupt(context.Background(), hitl.InterruptOptions{
 		WorkflowID: "tool_approval",

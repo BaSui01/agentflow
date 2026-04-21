@@ -98,7 +98,7 @@ func TestToolRegistryHandler_Create_AuditLogFields(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
 	core, observed := observer.New(zap.InfoLevel)
-	handler := NewToolRegistryHandler(hosted.NewGormToolRegistryStore(db), runtime, zap.New(core))
+	handler := NewToolRegistryHandler(usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.New(core))
 
 	body := []byte(`{"name":"knowledge_search","target":"retrieval","enabled":true}`)
 	w := httptest.NewRecorder()

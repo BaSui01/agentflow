@@ -66,7 +66,7 @@ func TestStartupSummary_ReportsCapabilitiesDependenciesAndRestartBoundaries(t *t
 	assert.Contains(t, summary.RestartRequiredRoutes, "multimodal")
 }
 
-func TestInitHandlers_FailsWhenConfiguredMainProviderBuilderErrors(t *testing.T) {
+func TestInitHandlers_ToleratesConfiguredMainProviderBuilderErrors(t *testing.T) {
 	const mode = "test-llm-unavailable"
 	bootstrap.UnregisterMainProviderBuilder(mode)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(mode,
@@ -80,10 +80,9 @@ func TestInitHandlers_FailsWhenConfiguredMainProviderBuilderErrors(t *testing.T)
 	cfg.Multimodal.Enabled = false
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
-	err := s.initHandlers()
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to initialize llm runtime")
-	assert.ErrorContains(t, err, assert.AnError.Error())
+	require.NoError(t, s.initHandlers())
+	assert.Nil(t, s.chatHandler)
+	assert.Nil(t, s.costHandler)
 }
 
 func TestInitHandlers_RedisDependencySurfacesInReadinessProbe(t *testing.T) {

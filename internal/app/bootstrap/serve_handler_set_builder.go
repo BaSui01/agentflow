@@ -327,8 +327,8 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 		set.CheckpointManager = agent.NewCheckpointManager(checkpointStore, in.Logger)
 	}
 
-	if set.Provider != nil {
-		resolver := agent.NewCachingResolver(set.AgentRegistry, set.Provider, in.Logger).
+	if llmRuntime != nil && llmRuntime.Gateway != nil {
+		resolver := agent.NewCachingResolver(set.AgentRegistry, llmRuntime.Gateway, in.Logger).
 			WithDefaultModel(in.Cfg.Agent.Model)
 		if toolingRuntime != nil && toolingRuntime.ToolManager != nil {
 			resolver = resolver.WithToolManager(toolingRuntime.ToolManager)
@@ -351,7 +351,7 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 		if llmRuntime != nil {
 			ledger = llmRuntime.Ledger
 		}
-		RegisterDefaultRuntimeAgentFactory(set.AgentRegistry, set.Provider, set.ToolProvider, set.CheckpointManager, ledger, in.Logger)
+		RegisterDefaultRuntimeAgentFactory(set.AgentRegistry, llmRuntime.Gateway, llmRuntime.ToolGateway, set.CheckpointManager, ledger, in.Logger)
 		in.Logger.Info("Default runtime agent factory registered")
 
 		set.AgentHandler = handlers.NewAgentHandlerWithService(
@@ -370,12 +370,14 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 
 	workflowOpts := WorkflowRuntimeOptions{
-		LLMProvider:       set.Provider,
 		DefaultModel:      in.Cfg.Agent.Model,
 		HITLManager:       in.WorkflowHITLManager,
 		CheckpointStore:   set.CheckpointStore,
 		RetrievalStore:    set.RAGStore,
 		EmbeddingProvider: set.RAGEmbedding,
+	}
+	if llmRuntime != nil {
+		workflowOpts.LLMGateway = llmRuntime.Gateway
 	}
 	if set.Resolver != nil {
 		workflowOpts.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {

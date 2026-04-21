@@ -2,10 +2,44 @@ package agent
 
 import (
 	"context"
+	"strings"
 
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/types"
 )
+
+const (
+	toolRiskSafeRead         = "safe_read"
+	toolRiskRequiresApproval = "requires_approval"
+	toolRiskUnknown          = "unknown"
+)
+
+func classifyToolRiskByName(name string) string {
+	switch strings.TrimSpace(name) {
+	case "web_search", "file_search", "retrieval", "read_file", "list_directory":
+		return toolRiskSafeRead
+	case "write_file", "edit_file", "run_command", "code_execution":
+		return toolRiskRequiresApproval
+	default:
+		if strings.HasPrefix(strings.TrimSpace(name), "mcp_") {
+			return toolRiskRequiresApproval
+		}
+		return toolRiskUnknown
+	}
+}
+
+func groupToolRisks(names []string) map[string][]string {
+	grouped := map[string][]string{
+		toolRiskSafeRead:         {},
+		toolRiskRequiresApproval: {},
+		toolRiskUnknown:          {},
+	}
+	for _, name := range normalizeStringSlice(names) {
+		risk := classifyToolRiskByName(name)
+		grouped[risk] = append(grouped[risk], name)
+	}
+	return grouped
+}
 
 // PreparedToolProtocol is the runtime-resolved tool execution bundle consumed
 // by completion flows.
