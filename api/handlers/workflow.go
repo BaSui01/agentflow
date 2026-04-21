@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
-	"github.com/BaSui01/agentflow/workflow/dsl"
 	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
 	"go.uber.org/zap"
 )
@@ -14,28 +14,24 @@ import (
 // WorkflowHandler handles workflow API requests.
 type WorkflowHandler struct {
 	mu      sync.RWMutex
-	service WorkflowService
+	service usecase.WorkflowService
 	logger  *zap.Logger
 }
 
-// NewWorkflowHandler creates a new workflow handler.
-func NewWorkflowHandler(executor WorkflowExecutor, parser *dsl.Parser, logger *zap.Logger) *WorkflowHandler {
-	handler := &WorkflowHandler{logger: logger}
-	handler.UpdateRuntime(executor, parser)
-	return handler
+func NewWorkflowHandler(service usecase.WorkflowService, logger *zap.Logger) *WorkflowHandler {
+	return &WorkflowHandler{service: service, logger: logger}
 }
 
-// UpdateRuntime swaps workflow executor/parser wiring in place.
-func (h *WorkflowHandler) UpdateRuntime(executor WorkflowExecutor, parser *dsl.Parser) {
+func (h *WorkflowHandler) UpdateService(service usecase.WorkflowService) {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.service = newDefaultWorkflowService(executor, parser)
+	h.service = service
 }
 
-func (h *WorkflowHandler) currentService() WorkflowService {
+func (h *WorkflowHandler) currentService() usecase.WorkflowService {
 	if h == nil {
 		return nil
 	}
@@ -78,7 +74,14 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 	}
 
 	service := h.currentService()
-	wf, source, apiErr := service.BuildDAGWorkflow(req)
+	wf, source, apiErr := service.BuildDAGWorkflow(usecase.WorkflowBuildInput{
+		DSL:     req.DSL,
+		DSLFile: req.DSLFile,
+		DAGJSON: req.DAGJSON,
+		DAGYAML: req.DAGYAML,
+		DAGFile: req.DAGFile,
+		Source:  req.Source,
+	})
 	if apiErr != nil {
 		WriteError(w, apiErr, h.logger)
 		return

@@ -11,15 +11,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/capabilities"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/alicebob/miniredis/v2"
@@ -157,21 +162,13 @@ func TestMultimodalHandler_ImageReferenceFlow(t *testing.T) {
 	logger := zap.NewNop()
 	img := &mockImageProvider{}
 	vdo := &mockVideoProvider{}
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{"mock": img},
-		map[string]video.Provider{"runway": vdo},
-		"mock",
-		"runway",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		logger,
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         logger,
+		imageProviders: map[string]image.Provider{"mock": img},
+		videoProviders: map[string]video.Provider{"runway": vdo},
+		defaultImage:   "mock",
+		defaultVideo:   "runway",
+	})
 
 	refID := uploadTestReference(t, h)
 
@@ -238,21 +235,11 @@ func TestConvertAPIMessages_PreservesMultimodalFields(t *testing.T) {
 func TestMultimodalHandler_ImageStream(t *testing.T) {
 	logger := zap.NewNop()
 	img := &mockImageProvider{}
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{"mock": img},
-		map[string]video.Provider{},
-		"mock",
-		"",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		logger,
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         logger,
+		imageProviders: map[string]image.Provider{"mock": img},
+		defaultImage:   "mock",
+	})
 
 	body := map[string]any{
 		"prompt": "a cat",
@@ -283,21 +270,13 @@ func TestMultimodalHandler_VideoReferenceFlow(t *testing.T) {
 	logger := zap.NewNop()
 	img := &mockImageProvider{}
 	vdo := &mockVideoProvider{}
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{"mock": img},
-		map[string]video.Provider{"runway": vdo},
-		"mock",
-		"runway",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		logger,
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         logger,
+		imageProviders: map[string]image.Provider{"mock": img},
+		videoProviders: map[string]video.Provider{"runway": vdo},
+		defaultImage:   "mock",
+		defaultVideo:   "runway",
+	})
 
 	refID := uploadTestReference(t, h)
 
@@ -322,21 +301,10 @@ func TestMultimodalHandler_VideoReferenceFlow(t *testing.T) {
 
 func TestMultimodalHandler_PlanUnknownField(t *testing.T) {
 	logger := zap.NewNop()
-	h := NewMultimodalHandlerWithProviders(
-		&mockLLMProvider{},
-		nil,
-		nil,
-		map[string]image.Provider{},
-		map[string]video.Provider{},
-		"",
-		"",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		logger,
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:       logger,
+		chatProvider: &mockLLMProvider{},
+	})
 
 	raw := []byte(`{"prompt":"test","unknown_field":"x"}`)
 	w := httptest.NewRecorder()
@@ -352,21 +320,13 @@ func TestMultimodalHandler_Capabilities(t *testing.T) {
 	logger := zap.NewNop()
 	img := &mockImageProvider{}
 	vdo := &mockVideoProvider{}
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{"mock": img},
-		map[string]video.Provider{"runway": vdo},
-		"mock",
-		"runway",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		logger,
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         logger,
+		imageProviders: map[string]image.Provider{"mock": img},
+		videoProviders: map[string]video.Provider{"runway": vdo},
+		defaultImage:   "mock",
+		defaultVideo:   "runway",
+	})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/multimodal/capabilities", nil)
@@ -376,12 +336,13 @@ func TestMultimodalHandler_Capabilities(t *testing.T) {
 }
 
 func TestMultimodalHandler_DefaultProviderRespected(t *testing.T) {
-	h := NewMultimodalHandlerFromConfig(MultimodalHandlerConfig{
-		OpenAIAPIKey:         "openai-key",
-		GoogleAPIKey:         "google-key",
-		DefaultImageProvider: "gemini",
-		DefaultVideoProvider: "veo",
-	}, zap.NewNop())
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         zap.NewNop(),
+		imageProviders: map[string]image.Provider{"gemini": &mockImageProvider{}},
+		videoProviders: map[string]video.Provider{"veo": &mockVideoProvider{}},
+		defaultImage:   "gemini",
+		defaultVideo:   "veo",
+	})
 
 	imageProvider, err := h.resolveImageProvider("")
 	require.NoError(t, err)
@@ -393,21 +354,10 @@ func TestMultimodalHandler_DefaultProviderRespected(t *testing.T) {
 }
 
 func TestMultimodalHandler_UploadReferenceStoreFailure(t *testing.T) {
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{},
-		map[string]video.Provider{},
-		"",
-		"",
-		nil,
-		0,
-		0,
-		&failingReferenceStore{},
-		"",
-		zap.NewNop(),
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         zap.NewNop(),
+		referenceStore: &failingReferenceStore{},
+	})
 
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -432,21 +382,11 @@ func TestMultimodalHandler_UploadReferenceStoreFailure(t *testing.T) {
 
 func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 	img := &mockImageProvider{}
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{"mock": img},
-		map[string]video.Provider{},
-		"mock",
-		"",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		zap.NewNop(),
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         zap.NewNop(),
+		imageProviders: map[string]image.Provider{"mock": img},
+		defaultImage:   "mock",
+	})
 
 	body := map[string]any{
 		"prompt":              "a cat",
@@ -468,21 +408,11 @@ func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 
 func TestMultimodalHandler_VideoRejectsPrivateReferenceURL(t *testing.T) {
 	vdo := &mockVideoProvider{}
-	h := NewMultimodalHandlerWithProviders(
-		nil,
-		nil,
-		nil,
-		map[string]image.Provider{},
-		map[string]video.Provider{"runway": vdo},
-		"",
-		"runway",
-		nil,
-		0,
-		0,
-		nil,
-		"",
-		zap.NewNop(),
-	)
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:         zap.NewNop(),
+		videoProviders: map[string]video.Provider{"runway": vdo},
+		defaultVideo:   "runway",
+	})
 
 	body := map[string]any{
 		"prompt":              "a moving camera scene",
@@ -588,6 +518,162 @@ func TestRedisReferenceStore_TTLExpiry(t *testing.T) {
 
 	_, ok := store.Get("ref_2")
 	assert.False(t, ok)
+}
+
+type multimodalHandlerTestConfig struct {
+	logger           *zap.Logger
+	chatProvider     llm.Provider
+	imageProviders   map[string]image.Provider
+	videoProviders   map[string]video.Provider
+	defaultImage     string
+	defaultVideo     string
+	referenceMaxSize int64
+	referenceTTL     time.Duration
+	referenceStore   storage.ReferenceStore
+	defaultChatModel string
+}
+
+func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHandler {
+	logger := cfg.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if cfg.imageProviders == nil {
+		cfg.imageProviders = map[string]image.Provider{}
+	}
+	if cfg.videoProviders == nil {
+		cfg.videoProviders = map[string]video.Provider{}
+	}
+	if cfg.referenceMaxSize <= 0 {
+		cfg.referenceMaxSize = defaultReferenceBytes
+	}
+	if cfg.referenceTTL <= 0 {
+		cfg.referenceTTL = defaultReferenceTTL
+	}
+	if cfg.referenceStore == nil {
+		cfg.referenceStore = storage.NewMemoryReferenceStore()
+	}
+	if strings.TrimSpace(cfg.defaultChatModel) == "" {
+		cfg.defaultChatModel = defaultChatModelFallback
+	}
+
+	router := multimodal.NewRouter()
+	imageNames := make([]string, 0, len(cfg.imageProviders))
+	for name := range cfg.imageProviders {
+		imageNames = append(imageNames, name)
+	}
+	sort.Strings(imageNames)
+	videoNames := make([]string, 0, len(cfg.videoProviders))
+	for name := range cfg.videoProviders {
+		videoNames = append(videoNames, name)
+	}
+	sort.Strings(videoNames)
+
+	defaultImage := strings.TrimSpace(cfg.defaultImage)
+	if defaultImage == "" && len(imageNames) > 0 {
+		defaultImage = imageNames[0]
+	}
+	defaultVideo := strings.TrimSpace(cfg.defaultVideo)
+	if defaultVideo == "" && len(videoNames) > 0 {
+		defaultVideo = videoNames[0]
+	}
+	for _, name := range imageNames {
+		router.RegisterImage(name, cfg.imageProviders[name], name == defaultImage)
+	}
+	for _, name := range videoNames {
+		router.RegisterVideo(name, cfg.videoProviders[name], name == defaultVideo)
+	}
+
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: cfg.chatProvider,
+		Capabilities: capabilities.NewEntry(router),
+		Logger:       logger,
+	})
+
+	var structuredProvider llm.Provider
+	if cfg.chatProvider != nil {
+		structuredProvider = llmgateway.NewChatProviderAdapter(gateway, cfg.chatProvider)
+	}
+
+	resolveImage := func(provider string) (string, error) {
+		name := strings.TrimSpace(provider)
+		if name == "" {
+			name = defaultImage
+		}
+		if name == "" {
+			return "", fmt.Errorf("no default image provider available")
+		}
+		if _, err := router.Image(name); err != nil {
+			return "", fmt.Errorf("image provider %q not found", name)
+		}
+		return name, nil
+	}
+	resolveVideo := func(provider string) (string, error) {
+		name := strings.TrimSpace(provider)
+		if name == "" {
+			name = defaultVideo
+		}
+		if name == "" {
+			return "", fmt.Errorf("no default video provider available")
+		}
+		if _, err := router.Video(name); err != nil {
+			return "", fmt.Errorf("video provider %q not found", name)
+		}
+		return name, nil
+	}
+
+	service := usecase.NewDefaultMultimodalService(
+		usecase.MultimodalRuntime{
+			Gateway:              gateway,
+			Pipeline:             &multimodal.DefaultPromptPipeline{},
+			ResolveImageProvider: resolveImage,
+			ResolveVideoProvider: resolveVideo,
+			ReferenceStore:       cfg.referenceStore,
+			ReferenceTTL:         cfg.referenceTTL,
+			ReferenceMaxSize:     cfg.referenceMaxSize,
+		},
+	)
+
+	handler := NewMultimodalHandler(service, logger)
+	handler.ApplyRuntimeDeps(MultimodalHandlerRuntimeDeps{
+		DefaultImageProvider: defaultImage,
+		DefaultVideoProvider: defaultVideo,
+		ImageProviders:       imageNames,
+		VideoProviders:       videoNames,
+		ReferenceMaxSize:     cfg.referenceMaxSize,
+		ReferenceTTL:         cfg.referenceTTL,
+		ReferenceStore:       cfg.referenceStore,
+		DefaultChatModel:     cfg.defaultChatModel,
+		StructuredChat:       structuredProvider != nil,
+		StructuredProvider:   structuredProvider,
+		ResolveImageProvider: resolveImage,
+		ResolveVideoProvider: resolveVideo,
+		ImageStreamProvider: func(provider string) (image.StreamingProvider, bool) {
+			p, err := router.Image(provider)
+			if err != nil {
+				return nil, false
+			}
+			sp, ok := p.(image.StreamingProvider)
+			return sp, ok
+		},
+		InvokeChat: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			resp, err := gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+				Capability: llmcore.CapabilityChat,
+				ModelHint:  req.Model,
+				TraceID:    req.TraceID,
+				Payload:    req,
+			})
+			if err != nil {
+				return nil, err
+			}
+			chatResp, ok := resp.Output.(*llm.ChatResponse)
+			if !ok || chatResp == nil {
+				return nil, fmt.Errorf("invalid chat gateway response")
+			}
+			return chatResp, nil
+		},
+	})
+	return handler
 }
 
 func uploadTestReference(t *testing.T, h *MultimodalHandler) string {

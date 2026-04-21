@@ -48,7 +48,7 @@
 ### Chat Handler
 
 ```go
-chatHandler := handlers.NewChatHandler(provider, policyManager, logger)
+chatHandler := handlers.NewChatHandler(chatService, logger)
 http.HandleFunc("/api/v1/chat/completions", chatHandler.HandleCompletion)
 http.HandleFunc("/api/v1/chat/completions/stream", chatHandler.HandleStream)
 ```
@@ -60,7 +60,7 @@ http.HandleFunc("/api/v1/chat/completions/stream", chatHandler.HandleStream)
 ### Agent Handler
 
 ```go
-agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger, resolver)
+agentHandler := handlers.NewAgentHandlerWithService(agentService, nil, logger)
 http.HandleFunc("GET /api/v1/agents", agentHandler.HandleListAgents)
 http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 ```

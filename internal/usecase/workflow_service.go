@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -19,17 +19,10 @@ type WorkflowExecutor interface {
 	ExecuteDAG(ctx context.Context, wf *workflow.DAGWorkflow, input any) (any, error)
 }
 
-// WorkflowService encapsulates workflow parsing, validation and execution use-cases.
 type WorkflowService interface {
-	BuildDAGWorkflow(req workflowExecuteRequest) (*workflow.DAGWorkflow, string, *types.Error)
+	BuildDAGWorkflow(req WorkflowBuildInput) (*workflow.DAGWorkflow, string, *types.Error)
 	Execute(ctx context.Context, wf *workflow.DAGWorkflow, input any, streamEmitter workflow.WorkflowStreamEmitter, nodeEmitter workflowobs.NodeEventEmitter) (any, *types.Error)
-	ValidateDSL(rawDSL string) workflowDSLValidationResult
-}
-
-type workflowDSLValidationResult struct {
-	Valid  bool
-	Name   string
-	Errors []string
+	ValidateDSL(rawDSL string) WorkflowDSLValidationResult
 }
 
 type defaultWorkflowService struct {
@@ -37,14 +30,14 @@ type defaultWorkflowService struct {
 	parser   *dsl.Parser
 }
 
-func newDefaultWorkflowService(executor WorkflowExecutor, parser *dsl.Parser) WorkflowService {
+func NewDefaultWorkflowService(executor WorkflowExecutor, parser *dsl.Parser) WorkflowService {
 	return &defaultWorkflowService{
 		executor: executor,
 		parser:   parser,
 	}
 }
 
-func (s *defaultWorkflowService) BuildDAGWorkflow(req workflowExecuteRequest) (*workflow.DAGWorkflow, string, *types.Error) {
+func (s *defaultWorkflowService) BuildDAGWorkflow(req WorkflowBuildInput) (*workflow.DAGWorkflow, string, *types.Error) {
 	if s.parser == nil {
 		return nil, "", types.NewInternalError("workflow parser is not configured")
 	}
@@ -120,11 +113,11 @@ func (s *defaultWorkflowService) Execute(
 	return result, nil
 }
 
-func (s *defaultWorkflowService) ValidateDSL(rawDSL string) workflowDSLValidationResult {
+func (s *defaultWorkflowService) ValidateDSL(rawDSL string) WorkflowDSLValidationResult {
 	validator := dsl.NewValidator()
 	var dslDef dsl.WorkflowDSL
 	if err := yaml.Unmarshal([]byte(rawDSL), &dslDef); err != nil {
-		return workflowDSLValidationResult{
+		return WorkflowDSLValidationResult{
 			Valid:  false,
 			Errors: []string{"invalid YAML: " + err.Error()},
 		}
@@ -136,13 +129,13 @@ func (s *defaultWorkflowService) ValidateDSL(rawDSL string) workflowDSLValidatio
 		for i, e := range errs {
 			errMsgs[i] = e.Error()
 		}
-		return workflowDSLValidationResult{
+		return WorkflowDSLValidationResult{
 			Valid:  false,
 			Errors: errMsgs,
 		}
 	}
 
-	return workflowDSLValidationResult{
+	return WorkflowDSLValidationResult{
 		Valid: true,
 		Name:  dslDef.Name,
 	}
@@ -168,7 +161,7 @@ const (
 	workflowSourceDAGFile = "dag_file"
 )
 
-func resolveWorkflowSource(req workflowExecuteRequest) (string, error) {
+func resolveWorkflowSource(req WorkflowBuildInput) (string, error) {
 	source := strings.ToLower(strings.TrimSpace(req.Source))
 	if source == "" || source == workflowSourceAuto {
 		available := make([]string, 0, 5)

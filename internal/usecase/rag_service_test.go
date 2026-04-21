@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -86,7 +86,7 @@ func TestDefaultRAGService_Query(t *testing.T) {
 		&fakeRAGEmbedding{queryVec: []float64{1, 2, 3}},
 	)
 
-	got, err := svc.Query(context.Background(), "hello", 3, RAGQueryOptions{Strategy: "vector"})
+	got, err := svc.Query(context.Background(), RAGQueryInput{Query: "hello", TopK: 3, Strategy: "vector"})
 	if err != nil {
 		t.Fatalf("Query error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestDefaultRAGService_Query_EmbeddingError(t *testing.T) {
 		&fakeRAGStore{},
 		&fakeRAGEmbedding{err: errors.New("embed failed")},
 	)
-	_, err := svc.Query(context.Background(), "hello", 3, RAGQueryOptions{})
+	_, err := svc.Query(context.Background(), RAGQueryInput{Query: "hello", TopK: 3})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -120,7 +120,7 @@ func TestDefaultRAGService_Query_InvalidStrategy(t *testing.T) {
 		&fakeRAGStore{},
 		&fakeRAGEmbedding{queryVec: []float64{1, 2, 3}},
 	)
-	_, err := svc.Query(context.Background(), "hello", 3, RAGQueryOptions{Strategy: "graph_rag"})
+	_, err := svc.Query(context.Background(), RAGQueryInput{Query: "hello", TopK: 3, Strategy: "graph_rag"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -135,9 +135,7 @@ func TestDefaultRAGService_Index(t *testing.T) {
 		store,
 		&fakeRAGEmbedding{docVecs: [][]float64{{0.1, 0.2}}},
 	)
-	err := svc.Index(context.Background(), []core.Document{
-		{ID: "1", Content: "doc"},
-	})
+	err := svc.Index(context.Background(), RAGIndexInput{Documents: []core.Document{{ID: "1", Content: "doc"}}})
 	if err != nil {
 		t.Fatalf("Index error: %v", err)
 	}
@@ -155,13 +153,13 @@ func TestDefaultRAGService_Query_BM25(t *testing.T) {
 			docVecs:  [][]float64{{1, 0}},
 		},
 	)
-	if err := svc.Index(context.Background(), []core.Document{
+	if err := svc.Index(context.Background(), RAGIndexInput{Documents: []core.Document{
 		{ID: "doc-1", Content: "agentflow rag strategy routing"},
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("Index error: %v", err)
 	}
 
-	got, err := svc.Query(context.Background(), "strategy", 3, RAGQueryOptions{Strategy: "bm25"})
+	got, err := svc.Query(context.Background(), RAGQueryInput{Query: "strategy", TopK: 3, Strategy: "bm25"})
 	if err != nil {
 		t.Fatalf("Query error: %v", err)
 	}

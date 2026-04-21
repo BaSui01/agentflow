@@ -1,18 +1,30 @@
-package handlers
+package usecase
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 )
 
-// APIKeyService encapsulates API key CRUD/use-case logic for API handlers.
 type APIKeyService interface {
 	ListProviders() ([]llm.LLMProvider, *types.Error)
-	ListAPIKeys(providerID uint) ([]apiKeyResponse, *types.Error)
-	CreateAPIKey(providerID uint, req createAPIKeyRequest) (*apiKeyResponse, *types.Error)
-	UpdateAPIKey(providerID, keyID uint, req updateAPIKeyRequest) (*apiKeyResponse, *types.Error)
+	ListAPIKeys(providerID uint) ([]APIKeyView, *types.Error)
+	CreateAPIKey(providerID uint, req CreateAPIKeyInput) (*APIKeyView, *types.Error)
+	UpdateAPIKey(providerID, keyID uint, req UpdateAPIKeyInput) (*APIKeyView, *types.Error)
 	DeleteAPIKey(providerID, keyID uint) *types.Error
-	ListAPIKeyStats(providerID uint) ([]apiKeyStatsResponse, *types.Error)
+	ListAPIKeyStats(providerID uint) ([]APIKeyStatsView, *types.Error)
+}
+
+type APIKeyStore interface {
+	ListProviders() ([]llm.LLMProvider, error)
+	ListAPIKeys(providerID uint) ([]llm.LLMProviderAPIKey, error)
+	CreateAPIKey(key *llm.LLMProviderAPIKey) error
+	GetAPIKey(keyID, providerID uint) (llm.LLMProviderAPIKey, error)
+	UpdateAPIKey(key *llm.LLMProviderAPIKey, updates map[string]any) error
+	ReloadAPIKey(key *llm.LLMProviderAPIKey) error
+	DeleteAPIKey(keyID, providerID uint) (int64, error)
 }
 
 type DefaultAPIKeyService struct {
@@ -31,24 +43,24 @@ func (s *DefaultAPIKeyService) ListProviders() ([]llm.LLMProvider, *types.Error)
 	return providers, nil
 }
 
-func (s *DefaultAPIKeyService) ListAPIKeys(providerID uint) ([]apiKeyResponse, *types.Error) {
+func (s *DefaultAPIKeyService) ListAPIKeys(providerID uint) ([]APIKeyView, *types.Error) {
 	keys, err := s.store.ListAPIKeys(providerID)
 	if err != nil {
 		return nil, types.NewInternalError("failed to list API keys").WithCause(err)
 	}
 
-	resp := make([]apiKeyResponse, 0, len(keys))
+	resp := make([]APIKeyView, 0, len(keys))
 	for _, k := range keys {
 		resp = append(resp, toAPIKeyResponse(k))
 	}
 	return resp, nil
 }
 
-func (s *DefaultAPIKeyService) CreateAPIKey(providerID uint, req createAPIKeyRequest) (*apiKeyResponse, *types.Error) {
+func (s *DefaultAPIKeyService) CreateAPIKey(providerID uint, req CreateAPIKeyInput) (*APIKeyView, *types.Error) {
 	if req.APIKey == "" {
 		return nil, types.NewError(types.ErrInvalidRequest, "api_key is required")
 	}
-	if req.BaseURL != "" && !ValidateURL(req.BaseURL) {
+	if req.BaseURL != "" && !validateURL(req.BaseURL) {
 		return nil, types.NewError(types.ErrInvalidRequest, "base_url must be a valid HTTP or HTTPS URL")
 	}
 	if req.Priority < 0 {
@@ -90,13 +102,13 @@ func (s *DefaultAPIKeyService) CreateAPIKey(providerID uint, req createAPIKeyReq
 	return &resp, nil
 }
 
-func (s *DefaultAPIKeyService) UpdateAPIKey(providerID, keyID uint, req updateAPIKeyRequest) (*apiKeyResponse, *types.Error) {
+func (s *DefaultAPIKeyService) UpdateAPIKey(providerID, keyID uint, req UpdateAPIKeyInput) (*APIKeyView, *types.Error) {
 	existing, err := s.store.GetAPIKey(keyID, providerID)
 	if err != nil {
 		return nil, types.NewNotFoundError("API key not found")
 	}
 
-	if req.BaseURL != nil && *req.BaseURL != "" && !ValidateURL(*req.BaseURL) {
+	if req.BaseURL != nil && *req.BaseURL != "" && !validateURL(*req.BaseURL) {
 		return nil, types.NewError(types.ErrInvalidRequest, "base_url must be a valid HTTP or HTTPS URL")
 	}
 	if req.Priority != nil && *req.Priority < 0 {
@@ -159,19 +171,19 @@ func (s *DefaultAPIKeyService) DeleteAPIKey(providerID, keyID uint) *types.Error
 	return nil
 }
 
-func (s *DefaultAPIKeyService) ListAPIKeyStats(providerID uint) ([]apiKeyStatsResponse, *types.Error) {
+func (s *DefaultAPIKeyService) ListAPIKeyStats(providerID uint) ([]APIKeyStatsView, *types.Error) {
 	keys, err := s.store.ListAPIKeys(providerID)
 	if err != nil {
 		return nil, types.NewInternalError("failed to load API keys").WithCause(err)
 	}
 
-	stats := make([]apiKeyStatsResponse, 0, len(keys))
+	stats := make([]APIKeyStatsView, 0, len(keys))
 	for _, k := range keys {
 		successRate := 1.0
 		if k.TotalRequests > 0 {
 			successRate = float64(k.TotalRequests-k.FailedRequests) / float64(k.TotalRequests)
 		}
-		stats = append(stats, apiKeyStatsResponse{
+		stats = append(stats, APIKeyStatsView{
 			KeyID:          k.ID,
 			Label:          k.Label,
 			BaseURL:        k.BaseURL,
@@ -189,4 +201,39 @@ func (s *DefaultAPIKeyService) ListAPIKeyStats(providerID uint) ([]apiKeyStatsRe
 	}
 
 	return stats, nil
+}
+
+func toAPIKeyResponse(k llm.LLMProviderAPIKey) APIKeyView {
+	return APIKeyView{
+		ID:             k.ID,
+		ProviderID:     k.ProviderID,
+		APIKeyMasked:   maskAPIKey(k.APIKey),
+		BaseURL:        k.BaseURL,
+		Label:          k.Label,
+		Priority:       k.Priority,
+		Weight:         k.Weight,
+		Enabled:        k.Enabled,
+		TotalRequests:  k.TotalRequests,
+		FailedRequests: k.FailedRequests,
+		RateLimitRPM:   k.RateLimitRPM,
+		RateLimitRPD:   k.RateLimitRPD,
+	}
+}
+
+func maskAPIKey(key string) string {
+	if len(key) <= 4 {
+		return "****"
+	}
+	return strings.Repeat("*", len(key)-4) + key[len(key)-4:]
+}
+
+func validateURL(raw string) bool {
+	if strings.TrimSpace(raw) == "" {
+		return false
+	}
+	u, err := url.ParseRequestURI(raw)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
 }

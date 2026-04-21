@@ -9,16 +9,37 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
+	"github.com/BaSui01/agentflow/internal/usecase"
+	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+func newChatHandlerFromProvider(provider llm.Provider, logger *zap.Logger) *handlers.ChatHandler {
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       logger,
+	})
+	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
+	service := usecase.NewDefaultChatService(
+		usecase.ChatRuntime{
+			Gateway:      gateway,
+			ChatProvider: chatProvider,
+		},
+		handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(30*time.Second)),
+		logger,
+	)
+	return handlers.NewChatHandler(service, logger)
+}
 
 func TestChatEndpoints_ChannelRoutedProviderCompletion(t *testing.T) {
 	t.Parallel()
@@ -84,7 +105,7 @@ func TestChatEndpoints_ChannelRoutedProviderCompletion(t *testing.T) {
 	})
 
 	mux := http.NewServeMux()
-	routes.RegisterChat(mux, handlers.NewChatHandler(provider, nil, zap.NewNop()), zap.NewNop())
+	routes.RegisterChat(mux, newChatHandlerFromProvider(provider, zap.NewNop()), zap.NewNop())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -190,7 +211,7 @@ func TestChatEndpoints_ChannelRoutedProviderStream(t *testing.T) {
 	})
 
 	mux := http.NewServeMux()
-	routes.RegisterChat(mux, handlers.NewChatHandler(provider, nil, zap.NewNop()), zap.NewNop())
+	routes.RegisterChat(mux, newChatHandlerFromProvider(provider, zap.NewNop()), zap.NewNop())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -285,7 +306,7 @@ func TestChatEndpoints_ChannelRoutedProviderOpenAICompatCompletion(t *testing.T)
 	})
 
 	mux := http.NewServeMux()
-	routes.RegisterChat(mux, handlers.NewChatHandler(provider, nil, zap.NewNop()), zap.NewNop())
+	routes.RegisterChat(mux, newChatHandlerFromProvider(provider, zap.NewNop()), zap.NewNop())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -380,7 +401,7 @@ func TestChatEndpoints_ChannelRoutedProviderOpenAICompatResponsesStream(t *testi
 	})
 
 	mux := http.NewServeMux()
-	routes.RegisterChat(mux, handlers.NewChatHandler(provider, nil, zap.NewNop()), zap.NewNop())
+	routes.RegisterChat(mux, newChatHandlerFromProvider(provider, zap.NewNop()), zap.NewNop())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -475,7 +496,7 @@ func TestChatEndpoints_ChannelRoutedProviderCompletionFailureStillRecordsRouteUs
 	})
 
 	mux := http.NewServeMux()
-	routes.RegisterChat(mux, handlers.NewChatHandler(provider, nil, zap.NewNop()), zap.NewNop())
+	routes.RegisterChat(mux, newChatHandlerFromProvider(provider, zap.NewNop()), zap.NewNop())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

@@ -33,19 +33,19 @@ import (
 
 type mockChatService struct{}
 
-func (m *mockChatService) Complete(_ context.Context, req *api.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
+func (m *mockChatService) Complete(_ context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
 	// If the request carries tools, return a tool_calls response.
 	if len(req.Tools) > 0 {
 		return &usecase.ChatCompletionResult{
-			Response: &api.ChatResponse{
+			Response: &usecase.ChatResponse{
 				ID:       "chatcmpl-tool-001",
 				Provider: "mock",
 				Model:    req.Model,
-				Choices: []api.ChatChoice{
+				Choices: []usecase.ChatChoice{
 					{
 						Index:        0,
 						FinishReason: "tool_calls",
-						Message: api.Message{
+						Message: usecase.Message{
 							Role:    "assistant",
 							Content: "",
 							ToolCalls: []types.ToolCall{
@@ -58,7 +58,7 @@ func (m *mockChatService) Complete(_ context.Context, req *api.ChatRequest) (*us
 						},
 					},
 				},
-				Usage:     api.ChatUsage{PromptTokens: 20, CompletionTokens: 10, TotalTokens: 30},
+				Usage:     usecase.ChatUsage{PromptTokens: 20, CompletionTokens: 10, TotalTokens: 30},
 				CreatedAt: time.Now(),
 			},
 			Raw: &llm.ChatResponse{
@@ -71,18 +71,18 @@ func (m *mockChatService) Complete(_ context.Context, req *api.ChatRequest) (*us
 	}
 
 	return &usecase.ChatCompletionResult{
-		Response: &api.ChatResponse{
+		Response: &usecase.ChatResponse{
 			ID:       "chatcmpl-mock-001",
 			Provider: "mock",
 			Model:    req.Model,
-			Choices: []api.ChatChoice{
+			Choices: []usecase.ChatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message:      api.Message{Role: "assistant", Content: "Hello from mock provider!"},
+					Message:      usecase.Message{Role: "assistant", Content: "Hello from mock provider!"},
 				},
 			},
-			Usage:     api.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage:     usecase.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 			CreatedAt: time.Now(),
 		},
 		Raw: &llm.ChatResponse{
@@ -94,7 +94,7 @@ func (m *mockChatService) Complete(_ context.Context, req *api.ChatRequest) (*us
 	}, nil
 }
 
-func (m *mockChatService) Stream(_ context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (m *mockChatService) Stream(_ context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
 	ch := make(chan llmcore.UnifiedChunk, 4)
 	go func() {
 		defer close(ch)
@@ -130,7 +130,7 @@ func (m *mockChatService) DefaultRoutePolicy() string       { return "balanced" 
 func buildServer() *httptest.Server {
 	logger := zap.NewNop()
 	svc := &mockChatService{}
-	chatHandler := handlers.NewChatHandlerWithService(svc, logger)
+	chatHandler := handlers.NewChatHandler(svc, logger)
 	healthHandler := handlers.NewHealthHandler(logger)
 
 	mux := http.NewServeMux()
@@ -144,9 +144,9 @@ func buildServer() *httptest.Server {
 // =========================================================================
 
 type testResult struct {
-	name    string
-	passed  bool
-	detail  string
+	name   string
+	passed bool
+	detail string
 }
 
 func (r testResult) String() string {

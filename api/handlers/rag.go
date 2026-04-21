@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -12,7 +12,7 @@ import (
 
 // RAGHandler handles RAG (Retrieval-Augmented Generation) API requests.
 type RAGHandler struct {
-	service RAGService
+	service usecase.RAGService
 	logger  *zap.Logger
 }
 
@@ -27,12 +27,7 @@ func asTypesError(err error) *types.Error {
 	return types.NewError(types.ErrInternalError, "internal error").WithCause(err)
 }
 
-// NewRAGHandler creates a new RAG handler.
-func NewRAGHandler(store rag.VectorStore, embedding rag.EmbeddingProvider, logger *zap.Logger) *RAGHandler {
-	return NewRAGHandlerWithService(NewDefaultRAGService(store, embedding), logger)
-}
-
-func NewRAGHandlerWithService(service RAGService, logger *zap.Logger) *RAGHandler {
+func NewRAGHandler(service usecase.RAGService, logger *zap.Logger) *RAGHandler {
 	return &RAGHandler{
 		service: service,
 		logger:  logger,
@@ -81,8 +76,11 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		req.TopK = 256
 	}
 
-	queryResponse, err := h.service.Query(r.Context(), req.Query, req.TopK, RAGQueryOptions{
-		Strategy: req.Strategy,
+	queryResponse, err := h.service.Query(r.Context(), usecase.RAGQueryInput{
+		Query:      req.Query,
+		TopK:       req.TopK,
+		Strategy:   req.Strategy,
+		Collection: req.Collection,
 	})
 	if err != nil {
 		WriteError(w, asTypesError(err), h.logger)
@@ -166,7 +164,10 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 			Metadata: doc.Metadata,
 		}
 	}
-	if err := h.service.Index(r.Context(), docs); err != nil {
+	if err := h.service.Index(r.Context(), usecase.RAGIndexInput{
+		Documents:  docs,
+		Collection: req.Collection,
+	}); err != nil {
 		WriteError(w, asTypesError(err), h.logger)
 		return
 	}

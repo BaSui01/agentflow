@@ -1619,7 +1619,7 @@ go test ./workflow/... -v -race
 - 依赖已清理：`go mod tidy` 后移除 `chromedp/cdproto/sysutil`
 
 历史实现草案不再作为当前可执行任务，统一以治理文档结论为准：
-`docs/重构计划/未使用代码治理重构计划-2026-03-03.md`
+`docs/重构计划/归档/未使用代码治理重构计划-2026-03-03.md`
 
 ## P1-5: LLM Provider 空壳补全
 

@@ -7,14 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
-	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
-	"github.com/BaSui01/agentflow/llm/observability"
-	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -34,35 +29,13 @@ const maxTokensUpperBound = 128000
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
 	mu        sync.RWMutex
-	gateway   llmcore.Gateway
 	converter ChatConverter
 	service   usecase.ChatService
 	logger    *zap.Logger
 }
 
 // NewChatHandler 创建聊天处理器
-func NewChatHandler(provider llm.Provider, policyManager *llmpolicy.Manager, logger *zap.Logger) *ChatHandler {
-	return NewChatHandlerWithRuntime(provider, policyManager, nil, nil, logger)
-}
-
-// NewChatHandlerWithRuntime creates a chat handler with routing runtime dependencies.
-func NewChatHandlerWithRuntime(
-	provider llm.Provider,
-	policyManager *llmpolicy.Manager,
-	toolManager agent.ToolManager,
-	ledger observability.Ledger,
-	logger *zap.Logger,
-) *ChatHandler {
-	handler := &ChatHandler{
-		converter: NewDefaultChatConverter(defaultStreamTimeout),
-		logger:    logger,
-	}
-	handler.UpdateRuntime(provider, policyManager, toolManager, ledger)
-	return handler
-}
-
-// NewChatHandlerWithService creates a chat handler with an explicit service.
-func NewChatHandlerWithService(service usecase.ChatService, logger *zap.Logger) *ChatHandler {
+func NewChatHandler(service usecase.ChatService, logger *zap.Logger) *ChatHandler {
 	if logger == nil {
 		panic("api.ChatHandler: logger is required and cannot be nil")
 	}
@@ -73,30 +46,15 @@ func NewChatHandlerWithService(service usecase.ChatService, logger *zap.Logger) 
 	}
 }
 
-// UpdateRuntime swaps the handler's chat runtime in place so existing HTTP
-// route bindings keep using the latest provider chain after hot reload.
-func (h *ChatHandler) UpdateRuntime(
-	provider llm.Provider,
-	policyManager *llmpolicy.Manager,
-	toolManager agent.ToolManager,
-	ledger observability.Ledger,
-) {
+// UpdateService swaps the handler's chat service in place so existing HTTP
+// route bindings keep using the latest service after hot reload.
+func (h *ChatHandler) UpdateService(service usecase.ChatService) {
 	if h == nil {
 		return
 	}
 
-	gateway := llmgateway.New(llmgateway.Config{
-		ChatProvider:  provider,
-		PolicyManager: policyManager,
-		Ledger:        ledger,
-		Logger:        h.logger,
-	})
-	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
-	service := usecase.NewDefaultChatService(gateway, chatProvider, toolManager, h.converter, h.logger)
-
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.gateway = gateway
 	h.service = service
 }
 
@@ -142,7 +100,7 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := service.Complete(r.Context(), &req)
+	result, err := service.Complete(r.Context(), h.converter.ToUsecaseRequest(&req))
 	if err != nil {
 		WriteError(w, err, h.logger)
 		return
@@ -158,7 +116,7 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		zap.Duration("duration", result.Duration),
 	)
 
-	WriteSuccess(w, result.Response)
+	WriteSuccess(w, h.converter.ToAPIResponseFromUsecase(result.Response))
 }
 
 // HandleStream 处理流式聊天请求
@@ -206,7 +164,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stream, err := service.Stream(r.Context(), &req)
+	stream, err := service.Stream(r.Context(), h.converter.ToUsecaseRequest(&req))
 	if err != nil {
 		WriteError(w, err, h.logger)
 		return

@@ -36,12 +36,19 @@
 | [📊 工作流编排进阶](./tutorials/10.工作流编排进阶.md) | 高级工作流模式与 DSL | ⭐⭐⭐⭐ |
 | [💰 成本追踪](./tutorials/11.成本追踪.md) | Token 计数与成本管理 | ⭐⭐ |
 
+### 📘 指南
+
+| 文档 | 描述 | 难度 |
+|------|------|------|
+| [🧭 模型厂商与模型中文命名规范](./guides/模型厂商与模型中文命名规范.md) | 统一厂商名、模型名、latest 写法与引用口径 | ⭐ |
+| [✅ 最佳实践](./guides/best-practices.md) | AgentFlow 使用建议与常见设计约束 | ⭐⭐ |
+
 ---
 
 ## 🌟 核心特性
 
 ### 🔌 统一 LLM 抽象层
-- **13+ 提供商支持**: OpenAI、Claude、Gemini、DeepSeek、通义千问、智谱 GLM、Grok、Kimi 等
+- **13+ 提供商支持**: OpenAI、Anthropic Claude、Google Gemini、DeepSeek、通义千问 Qwen、智谱 GLM、xAI Grok、Kimi 等
 - **统一接口**: 一套代码适配所有 LLM
 - **弹性容错**: 自动重试、熔断器、幂等性保证
 - **A/B 测试路由**: 多变体流量分配、粘性路由、动态权重调整

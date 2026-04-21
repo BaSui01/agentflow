@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -12,21 +12,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// RAGService defines the use-case boundary for RAG handler.
 type RAGService interface {
-	Query(ctx context.Context, query string, topK int, opts RAGQueryOptions) (*RAGQueryResponse, error)
-	Index(ctx context.Context, docs []core.Document) error
+	Query(ctx context.Context, input RAGQueryInput) (*RAGQueryOutput, error)
+	Index(ctx context.Context, input RAGIndexInput) error
 	SupportedStrategies() []string
-}
-
-type RAGQueryOptions struct {
-	Strategy string
-}
-
-type RAGQueryResponse struct {
-	Results           []core.VectorSearchResult
-	RequestedStrategy string
-	EffectiveStrategy string
 }
 
 type ragStrategyExecutor func(ctx context.Context, query string, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error)
@@ -55,14 +44,14 @@ func NewDefaultRAGService(store core.VectorStore, embedding core.EmbeddingProvid
 	return service
 }
 
-func (s *DefaultRAGService) Query(ctx context.Context, query string, topK int, opts RAGQueryOptions) (*RAGQueryResponse, error) {
-	queryEmbedding, err := s.embedding.EmbedQuery(ctx, query)
+func (s *DefaultRAGService) Query(ctx context.Context, input RAGQueryInput) (*RAGQueryOutput, error) {
+	queryEmbedding, err := s.embedding.EmbedQuery(ctx, input.Query)
 	if err != nil {
 		return nil, types.NewError(types.ErrUpstreamError, "failed to generate query embedding").WithCause(err)
 	}
 
-	requestedStrategy := normalizeRAGStrategy(opts.Strategy)
-	effectiveStrategy, err := s.resolveStrategy(ctx, query, requestedStrategy)
+	requestedStrategy := normalizeRAGStrategy(input.Strategy)
+	effectiveStrategy, err := s.resolveStrategy(ctx, input.Query, requestedStrategy)
 	if err != nil {
 		return nil, err
 	}
@@ -72,19 +61,21 @@ func (s *DefaultRAGService) Query(ctx context.Context, query string, topK int, o
 		return nil, types.NewError(types.ErrInvalidRequest, fmt.Sprintf("unsupported strategy: %s", effectiveStrategy))
 	}
 
-	results, err := executor(ctx, query, queryEmbedding, topK)
+	results, err := executor(ctx, input.Query, queryEmbedding, input.TopK)
 	if err != nil {
 		return nil, types.NewError(types.ErrInternalError, "rag query failed").WithCause(err)
 	}
 
-	return &RAGQueryResponse{
+	return &RAGQueryOutput{
 		Results:           results,
 		RequestedStrategy: requestedStrategy,
 		EffectiveStrategy: effectiveStrategy,
+		Collection:        input.Collection,
 	}, nil
 }
 
-func (s *DefaultRAGService) Index(ctx context.Context, docs []core.Document) error {
+func (s *DefaultRAGService) Index(ctx context.Context, input RAGIndexInput) error {
+	docs := input.Documents
 	if len(docs) == 0 {
 		return nil
 	}

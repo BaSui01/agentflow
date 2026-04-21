@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
@@ -17,6 +18,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+func newChatServiceUnderTest(
+	gateway llmcore.Gateway,
+	chatProvider llm.Provider,
+	toolManager agent.ToolManager,
+) usecase.ChatService {
+	return usecase.NewDefaultChatService(
+		usecase.ChatRuntime{
+			Gateway:      gateway,
+			ChatProvider: chatProvider,
+			ToolManager:  toolManager,
+		},
+		newUsecaseChatConverter(NewDefaultChatConverter(defaultStreamTimeout)),
+		zap.NewNop(),
+	)
+}
 
 type chatGatewayStub struct {
 	invokeReq *llmcore.UnifiedRequest
@@ -137,9 +154,9 @@ func (s *chatGatewayStub) Stream(_ context.Context, req *llmcore.UnifiedRequest)
 
 func TestChatService_Complete_RoutesByParams(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := newChatServiceUnderTest(gw, nil, nil)
 
-	result, err := svc.Complete(context.Background(), &api.ChatRequest{
+	result, err := svc.Complete(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model:        "gpt-4o",
 		Provider:     "openai",
 		RoutePolicy:  "cost_first",
@@ -149,7 +166,7 @@ func TestChatService_Complete_RoutesByParams(t *testing.T) {
 		},
 		Metadata: map[string]string{"tenant": "t1"},
 		Tags:     []string{"prod", "prod", "chat"},
-	})
+	}))
 	require.Nil(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, gw.invokeReq)
@@ -165,15 +182,15 @@ func TestChatService_Complete_RoutesByParams(t *testing.T) {
 
 func TestChatService_Complete_InvalidRoutePolicy(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := newChatServiceUnderTest(gw, nil, nil)
 
-	result, err := svc.Complete(context.Background(), &api.ChatRequest{
+	result, err := svc.Complete(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model:       "gpt-4o",
 		RoutePolicy: "fastest",
 		Messages: []api.Message{
 			{Role: "user", Content: "hello"},
 		},
-	})
+	}))
 	require.Nil(t, result)
 	require.NotNil(t, err)
 	assert.Equal(t, types.ErrInvalidRequest, err.Code)
@@ -181,15 +198,15 @@ func TestChatService_Complete_InvalidRoutePolicy(t *testing.T) {
 
 func TestChatService_Complete_InvalidEndpointMode(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := newChatServiceUnderTest(gw, nil, nil)
 
-	result, err := svc.Complete(context.Background(), &api.ChatRequest{
+	result, err := svc.Complete(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model:        "gpt-4o",
 		EndpointMode: "responses_api",
 		Messages: []api.Message{
 			{Role: "user", Content: "hello"},
 		},
-	})
+	}))
 	require.Nil(t, result)
 	require.NotNil(t, err)
 	assert.Equal(t, types.ErrInvalidRequest, err.Code)
@@ -197,9 +214,9 @@ func TestChatService_Complete_InvalidEndpointMode(t *testing.T) {
 
 func TestChatService_Stream_RoutesByParams(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := newChatServiceUnderTest(gw, nil, nil)
 
-	stream, err := svc.Stream(context.Background(), &api.ChatRequest{
+	stream, err := svc.Stream(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model:        "gpt-4o",
 		Provider:     "openai",
 		RoutePolicy:  "balanced",
@@ -207,7 +224,7 @@ func TestChatService_Stream_RoutesByParams(t *testing.T) {
 		Messages: []api.Message{
 			{Role: "user", Content: "hello"},
 		},
-	})
+	}))
 	require.Nil(t, err)
 	require.NotNil(t, stream)
 	require.NotNil(t, gw.streamReq)
@@ -283,9 +300,9 @@ func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 		},
 	}
 
-	svc := usecase.NewDefaultChatService(gw, provider, toolManager, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := newChatServiceUnderTest(gw, provider, toolManager)
 
-	result, err := svc.Complete(context.Background(), &api.ChatRequest{
+	result, err := svc.Complete(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model: "gpt-4o",
 		Messages: []api.Message{
 			{Role: "user", Content: "请检索并回答"},
@@ -295,7 +312,7 @@ func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 			{Name: "not_registered", Parameters: json.RawMessage(`{"type":"object"}`)},
 		},
 		ToolChoice: "auto",
-	})
+	}))
 	require.Nil(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Raw)
@@ -312,9 +329,9 @@ func TestChatService_Complete_FallbackGatewayWhenNoToolManager(t *testing.T) {
 			return nil, errors.New("should not call provider completion")
 		},
 	}
-	svc := usecase.NewDefaultChatService(gw, provider, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := newChatServiceUnderTest(gw, provider, nil)
 
-	result, err := svc.Complete(context.Background(), &api.ChatRequest{
+	result, err := svc.Complete(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model: "gpt-4o",
 		Messages: []api.Message{
 			{Role: "user", Content: "hello"},
@@ -322,7 +339,7 @@ func TestChatService_Complete_FallbackGatewayWhenNoToolManager(t *testing.T) {
 		Tools: []api.ToolSchema{
 			{Name: "retrieval", Parameters: json.RawMessage(`{"type":"object"}`)},
 		},
-	})
+	}))
 	require.Nil(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, provider.completionCalls)
@@ -375,8 +392,8 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 		},
 	}
 
-	svc := usecase.NewDefaultChatService(gw, provider, toolManager, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
-	stream, err := svc.Stream(context.Background(), &api.ChatRequest{
+	svc := newChatServiceUnderTest(gw, provider, toolManager)
+	stream, err := svc.Stream(context.Background(), NewDefaultChatConverter(defaultStreamTimeout).ToUsecaseRequest(&api.ChatRequest{
 		Model: "gpt-4o",
 		Messages: []api.Message{
 			{Role: "user", Content: "流式检索回答"},
@@ -384,7 +401,7 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 		Tools: []api.ToolSchema{
 			{Name: "retrieval", Parameters: json.RawMessage(`{"type":"object"}`)},
 		},
-	})
+	}))
 	require.Nil(t, err)
 	require.NotNil(t, stream)
 	assert.Nil(t, gw.streamReq)

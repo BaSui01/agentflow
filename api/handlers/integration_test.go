@@ -24,27 +24,27 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockChatService struct {
-	completeFunc func(ctx context.Context, req *api.ChatRequest) (*usecase.ChatCompletionResult, *types.Error)
-	streamFunc   func(ctx context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error)
+	completeFunc func(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error)
+	streamFunc   func(ctx context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error)
 }
 
-func (m *mockChatService) Complete(ctx context.Context, req *api.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
+func (m *mockChatService) Complete(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
 	if m.completeFunc != nil {
 		return m.completeFunc(ctx, req)
 	}
 	return &usecase.ChatCompletionResult{
-		Response: &api.ChatResponse{
+		Response: &usecase.ChatResponse{
 			ID:       "chatcmpl-test-123",
 			Provider: "mock",
 			Model:    req.Model,
-			Choices: []api.ChatChoice{
+			Choices: []usecase.ChatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message:      api.Message{Role: "assistant", Content: "Hello from mock"},
+					Message:      usecase.Message{Role: "assistant", Content: "Hello from mock"},
 				},
 			},
-			Usage:     api.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage:     usecase.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 			CreatedAt: time.Now(),
 		},
 		Raw: &llm.ChatResponse{
@@ -56,7 +56,7 @@ func (m *mockChatService) Complete(ctx context.Context, req *api.ChatRequest) (*
 	}, nil
 }
 
-func (m *mockChatService) Stream(ctx context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (m *mockChatService) Stream(ctx context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
 	if m.streamFunc != nil {
 		return m.streamFunc(ctx, req)
 	}
@@ -76,7 +76,7 @@ func newTestMux(t *testing.T) (*http.ServeMux, *mockChatService) {
 	t.Helper()
 	logger := zap.NewNop()
 	svc := &mockChatService{}
-	chatHandler := handlers.NewChatHandlerWithService(svc, logger)
+	chatHandler := handlers.NewChatHandler(svc, logger)
 	healthHandler := handlers.NewHealthHandler(logger)
 
 	mux := http.NewServeMux()
@@ -311,7 +311,7 @@ func TestOpenAICompatChatCompletionsEndpoint_InvalidJSON(t *testing.T) {
 
 func TestChatCompletionsEndpoint_ServiceError(t *testing.T) {
 	mux, svc := newTestMux(t)
-	svc.completeFunc = func(ctx context.Context, req *api.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
+	svc.completeFunc = func(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
 		return nil, types.NewInternalError("mock service failure")
 	}
 	srv := httptest.NewServer(mux)

@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -9,10 +9,19 @@ import (
 )
 
 type ToolProviderService interface {
-	List() ([]toolProviderResponse, *types.Error)
-	Upsert(provider string, req upsertToolProviderRequest) (*toolProviderResponse, *types.Error)
+	List() ([]ToolProviderView, *types.Error)
+	Upsert(provider string, req UpsertToolProviderInput) (*ToolProviderView, *types.Error)
 	Delete(provider string) *types.Error
 	Reload() *types.Error
+}
+
+type ToolProviderStore interface {
+	List() ([]hosted.ToolProviderConfig, error)
+	GetByProvider(provider string) (hosted.ToolProviderConfig, error)
+	Create(row *hosted.ToolProviderConfig) error
+	Update(row *hosted.ToolProviderConfig, updates map[string]any) error
+	Reload(row *hosted.ToolProviderConfig) error
+	DeleteByProvider(provider string) (int64, error)
 }
 
 type DefaultToolProviderService struct {
@@ -24,19 +33,19 @@ func NewDefaultToolProviderService(store ToolProviderStore, runtime ToolRegistry
 	return &DefaultToolProviderService{store: store, runtime: runtime}
 }
 
-func (s *DefaultToolProviderService) List() ([]toolProviderResponse, *types.Error) {
+func (s *DefaultToolProviderService) List() ([]ToolProviderView, *types.Error) {
 	rows, err := s.store.List()
 	if err != nil {
 		return nil, types.NewInternalError("failed to list tool providers").WithCause(err)
 	}
-	out := make([]toolProviderResponse, 0, len(rows))
+	out := make([]ToolProviderView, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, toToolProviderResponse(row))
 	}
 	return out, nil
 }
 
-func (s *DefaultToolProviderService) Upsert(provider string, req upsertToolProviderRequest) (*toolProviderResponse, *types.Error) {
+func (s *DefaultToolProviderService) Upsert(provider string, req UpsertToolProviderInput) (*ToolProviderView, *types.Error) {
 	if s.runtime == nil {
 		return nil, types.NewInternalError("tool runtime is not configured")
 	}
@@ -130,7 +139,7 @@ func normalizeAndValidateProvider(provider string) (string, *types.Error) {
 	}
 }
 
-func validateUpsertToolProviderRequest(provider string, req upsertToolProviderRequest) *types.Error {
+func validateUpsertToolProviderRequest(provider string, req UpsertToolProviderInput) *types.Error {
 	if req.TimeoutSeconds <= 0 {
 		return types.NewError(types.ErrInvalidRequest, "timeout_seconds must be positive")
 	}
@@ -152,18 +161,8 @@ func validateUpsertToolProviderRequest(provider string, req upsertToolProviderRe
 	return nil
 }
 
-type toolProviderResponse struct {
-	ID             uint   `json:"id"`
-	Provider       string `json:"provider"`
-	BaseURL        string `json:"base_url,omitempty"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Priority       int    `json:"priority"`
-	Enabled        bool   `json:"enabled"`
-	HasAPIKey      bool   `json:"has_api_key"`
-}
-
-func toToolProviderResponse(row hosted.ToolProviderConfig) toolProviderResponse {
-	return toolProviderResponse{
+func toToolProviderResponse(row hosted.ToolProviderConfig) ToolProviderView {
+	return ToolProviderView{
 		ID:             row.ID,
 		Provider:       row.Provider,
 		BaseURL:        row.BaseURL,

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,11 +18,11 @@ import (
 
 type toolApprovalRuntimeStub struct {
 	manager *hitl.InterruptManager
-	stats   *ToolApprovalStats
+	stats   *usecase.ToolApprovalStats
 	cleanup int
-	grants  []*ToolApprovalGrantView
+	grants  []*usecase.ToolApprovalGrantView
 	revoked string
-	history []*ToolApprovalHistoryEntry
+	history []*usecase.ToolApprovalHistoryEntry
 }
 
 func (s *toolApprovalRuntimeStub) GetInterrupt(ctx context.Context, interruptID string) (*hitl.Interrupt, error) {
@@ -36,18 +37,18 @@ func (s *toolApprovalRuntimeStub) ResolveInterrupt(ctx context.Context, interrup
 	return s.manager.ResolveInterrupt(ctx, interruptID, response)
 }
 
-func (s *toolApprovalRuntimeStub) GrantStats(ctx context.Context) (*ToolApprovalStats, error) {
+func (s *toolApprovalRuntimeStub) GrantStats(ctx context.Context) (*usecase.ToolApprovalStats, error) {
 	if s.stats != nil {
 		return s.stats, nil
 	}
-	return &ToolApprovalStats{}, nil
+	return &usecase.ToolApprovalStats{}, nil
 }
 
 func (s *toolApprovalRuntimeStub) CleanupExpiredGrants(ctx context.Context) (int, error) {
 	return s.cleanup, nil
 }
 
-func (s *toolApprovalRuntimeStub) ListGrants(ctx context.Context) ([]*ToolApprovalGrantView, error) {
+func (s *toolApprovalRuntimeStub) ListGrants(ctx context.Context) ([]*usecase.ToolApprovalGrantView, error) {
 	return s.grants, nil
 }
 
@@ -56,13 +57,13 @@ func (s *toolApprovalRuntimeStub) RevokeGrant(ctx context.Context, fingerprint s
 	return nil
 }
 
-func (s *toolApprovalRuntimeStub) ListHistory(ctx context.Context, limit int) ([]*ToolApprovalHistoryEntry, error) {
+func (s *toolApprovalRuntimeStub) ListHistory(ctx context.Context, limit int) ([]*usecase.ToolApprovalHistoryEntry, error) {
 	return s.history, nil
 }
 
 func TestToolApprovalHandler_ListGetResolve(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
-	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{manager: manager}, "tool_approval", zap.NewNop())
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval"), zap.NewNop())
 
 	interrupt, err := manager.CreatePendingInterrupt(context.Background(), hitl.InterruptOptions{
 		WorkflowID:  "tool_approval",
@@ -110,7 +111,7 @@ func TestToolApprovalHandler_ListGetResolve(t *testing.T) {
 
 func TestToolApprovalHandler_ListStatusValidation(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
-	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{manager: manager}, "tool_approval", zap.NewNop())
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval"), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals?status=weird", nil)
 	rec := httptest.NewRecorder()
@@ -120,7 +121,7 @@ func TestToolApprovalHandler_ListStatusValidation(t *testing.T) {
 
 func TestToolApprovalHandler_ResolveRequiresJSONBody(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
-	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{manager: manager}, "tool_approval", zap.NewNop())
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval"), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools/approvals/int_1/resolve", bytes.NewReader([]byte(`{}`)))
 	req.SetPathValue("id", "int_1")
@@ -131,7 +132,7 @@ func TestToolApprovalHandler_ResolveRequiresJSONBody(t *testing.T) {
 
 func TestDefaultToolApprovalService_ParseResolvedList(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
-	svc := NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval")
+	svc := usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval")
 
 	interrupt, err := manager.CreatePendingInterrupt(context.Background(), hitl.InterruptOptions{
 		WorkflowID: "tool_approval",
@@ -151,7 +152,7 @@ func TestDefaultToolApprovalService_ParseResolvedList(t *testing.T) {
 
 func TestToolApprovalHandler_ResponsePayloadIsJSON(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
-	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{manager: manager}, "tool_approval", zap.NewNop())
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{manager: manager}, "tool_approval"), zap.NewNop())
 
 	interrupt, err := manager.CreatePendingInterrupt(context.Background(), hitl.InterruptOptions{
 		WorkflowID: "tool_approval",
@@ -171,16 +172,16 @@ func TestToolApprovalHandler_ResponsePayloadIsJSON(t *testing.T) {
 
 func TestToolApprovalHandler_StatsAndCleanup(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
-	handler := NewToolApprovalHandler(&toolApprovalRuntimeStub{
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(&toolApprovalRuntimeStub{
 		manager: manager,
-		stats: &ToolApprovalStats{
+		stats: &usecase.ToolApprovalStats{
 			Backend:          "redis",
 			Scope:            "request",
 			GrantTTL:         "15m0s",
 			ActiveGrantCount: 2,
 		},
 		cleanup: 1,
-	}, "tool_approval", zap.NewNop())
+	}, "tool_approval"), zap.NewNop())
 
 	statsReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/stats", nil)
 	statsRec := httptest.NewRecorder()
@@ -199,7 +200,7 @@ func TestToolApprovalHandler_ListGrantsAndRevoke(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
 	runtime := &toolApprovalRuntimeStub{
 		manager: manager,
-		grants: []*ToolApprovalGrantView{{
+		grants: []*usecase.ToolApprovalGrantView{{
 			Fingerprint: "fp-1",
 			ApprovalID:  "grant:fp-1",
 			Scope:       "request",
@@ -208,7 +209,7 @@ func TestToolApprovalHandler_ListGrantsAndRevoke(t *testing.T) {
 			ExpiresAt:   "2026-04-01T00:00:00Z",
 		}},
 	}
-	handler := NewToolApprovalHandler(runtime, "tool_approval", zap.NewNop())
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(runtime, "tool_approval"), zap.NewNop())
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/grants", nil)
 	listRec := httptest.NewRecorder()
@@ -228,13 +229,13 @@ func TestToolApprovalHandler_ListHistory(t *testing.T) {
 	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
 	runtime := &toolApprovalRuntimeStub{
 		manager: manager,
-		history: []*ToolApprovalHistoryEntry{{
+		history: []*usecase.ToolApprovalHistoryEntry{{
 			EventType: "approval_requested",
 			ToolName:  "run_command",
 			Timestamp: "2026-04-01T00:00:00Z",
 		}},
 	}
-	handler := NewToolApprovalHandler(runtime, "tool_approval", zap.NewNop())
+	handler := NewToolApprovalHandler(usecase.NewDefaultToolApprovalService(runtime, "tool_approval"), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/history", nil)
 	rec := httptest.NewRecorder()
