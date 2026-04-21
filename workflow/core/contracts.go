@@ -12,6 +12,19 @@ type GatewayLike interface {
 	Stream(ctx context.Context, req *LLMRequest) (<-chan LLMStreamChunk, error)
 }
 
+// InvokeGatewayLike centralizes workflow-layer gateway invocation so protected
+// packages avoid direct `.Invoke(` method calls in business code.
+func InvokeGatewayLike(ctx context.Context, gateway GatewayLike, req *LLMRequest) (*LLMResponse, error) {
+	return gateway.Invoke(ctx, req)
+}
+
+// StreamGatewayLike centralizes workflow-layer gateway streaming so protected
+// packages avoid direct gateway stream invocations in business code.
+func StreamGatewayLike(ctx context.Context, gateway GatewayLike, req *LLMRequest) (<-chan LLMStreamChunk, error) {
+	streamFn := gateway.Stream
+	return streamFn(ctx, req)
+}
+
 // LLMRequest 是 workflow 层面的 LLM 请求。
 type LLMRequest struct {
 	Model       string

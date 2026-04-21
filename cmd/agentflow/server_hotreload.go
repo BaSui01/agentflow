@@ -7,8 +7,10 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
@@ -22,8 +24,6 @@ func (s *Server) initHotReloadManager() error {
 
 	bootstrap.RegisterHotReloadCallbacks(s.hotReloadManager, s.logger, func(_old, newConfig *config.Config) {
 		if err := s.reloadLLMRuntime(newConfig); err != nil {
-			// HotReloadManager captures callback panics, rolls back to the last
-			// good config, and returns the rebuild error to the caller.
 			panic(err)
 		}
 		s.cfg = newConfig
@@ -51,6 +51,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		llmCache      = s.llmCache
 		llmMetrics    = s.llmMetrics
 		gateway       llmcore.Gateway
+		toolGateway   llmcore.Gateway
 		ledger        observability.Ledger
 	)
 	if llmRuntime != nil {
@@ -61,9 +62,9 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		llmCache = llmRuntime.Cache
 		llmMetrics = llmRuntime.Metrics
 		gateway = llmRuntime.Gateway
+		toolGateway = llmRuntime.ToolGateway
 		ledger = llmRuntime.Ledger
 	}
-
 	resolver, err := s.buildReloadedResolver(cfg, gateway)
 	if err != nil {
 		return err
@@ -79,38 +80,48 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	s.llmMetrics = llmMetrics
 	s.resolver = resolver
 
-	reloadedBindings := bootstrap.ApplyReloadedTextRuntimeBindings(bootstrap.ReloadedTextRuntimeOptions{
-		Runtime:         llmRuntime,
-		ToolingRuntime:  s.toolingRuntime,
-		ChatHandler:     s.chatHandler,
-		CostHandler:     s.costHandler,
-		HTTPServerBound: s.httpManager != nil,
-		Logger:          s.logger,
-	})
-	s.chatHandler = reloadedBindings.ChatHandler
-	s.costHandler = reloadedBindings.CostHandler
+	previousChatService := s.chatService
+	var chatService usecase.ChatService
+	if llmRuntime != nil {
+		chatService = s.buildChatService(provider, llmRuntime.PolicyManager, ledger)
+	}
+	if previousChatService != nil && chatService == nil {
+		chatService = previousChatService
+	}
+	s.chatService = chatService
+	if s.chatHandler != nil && previousChatService != chatService {
+		s.chatHandler.UpdateService(chatService)
+	} else if s.chatHandler == nil && chatService != nil && s.httpManager == nil {
+		s.chatHandler = handlers.NewChatHandler(chatService, s.logger)
+	} else if chatService != nil && s.httpManager != nil {
+		s.logger.Warn("LLM hot reload rebuilt chat runtime but chat routes were not bound at startup; restart required to activate chat endpoints")
+	}
+
+	if s.costHandler != nil {
+		s.costHandler.UpdateTracker(costTracker)
+	} else if costTracker != nil && s.httpManager == nil {
+		s.costHandler = handlers.NewCostHandler(costTracker, s.logger)
+	} else if costTracker != nil {
+		s.logger.Warn("LLM hot reload rebuilt cost runtime but cost routes were not bound at startup; restart required to activate cost endpoints")
+	}
 
 	if s.agentRegistry != nil {
 		if gateway != nil {
-			var toolGateway llmcore.Gateway
-			if llmRuntime != nil {
-				toolGateway = llmRuntime.ToolGateway
-			}
 			bootstrap.RegisterDefaultRuntimeAgentFactory(s.agentRegistry, gateway, toolGateway, s.checkpointManager, ledger, s.logger)
 		} else {
 			s.agentRegistry.Unregister(agent.TypeGeneric)
 		}
 	}
 	if s.agentHandler != nil {
+		var agentResolver usecase.AgentResolver
 		if resolver != nil {
-			s.agentHandler.UpdateResolver(resolver.Resolve)
-		} else {
-			s.agentHandler.UpdateResolver(nil)
+			agentResolver = resolver.Resolve
 		}
+		s.agentHandler.UpdateService(bootstrap.BuildAgentService(s.discoveryRegistry, agentResolver))
 	}
 
 	if s.workflowHandler != nil && workflowRuntime != nil {
-		s.workflowHandler.UpdateRuntime(workflowRuntime.Facade, workflowRuntime.Parser)
+		s.workflowHandler.UpdateService(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser))
 	}
 
 	if s.multimodalHandler != nil && cfg.Multimodal.Enabled {

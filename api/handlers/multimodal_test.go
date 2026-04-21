@@ -23,7 +23,6 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
@@ -137,6 +136,62 @@ func (m *mockLLMProvider) SupportsNativeFunctionCalling() bool { return true }
 func (m *mockLLMProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
 
 func (m *mockLLMProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+type scriptedMultimodalChatProvider struct{}
+
+func (m *scriptedMultimodalChatProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	_ = ctx
+	content := "single response"
+	model := req.Model
+	if strings.TrimSpace(model) == "" {
+		model = "gpt-4o-mini"
+	}
+	if len(req.Messages) > 0 {
+		first := req.Messages[0].Content
+		switch {
+		case strings.Contains(first, "orchestration planner"):
+			content = "1. gather facts\n2. produce answer"
+		case strings.Contains(first, "executor agent"):
+			content = "final answer"
+		}
+	}
+	return &llm.ChatResponse{
+		ID:    "scripted",
+		Model: model,
+		Choices: []llm.ChatChoice{
+			{
+				Index: 0,
+				Message: types.Message{
+					Role:    types.RoleAssistant,
+					Content: content,
+				},
+			},
+		},
+		CreatedAt: time.Now(),
+	}, nil
+}
+
+func (m *scriptedMultimodalChatProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk)
+	close(ch)
+	return ch, nil
+}
+
+func (m *scriptedMultimodalChatProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+
+func (m *scriptedMultimodalChatProvider) Name() string { return "scripted-multimodal-chat" }
+
+func (m *scriptedMultimodalChatProvider) SupportsNativeFunctionCalling() bool { return true }
+
+func (m *scriptedMultimodalChatProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+
+func (m *scriptedMultimodalChatProvider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{}
+}
 
 type failingReferenceStore struct{}
 
@@ -314,6 +369,43 @@ func TestMultimodalHandler_PlanUnknownField(t *testing.T) {
 	h.HandlePlan(w, r)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMultimodalHandler_PlanSuccess(t *testing.T) {
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:       zap.NewNop(),
+		chatProvider: &mockLLMProvider{},
+	})
+
+	raw := []byte(`{"prompt":"make a launch teaser","shot_count":2}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/multimodal/plan", bytes.NewReader(raw))
+	r.Header.Set("Content-Type", "application/json")
+
+	h.HandlePlan(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"plan"`)
+	assert.Contains(t, w.Body.String(), `"goal":"x"`)
+}
+
+func TestMultimodalHandler_ChatAgentMode(t *testing.T) {
+	h := newMultimodalHandlerForTest(multimodalHandlerTestConfig{
+		logger:       zap.NewNop(),
+		chatProvider: &scriptedMultimodalChatProvider{},
+	})
+
+	raw := []byte(`{"message":"draft a multimodal launch response","agent_mode":true}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/multimodal/chat", bytes.NewReader(raw))
+	r.Header.Set("Content-Type", "application/json")
+
+	h.HandleChat(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"mode":"agent"`)
+	assert.Contains(t, w.Body.String(), `"planner_output":"1. gather facts\n2. produce answer"`)
+	assert.Contains(t, w.Body.String(), `"final_text":"final answer"`)
 }
 
 func TestMultimodalHandler_Capabilities(t *testing.T) {
@@ -554,7 +646,7 @@ func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHan
 		cfg.referenceStore = storage.NewMemoryReferenceStore()
 	}
 	if strings.TrimSpace(cfg.defaultChatModel) == "" {
-		cfg.defaultChatModel = defaultChatModelFallback
+		cfg.defaultChatModel = "gpt-4o-mini"
 	}
 
 	router := multimodal.NewRouter()
@@ -589,11 +681,6 @@ func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHan
 		Capabilities: capabilities.NewEntry(router),
 		Logger:       logger,
 	})
-
-	var structuredProvider llm.Provider
-	if cfg.chatProvider != nil {
-		structuredProvider = llmgateway.NewChatProviderAdapter(gateway, cfg.chatProvider)
-	}
 
 	resolveImage := func(provider string) (string, error) {
 		name := strings.TrimSpace(provider)
@@ -631,6 +718,8 @@ func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHan
 			ReferenceStore:       cfg.referenceStore,
 			ReferenceTTL:         cfg.referenceTTL,
 			ReferenceMaxSize:     cfg.referenceMaxSize,
+			ChatEnabled:          cfg.chatProvider != nil,
+			DefaultChatModel:     cfg.defaultChatModel,
 		},
 	)
 
@@ -643,9 +732,7 @@ func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHan
 		ReferenceMaxSize:     cfg.referenceMaxSize,
 		ReferenceTTL:         cfg.referenceTTL,
 		ReferenceStore:       cfg.referenceStore,
-		DefaultChatModel:     cfg.defaultChatModel,
-		StructuredChat:       structuredProvider != nil,
-		StructuredProvider:   structuredProvider,
+		ChatEnabled:          cfg.chatProvider != nil,
 		ResolveImageProvider: resolveImage,
 		ResolveVideoProvider: resolveVideo,
 		ImageStreamProvider: func(provider string) (image.StreamingProvider, bool) {
@@ -655,22 +742,6 @@ func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHan
 			}
 			sp, ok := p.(image.StreamingProvider)
 			return sp, ok
-		},
-		InvokeChat: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-			resp, err := gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-				Capability: llmcore.CapabilityChat,
-				ModelHint:  req.Model,
-				TraceID:    req.TraceID,
-				Payload:    req,
-			})
-			if err != nil {
-				return nil, err
-			}
-			chatResp, ok := resp.Output.(*llm.ChatResponse)
-			if !ok || chatResp == nil {
-				return nil, fmt.Errorf("invalid chat gateway response")
-			}
-			return chatResp, nil
 		},
 	})
 	return handler

@@ -232,6 +232,37 @@ func TestBuildGenerationConfig_WithThinking(t *testing.T) {
 	assert.True(t, cfg.ThinkingConfig.IncludeThoughts)
 }
 
+func TestBuildGenAIGenerationConfig_Gemini25UsesThinkingBudget(t *testing.T) {
+	req := &llm.ChatRequest{Model: "gemini-2.5-flash", ReasoningMode: "high"}
+	cfg := buildGenAIGenerationConfig(req, nil)
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.ThinkingConfig)
+	require.NotNil(t, cfg.ThinkingConfig.ThinkingBudget)
+	assert.Equal(t, int32(-1), *cfg.ThinkingConfig.ThinkingBudget)
+	assert.True(t, cfg.ThinkingConfig.IncludeThoughts)
+	assert.Equal(t, "", string(cfg.ThinkingConfig.ThinkingLevel))
+}
+
+func TestBuildGenAIGenerationConfig_Gemini25FlashDisableThinking(t *testing.T) {
+	req := &llm.ChatRequest{Model: "gemini-2.5-flash", ReasoningMode: "disabled"}
+	cfg := buildGenAIGenerationConfig(req, nil)
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.ThinkingConfig)
+	require.NotNil(t, cfg.ThinkingConfig.ThinkingBudget)
+	assert.Equal(t, int32(0), *cfg.ThinkingConfig.ThinkingBudget)
+	assert.False(t, cfg.ThinkingConfig.IncludeThoughts)
+}
+
+func TestBuildGenAIGenerationConfig_Gemini3UsesThinkingLevel(t *testing.T) {
+	req := &llm.ChatRequest{Model: "gemini-3-pro-preview", ReasoningMode: "high"}
+	cfg := buildGenAIGenerationConfig(req, nil)
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.ThinkingConfig)
+	assert.Equal(t, "HIGH", string(cfg.ThinkingConfig.ThinkingLevel))
+	assert.Nil(t, cfg.ThinkingConfig.ThinkingBudget)
+	assert.True(t, cfg.ThinkingConfig.IncludeThoughts)
+}
+
 func TestBuildGenerationConfig_WithResponseFormat(t *testing.T) {
 	req := &llm.ChatRequest{
 		ResponseFormat: &llm.ResponseFormat{

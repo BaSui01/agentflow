@@ -30,12 +30,16 @@ type MultimodalRuntime struct {
 	ReferenceStore       storage.ReferenceStore
 	ReferenceTTL         time.Duration
 	ReferenceMaxSize     int64
+	ChatEnabled          bool
+	DefaultChatModel     string
 }
 
-// MultimodalService encapsulates multimodal image/video execution.
+// MultimodalService encapsulates multimodal image/video/plan/chat execution.
 type MultimodalService interface {
 	GenerateImage(ctx context.Context, req MultimodalImageRequest) (*MultimodalImageResult, error)
 	GenerateVideo(ctx context.Context, req MultimodalVideoRequest) (*MultimodalVideoResult, error)
+	GeneratePlan(ctx context.Context, req MultimodalPlanRequest) (*MultimodalPlanResult, error)
+	Chat(ctx context.Context, req MultimodalChatRequest) (*MultimodalChatResult, error)
 }
 
 // DefaultMultimodalService is the default MultimodalService implementation.
@@ -44,9 +48,7 @@ type DefaultMultimodalService struct {
 }
 
 // NewDefaultMultimodalService constructs the default multimodal usecase service.
-func NewDefaultMultimodalService(
-	runtime MultimodalRuntime,
-) MultimodalService {
+func NewDefaultMultimodalService(runtime MultimodalRuntime) MultimodalService {
 	return &DefaultMultimodalService{
 		runtimeRef: NewAtomicRuntimeRef(runtime),
 	}
@@ -78,8 +80,7 @@ func (s *DefaultMultimodalService) GenerateImage(ctx context.Context, req Multim
 	}
 	providerName, err := runtime.ResolveImageProvider(req.Provider)
 	if err != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).
-			WithCause(err)
+		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).WithCause(err)
 	}
 
 	negative := strings.TrimSpace(req.NegativePrompt)
@@ -178,8 +179,7 @@ func (s *DefaultMultimodalService) GenerateVideo(ctx context.Context, req Multim
 	}
 	providerName, err := runtime.ResolveVideoProvider(req.Provider)
 	if err != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).
-			WithCause(err)
+		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).WithCause(err)
 	}
 
 	promptResult, err := runtime.Pipeline.Build(ctx, multimodal.PromptContext{
@@ -225,8 +225,7 @@ func (s *DefaultMultimodalService) GenerateVideo(ctx context.Context, req Multim
 		} else {
 			validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(ctx, req.ReferenceImageURL)
 			if urlErr != nil {
-				return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).
-					WithCause(urlErr)
+				return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).WithCause(urlErr)
 			}
 			genReq.ImageURL = validatedURL
 		}
@@ -270,13 +269,11 @@ func (s *DefaultMultimodalService) resolveReferenceImage(runtime MultimodalRunti
 
 	validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(ctx, referenceURL)
 	if urlErr != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).
-			WithCause(urlErr)
+		return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).WithCause(urlErr)
 	}
 	data, _, dlErr := multimodal.DownloadReferenceImage(ctx, validatedURL, runtime.ReferenceMaxSize)
 	if dlErr != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, dlErr.Error()).
-			WithCause(dlErr)
+		return nil, types.NewError(types.ErrInvalidRequest, dlErr.Error()).WithCause(dlErr)
 	}
 	return data, nil
 }

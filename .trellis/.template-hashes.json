@@ -62,14 +62,14 @@
   ".claude/hooks/ralph-loop.py": "df864b971ea5faf5801a88f013f230c92d458f52f64731a91f02cd78d7b932c3",
   ".claude/hooks/session-start.py": "dfa553082095b75f2d714be42fbf46f651235df63caba9eb50d7b84306d486e3",
   ".claude/hooks/statusline.py": "c92c0020a0c60308437b66f024a244303e708519c97089cf654ceddc144f7435",
-  ".claude/settings.json": "f468342f1ebfef18dbbde0a2528366b32ec154befca880e0c8b29fefdcccb1bf",
+  ".claude/settings.json": "787b2ed0e2103ce46464af29398637eff8f63b8cedc3122d3707454b6f7c31c4",
   ".claude/settings.local.json": "93e8d1aa1755c68291531952e456884a859c294430a885d45d225a48ee1693fc",
   ".codex/agents/check.toml": "bd7f208dd61fe7d15550171fa468bf3c0ecd0b84626d2441777ff7261ef021ad",
   ".codex/agents/implement.toml": "24e14420227467ec9b5df59cec97640563a59d6f0092fb7be179d8554547f39b",
   ".codex/agents/research.toml": "eb7633412637869df29dd5b853458e869cba527f07ff4558838adce491a8837e",
   ".codex/config.toml": "7543da7e1773a0f26bc9178716b34154fdc5fefd820fb184e7cb169f1910cc99",
   ".codex/hooks/session-start.py": "10b0ef333ea681f92d7798d70c166ef567e6d65eac2e8de5436fd69a1b4353d9",
-  ".codex/hooks.json": "886075b7aef39969e1c34d372ca25ca4d09ce3ebc65f740818513abcf47ad25e",
+  ".codex/hooks.json": "acbc9e586e93e1315100246395713270b51907d3728d82d6822af085e8cae124",
   ".codex/prompts/refactor-plan.md": "5f4cd93c12e74670d6cd511b6500e47a6c4845e7666bd1b3f90ef7cc4737e1c8",
   ".codex/skills/cn-refactor-plan-governance/SKILL.md": "dbed848bf943825a5f1d8b7c014190d9469c4952d70f2fa3fcdcfcce44b3533a",
   ".codex/skills/cn-refactor-plan-governance/agents/openai.yaml": "3b8a91d6bca200127458cb3abd17631e10e35abb5d927794d6e0bb9705592088",
@@ -89,5 +89,7 @@
   ".agents/skills/integrate-skill/SKILL.md": "2d4da52f3f09fb8b92011f2019ad9e28a20054d577c212c9ed6f2bf156b59d52",
   ".agents/skills/onboard/SKILL.md": "ec6db142f763c81a3273be45b5d7726f695c32aaa5404e90dbd6e40aec92fb98",
   ".agents/skills/record-session/SKILL.md": "6707f3df209a4064d1617ea92807265829a62a0343b3da9fdeac289187730626",
-  ".agents/skills/start/SKILL.md": "8853e4ddc1681e043dec34be76c7c6fd961a3d52cbd0a2320225d72440425639"
+  ".agents/skills/start/SKILL.md": "8853e4ddc1681e043dec34be76c7c6fd961a3d52cbd0a2320225d72440425639",
+  ".trellis/.gitignore": "c549b846e9ce389521afe4738a1dc3ea5531f762d98413d41ed2c3651b2f09ca",
+  ".agents/skills/update-spec/SKILL.md": "7ccf7d29ea26d28b0bd8af94ea5b8bfcddaddd9f2797f3becedbe5f3a0a9e9a7"
 }

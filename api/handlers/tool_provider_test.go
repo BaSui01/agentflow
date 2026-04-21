@@ -93,7 +93,7 @@ func TestToolProviderHandler_Upsert_AuditLogFields(t *testing.T) {
 	db := setupToolProviderDB(t)
 	runtime := &toolProviderRuntimeStub{}
 	core, observed := observer.New(zap.InfoLevel)
-	handler := NewToolProviderHandler(NewGormToolProviderStore(db), runtime, zap.New(core))
+	handler := NewToolProviderHandler(usecase.NewDefaultToolProviderService(NewGormToolProviderStore(db), runtime), zap.New(core))
 
 	body := []byte(`{"api_key":"tv-key","timeout_seconds":20,"priority":10,"enabled":true}`)
 	w := httptest.NewRecorder()

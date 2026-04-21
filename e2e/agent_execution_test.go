@@ -137,9 +137,7 @@ func setupE2EServer(t *testing.T, resolver usecase.AgentResolver) *httptest.Serv
 	t.Helper()
 	logger := zap.NewNop()
 	registry := newE2ERegistry()
-	agentRegistry := agent.NewAgentRegistry(logger)
-
-	agentHandler := handlers.NewAgentHandler(registry, agentRegistry, logger, resolver)
+	agentHandler := handlers.NewAgentHandlerWithService(usecase.NewDefaultAgentService(registry, resolver), nil, logger)
 	healthHandler := handlers.NewHealthHandler(logger)
 
 	mux := http.NewServeMux()

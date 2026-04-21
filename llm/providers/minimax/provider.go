@@ -35,7 +35,7 @@ func newMiniMaxCapabilityHost(cfg providers.MiniMaxConfig, logger *zap.Logger) *
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "MiniMax-Text-01",
+			FallbackModel: "MiniMax-M2.7",
 			Timeout:       cfg.Timeout,
 			SupportsTools: &supportsTools,
 		}, logger),

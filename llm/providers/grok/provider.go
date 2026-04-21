@@ -30,7 +30,7 @@ func newGrokCapabilityHost(cfg providers.GrokConfig, logger *zap.Logger) *GrokPr
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "grok-3",
+			FallbackModel: "grok-4.20",
 			Timeout:       cfg.Timeout,
 			RequestHook:   grokRequestHook,
 		}, logger),
@@ -43,11 +43,11 @@ func newGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider
 }
 
 // grokRequestHook handles Grok-specific request modifications.
-// Switches to grok-3-mini reasoning model for thinking/extended modes.
+// Switches to grok-4.20 reasoning model for thinking/extended modes.
 func grokRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
-			body.Model = "grok-3-mini"
+			body.Model = "grok-4.20-reasoning"
 		}
 	}
 }

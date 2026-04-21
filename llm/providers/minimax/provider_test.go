@@ -54,7 +54,7 @@ func TestNewMiniMaxProvider_Defaults(t *testing.T) {
 
 func TestMiniMaxProvider_FallbackModel(t *testing.T) {
 	p := newMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
-	assert.Equal(t, "MiniMax-Text-01", p.Cfg.FallbackModel)
+	assert.Equal(t, "MiniMax-M2.7", p.Cfg.FallbackModel)
 }
 
 func TestMiniMaxProvider_NilLogger(t *testing.T) {
@@ -79,7 +79,7 @@ func TestMiniMaxProvider_LegacyModel_NoNativeFunctionCalling(t *testing.T) {
 func TestMiniMaxProvider_NewModel_SupportsNativeFunctionCalling(t *testing.T) {
 	p := newMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			Model: "MiniMax-Text-01",
+			Model: "MiniMax-M2.7",
 		},
 	}, zap.NewNop())
 
@@ -145,7 +145,7 @@ func TestMiniMaxProvider_Completion(t *testing.T) {
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from MiniMax", resp.Choices[0].Message.Content)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
-	assert.Equal(t, "MiniMax-Text-01", capturedRequest.Model)
+	assert.Equal(t, "MiniMax-M2.7", capturedRequest.Model)
 }
 
 func TestMiniMaxProvider_Completion_Error(t *testing.T) {

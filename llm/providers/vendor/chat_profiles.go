@@ -8,6 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -19,17 +20,18 @@ type ChatCapabilityMatrix struct {
 }
 
 type compatProviderProfile struct {
-	Code           string
-	DefaultBaseURL string
-	FallbackModel  string
-	EndpointPath   string
-	AuthHeaderName string
-	SupportsTools  func(ChatProviderConfig) *bool
-	RequestHook    func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest)
-	BuildHeaders   func(ChatProviderConfig) func(req *http.Request, apiKey string)
-	ResolveName    func(ChatProviderConfig) string
-	ResolveBaseURL func(ChatProviderConfig) string
-	Capabilities   ChatCapabilityMatrix
+	Code            string
+	DefaultBaseURL  string
+	FallbackModel   string
+	EndpointPath    string
+	AuthHeaderName  string
+	SupportsTools   func(ChatProviderConfig) *bool
+	RequestHook     func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest)
+	ValidateRequest func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) error
+	BuildHeaders    func(ChatProviderConfig) func(req *http.Request, apiKey string)
+	ResolveName     func(ChatProviderConfig) string
+	ResolveBaseURL  func(ChatProviderConfig) string
+	Capabilities    ChatCapabilityMatrix
 }
 
 var compatProviderProfiles = map[string]compatProviderProfile{
@@ -42,53 +44,56 @@ var compatProviderProfiles = map[string]compatProviderProfile{
 		Capabilities:   compatCapabilities(true),
 	},
 	"qwen": {
-		Code:           "qwen",
-		DefaultBaseURL: "https://dashscope.aliyuncs.com",
-		FallbackModel:  "qwen3-235b-a22b",
-		EndpointPath:   "/compatible-mode/v1/chat/completions",
-		RequestHook:    qwenRequestHook,
-		Capabilities:   compatCapabilities(true),
+		Code:            "qwen",
+		DefaultBaseURL:  "https://dashscope.aliyuncs.com",
+		FallbackModel:   "qwen3-max-2026-01-23",
+		EndpointPath:    "/compatible-mode/v1/chat/completions",
+		RequestHook:     qwenRequestHook,
+		ValidateRequest: validateQwenRequest,
+		Capabilities:    compatCapabilities(true),
 	},
 	"glm": {
 		Code:           "glm",
 		DefaultBaseURL: "https://open.bigmodel.cn",
-		FallbackModel:  "glm-4-plus",
+		FallbackModel:  "glm-5.1",
 		EndpointPath:   "/api/paas/v4/chat/completions",
 		RequestHook:    glmRequestHook,
 		Capabilities:   compatCapabilities(true),
 	},
 	"grok": {
-		Code:           "grok",
-		DefaultBaseURL: "https://api.x.ai",
-		FallbackModel:  "grok-3",
-		RequestHook:    grokRequestHook,
-		Capabilities:   compatCapabilities(true),
+		Code:            "grok",
+		DefaultBaseURL:  "https://api.x.ai",
+		FallbackModel:   "grok-4.20",
+		RequestHook:     grokRequestHook,
+		ValidateRequest: validateGrokRequest,
+		Capabilities:    compatCapabilities(true),
 	},
 	"kimi": {
-		Code:           "kimi",
-		DefaultBaseURL: "https://api.moonshot.cn",
-		FallbackModel:  "moonshot-v1-32k",
-		RequestHook:    kimiRequestHook,
-		Capabilities:   compatCapabilities(true),
+		Code:            "kimi",
+		DefaultBaseURL:  "https://api.moonshot.cn",
+		FallbackModel:   "kimi-k2.5",
+		RequestHook:     kimiRequestHook,
+		ValidateRequest: validateKimiRequest,
+		Capabilities:    compatCapabilities(true),
 	},
 	"mistral": {
 		Code:           "mistral",
 		DefaultBaseURL: "https://api.mistral.ai",
-		FallbackModel:  "mistral-large-latest",
+		FallbackModel:  "mistral-medium-latest",
 		RequestHook:    mistralRequestHook,
 		Capabilities:   compatCapabilities(true),
 	},
 	"minimax": {
 		Code:           "minimax",
 		DefaultBaseURL: "https://api.minimax.io",
-		FallbackModel:  "MiniMax-Text-01",
+		FallbackModel:  "MiniMax-M2.7",
 		SupportsTools:  minimaxSupportsTools,
 		Capabilities:   compatCapabilities(true),
 	},
 	"hunyuan": {
 		Code:           "hunyuan",
 		DefaultBaseURL: "https://api.hunyuan.cloud.tencent.com",
-		FallbackModel:  "hunyuan-turbos-latest",
+		FallbackModel:  "hunyuan-t1-latest",
 		RequestHook:    hunyuanRequestHook,
 		Capabilities:   compatCapabilities(true),
 	},
@@ -161,16 +166,17 @@ func newCompatBuiltInChatProvider(providerCode string, cfg ChatProviderConfig, l
 	}
 
 	compatCfg := openaicompat.Config{
-		ProviderName:   providerName,
-		APIKey:         cfg.APIKey,
-		APIKeys:        cfg.APIKeys,
-		BaseURL:        baseURL,
-		DefaultModel:   cfg.Model,
-		FallbackModel:  profile.FallbackModel,
-		Timeout:        cfg.Timeout,
-		EndpointPath:   profile.EndpointPath,
-		AuthHeaderName: profile.AuthHeaderName,
-		RequestHook:    profile.RequestHook,
+		ProviderName:    providerName,
+		APIKey:          cfg.APIKey,
+		APIKeys:         cfg.APIKeys,
+		BaseURL:         baseURL,
+		DefaultModel:    cfg.Model,
+		FallbackModel:   profile.FallbackModel,
+		Timeout:         cfg.Timeout,
+		EndpointPath:    profile.EndpointPath,
+		AuthHeaderName:  profile.AuthHeaderName,
+		RequestHook:     profile.RequestHook,
+		ValidateRequest: profile.ValidateRequest,
 	}
 	if profile.SupportsTools != nil {
 		compatCfg.SupportsTools = profile.SupportsTools(cfg)
@@ -220,10 +226,14 @@ func deepseekRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRe
 }
 
 func qwenRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" || req.ReasoningMode == "enabled" {
 		if req.Model == "" {
-			body.Model = "qwen3-max"
+			body.Model = "qwen3-max-2026-01-23"
 		}
+		enableThinking := true
+		incrementalOutput := true
+		body.EnableThinking = &enableThinking
+		body.IncrementalOutput = &incrementalOutput
 	}
 }
 
@@ -238,16 +248,22 @@ func glmRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest
 func grokRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
-			body.Model = "grok-3-mini"
+			body.Model = "grok-4.20-reasoning"
 		}
 	}
 }
 
 func kimiRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" || req.ReasoningMode == "enabled" {
 		if req.Model == "" {
-			body.Model = "k1"
+			body.Model = "kimi-k2.5"
 		}
+		body.Thinking = &providerbase.Thinking{Type: "enabled"}
+	} else if req.ReasoningMode == "disabled" {
+		if req.Model == "" {
+			body.Model = "kimi-k2.5"
+		}
+		body.Thinking = &providerbase.Thinking{Type: "disabled"}
 	}
 }
 
@@ -291,4 +307,127 @@ func extraString(extra map[string]any, key string) string {
 	}
 	value, _ := extra[key].(string)
 	return value
+}
+
+func validateQwenRequest(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) error {
+	if req == nil {
+		return nil
+	}
+	if !isReasoningModeEnabled(req) {
+		return nil
+	}
+	if req.ResponseFormat == nil {
+		return nil
+	}
+	switch req.ResponseFormat.Type {
+	case llm.ResponseFormatJSONObject, llm.ResponseFormatJSONSchema:
+		return invalidCompatRequest("qwen", "Qwen thinking mode does not support structured JSON response_format; disable thinking or remove response_format")
+	default:
+		return nil
+	}
+}
+
+func validateGrokRequest(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) error {
+	if req == nil {
+		return nil
+	}
+	if !isGrokReasoningRequest(req, body) {
+		return nil
+	}
+	if len(req.Stop) > 0 {
+		return invalidCompatRequest("grok", "xAI Grok reasoning models do not support stop")
+	}
+	if req.FrequencyPenalty != nil {
+		return invalidCompatRequest("grok", "xAI Grok reasoning models do not support frequency_penalty")
+	}
+	if req.PresencePenalty != nil {
+		return invalidCompatRequest("grok", "xAI Grok reasoning models do not support presence_penalty")
+	}
+	if strings.TrimSpace(req.ReasoningEffort) != "" {
+		return invalidCompatRequest("grok", "xAI Grok reasoning models do not support reasoning_effort")
+	}
+	return nil
+}
+
+func validateKimiRequest(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) error {
+	if req == nil {
+		return nil
+	}
+	if !isKimiThinkingRequest(req, body) {
+		return nil
+	}
+	if req.ToolChoice != nil {
+		mode := providerbase.NormalizeToolChoice(req.ToolChoice).Mode
+		if mode != "" && mode != "auto" {
+			return invalidCompatRequest("kimi", "Kimi thinking mode only supports tool_choice auto")
+		}
+	}
+	if req.Temperature != 0 {
+		return invalidCompatRequest("kimi", "Kimi thinking mode does not support custom temperature")
+	}
+	if req.TopP != 0 {
+		return invalidCompatRequest("kimi", "Kimi thinking mode does not support custom top_p")
+	}
+	if req.N != nil {
+		return invalidCompatRequest("kimi", "Kimi thinking mode does not support custom n")
+	}
+	if req.FrequencyPenalty != nil {
+		return invalidCompatRequest("kimi", "Kimi thinking mode does not support frequency_penalty")
+	}
+	if req.PresencePenalty != nil {
+		return invalidCompatRequest("kimi", "Kimi thinking mode does not support presence_penalty")
+	}
+	if req.RepetitionPenalty != nil {
+		return invalidCompatRequest("kimi", "Kimi thinking mode does not support repetition_penalty")
+	}
+	return nil
+}
+
+func invalidCompatRequest(provider, message string) error {
+	return &types.Error{
+		Code:       llm.ErrInvalidRequest,
+		Message:    message,
+		HTTPStatus: http.StatusBadRequest,
+		Provider:   provider,
+	}
+}
+
+func isReasoningModeEnabled(req *llm.ChatRequest) bool {
+	if req == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(req.ReasoningMode)) {
+	case "thinking", "extended", "enabled", "adaptive":
+		return true
+	default:
+		return false
+	}
+}
+
+func isGrokReasoningRequest(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) bool {
+	if isReasoningModeEnabled(req) {
+		return true
+	}
+	model := ""
+	if req != nil {
+		model = strings.ToLower(strings.TrimSpace(req.Model))
+	}
+	if model == "" && body != nil {
+		model = strings.ToLower(strings.TrimSpace(body.Model))
+	}
+	return strings.Contains(model, "reasoning")
+}
+
+func isKimiThinkingRequest(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) bool {
+	if isReasoningModeEnabled(req) {
+		return true
+	}
+	model := ""
+	if req != nil {
+		model = strings.ToLower(strings.TrimSpace(req.Model))
+	}
+	if model == "" && body != nil {
+		model = strings.ToLower(strings.TrimSpace(body.Model))
+	}
+	return strings.Contains(model, "thinking") || model == "k1"
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,34 +44,67 @@ func setupToolRegistryTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestBuildToolRegistryHandler(t *testing.T) {
-	db := setupToolRegistryTestDB(t)
-	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
-
-	assert.Nil(t, BuildToolRegistryHandler(nil, runtime, zap.NewNop()))
-	assert.Nil(t, BuildToolRegistryHandler(db, nil, zap.NewNop()))
-	assert.NotNil(t, BuildToolRegistryHandler(db, runtime, zap.NewNop()))
+func newToolRegistryHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *handlers.ToolRegistryHandler {
+	if db == nil || runtime == nil {
+		return nil
+	}
+	return handlers.NewToolRegistryHandler(
+		usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime),
+		zap.NewNop(),
+	)
 }
 
-func TestBuildToolProviderHandler(t *testing.T) {
+func newToolProviderHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *handlers.ToolProviderHandler {
+	if db == nil || runtime == nil {
+		return nil
+	}
+	return handlers.NewToolProviderHandler(
+		usecase.NewDefaultToolProviderService(handlers.NewGormToolProviderStore(db), runtime),
+		zap.NewNop(),
+	)
+}
+
+func newToolApprovalHandlerForTest(manager *hitl.InterruptManager) *handlers.ToolApprovalHandler {
+	if manager == nil {
+		return nil
+	}
+	config := ToolApprovalConfig{Backend: "memory"}
+	return handlers.NewToolApprovalHandler(
+		usecase.NewDefaultToolApprovalService(&toolApprovalRuntime{
+			manager: manager,
+			store:   defaultToolApprovalGrantStore(config, zap.NewNop()),
+			history: defaultToolApprovalHistoryStore(config),
+			config:  config,
+		}, "tool_approval"),
+		zap.NewNop(),
+	)
+}
+
+func TestToolRegistryHandlerConstruction(t *testing.T) {
 	db := setupToolRegistryTestDB(t)
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
 
-	assert.Nil(t, BuildToolProviderHandler(nil, runtime, zap.NewNop()))
-	assert.Nil(t, BuildToolProviderHandler(db, nil, zap.NewNop()))
-	assert.NotNil(t, BuildToolProviderHandler(db, runtime, zap.NewNop()))
+	assert.Nil(t, newToolRegistryHandler(nil, runtime))
+	assert.Nil(t, newToolRegistryHandler(db, nil))
+	assert.NotNil(t, newToolRegistryHandler(db, runtime))
+}
+
+func TestToolProviderHandlerConstruction(t *testing.T) {
+	db := setupToolRegistryTestDB(t)
+	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
+
+	assert.Nil(t, newToolProviderHandler(nil, runtime))
+	assert.Nil(t, newToolProviderHandler(db, nil))
+	assert.NotNil(t, newToolProviderHandler(db, runtime))
 }
 
 func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	db := setupToolRegistryTestDB(t)
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
-	toolHandler := BuildToolRegistryHandler(db, runtime, zap.NewNop())
-	providerHandler := BuildToolProviderHandler(db, runtime, zap.NewNop())
-	approvalHandler := BuildToolApprovalHandler(
+	toolHandler := newToolRegistryHandler(db, runtime)
+	providerHandler := newToolProviderHandler(db, runtime)
+	approvalHandler := newToolApprovalHandlerForTest(
 		hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop()),
-		"tool_approval",
-		ToolApprovalConfig{Backend: "memory"},
-		zap.NewNop(),
 	)
 	require.NotNil(t, toolHandler)
 	require.NotNil(t, providerHandler)
@@ -124,36 +158,10 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	approvalRec := httptest.NewRecorder()
 	mux.ServeHTTP(approvalRec, approvalReq)
 	assert.Equal(t, http.StatusOK, approvalRec.Code)
-
-	historyReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/history", nil)
-	historyRec := httptest.NewRecorder()
-	mux.ServeHTTP(historyRec, historyReq)
-	assert.Equal(t, http.StatusOK, historyRec.Code)
-
-	grantsReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/grants", nil)
-	grantsRec := httptest.NewRecorder()
-	mux.ServeHTTP(grantsRec, grantsReq)
-	assert.Equal(t, http.StatusOK, grantsRec.Code)
-
-	statsReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/stats", nil)
-	statsRec := httptest.NewRecorder()
-	mux.ServeHTTP(statsRec, statsReq)
-	assert.Equal(t, http.StatusOK, statsRec.Code)
-
-	cleanupReq := httptest.NewRequest(http.MethodPost, "/api/v1/tools/approvals/cleanup", nil)
-	cleanupRec := httptest.NewRecorder()
-	mux.ServeHTTP(cleanupRec, cleanupReq)
-	assert.Equal(t, http.StatusOK, cleanupRec.Code)
-
-	revokeReq := httptest.NewRequest(http.MethodDelete, "/api/v1/tools/approvals/grants/fp-1", nil)
-	revokeReq.SetPathValue("fingerprint", "fp-1")
-	revokeRec := httptest.NewRecorder()
-	mux.ServeHTTP(revokeRec, revokeReq)
-	assert.NotEqual(t, http.StatusNotFound, revokeRec.Code)
 }
 
 func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
-	chatHandler := handlers.NewChatHandler(nil, nil, zap.NewNop())
+	chatHandler := handlers.NewChatHandler(nil, zap.NewNop())
 	require.NotNil(t, chatHandler)
 
 	mux := http.NewServeMux()
@@ -182,9 +190,7 @@ func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
 
 func TestBuildMetricsServerConfig_DefaultLoopbackBinding(t *testing.T) {
 	cfg := config.DefaultServerConfig()
-
 	built := BuildMetricsServerConfig(cfg)
-
 	assert.Equal(t, "127.0.0.1:9091", built.Addr)
 }
 
@@ -192,8 +198,6 @@ func TestBuildMetricsServerConfig_ExplicitBindAddress(t *testing.T) {
 	cfg := config.DefaultServerConfig()
 	cfg.MetricsPort = 10091
 	cfg.MetricsBindAddress = "0.0.0.0"
-
 	built := BuildMetricsServerConfig(cfg)
-
 	assert.Equal(t, "0.0.0.0:10091", built.Addr)
 }

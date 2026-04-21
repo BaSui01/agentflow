@@ -86,10 +86,10 @@ func TestChooseModel_Priority(t *testing.T) {
 // 在没有指定其他模型时正确返回
 func TestChooseModel_ProviderDefaults(t *testing.T) {
 	providerDefaults := map[string]string{
-		"grok":     "grok-3",
-		"glm":      "glm-4-plus",
-		"minimax":  "MiniMax-Text-01",
-		"qwen":     "qwen-plus",
+		"grok":     "grok-4.20",
+		"glm":      "glm-5.1",
+		"minimax":  "MiniMax-M2.7",
+		"qwen":     "qwen3-max-2026-01-23",
 		"deepseek": "deepseek-chat",
 	}
 
@@ -157,24 +157,24 @@ func TestChooseModel_RealWorldScenarios(t *testing.T) {
 				Model: "gpt-4-turbo",
 			},
 			configModel:   "",
-			defaultModel:  "grok-beta",
+			defaultModel:  "grok-4.20",
 			expectedModel: "gpt-4-turbo",
 			description:   "User wants to use a specific model for this request",
 		},
 		{
 			name:          "Application-wide config sets default model",
 			req:           &llm.ChatRequest{Model: ""},
-			configModel:   "glm-4-plus",
-			defaultModel:  "glm-4",
-			expectedModel: "glm-4-plus",
+			configModel:   "glm-5.1",
+			defaultModel:  "glm-4.6",
+			expectedModel: "glm-5.1",
 			description:   "Application config overrides provider default",
 		},
 		{
 			name:          "Provider default used in simple setup",
 			req:           &llm.ChatRequest{Model: ""},
 			configModel:   "",
-			defaultModel:  "qwen-plus",
-			expectedModel: "qwen-plus",
+			defaultModel:  "qwen3-max-2026-01-23",
+			expectedModel: "qwen3-max-2026-01-23",
 			description:   "No customization, use provider default",
 		},
 		{

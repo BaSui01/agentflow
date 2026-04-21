@@ -28,7 +28,7 @@ func newGLMCapabilityHost(cfg providers.GLMConfig, logger *zap.Logger) *GLMProvi
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "glm-4-plus",
+			FallbackModel: "glm-5.1",
 			Timeout:       cfg.Timeout,
 			EndpointPath:  "/api/paas/v4/chat/completions",
 			RequestHook:   glmRequestHook,

@@ -28,7 +28,7 @@ func newMistralCapabilityHost(cfg providers.MistralConfig, logger *zap.Logger) *
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "mistral-large-latest",
+			FallbackModel: "mistral-medium-latest",
 			Timeout:       cfg.Timeout,
 			RequestHook:   mistralRequestHook,
 		}, logger),

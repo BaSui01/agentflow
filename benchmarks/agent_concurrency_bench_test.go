@@ -116,8 +116,7 @@ func buildBenchAgent(agentID string, maxConcurrency int) agent.Agent {
 func setupBenchServer(resolver usecase.AgentResolver) *httptest.Server {
 	logger := zap.NewNop()
 	registry := newBenchRegistry()
-	agentRegistry := agent.NewAgentRegistry(logger)
-	agentHandler := handlers.NewAgentHandler(registry, agentRegistry, logger, resolver)
+	agentHandler := handlers.NewAgentHandlerWithService(usecase.NewDefaultAgentService(registry, resolver), nil, logger)
 	healthHandler := handlers.NewHealthHandler(logger)
 	mux := http.NewServeMux()
 	routes.RegisterSystem(mux, healthHandler, "bench", time.Now().Format(time.RFC3339), "HEAD")

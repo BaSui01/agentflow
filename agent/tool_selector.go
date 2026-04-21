@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -67,6 +68,12 @@ type ToolSelector interface {
 
 	// ScoreTools 对工具进行评分
 	ScoreTools(ctx context.Context, task string, tools []types.ToolSchema) ([]ToolScore, error)
+}
+
+type reasoningModeSelectorFunc func(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection
+
+func (f reasoningModeSelectorFunc) Select(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+	return f(ctx, input, state, registry, reflectionEnabled)
 }
 
 // DynamicToolSelector 动态工具选择器
@@ -156,6 +163,41 @@ func (s *DynamicToolSelector) SelectTools(ctx context.Context, task string, avai
 	)
 
 	return selected, nil
+}
+
+func (b *BaseAgent) toolSelectionMiddleware() ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		b.logger.Debug("selecting tools dynamically", zap.String("trace_id", input.TraceID))
+		availableTools := b.toolManager.GetAllowedTools(b.ID())
+		selected, err := b.extensions.ToolSelector().SelectTools(ctx, input.Content, availableTools)
+		if err != nil {
+			b.logger.Warn("tool selection failed", zap.String("trace_id", input.TraceID), zap.Error(err))
+		} else {
+			toolNames := make([]string, 0, len(selected))
+			for _, tool := range selected {
+				name := strings.TrimSpace(tool.Name)
+				if name == "" {
+					continue
+				}
+				toolNames = append(toolNames, name)
+			}
+
+			override := &RunConfig{}
+			if len(toolNames) == 0 {
+				override.DisableTools = true
+			} else {
+				override.ToolWhitelist = toolNames
+			}
+			ctx = WithRunConfig(ctx, MergeRunConfig(GetRunConfig(ctx), override))
+
+			b.logger.Info("tools selected dynamically",
+				zap.String("trace_id", input.TraceID),
+				zap.Strings("selected_tools", toolNames),
+				zap.Bool("tools_disabled", len(toolNames) == 0),
+			)
+		}
+		return next(ctx, input)
+	}
 }
 
 // ScoreTools 对工具进行评分
@@ -354,6 +396,12 @@ func (s *DynamicToolSelector) llmRanking(ctx context.Context, task string, score
 	}
 
 	return reordered, nil
+}
+
+// AsToolSelectorRunner wraps a *DynamicToolSelector as a DynamicToolSelectorRunner.
+// Since the interface now uses concrete types, this is a direct cast.
+func AsToolSelectorRunner(selector *DynamicToolSelector) DynamicToolSelectorRunner {
+	return selector
 }
 
 // UpdateToolStats 更新工具统计信息

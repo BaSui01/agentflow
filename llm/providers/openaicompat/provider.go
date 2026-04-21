@@ -65,6 +65,10 @@ type Config struct {
 	// Use this for provider-specific fields (e.g., DeepSeek's ReasoningMode model selection).
 	RequestHook func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest)
 
+	// ValidateRequest is an optional function to reject incompatible request/model
+	// combinations before the request is sent upstream.
+	ValidateRequest func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) error
+
 	// SupportsTools indicates whether this provider supports native function calling.
 	// Defaults to true if not set.
 	SupportsTools *bool
@@ -339,6 +343,11 @@ func (p *Provider) buildRequestBody(req *llm.ChatRequest, isStream bool) (provid
 	}
 	if req.WebSearchOptions != nil {
 		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
+	}
+	if p.Cfg.ValidateRequest != nil {
+		if err := p.Cfg.ValidateRequest(req, &body); err != nil {
+			return providerbase.OpenAICompatRequest{}, err
+		}
 	}
 	if p.Cfg.RequestHook != nil {
 		p.Cfg.RequestHook(req, &body)

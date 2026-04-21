@@ -9,11 +9,13 @@ import (
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 )
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
@@ -23,25 +25,22 @@ type BaseAgent struct {
 	runtimeGuardrailsCfg *guardrails.GuardrailsConfig
 	state                State
 	stateMu              sync.RWMutex
-	// TODO(T-001/T-002): 当前使用 TryLock 拒绝并发请求；
-	// 应引入带超时的 Lock 或请求队列，并将配置锁与执行锁分离。
-	execMu   sync.Mutex   // 执行互斥锁，防止并发执行
-	configMu sync.RWMutex // 配置互斥锁，与 execMu 分离，避免配置方法与 Execute 争用
+	execSem              *semaphore.Weighted // 执行信号量，控制并发执行数（默认1）
+	execCount            int64               // 当前活跃执行数（配合并发状态机）
+	configMu             sync.RWMutex        // 配置互斥锁，与 execSem 分离，避免配置方法与 Execute 争用
 
-	// 使用 llm.Provider 接口解耦对 llm 包的直接依赖
-	provider        llm.Provider
-	gatewayOnce     sync.Once
-	gatewayInstance llm.Provider
-	toolProvider    llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
-	toolGatewayOnce sync.Once
-	toolGatewayInst llm.Provider
-	externalGateway llm.Provider // injected shared gateway (skips lazy creation)
-	ledger          observability.Ledger
-	memory          MemoryManager
-	toolManager     ToolManager
-	retriever       RetrievalProvider
-	toolState       ToolStateProvider
-	bus             EventBus
+	mainGateway          llmcore.Gateway
+	toolGateway          llmcore.Gateway
+	mainProviderCompat   llm.Provider
+	toolProviderCompat   llm.Provider
+	gatewayProviderCache llm.Provider
+	toolGatewayProvider  llm.Provider
+	ledger               observability.Ledger
+	memory               MemoryManager
+	toolManager          ToolManager
+	retriever            RetrievalProvider
+	toolState            ToolStateProvider
+	bus                  EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
 	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
@@ -51,6 +50,9 @@ type BaseAgent struct {
 	// 上下文工程相关
 	contextManager       ContextManager // 上下文管理器（可选）
 	contextEngineEnabled bool           // 是否启用上下文工程
+	ephemeralPrompt      *EphemeralPromptLayerBuilder
+	traceFeedbackPlanner TraceFeedbackPlanner
+	memoryRuntime        MemoryRuntime
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
@@ -68,12 +70,16 @@ type BaseAgent struct {
 	reasoningSelector ReasoningModeSelector
 	completionJudge   CompletionJudge
 	checkpointManager *CheckpointManager
+	optionsResolver   ExecutionOptionsResolver
+	requestAdapter    ChatRequestAdapter
+	toolProtocol      ToolProtocolRuntime
+	reasoningRuntime  ReasoningRuntime
 }
 
 // NewBaseAgent 创建基础 Agent
 func NewBaseAgent(
 	cfg types.AgentConfig,
-	provider llm.Provider,
+	gateway llmcore.Gateway,
 	memory MemoryManager,
 	toolManager ToolManager,
 	bus EventBus,
@@ -89,16 +95,23 @@ func NewBaseAgent(
 	ba := &BaseAgent{
 		config:               cfg,
 		promptBundle:         promptBundleFromConfig(cfg),
-		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
+		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.ExecutionOptions().Control.Guardrails),
 		state:                StateInit,
-		provider:             provider,
+		mainGateway:          gateway,
+		mainProviderCompat:   compatProviderFromGateway(gateway),
 		ledger:               ledger,
 		memory:               memory,
 		toolManager:          toolManager,
 		bus:                  bus,
 		logger:               agentLogger,
+		ephemeralPrompt:      NewEphemeralPromptLayerBuilder(),
+		traceFeedbackPlanner: NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter()),
 		reasoningSelector:    NewDefaultReasoningModeSelector(),
 		completionJudge:      NewDefaultCompletionJudge(),
+		optionsResolver:      NewDefaultExecutionOptionsResolver(),
+		requestAdapter:       NewDefaultChatRequestAdapter(),
+		toolProtocol:         NewDefaultToolProtocolRuntime(),
+		execSem:              semaphore.NewWeighted(1),
 	}
 
 	// Initialize composite sub-managers for pipeline steps
@@ -107,6 +120,7 @@ func NewBaseAgent(
 	ba.guardrails = NewGuardrailsManager(agentLogger)
 	ba.memoryCache = NewMemoryCache(cfg.Core.ID, memory, agentLogger)
 	ba.memoryFacade = NewUnifiedMemoryFacade(memory, nil, agentLogger)
+	ba.memoryRuntime = NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return ba.memoryFacade }, func() MemoryManager { return ba.memory }, agentLogger)
 
 	// 如果配置, 初始化守护栏
 	if ba.runtimeGuardrailsCfg != nil {
@@ -257,31 +271,37 @@ func (b *BaseAgent) Teardown(ctx context.Context) error {
 // execLockWaitTimeout 短超时等待，避免并发请求直接返回 ErrAgentBusy
 const execLockWaitTimeout = 100 * time.Millisecond
 
-// TryLockExec 尝试获取执行锁，防止并发执行
-// 在超时时间内（默认 100ms）会重试获取锁，而非立即返回失败
+// TryLockExec 尝试获取执行槽位，防止并发执行超出限制。
+// 在超时时间内（默认 100ms）会等待，而非立即返回失败。
 func (b *BaseAgent) TryLockExec() bool {
-	if b.execMu.TryLock() {
-		return true
-	}
-	deadline := time.Now().Add(execLockWaitTimeout)
-	for time.Now().Before(deadline) {
-		if b.execMu.TryLock() {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
+	ctx, cancel := context.WithTimeout(context.Background(), execLockWaitTimeout)
+	defer cancel()
+	return b.execSem.Acquire(ctx, 1) == nil
 }
 
-// UnlockExec 释放执行锁
+// UnlockExec 释放执行槽位。
 func (b *BaseAgent) UnlockExec() {
-	b.execMu.Unlock()
+	b.execSem.Release(1)
+}
+
+// SetMaxConcurrency 设置 Agent 的最大并发执行数（默认 1）。
+// 如果当前有执行在进行，会等待它们完成后才生效。
+func (b *BaseAgent) SetMaxConcurrency(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	// 获取全部旧容量，确保没有正在执行的请求
+	_ = b.execSem.Acquire(context.Background(), 1)
+	b.execSem.Release(1)
+	b.execSem = semaphore.NewWeighted(int64(n))
 }
 
 // EnsureReady 确保 Agent 处于就绪状态
 func (b *BaseAgent) EnsureReady() error {
 	state := b.State()
-	if state != StateReady {
+	if state != StateReady && state != StateRunning {
 		return ErrAgentNotReady
 	}
 	return nil
@@ -326,73 +346,104 @@ func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([
 	return b.memory.Search(ctx, b.config.Core.ID, query, topK)
 }
 
-// Provider 返回 LLM Provider
-func (b *BaseAgent) Provider() llm.Provider { return b.provider }
+// MainGateway 返回主请求链路使用的 gateway。
+func (b *BaseAgent) MainGateway() llmcore.Gateway {
+	if b == nil {
+		return nil
+	}
+	return b.mainGateway
+}
 
-// MainProvider 返回经过 gateway 包装后的主 LLM Provider。
-func (b *BaseAgent) MainProvider() llm.Provider { return b.gatewayProvider() }
+func (b *BaseAgent) hasMainExecutionSurface() bool {
+	return b != nil && b.MainGateway() != nil
+}
 
-// ToolProvider 返回工具调用专用的 LLM Provider（可能为 nil）
-func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
+func (b *BaseAgent) hasDedicatedToolExecutionSurface() bool {
+	if b == nil {
+		return false
+	}
+	return b.toolGateway != nil
+}
 
-// SetToolProvider 设置工具调用专用的 LLM Provider
-func (b *BaseAgent) SetToolProvider(p llm.Provider) {
-	b.toolProvider = p
-	b.toolGatewayOnce = sync.Once{} // reset lazy init
-	b.toolGatewayInst = nil
+// ToolGateway 返回工具调用链路使用的 gateway（未配置时回退到主 gateway）。
+func (b *BaseAgent) ToolGateway() llmcore.Gateway {
+	if b == nil {
+		return nil
+	}
+	if b.toolGateway == nil {
+		return b.MainGateway()
+	}
+	return b.toolGateway
+}
+
+// SetToolGateway injects a pre-built shared tool gateway.
+func (b *BaseAgent) SetToolGateway(gw llmcore.Gateway) {
+	b.toolGateway = gw
+	b.toolProviderCompat = compatProviderFromGateway(gw)
+	b.toolGatewayProvider = nil
 }
 
 // SetGateway injects a pre-built shared Gateway instance.
-// When set, lazy gateway creation is skipped.
-func (b *BaseAgent) SetGateway(gw llm.Provider) {
-	b.externalGateway = gw
+func (b *BaseAgent) SetGateway(gw llmcore.Gateway) {
+	b.mainGateway = gw
+	b.mainProviderCompat = compatProviderFromGateway(gw)
+	b.gatewayProviderCache = nil
 }
 
 func (b *BaseAgent) gatewayProvider() llm.Provider {
-	if b.externalGateway != nil {
-		return b.externalGateway
+	gateway := b.MainGateway()
+	if gateway != nil {
+		if b.gatewayProviderCache != nil {
+			return b.gatewayProviderCache
+		}
+		return llmgateway.NewChatProviderAdapter(gateway, b.mainProviderCompat)
 	}
-	if b.provider == nil {
-		return b.provider
-	}
-	b.gatewayOnce.Do(func() {
-		b.gatewayInstance = wrapProviderWithGateway(b.provider, b.logger, b.ledger)
-	})
-	if b.gatewayInstance != nil {
-		return b.gatewayInstance
-	}
-	return b.provider
+	return nil
 }
 
 func (b *BaseAgent) gatewayToolProvider() llm.Provider {
-	if b.toolProvider != nil {
-		b.toolGatewayOnce.Do(func() {
-			b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
-		})
-		if b.toolGatewayInst != nil {
-			return b.toolGatewayInst
+	if b.hasDedicatedToolExecutionSurface() {
+		toolGateway := b.ToolGateway()
+		if toolGateway != nil {
+			if b.toolGatewayProvider != nil {
+				return b.toolGatewayProvider
+			}
+			return llmgateway.NewChatProviderAdapter(toolGateway, b.toolProviderCompat)
 		}
-		return b.toolProvider
 	}
 	return b.gatewayProvider()
 }
 
-func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llm.Provider {
+type providerBackedGateway interface {
+	ChatProvider() llm.Provider
+}
+
+func compatProviderFromGateway(gateway llmcore.Gateway) llm.Provider {
+	if gateway == nil {
+		return nil
+	}
+	backed, ok := gateway.(providerBackedGateway)
+	if !ok {
+		return nil
+	}
+	return backed.ChatProvider()
+}
+
+func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llmcore.Gateway {
 	if provider == nil {
 		return nil
 	}
-	service := llmgateway.New(llmgateway.Config{
+	return llmgateway.New(llmgateway.Config{
 		ChatProvider: provider,
 		Ledger:       ledger,
 		Logger:       logger,
 	})
-	return llmgateway.NewChatProviderAdapter(service, provider)
 }
 
 // maxReActIterations 返回 ReAct 最大迭代次数，默认 10
 func (b *BaseAgent) maxReActIterations() int {
-	if b.config.Runtime.MaxReActIterations > 0 {
-		return b.config.Runtime.MaxReActIterations
+	if value := b.config.ExecutionOptions().Control.MaxReActIterations; value > 0 {
+		return value
 	}
 	return 10
 }
@@ -463,6 +514,93 @@ func (b *BaseAgent) SetReasoningModeSelector(selector ReasoningModeSelector) {
 	b.reasoningSelector = selector
 }
 
+// SetExecutionOptionsResolver stores the resolver used by request preparation.
+func (b *BaseAgent) SetExecutionOptionsResolver(resolver ExecutionOptionsResolver) {
+	if resolver == nil {
+		b.optionsResolver = NewDefaultExecutionOptionsResolver()
+		return
+	}
+	b.optionsResolver = resolver
+}
+
+func (b *BaseAgent) executionOptionsResolver() ExecutionOptionsResolver {
+	if b.optionsResolver == nil {
+		return NewDefaultExecutionOptionsResolver()
+	}
+	return b.optionsResolver
+}
+
+// SetChatRequestAdapter stores the adapter used to build ChatRequest DTOs.
+func (b *BaseAgent) SetChatRequestAdapter(adapter ChatRequestAdapter) {
+	if adapter == nil {
+		b.requestAdapter = NewDefaultChatRequestAdapter()
+		return
+	}
+	b.requestAdapter = adapter
+}
+
+func (b *BaseAgent) chatRequestAdapter() ChatRequestAdapter {
+	if b.requestAdapter == nil {
+		return NewDefaultChatRequestAdapter()
+	}
+	return b.requestAdapter
+}
+
+// SetToolProtocolRuntime stores the runtime that materializes tool execution.
+func (b *BaseAgent) SetToolProtocolRuntime(runtime ToolProtocolRuntime) {
+	if runtime == nil {
+		b.toolProtocol = NewDefaultToolProtocolRuntime()
+		return
+	}
+	b.toolProtocol = runtime
+}
+
+func (b *BaseAgent) toolProtocolRuntime() ToolProtocolRuntime {
+	if b.toolProtocol == nil {
+		return NewDefaultToolProtocolRuntime()
+	}
+	return b.toolProtocol
+}
+
+// SetReasoningRuntime stores the runtime that unifies reasoning selection,
+// execution, and reflection for the default loop executor.
+func (b *BaseAgent) SetReasoningRuntime(runtime ReasoningRuntime) {
+	b.reasoningRuntime = runtime
+}
+
+func (b *BaseAgent) effectiveReasoningRuntime(options types.ExecutionOptions, enhanced EnhancedExecutionOptions) ReasoningRuntime {
+	if b.reasoningRuntime != nil {
+		return b.reasoningRuntime
+	}
+	return NewDefaultReasoningRuntime(
+		options,
+		b.reasoningRegistry,
+		enhanced.UseReflection && b.extensions.ReflectionExecutor() != nil,
+		b.loopSelector(options, enhanced),
+		b.loopStepExecutor(enhanced),
+		b.loopReflectionStep(enhanced),
+	)
+}
+
+// SetTraceFeedbackPlanner stores the planner used to decide whether recent
+// trace synopsis/history should be injected back into runtime prompt layers.
+func (b *BaseAgent) SetTraceFeedbackPlanner(planner TraceFeedbackPlanner) {
+	if planner == nil {
+		b.traceFeedbackPlanner = NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter())
+		return
+	}
+	b.traceFeedbackPlanner = planner
+}
+
+// SetMemoryRuntime stores memory recall/observe runtime used by execute path.
+func (b *BaseAgent) SetMemoryRuntime(runtime MemoryRuntime) {
+	if runtime == nil {
+		b.memoryRuntime = NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return b.memoryFacade }, func() MemoryManager { return b.memory }, b.logger)
+		return
+	}
+	b.memoryRuntime = runtime
+}
+
 // SetCompletionJudge stores the completion judge used by the default loop executor.
 func (b *BaseAgent) SetCompletionJudge(judge CompletionJudge) {
 	b.completionJudge = judge
@@ -471,185 +609,4 @@ func (b *BaseAgent) SetCompletionJudge(judge CompletionJudge) {
 // SetCheckpointManager stores the checkpoint manager used by the default loop executor.
 func (b *BaseAgent) SetCheckpointManager(manager *CheckpointManager) {
 	b.checkpointManager = manager
-}
-
-// EnhancedExecutionOptions 增强执行选项
-type EnhancedExecutionOptions struct {
-	UseReflection bool
-
-	UseToolSelection bool
-
-	UsePromptEnhancer bool
-
-	UseSkills   bool
-	SkillsQuery string
-
-	UseEnhancedMemory   bool
-	LoadWorkingMemory   bool
-	LoadShortTermMemory bool
-	SaveToMemory        bool
-
-	UseObservability bool
-	RecordMetrics    bool
-	RecordTrace      bool
-}
-
-// DefaultEnhancedExecutionOptions 默认增强执行选项
-func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
-	return EnhancedExecutionOptions{
-		UseReflection:       false,
-		UseToolSelection:    false,
-		UsePromptEnhancer:   false,
-		UseSkills:           false,
-		UseEnhancedMemory:   false,
-		LoadWorkingMemory:   true,
-		LoadShortTermMemory: true,
-		SaveToMemory:        true,
-		UseObservability:    true,
-		RecordMetrics:       true,
-		RecordTrace:         true,
-	}
-}
-
-// EnableReflection 启用 Reflection 机制
-func (b *BaseAgent) EnableReflection(executor ReflectionRunner) {
-	b.extensions.EnableReflection(executor)
-}
-
-// EnableToolSelection 启用动态工具选择
-func (b *BaseAgent) EnableToolSelection(selector DynamicToolSelectorRunner) {
-	b.extensions.EnableToolSelection(selector)
-}
-
-// EnablePromptEnhancer 启用提示词增强
-func (b *BaseAgent) EnablePromptEnhancer(enhancer PromptEnhancerRunner) {
-	b.extensions.EnablePromptEnhancer(enhancer)
-}
-
-// EnableSkills 启用 Skills 系统
-func (b *BaseAgent) EnableSkills(manager SkillDiscoverer) {
-	b.extensions.EnableSkills(manager)
-}
-
-// EnableMCP 启用 MCP 集成
-func (b *BaseAgent) EnableMCP(server MCPServerRunner) {
-	b.extensions.EnableMCP(server)
-}
-
-// EnableLSP 启用 LSP 集成。
-func (b *BaseAgent) EnableLSP(client LSPClientRunner) {
-	b.extensions.EnableLSP(client)
-}
-
-// EnableLSPWithLifecycle 启用 LSP，并注册可选生命周期对象（例如 *ManagedLSP）。
-func (b *BaseAgent) EnableLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) {
-	b.extensions.EnableLSPWithLifecycle(client, lifecycle)
-}
-
-// EnableEnhancedMemory 启用增强记忆系统
-func (b *BaseAgent) EnableEnhancedMemory(memorySystem EnhancedMemoryRunner) {
-	b.extensions.EnableEnhancedMemory(memorySystem)
-	b.memoryFacade = NewUnifiedMemoryFacade(b.memory, memorySystem, b.logger)
-}
-
-// EnableObservability 启用可观测性系统
-func (b *BaseAgent) EnableObservability(obsSystem ObservabilityRunner) {
-	b.extensions.EnableObservability(obsSystem)
-}
-
-// ExecuteEnhanced 增强执行（集成所有功能）
-// Uses a middleware pipeline so that each step is an independent, composable unit.
-func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options EnhancedExecutionOptions) (*Output, error) {
-	return b.executeWithPipeline(ctx, input, options)
-}
-
-func (b *BaseAgent) executeWithPipeline(ctx context.Context, input *Input, options EnhancedExecutionOptions) (*Output, error) {
-	if input == nil {
-		return nil, NewError(types.ErrInputValidation, "input is nil")
-	}
-	if input.TraceID != "" {
-		ctx = types.WithTraceID(ctx, input.TraceID)
-	}
-	pipeline := NewExecutionPipeline(b.coreExecutor(options))
-
-	if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
-		pipeline.Use(b.observabilityMiddleware(options))
-	}
-	if options.UseSkills && b.extensions.SkillManagerExt() != nil {
-		pipeline.Use(b.skillsMiddleware(options))
-	}
-	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil {
-		pipeline.Use(b.memoryLoadMiddleware(options))
-	}
-	if options.UsePromptEnhancer && b.extensions.PromptEnhancerExt() != nil {
-		pipeline.Use(b.promptEnhancerMiddleware())
-	}
-	if options.UseToolSelection && b.extensions.ToolSelector() != nil && b.toolManager != nil {
-		pipeline.Use(b.toolSelectionMiddleware())
-	}
-	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil && options.SaveToMemory {
-		pipeline.Use(b.memorySaveMiddleware())
-	}
-
-	b.logger.Info("starting enhanced execution",
-		zap.String("trace_id", input.TraceID),
-		zap.Bool("reflection", options.UseReflection),
-		zap.Bool("tool_selection", options.UseToolSelection),
-		zap.Bool("prompt_enhancer", options.UsePromptEnhancer),
-		zap.Bool("skills", options.UseSkills),
-		zap.Bool("enhanced_memory", options.UseEnhancedMemory),
-		zap.Bool("observability", options.UseObservability),
-	)
-
-	return pipeline.Execute(ctx, input)
-}
-
-func (b *BaseAgent) configuredExecutionOptions() EnhancedExecutionOptions {
-	options := DefaultEnhancedExecutionOptions()
-	options.UseReflection = b.config.IsReflectionEnabled() && b.extensions.ReflectionExecutor() != nil
-	options.UseToolSelection = b.config.IsToolSelectionEnabled() && b.extensions.ToolSelector() != nil && b.toolManager != nil
-	options.UsePromptEnhancer = b.config.IsPromptEnhancerEnabled() && b.extensions.PromptEnhancerExt() != nil
-	options.UseSkills = b.config.IsSkillsEnabled() && b.extensions.SkillManagerExt() != nil
-	options.UseEnhancedMemory = b.config.IsMemoryEnabled() && b.extensions.EnhancedMemoryExt() != nil
-	if !options.UseEnhancedMemory {
-		options.LoadWorkingMemory = false
-		options.LoadShortTermMemory = false
-		options.SaveToMemory = false
-	}
-
-	options.UseObservability = b.config.IsObservabilityEnabled() && b.extensions.ObservabilitySystemExt() != nil
-	if obsCfg := b.config.Extensions.Observability; obsCfg != nil {
-		options.RecordMetrics = obsCfg.MetricsEnabled
-		options.RecordTrace = obsCfg.TracingEnabled
-	} else if !options.UseObservability {
-		options.RecordMetrics = false
-		options.RecordTrace = false
-	}
-
-	return options
-}
-
-// coreExecutor returns the innermost execution function (Reflection or core execution).
-func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc {
-	return func(ctx context.Context, input *Input) (*Output, error) {
-		if err := b.EnsureReady(); err != nil {
-			return nil, err
-		}
-		runConfig := ResolveRunConfig(ctx, input)
-		executor := &LoopExecutor{
-			MaxIterations:     runConfig.EffectiveMaxLoopIterations(b.loopMaxIterations()),
-			Planner:           b.loopPlanner(),
-			StepExecutor:      b.loopStepExecutor(options),
-			Observer:          b.loopObserver(),
-			Selector:          b.loopSelector(options),
-			Judge:             b.completionJudge,
-			ReflectionStep:    b.loopReflectionStep(options),
-			ReasoningRegistry: b.reasoningRegistry,
-			ReflectionEnabled: options.UseReflection && b.extensions.ReflectionExecutor() != nil,
-			CheckpointManager: b.checkpointManager,
-			AgentID:           b.ID(),
-			Logger:            b.logger,
-		}
-		return executor.Execute(ctx, input)
-	}
 }

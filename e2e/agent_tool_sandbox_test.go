@@ -174,8 +174,7 @@ func TestE2E_AgentWithSandboxTool_Execute(t *testing.T) {
 	}
 
 	logger := zap.NewNop()
-	agentRegistry := agent.NewAgentRegistry(logger)
-	agentHandler := handlers.NewAgentHandler(reg, agentRegistry, logger, resolver)
+	agentHandler := handlers.NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, resolver), nil, logger)
 	healthHandler := handlers.NewHealthHandler(logger)
 
 	mux := http.NewServeMux()

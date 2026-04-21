@@ -43,6 +43,7 @@ type ClaudeProvider struct {
 // defaultClaudeTimeout is the default HTTP client timeout for Claude API requests.
 // Claude responses can be slower than other providers.
 const defaultClaudeTimeout = 60 * time.Second
+const defaultClaudeModel = "claude-opus-4-7"
 
 // NewClaudeProvider 创建 Claude Provider。
 func NewClaudeProvider(cfg providers.ClaudeConfig, logger *zap.Logger) *ClaudeProvider {
@@ -690,7 +691,10 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
-	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
+	model := providerbase.ChooseModel(req, p.cfg.Model, defaultClaudeModel)
+	if err := validateClaudeRequest(req, model); err != nil {
+		return nil, err
+	}
 	thinking, outputConfig, speed := buildClaudeReasoningControls(req, model)
 	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
 	if cacheErr != nil {
@@ -773,7 +777,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
-	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
+	model := providerbase.ChooseModel(req, p.cfg.Model, defaultClaudeModel)
+	if err := validateClaudeRequest(req, model); err != nil {
+		return nil, err
+	}
 	thinking, outputConfig, speed := buildClaudeReasoningControls(req, model)
 	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
 	if cacheErr != nil {
@@ -1293,6 +1300,41 @@ func validateThinkingConstraints(thinking anthropicsdk.ThinkingConfigParamUnion,
 	}
 }
 
+func validateClaudeRequest(req *llm.ChatRequest, model string) error {
+	if req == nil {
+		return nil
+	}
+	normModel := normalizeClaudeModelName(model)
+	if req.Temperature != 0 && req.TopP != 0 {
+		return &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    "Claude requests should set either temperature or top_p, but not both",
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   "claude",
+		}
+	}
+	if strings.Contains(normModel, "opus-4-7") || strings.Contains(normModel, "opus-4.7") {
+		if req.Temperature != 0 || req.TopP != 0 {
+			return &types.Error{
+				Code:       llm.ErrInvalidRequest,
+				Message:    "Claude Opus 4.7 requires temperature and top_p to remain unspecified",
+				HTTPStatus: http.StatusBadRequest,
+				Provider:   "claude",
+			}
+		}
+	}
+	mode := strings.ToLower(strings.TrimSpace(req.ReasoningMode))
+	if mode != "" && mode != "disabled" && req.Temperature != 0 {
+		return &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    "Claude thinking mode does not support custom temperature",
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   "claude",
+		}
+	}
+	return nil
+}
+
 func sdkStatusCode(err error) int {
 	var apiErr *anthropicsdk.Error
 	if errors.As(err, &apiErr) {
@@ -1407,6 +1449,8 @@ func claudeModelSupportsAdaptiveThinking(model string) bool {
 	}
 	switch {
 	case strings.Contains(model, "claude-mythos-preview"):
+		return true
+	case strings.Contains(model, "opus-4-7"), strings.Contains(model, "opus-4.7"):
 		return true
 	case strings.Contains(model, "opus-4-6"), strings.Contains(model, "opus-4.6"):
 		return true

@@ -543,23 +543,7 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 		}
 	}
 
-	if req.ReasoningMode != "" {
-		cfg.ThinkingConfig = &genai.ThinkingConfig{
-			IncludeThoughts: true,
-		}
-		switch strings.TrimSpace(strings.ToLower(req.ReasoningMode)) {
-		case "minimal":
-			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMinimal
-		case "low":
-			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelLow
-		case "medium":
-			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
-		case "high":
-			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelHigh
-		default:
-			cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
-		}
-	}
+	applyGeminiThinkingConfig(cfg, req)
 
 	if len(safetySettings) > 0 {
 		cfg.SafetySettings = make([]*genai.SafetySetting, 0, len(safetySettings))
@@ -589,6 +573,68 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 		return nil
 	}
 	return cfg
+}
+
+func applyGeminiThinkingConfig(cfg *genai.GenerateContentConfig, req *llm.ChatRequest) {
+	if cfg == nil || req == nil || strings.TrimSpace(req.ReasoningMode) == "" {
+		return
+	}
+
+	cfg.ThinkingConfig = &genai.ThinkingConfig{}
+	mode := strings.TrimSpace(strings.ToLower(req.ReasoningMode))
+	model := strings.TrimSpace(strings.ToLower(req.Model))
+	if model == "" {
+		model = defaultModel
+	}
+
+	if strings.Contains(model, "gemini-2.5") {
+		applyGemini25ThinkingConfig(cfg.ThinkingConfig, mode, model)
+		return
+	}
+
+	cfg.ThinkingConfig.IncludeThoughts = true
+	switch mode {
+	case "minimal":
+		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMinimal
+	case "low":
+		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelLow
+	case "medium":
+		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
+	case "high":
+		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelHigh
+	default:
+		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
+	}
+}
+
+func applyGemini25ThinkingConfig(cfg *genai.ThinkingConfig, mode, model string) {
+	if cfg == nil {
+		return
+	}
+
+	cfg.IncludeThoughts = mode != "disabled"
+
+	switch mode {
+	case "disabled":
+		if strings.Contains(model, "flash") || strings.Contains(model, "lite") {
+			budget := int32(0)
+			cfg.ThinkingBudget = &budget
+		}
+	case "minimal":
+		if strings.Contains(model, "flash") || strings.Contains(model, "lite") {
+			budget := int32(0)
+			cfg.ThinkingBudget = &budget
+			cfg.IncludeThoughts = false
+			return
+		}
+		budget := int32(-1)
+		cfg.ThinkingBudget = &budget
+		cfg.IncludeThoughts = false
+	default:
+		budget := int32(-1)
+		cfg.ThinkingBudget = &budget
+		cfg.IncludeThoughts = true
+	}
 }
 
 func isEmptyGenAIConfig(cfg *genai.GenerateContentConfig) bool {
@@ -987,7 +1033,7 @@ func extractGroundingAnnotationsFromGenAI(gm *genai.GroundingMetadata) []types.A
 // Helper functions
 // =============================================================================
 
-const defaultModel = "gemini-2.5-flash"
+const defaultModel = "gemini-2.5-pro"
 
 // normalizeFinishReason maps Gemini finish reasons to OpenAI-compatible values.
 func normalizeFinishReason(reason string) string {

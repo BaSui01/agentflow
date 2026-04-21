@@ -23,7 +23,7 @@ func TestNewOpenAIProvider_Defaults(t *testing.T) {
 	require.NotNil(t, p)
 	assert.Equal(t, "openai", p.Name())
 	assert.Equal(t, "https://api.openai.com", p.Cfg.BaseURL)
-	assert.Equal(t, "gpt-5.2", p.Cfg.FallbackModel)
+	assert.Equal(t, defaultOpenAIModel, p.Cfg.FallbackModel)
 }
 
 func TestWithPreviousResponseID(t *testing.T) {

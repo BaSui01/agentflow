@@ -28,7 +28,7 @@ func newQwenCapabilityHost(cfg providers.QwenConfig, logger *zap.Logger) *QwenPr
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "qwen3-235b-a22b",
+			FallbackModel: "qwen3-max-2026-01-23",
 			Timeout:       cfg.Timeout,
 			EndpointPath:  "/compatible-mode/v1/chat/completions",
 			RequestHook:   qwenRequestHook,
@@ -42,12 +42,15 @@ func newQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider
 }
 
 // qwenRequestHook handles Qwen-specific request modifications.
-// Switches to qwen3-max for thinking/extended reasoning modes.
-// Qwen3 series natively supports thinking mode; qwen3-max enables it by default.
+// Switches to qwen3-max snapshot for thinking/extended reasoning modes.
 func qwenRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" || req.ReasoningMode == "enabled" {
 		if req.Model == "" {
-			body.Model = "qwen3-max"
+			body.Model = "qwen3-max-2026-01-23"
 		}
+		enableThinking := true
+		incrementalOutput := true
+		body.EnableThinking = &enableThinking
+		body.IncrementalOutput = &incrementalOutput
 	}
 }
