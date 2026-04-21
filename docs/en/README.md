@@ -33,13 +33,19 @@
 | [🔍 RAG](./tutorials/07.RAG.md) | Vector storage and knowledge retrieval | ⭐⭐⭐⭐ |
 | [👥 Team & Legacy Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Official team facade plus legacy coordination surfaces | ⭐⭐⭐⭐ |
 
+### 📘 Guides
+
+| Document | Description | Difficulty |
+|----------|-------------|------------|
+| [🧭 Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | Official 12-month snapshot for chat, image, video, TTS, STT, and realtime model families | ⭐ |
+
 ---
 
 ## 🌟 Core Features
 
 ### 🔌 Unified LLM Abstraction Layer
 
-- **13+ Provider Support**: OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Kimi, Mistral, Hunyuan, MiniMax, Doubao, Llama
+- **13+ Provider Support**: OpenAI, Anthropic Claude, Google Gemini, DeepSeek, Qwen, GLM, xAI Grok, Kimi, Mistral, Hunyuan, MiniMax, Doubao, Llama
 - **Unified Interface**: One codebase for all LLMs
 - **Resilience**: Auto-retry, circuit breaker, idempotency
 - **A/B Testing Routing**: Multi-variant traffic splitting, sticky routing, dynamic weight adjustment, metrics collection
@@ -98,6 +104,7 @@
 - **Music**: Suno, MiniMax
 - **3D**: Meshy, Tripo
 - **Rerank**: Cohere, Qwen, GLM
+- **Recent Official Model Matrix**: See [Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) for the 2025-04-21 to 2026-04-21 snapshot
 
 ### 🛡️ Enterprise Features
 

@@ -12,7 +12,7 @@ import (
 // MiniMax 使用 OpenAI 兼容的 API 格式.
 //
 // 旧模型（abab 系列）不支持原生函数调用，框架会自动降级为 XML 工具调用模式。
-// 新模型（MiniMax-Text-01, M1, M2 等）支持标准 JSON tool calling。
+// 新模型（如 MiniMax-M2.7 / MiniMax-M2.5 等）支持标准 JSON tool calling。
 type MiniMaxProvider struct {
 	*openaicompat.Provider
 }
