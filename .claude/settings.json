@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "bash .trellis/scripts/run-python.sh .claude/hooks/statusline.py"
+    "command": "python .claude/hooks/statusline.py"
   },
   "hooks": {
     "SessionStart": [
@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .claude/hooks/session-start.py",
+            "command": "python .claude/hooks/session-start.py",
             "timeout": 10
           }
         ]
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .claude/hooks/session-start.py",
+            "command": "python .claude/hooks/session-start.py",
             "timeout": 10
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .claude/hooks/session-start.py",
+            "command": "python .claude/hooks/session-start.py",
             "timeout": 10
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .claude/hooks/inject-subagent-context.py",
+            "command": "python .claude/hooks/inject-subagent-context.py",
             "timeout": 30
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .claude/hooks/inject-subagent-context.py",
+            "command": "python .claude/hooks/inject-subagent-context.py",
             "timeout": 30
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .claude/hooks/ralph-loop.py",
+            "command": "python .claude/hooks/ralph-loop.py",
             "timeout": 10
           }
         ]
