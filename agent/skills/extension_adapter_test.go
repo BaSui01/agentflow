@@ -64,6 +64,24 @@ func TestSkillsExtensionAdapter_ExecuteSkill_ViaRegistry(t *testing.T) {
 	assert.Equal(t, "executed", resultMap["result"])
 }
 
+func TestSkillsExtensionAdapter_ExecuteSkill_ViaRegistryByID(t *testing.T) {
+	mgr := NewSkillManager(DefaultSkillManagerConfig(), zap.NewNop())
+	reg := NewRegistry(zap.NewNop())
+
+	handler := func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+		return []byte(`{"result":"executed-by-id"}`), nil
+	}
+	require.NoError(t, reg.Register(&SkillDefinition{ID: "s1", Name: "Alpha", Category: CategoryCoding}, handler))
+
+	adapter := NewSkillsExtensionAdapter(mgr, reg)
+	result, err := adapter.ExecuteSkill(context.Background(), "s1", map[string]string{"key": "val"})
+	require.NoError(t, err)
+
+	resultMap, ok := result.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "executed-by-id", resultMap["result"])
+}
+
 func TestSkillsExtensionAdapter_ExecuteSkill_FallbackToInstructions(t *testing.T) {
 	mgr := NewSkillManager(DefaultSkillManagerConfig(), zap.NewNop())
 	s1, _ := NewSkillBuilder("s1", "Alpha").

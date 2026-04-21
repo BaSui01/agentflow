@@ -38,6 +38,58 @@ func TestAgentRootPackageFileBudget(t *testing.T) {
 	}
 }
 
+func TestAgentRootPublicSurfaceBudget(t *testing.T) {
+	const maxImplementationHeavyRootFiles = 11
+	implementationMarkers := []string{
+		"runtime",
+		"facade",
+		"adapter",
+		"selector",
+		"pipeline",
+		"executor",
+	}
+
+	entries, err := os.ReadDir("agent")
+	if err != nil {
+		t.Fatalf("read agent dir: %v", err)
+	}
+
+	var matched []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		for _, marker := range implementationMarkers {
+			if strings.Contains(name, marker) {
+				matched = append(matched, name)
+				break
+			}
+		}
+	}
+
+	if len(matched) > maxImplementationHeavyRootFiles {
+		slices.Sort(matched)
+		t.Fatalf("agent root package has %d implementation-heavy files (%s), exceeds budget %d", len(matched), strings.Join(matched, ", "), maxImplementationHeavyRootFiles)
+	}
+}
+
+func TestRootLayoutBudget(t *testing.T) {
+	const maxTopLevelEntries = 53
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read repo root: %v", err)
+	}
+
+	if len(entries) > maxTopLevelEntries {
+		t.Fatalf("repo root has %d top-level entries, exceeds budget %d", len(entries), maxTopLevelEntries)
+	}
+}
+
 func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 	allowlist := map[string]string{
 		"cache":      "single cohesive cache manager entrypoint",
@@ -579,6 +631,205 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 		for _, snippet := range tt.forbiddenSnippets {
 			if strings.Contains(src, snippet) {
 				t.Fatalf("%s must not promote legacy public entry %q; use the unified runtime/facade entry instead", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
+	type sourceExpectation struct {
+		path             string
+		requiredSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"`agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"`agent/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"`agent.NewAgentBuilder`, `agent.NewBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths",
+			},
+		},
+		{
+			path: "docs/getting_started.md",
+			requiredSnippets: []string{
+				"推荐入口是 `agent/runtime.Builder`",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/01.快速开始.md",
+			requiredSnippets: []string{
+				"`agent/runtime.Builder` 是 `agent` 子模块 runtime 入口",
+			},
+		},
+		{
+			path: "docs/en/tutorials/01.QuickStart.md",
+			requiredSnippets: []string{
+				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/03.Agent开发教程.md",
+			requiredSnippets: []string{
+				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder`",
+			},
+		},
+		{
+			path: "docs/en/tutorials/03.AgentDevelopment.md",
+			requiredSnippets: []string{
+				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder`",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q to keep the official runtime entrypoint explicit", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestOfficialEntrypointDocsConsistency(t *testing.T) {
+	type docExpectation struct {
+		path                   string
+		requiredSnippets       []string
+		requiredAdvancedLegacy []string
+		forbiddenSnippets      []string
+	}
+
+	expectations := []docExpectation{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"`agent.NewBaseAgent`",
+				"`agent.CreateAgent`",
+				"高级扩展",
+			},
+			forbiddenSnippets: []string{
+				"推荐使用 `agent.NewAgentBuilder`",
+				"`agent.NewAgentBuilder` 作为正式入口",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/runtime.Builder` is only the runtime entry for the `agent` submodule",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"`agent.NewBaseAgent`",
+				"`agent.CreateAgent`",
+				"advanced extension",
+			},
+			forbiddenSnippets: []string{
+				"recommend `agent.NewAgentBuilder`",
+				"`agent.NewAgentBuilder` as the official entrypoint",
+			},
+		},
+		{
+			path: "docs/getting_started.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/runtime.Builder`",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"高级扩展",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/01.快速开始.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/runtime.Builder` 是 `agent` 子模块 runtime 入口",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"`agent.CreateAgent`",
+				"`agent.NewBaseAgent`",
+				"高级扩展",
+			},
+		},
+		{
+			path: "docs/en/tutorials/01.QuickStart.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"`agent.CreateAgent`",
+				"`agent.NewBaseAgent`",
+				"advanced extension",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/03.Agent开发教程.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder`",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"`agent.CreateAgent`",
+				"`agent.NewBaseAgent`",
+				"高级扩展",
+			},
+		},
+		{
+			path: "docs/en/tutorials/03.AgentDevelopment.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder`",
+			},
+			requiredAdvancedLegacy: []string{
+				"`agent.NewAgentBuilder`",
+				"`agent.CreateAgent`",
+				"`agent.NewBaseAgent`",
+				"advanced extension",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q to keep the official entrypoint set consistent", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.requiredAdvancedLegacy {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must describe legacy builders as advanced-extension-only and include %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not promote legacy entrypoint phrasing %q", tt.path, snippet)
 			}
 		}
 	}
