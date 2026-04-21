@@ -81,7 +81,7 @@
 
 ### 🎯 多提供商支持
 
-- **13+ 提供商** - OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Mistral, Hunyuan, Kimi, MiniMax, Doubao, Llama
+- **13+ 提供商** - OpenAI、Anthropic Claude、Google Gemini、DeepSeek、Qwen、GLM、xAI Grok、Mistral、腾讯混元、Kimi、MiniMax、Doubao、Llama
 - **智能路由** - 成本/健康/QPS 负载均衡
 - **A/B 测试路由** - 多变体流量分配、粘性路由、动态权重调整、指标收集
 - **统一 Token 计数器** - Tokenizer 接口 + tiktoken 适配器 + CJK 估算器
@@ -92,13 +92,14 @@
 
 ### 🎨 多模态能力
 
-- **Embedding** - OpenAI, Gemini, Cohere, Jina, Voyage
-- **Image** - DALL-E, Flux, Gemini, Stability, Ideogram, 通义万相, 智谱, 文心一格, 豆包, 腾讯混元, 可灵
-- **Video** - Sora, Runway, Veo, Gemini, 可灵, Luma, MiniMax, 即梦 Seedance
-- **Speech** - OpenAI TTS/STT, ElevenLabs, Deepgram
+- **Embedding** - OpenAI、Gemini、Cohere、Jina、Voyage
+- **Image** - `gpt-image-1`、Imagen 4、Flux、Stability、Ideogram、通义万相、智谱、文心一格、豆包、腾讯混元、可灵
+- **Video** - `sora-2`、Runway Gen-4.5 / `gen4_turbo`、Veo 3.1、Gemini、可灵、Luma、MiniMax、即梦 Seedance
+- **Speech** - `gpt-4o-mini-tts`、`gpt-4o-transcribe`、ElevenLabs、Deepgram
 - **Music** - Suno, MiniMax
 - **3D** - Meshy, Tripo
 - **Rerank** - Cohere, Qwen, GLM
+- **文档总表** - 近 12 个月主流模型总表见 `docs/cn/guides/近12个月主流多模态模型总表.md`
 
 ### 🛡️ 企业级能力
 
@@ -186,7 +187,7 @@ func main() {
             Type: "assistant",
         },
         LLM: types.LLMConfig{
-            Model: "gpt-4o-mini",
+            Model: "gpt-5.4",
         },
     })
     if err != nil {
@@ -244,14 +245,14 @@ func main() {
     if err := db.Create(&p).Error; err != nil {
         panic(err)
     }
-    m := llm.LLMModel{ModelName: "gpt-4o", DisplayName: "GPT-4o", Enabled: true}
+    m := llm.LLMModel{ModelName: "gpt-5.4", DisplayName: "GPT-5.4", Enabled: true}
     if err := db.Create(&m).Error; err != nil {
         panic(err)
     }
     pm := llm.LLMProviderModel{
         ModelID:         m.ID,
         ProviderID:      p.ID,
-        RemoteModelName: "gpt-4o",
+        RemoteModelName: "gpt-5.4",
         BaseURL:         "https://api.openai.com",
         PriceInput:      0.001,
         PriceCompletion: 0.002,
@@ -283,7 +284,7 @@ func main() {
         panic(err)
     }
 
-    selection, err := router.SelectProviderWithModel(ctx, "gpt-4o", llmrouter.StrategyCostBased)
+    selection, err := router.SelectProviderWithModel(ctx, "gpt-5.4", llmrouter.StrategyCostBased)
     if err != nil {
         panic(err)
     }
@@ -356,7 +357,7 @@ ag, err := rt.NewAgent(ctx, types.AgentConfig{
         Type: "assistant",
     },
     LLM: types.LLMConfig{
-        Model: "gpt-4o-mini",
+        Model: "gpt-5.4",
     },
 })
 if err != nil {
@@ -652,16 +653,22 @@ agentflow/
 
 - [快速开始](docs/cn/tutorials/01.快速开始.md)
 - [Provider 配置指南](docs/cn/tutorials/02.Provider配置指南.md)
+- [近12个月主流多模态模型总表](docs/cn/guides/近12个月主流多模态模型总表.md)
 - [Agent 开发教程](docs/cn/tutorials/03.Agent开发教程.md)
 - [工具集成说明](docs/cn/tutorials/04.工具集成说明.md)
 - [工作流编排](docs/cn/tutorials/05.工作流编排.md)
 - [多模态处理](docs/cn/tutorials/06.多模态处理.md)
+- [模型与媒体端点参考](docs/模型与媒体端点参考.md)
+- [多模态能力端点参考](docs/多模态能力端点参考.md)
+- [视频与图像厂商及端点说明](docs/视频与图像厂商及端点说明.md)
 - [检索增强 RAG](docs/cn/tutorials/07.检索增强RAG.md)
 - [Team 与 Legacy 多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
 - [Hosted 工具与 MCP](docs/cn/tutorials/09.Hosted工具与MCP.md)
 - [工作流编排进阶](docs/cn/tutorials/10.工作流编排进阶.md)
 - [成本追踪](docs/cn/tutorials/11.成本追踪.md)
 - [多模态框架 API](docs/cn/tutorials/21.多模态框架API.md)
+- [多模态实现总结](docs/多模态实现总结.md)
+- [多模态功能实现报告](docs/多模态功能实现报告.md)
 
 ## 🔧 技术栈
 

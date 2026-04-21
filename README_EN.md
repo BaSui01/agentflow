@@ -78,7 +78,7 @@ English | [中文](README.md)
 
 ### 🎯 Multi-Provider Support
 
-- **13+ Providers** - OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Mistral, Hunyuan, Kimi, MiniMax, Doubao, Llama
+- **13+ Providers** - OpenAI, Anthropic Claude, Google Gemini, DeepSeek, Qwen, GLM, xAI Grok, Mistral, Tencent Hunyuan, Kimi, MiniMax, Doubao, Llama
 - **Smart Routing** - Cost/health/QPS load balancing
 - **A/B Testing Router** - Multi-variant traffic allocation, sticky routing, dynamic weight adjustment, metrics collection
 - **Unified Token Counter** - Tokenizer interface + tiktoken adapter + CJK estimator
@@ -89,12 +89,13 @@ English | [中文](README.md)
 
 ### 🎨 Multimodal Capabilities
 - **Embedding** - OpenAI, Gemini, Cohere, Jina, Voyage
-- **Image** - DALL-E, Flux, Gemini, Stability, Ideogram, Tongyi, Zhipu, Baidu, Doubao, Tencent Hunyuan, Kling
-- **Video** - Sora, Runway, Veo, Gemini, Kling, Luma, MiniMax, Seedance
-- **Speech** - OpenAI TTS/STT, ElevenLabs, Deepgram
+- **Image** - `gpt-image-1`, Imagen 4, Flux, Stability, Ideogram, Tongyi, Zhipu, Baidu, Doubao, Tencent Hunyuan, Kling
+- **Video** - `sora-2`, Runway Gen-4.5 / `gen4_turbo`, Veo 3.1, Gemini, Kling, Luma, MiniMax, Seedance
+- **Speech** - `gpt-4o-mini-tts`, `gpt-4o-transcribe`, ElevenLabs, Deepgram
 - **Music** - Suno, MiniMax
 - **3D** - Meshy, Tripo
 - **Rerank** - Cohere, Qwen, GLM
+- **Model Snapshot** - See `docs/en/guides/RecentModelFamiliesAndModalities.md` for the 12-month official model matrix
 
 ### 🛡️ Enterprise-Grade
 
@@ -175,7 +176,7 @@ func main() {
             Type: "assistant",
         },
         LLM: types.LLMConfig{
-            Model: "gpt-4o-mini",
+            Model: "gpt-5.4",
         },
     })
     if err != nil {
@@ -233,14 +234,14 @@ func main() {
     if err := db.Create(&p).Error; err != nil {
         panic(err)
     }
-    m := llm.LLMModel{ModelName: "gpt-4o", DisplayName: "GPT-4o", Enabled: true}
+    m := llm.LLMModel{ModelName: "gpt-5.4", DisplayName: "GPT-5.4", Enabled: true}
     if err := db.Create(&m).Error; err != nil {
         panic(err)
     }
     pm := llm.LLMProviderModel{
         ModelID:         m.ID,
         ProviderID:      p.ID,
-        RemoteModelName: "gpt-4o",
+        RemoteModelName: "gpt-5.4",
         BaseURL:         "https://api.openai.com",
         PriceInput:      0.001,
         PriceCompletion: 0.002,
@@ -272,7 +273,7 @@ func main() {
         panic(err)
     }
 
-    selection, err := router.SelectProviderWithModel(ctx, "gpt-4o", llmrouter.StrategyCostBased)
+    selection, err := router.SelectProviderWithModel(ctx, "gpt-5.4", llmrouter.StrategyCostBased)
     if err != nil {
         panic(err)
     }
@@ -345,7 +346,7 @@ ag, err := rt.NewAgent(ctx, types.AgentConfig{
         Type: "assistant",
     },
     LLM: types.LLMConfig{
-        Model: "gpt-4o-mini",
+        Model: "gpt-5.4",
     },
 })
 if err != nil {
@@ -649,13 +650,19 @@ agentflow/
 
 - [Quick Start](docs/en/tutorials/01.QuickStart.md)
 - [Provider Configuration](docs/en/tutorials/02.ProviderConfiguration.md)
+- [Recent Model Families and Multimodal Matrix](docs/en/guides/RecentModelFamiliesAndModalities.md)
 - [Agent Development](docs/en/tutorials/03.AgentDevelopment.md)
 - [Tool Integration](docs/en/tutorials/04.ToolIntegration.md)
 - [Workflow Orchestration](docs/en/tutorials/05.WorkflowOrchestration.md)
 - [Multimodal Processing](docs/en/tutorials/06.MultimodalProcessing.md)
+- [Unified Model and Media Endpoints](docs/模型与媒体端点参考.md)
+- [Multimodal Capability Endpoints](docs/多模态能力端点参考.md)
+- [Image and Video Provider Endpoints](docs/视频与图像厂商及端点说明.md)
 - [RAG](docs/en/tutorials/07.RAG.md)
 - [Multi-Agent Collaboration](docs/en/tutorials/08.MultiAgentCollaboration.md)
 - [Multimodal Framework API](docs/en/tutorials/21.MultimodalFrameworkAPI.md)
+- [Multimodal Implementation Summary](docs/多模态实现总结.md)
+- [Multimodal Implementation Report](docs/多模态功能实现报告.md)
 
 ## 🔧 Tech Stack
 
