@@ -21,7 +21,7 @@ type Profile struct {
 	TTS       speech.TTSProvider
 	STT       speech.STTProvider
 
-	// LanguageModels 按语言适配默认模型，如 {"zh":"gpt-5.2", "en":"gpt-5.2"}。
+	// LanguageModels 按语言适配默认模型，如 {"zh":"gpt-5.4", "en":"gpt-5.4"}。
 	LanguageModels map[string]string
 }
 

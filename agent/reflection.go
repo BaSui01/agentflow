@@ -20,6 +20,42 @@ type ReflectionExecutorConfig struct {
 	CriticPrompt  string  `json:"critic_prompt"`  // Critic prompt template
 }
 
+// reflectionRunnerAdapter wraps *ReflectionExecutor to satisfy ReflectionRunner.
+type reflectionRunnerAdapter struct {
+	executor *ReflectionExecutor
+}
+
+func (a *reflectionRunnerAdapter) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
+	result, err := a.executor.ExecuteWithReflection(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return result.FinalOutput, nil
+}
+
+func (a *reflectionRunnerAdapter) ReflectStep(ctx context.Context, input *Input, output *Output, state *LoopState) (*LoopReflectionResult, error) {
+	return a.executor.ReflectStep(ctx, input, output, state)
+}
+
+// AsReflectionRunner wraps a *ReflectionExecutor as a ReflectionRunner.
+func AsReflectionRunner(executor *ReflectionExecutor) ReflectionRunner {
+	return &reflectionRunnerAdapter{executor: executor}
+}
+
+// promptEnhancerRunnerAdapter wraps *PromptEnhancer to satisfy PromptEnhancerRunner.
+type promptEnhancerRunnerAdapter struct {
+	enhancer *PromptEnhancer
+}
+
+func (a *promptEnhancerRunnerAdapter) EnhanceUserPrompt(prompt, context string) (string, error) {
+	return a.enhancer.EnhanceUserPrompt(prompt, context), nil
+}
+
+// AsPromptEnhancerRunner wraps a *PromptEnhancer as a PromptEnhancerRunner.
+func AsPromptEnhancerRunner(enhancer *PromptEnhancer) PromptEnhancerRunner {
+	return &promptEnhancerRunnerAdapter{enhancer: enhancer}
+}
+
 // 默认反射 Config 返回默认反射配置
 func DefaultReflectionConfig() *ReflectionExecutorConfig {
 	config := DefaultReflectionExecutorConfig()

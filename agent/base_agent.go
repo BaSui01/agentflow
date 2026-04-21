@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,120 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 )
+
+// ExecutionFunc is the core agent execution function signature.
+type ExecutionFunc func(ctx context.Context, input *Input) (*Output, error)
+
+// ExecutionMiddleware wraps an ExecutionFunc, adding pre/post processing.
+// Call next to proceed to the next middleware (or the core executor).
+type ExecutionMiddleware func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error)
+
+// ExecutionPipeline chains middlewares around a core ExecutionFunc.
+type ExecutionPipeline struct {
+	middlewares []ExecutionMiddleware
+	core        ExecutionFunc
+}
+
+// NewExecutionPipeline creates a pipeline that wraps the given core function.
+func NewExecutionPipeline(core ExecutionFunc) *ExecutionPipeline {
+	return &ExecutionPipeline{core: core}
+}
+
+// Use appends one or more middlewares. They execute in the order added.
+func (p *ExecutionPipeline) Use(mws ...ExecutionMiddleware) {
+	p.middlewares = append(p.middlewares, mws...)
+}
+
+// Execute runs the full middleware chain followed by the core function.
+func (p *ExecutionPipeline) Execute(ctx context.Context, input *Input) (*Output, error) {
+	if input == nil {
+		return nil, NewError(types.ErrInputValidation, "pipeline input is nil")
+	}
+	fn := p.core
+	for i := len(p.middlewares) - 1; i >= 0; i-- {
+		mw := p.middlewares[i]
+		next := fn
+		fn = func(ctx context.Context, input *Input) (*Output, error) {
+			return mw(ctx, input, next)
+		}
+	}
+	return fn(ctx, input)
+}
+
+type enhancedCtxKey int
+
+const (
+	ctxKeySkillInstructions enhancedCtxKey = iota
+	ctxKeyMemoryContext
+)
+
+func withSkillInstructions(ctx context.Context, instructions []string) context.Context {
+	return context.WithValue(ctx, ctxKeySkillInstructions, instructions)
+}
+
+func skillInstructionsFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxKeySkillInstructions).([]string)
+	return v
+}
+
+func withMemoryContext(ctx context.Context, memCtx []string) context.Context {
+	return context.WithValue(ctx, ctxKeyMemoryContext, memCtx)
+}
+
+func memoryContextFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxKeyMemoryContext).([]string)
+	return v
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+func shallowCopyInput(in *Input) *Input {
+	cp := *in
+	if in.Context != nil {
+		cp.Context = make(map[string]any, len(in.Context))
+		for k, v := range in.Context {
+			cp.Context[k] = v
+		}
+	}
+	return &cp
+}
+
+func normalizeInstructionList(instructions []string) []string {
+	if len(instructions) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(instructions))
+	cleaned := make([]string, 0, len(instructions))
+	for _, instruction := range instructions {
+		instruction = strings.TrimSpace(instruction)
+		if instruction == "" {
+			continue
+		}
+		if _, exists := unique[instruction]; exists {
+			continue
+		}
+		unique[instruction] = struct{}{}
+		cleaned = append(cleaned, instruction)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func explainabilityTimelineRecorder(obs ObservabilityRunner) ExplainabilityTimelineRecorder {
+	recorder, _ := obs.(ExplainabilityTimelineRecorder)
+	return recorder
+}
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
 type BaseAgent struct {

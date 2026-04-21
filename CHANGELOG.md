@@ -154,14 +154,14 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - Gemini 图像 `SupportedSizes()` 改为返回 Gemini 原生格式 `["1K","2K","4K"]`，并自动映射通用像素格式（"1024x1024"→"1K" 等）
-- 文档 `docs/VIDEO_IMAGE_PROVIDERS.md` 补充 Gemini 模型版本对比表、全量参数说明、流式事件序列描述及请求示例
+- 文档 `docs/视频与图像厂商及端点说明.md` 补充 Gemini 模型版本对比表、全量参数说明、流式事件序列描述及请求示例
 
 ## [1.6.1] - 2026-03-09
 
 ### Added
 - 多模态图像厂商：智谱(zhipu)、文心一格(baidu)、豆包/火山(doubao)、腾讯混元生图(tencent)、可灵(kling)；腾讯混元 TC3-HMAC-SHA256 签名实现
 - 可灵 Kling 图像 provider：与视频共用 `KlingAPIKey`，一 Key 双用
-- 文档 `docs/VIDEO_IMAGE_PROVIDERS.md`：接入清单、字节/可灵说明、一 Key 双用（OpenAI/Gemini/Kling）
+- 文档 `docs/视频与图像厂商及端点说明.md`：接入清单、字节/可灵说明、一 Key 双用（OpenAI/Gemini/Kling）
 
 ### Changed
 - 升级版本至 1.6.1
