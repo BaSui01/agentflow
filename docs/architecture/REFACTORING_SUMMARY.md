@@ -45,11 +45,11 @@ healthHandler := handlers.NewHealthHandler(logger)
 http.HandleFunc("/health", healthHandler.HandleHealth)
 
 // 聊天接口
-chatHandler := handlers.NewChatHandler(provider, policyManager, logger)
+chatHandler := handlers.NewChatHandler(chatService, logger)
 http.HandleFunc("/api/v1/chat/completions", chatHandler.HandleCompletion)
 
 // Agent 管理
-agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger)
+agentHandler := handlers.NewAgentHandlerWithService(agentService, nil, logger)
 http.HandleFunc("/api/v1/agents", agentHandler.HandleListAgents)
 ```
 
@@ -375,8 +375,8 @@ func main() {
 
     // 6. 创建 handlers
     healthHandler := handlers.NewHealthHandler(logger)
-    chatHandler := handlers.NewChatHandler(provider, policyManager, logger)
-    agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger)
+    chatHandler := handlers.NewChatHandler(chatService, logger)
+    agentHandler := handlers.NewAgentHandlerWithService(agentService, nil, logger)
 
     // 7. 注册路由
     mux := http.NewServeMux()

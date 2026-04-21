@@ -1,4 +1,4 @@
 interface:
-  display_name: "重构计划治理"
-  short_description: "维护中文重构计划文档并强制任务状态打勾闭环执行验收"
-  default_prompt: "请先校验重构计划格式与状态，再按未完成项推进，并在全部任务 [x] 前拒绝收尾。"
+  display_name: "重构计划治理与归档"
+  short_description: "对齐活动计划与架构约束后，推进、验收或归档中文重构计划并给出具体重构建议"
+  default_prompt: "请先读取 AGENTS.md、相关活动重构计划与架构文档，再给出具体重构建议或推进/归档动作，并明确区分单计划完成与全局收尾。"

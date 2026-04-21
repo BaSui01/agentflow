@@ -4,7 +4,7 @@ This document defines the runtime startup chain and composition boundaries.
 
 ## Runtime Chain
 
-`cmd/agentflow/main.go:runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow.NewServer(...).Start -> cmd/agentflow/server_handlers_runtime.go:initHandlers -> cmd/agentflow/server_http.go:startHTTPServer -> internal/app/bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+`cmd/agentflow/main.go:runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow.NewServer(...).Start -> cmd/agentflow/server_handlers_runtime.go:initHandlers -> internal/app/bootstrap.BuildServeHandlerSet(...) -> cmd/agentflow/server_http.go:startHTTPServer -> internal/app/bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 
 ## Composition Boundaries
 
@@ -13,6 +13,42 @@ This document defines the runtime startup chain and composition boundaries.
 - `api/handlers` stays focused on protocol conversion and delegates domain behavior.
 - `workflow` is the Layer 3 orchestrator; it is not an `agent` subtype and should only coordinate lower-level capabilities.
 - `agent` and `rag` are peer Layer 2 domain capabilities; either may be called directly from handler/usecase entrypoints.
+
+## Serve Boundary（已落地）
+
+一次性边界重构已经把 serve 期 handler 组装收敛到 `internal/app/bootstrap.BuildServeHandlerSet(...)`；`cmd/agentflow/server_handlers_runtime.go` 只做一次总装配调用与结果赋值。
+
+### Target Serve Chain
+
+```text
+cmd/agentflow
+  -> internal/app/bootstrap.BuildServeHandlerSet(...)
+    -> api/routes
+      -> api/handlers
+        -> internal/usecase
+          -> domain(agent/rag/workflow/llm)
+```
+
+### Target Responsibilities
+
+- `api/handlers`
+  - protocol-only adapter boundary
+  - request decode / validation / error mapping / response serialization / stream writing
+  - depends on usecase interfaces only; must not assemble provider, registry, parser, executor, store, or runtime details
+- `internal/usecase`
+  - application execution boundary behind handlers
+  - owns business execution, application DTOs/contracts, and runtime-holder based indirection needed by hot reload
+  - translates handler inputs into domain calls without depending on `api/` transport DTOs as the long-term boundary
+- `internal/app/bootstrap`
+  - startup-only composition support
+  - provides the single serve assembly entry `BuildServeHandlerSet(...)`
+  - may keep private helper builders, but those helpers exist only behind the single assembly entry rather than as parallel top-level wiring paths
+
+### One-shot Replacement Rule
+
+- Do not keep a legacy `initHandlers()` wiring path and a new `BuildServeHandlerSet(...)` path alive in parallel.
+- When the new boundary lands, handler-local runtime/service construction must be removed instead of wrapped in compatibility branches.
+- Documentation, tests, and architecture guards should converge on `handler -> usecase -> domain` plus `bootstrap.BuildServeHandlerSet(...)` as the single serve startup truth.
 
 ## Layer Map
 
@@ -34,6 +70,7 @@ Rules:
 - Not every request enters `workflow`; `agent` and `rag` remain direct domain entries.
 - When a workflow uses an agent step, the dependency direction is `workflow -> agent`, never `agent -> workflow` as the default main chain.
 - A single `agent` may use `rag` directly; `rag` is not reserved for workflow or multi-agent scenarios.
+- For the Phase-0 target boundary, handler-facing business execution should enter through `internal/usecase`, while `bootstrap` stays as startup-only assembly.
 
 ## Allowed / Forbidden Dependency Matrix
 
@@ -55,6 +92,11 @@ Notes:
 - `internal/app/bootstrap` is intentionally excluded from normal domain dependency graphs; it is startup-only composition support.
 
 ## Current Builder Split
+
+- `internal/app/bootstrap/serve_handler_set_builder.go`
+  - serve 期唯一主装配入口（handlers + runtime refs + stores/redis clients）
+  - `cmd/agentflow/server_handlers_runtime.go` 只调用该入口，不再逐个编排子 runtime builder
+  - `toolRegistryRuntimeAdapter` 已下沉到 bootstrap，组合根不再保留该适配器实现细节
 
 - `internal/app/bootstrap/bootstrap.go`
   - config loading/validation

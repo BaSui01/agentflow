@@ -1,0 +1,93 @@
+# ADR 007: 一次性应用边界收口
+
+## 状态
+- **状态**: 已接受
+- **日期**: 2026-04-21
+- **作者**: AgentFlow Team
+
+## 背景
+
+当前启动链路已经明确了 `cmd -> bootstrap -> routes -> handlers -> domain` 的单入口方向，但应用层边界仍然分散在 `api/handlers`、`internal/usecase`、`internal/app/bootstrap` 与部分 `agent` 根包构造路径之间：
+
+- `handler` 仍存在直接拼装 runtime / service 的残余路径，协议适配与业务执行尚未完全分离。
+- `bootstrap` 已承担启动期 builder/bridge 角色，但 `cmd/agentflow/server_handlers_runtime.go` 仍需要逐段编排多个 handler/runtime 细节。
+- `internal/usecase` 已在部分链路承担业务执行职责，但尚未成为 handler 之后的唯一应用层入口。
+
+这会带来三个问题：
+
+1. **边界不稳定**：handler 容易重新长出业务逻辑或底层装配细节。
+2. **装配口分散**：组合根无法通过一个统一入口表达完整的 serve 期 handler 装配。
+3. **重构成本高**：热更新、依赖注入、测试替身需要同时追踪 handler/runtime/usecase 的多条并行路径。
+
+同时，本项目的开发规则已经明确：
+
+- 只允许**单轨替换**，不保留新旧双实现并存。
+- `api/` 只做协议转换，`internal/app/bootstrap` 只做启动装配，核心业务执行应停留在应用/领域层。
+
+## 决策
+
+本次采用**一次性应用边界收口**策略，目标是把 serve 启动与 HTTP 应用主链固定为：
+
+```text
+cmd/agentflow
+  -> internal/app/bootstrap.BuildServeHandlerSet(...)
+    -> api/routes
+      -> api/handlers
+        -> internal/usecase
+          -> domain(agent/rag/workflow/llm)
+```
+
+### 1. Handler 边界
+
+- `api/handlers` 只承担协议适配职责：请求解析、参数校验、错误映射、响应序列化、SSE/stream 写出。
+- handler 只依赖 `internal/usecase` 暴露的 service/usecase 接口，不再直接拼装 provider、registry、parser、executor、store 或 runtime。
+- handler 对外保留稳定、可检索的单一构造入口；旧的并行构造路径在重构时一次性删除，不保留兼容分支。
+
+### 2. Usecase 边界
+
+- `internal/usecase` 成为 handler 之后的唯一应用层入口，承载业务执行、用例编排、应用层 DTO 与运行时持有器。
+- usecase 负责把协议无关的输入输出转换为领域调用，不反向依赖 `api/` transport DTO。
+- 热更新优先替换 usecase/runtime 持有器，不再以 handler 内部 runtime 替换作为长期边界。
+
+### 3. Bootstrap 边界
+
+- `internal/app/bootstrap` 保持启动期 builder/factory/registry 组装职责，不承载业务决策。
+- serve 启动期 handler 装配收口到唯一总装配入口：`BuildServeHandlerSet(...)`。
+- `BuildServeHandlerSet(...)` 统一返回 serve 所需 handlers、closers、runtime refs 与关联启动资源；私有 helper 可以继续存在，但只能作为该总入口的内部支撑，不再暴露并行主装配路径。
+
+### 4. 单轨替换规则
+
+- 本次重构不采用新旧 handler/service/bootstrap 双轨并存方案。
+- 一旦 `BuildServeHandlerSet(...)` 与新的 handler/usecase 边界落地，旧的现场拼装路径必须同步删除。
+- 文档、测试、架构守卫必须以新边界为唯一真相，不保留“过渡期默认仍可走旧链路”的描述。
+
+## 后果
+
+### 优点
+
+- ✅ `cmd` 与 `bootstrap` 的组合根职责更清晰，serve 装配口收敛为单一入口。
+- ✅ `handler -> usecase -> domain` 主链稳定后，协议适配、业务执行、领域能力更容易分别测试。
+- ✅ 热更新与运行时替换边界更明确，避免 handler/runtime 双持有导致的状态漂移。
+- ✅ 后续 `agent` 根包瘦身、handler 服务下沉、依赖守卫补强都可以围绕同一条主链推进。
+
+### 代价
+
+- ❌ 需要一次性迁移现有 handler 内残留的 runtime/service 装配逻辑。
+- ❌ 需要同步更新相关测试、启动装配文档与架构守卫，不能只改局部实现。
+
+## 不采纳的方案
+
+### 方案 1：保留旧 handler 构造路径，逐步切换到 usecase
+- **拒绝原因**：会形成双轨实现，违反开发阶段禁止兼容代码的规则。
+
+### 方案 2：让 `cmd/agentflow` 继续显式串联多个 bootstrap builder
+- **拒绝原因**：组合根会继续暴露底层装配细节，无法形成单一可验证的 serve 总装配边界。
+
+### 方案 3：直接把业务执行下沉到 handler
+- **拒绝原因**：会破坏 `api` 仅做协议转换的分层约束，也会让热更新和测试替身继续绑定在适配层。
+
+## 相关文档
+
+- `docs/architecture/startup-composition.md`
+- `docs/重构计划/一次性架构边界重构计划-2026-04-21.md`
+- `docs/architecture/ADRs/001-layered-architecture.md`
