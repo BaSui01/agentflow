@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -21,15 +20,15 @@ import (
 )
 
 type openAICompatServiceStub struct {
-	completeReq    *api.ChatRequest
-	streamReq      *api.ChatRequest
+	completeReq    *usecase.ChatRequest
+	streamReq      *usecase.ChatRequest
 	completeResult *usecase.ChatCompletionResult
 	completeErr    *types.Error
 	streamChunks   []llmcore.UnifiedChunk
 	streamErr      *types.Error
 }
 
-func (s *openAICompatServiceStub) Complete(_ context.Context, req *api.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
+func (s *openAICompatServiceStub) Complete(_ context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
 	s.completeReq = req
 	if s.completeErr != nil {
 		return nil, s.completeErr
@@ -37,7 +36,7 @@ func (s *openAICompatServiceStub) Complete(_ context.Context, req *api.ChatReque
 	return s.completeResult, nil
 }
 
-func (s *openAICompatServiceStub) Stream(_ context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (s *openAICompatServiceStub) Stream(_ context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
 	s.streamReq = req
 	if s.streamErr != nil {
 		return nil, s.streamErr
@@ -61,20 +60,20 @@ func (s *openAICompatServiceStub) DefaultRoutePolicy() string {
 func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		completeResult: &usecase.ChatCompletionResult{
-			Response: &api.ChatResponse{
+			Response: &usecase.ChatResponse{
 				ID:    "chatcmpl_test",
 				Model: "gpt-5.2",
-				Choices: []api.ChatChoice{
+				Choices: []usecase.ChatChoice{
 					{
 						Index:        0,
 						FinishReason: "stop",
-						Message: api.Message{
+						Message: usecase.Message{
 							Role:    "assistant",
 							Content: "ok",
 						},
 					},
 				},
-				Usage: api.ChatUsage{
+				Usage: usecase.ChatUsage{
 					PromptTokens:     10,
 					CompletionTokens: 5,
 					TotalTokens:      15,
@@ -83,7 +82,7 @@ func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandlerWithService(svc, zap.NewNop())
+	handler := NewChatHandler(svc, zap.NewNop())
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -164,7 +163,7 @@ func TestChatHandler_OpenAICompatChatCompletions_Stream(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandlerWithService(svc, zap.NewNop())
+	handler := NewChatHandler(svc, zap.NewNop())
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -186,14 +185,14 @@ func TestChatHandler_OpenAICompatChatCompletions_Stream(t *testing.T) {
 func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		completeResult: &usecase.ChatCompletionResult{
-			Response: &api.ChatResponse{
+			Response: &usecase.ChatResponse{
 				ID:    "resp_test",
 				Model: "gpt-5.2",
-				Choices: []api.ChatChoice{
+				Choices: []usecase.ChatChoice{
 					{
 						Index:        0,
 						FinishReason: "stop",
-						Message: api.Message{
+						Message: usecase.Message{
 							Role:    "assistant",
 							Content: "done",
 							ReasoningSummaries: []types.ReasoningSummary{
@@ -205,7 +204,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 						},
 					},
 				},
-				Usage: api.ChatUsage{
+				Usage: usecase.ChatUsage{
 					PromptTokens:     8,
 					CompletionTokens: 3,
 					TotalTokens:      11,
@@ -214,7 +213,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandlerWithService(svc, zap.NewNop())
+	handler := NewChatHandler(svc, zap.NewNop())
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -390,7 +389,7 @@ func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandlerWithService(svc, zap.NewNop())
+	handler := NewChatHandler(svc, zap.NewNop())
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -414,12 +413,12 @@ func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 func TestChatHandler_OpenAICompatResponses_WebSearchToolFilters(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		completeResult: &usecase.ChatCompletionResult{
-			Response: &api.ChatResponse{
+			Response: &usecase.ChatResponse{
 				ID: "resp_filters",
-				Choices: []api.ChatChoice{
+				Choices: []usecase.ChatChoice{
 					{
 						Index: 0,
-						Message: api.Message{
+						Message: usecase.Message{
 							Role:    "assistant",
 							Content: "ok",
 						},
@@ -428,7 +427,7 @@ func TestChatHandler_OpenAICompatResponses_WebSearchToolFilters(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandlerWithService(svc, zap.NewNop())
+	handler := NewChatHandler(svc, zap.NewNop())
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -461,12 +460,12 @@ func TestChatHandler_OpenAICompatResponses_WebSearchToolFilters(t *testing.T) {
 func TestChatHandler_OpenAICompatResponses_InputReasoningRoundTrip(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		completeResult: &usecase.ChatCompletionResult{
-			Response: &api.ChatResponse{
+			Response: &usecase.ChatResponse{
 				ID:    "resp_test",
 				Model: "gpt-5.2",
-				Choices: []api.ChatChoice{{
+				Choices: []usecase.ChatChoice{{
 					Index: 0,
-					Message: api.Message{
+					Message: usecase.Message{
 						Role:    "assistant",
 						Content: "done",
 					},
@@ -474,7 +473,7 @@ func TestChatHandler_OpenAICompatResponses_InputReasoningRoundTrip(t *testing.T)
 			},
 		},
 	}
-	handler := NewChatHandlerWithService(svc, zap.NewNop())
+	handler := NewChatHandler(svc, zap.NewNop())
 
 	body := []byte(`{
 		"model":"gpt-5.2",

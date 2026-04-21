@@ -5,21 +5,22 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 type ToolApprovalHandler struct {
-	svc    ToolApprovalService
+	svc    usecase.ToolApprovalService
 	logger *zap.Logger
 }
 
-func NewToolApprovalHandler(runtime ToolApprovalRuntime, workflowID string, logger *zap.Logger) *ToolApprovalHandler {
+func NewToolApprovalHandler(service usecase.ToolApprovalService, logger *zap.Logger) *ToolApprovalHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &ToolApprovalHandler{
-		svc:    NewDefaultToolApprovalService(runtime, workflowID),
+		svc:    service,
 		logger: logger,
 	}
 }
@@ -80,7 +81,12 @@ func (h *ToolApprovalHandler) HandleResolve(w http.ResponseWriter, r *http.Reque
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
-	if err := h.svc.Resolve(r.Context(), id, req.Approved, req.OptionID, req.Comment, req.UserID); err != nil {
+	if err := h.svc.Resolve(r.Context(), id, usecase.ResolveToolApprovalInput{
+		Approved: req.Approved,
+		OptionID: req.OptionID,
+		Comment:  req.Comment,
+		UserID:   req.UserID,
+	}); err != nil {
 		WriteError(w, err, h.logger)
 		return
 	}

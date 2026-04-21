@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	pkgserver "github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/types"
@@ -131,6 +132,7 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 	require.NoError(t, s.reloadLLMRuntime(cfg))
 	require.NotNil(t, s.chatHandler)
 	handler := s.chatHandler
+	service := s.chatService
 	require.NoError(t, s.initHotReloadManager())
 
 	assertHotReloadChatContent(t, handler, "from-a")
@@ -141,6 +143,7 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
 
 	require.Same(t, handler, s.chatHandler)
+	require.Same(t, service, s.chatService)
 	require.Equal(t, modeB, s.cfg.LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "from-b")
 }
@@ -171,6 +174,7 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 	require.NoError(t, s.reloadLLMRuntime(cfg))
 	require.NotNil(t, s.chatHandler)
 	handler := s.chatHandler
+	service := s.chatService
 	require.NoError(t, s.initHotReloadManager())
 
 	badCfg := config.DefaultConfig()
@@ -180,6 +184,7 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 	require.Error(t, err)
 
 	require.Same(t, handler, s.chatHandler)
+	require.Same(t, service, s.chatService)
 	require.Equal(t, modeA, s.cfg.LLM.MainProviderMode)
 	require.Equal(t, modeA, s.hotReloadManager.GetConfig().LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "stable")
@@ -302,7 +307,7 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
 	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, s.provider, nil)
-	s.workflowHandler = handlers.NewWorkflowHandler(workflowRuntime.Facade, workflowRuntime.Parser, s.logger)
+	s.workflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), s.logger)
 	require.NotNil(t, s.workflowHandler)
 	require.NotNil(t, s.currentWorkflowHITLManager())
 

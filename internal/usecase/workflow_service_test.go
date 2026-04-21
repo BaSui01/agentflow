@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -27,9 +27,9 @@ func (s *workflowExecutorStub) ExecuteDAG(ctx context.Context, wf *workflow.DAGW
 }
 
 func TestWorkflowService_BuildDAGWorkflow_FromDSL_Success(t *testing.T) {
-	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+	svc := NewDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
-	wf, source, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+	wf, source, err := svc.BuildDAGWorkflow(WorkflowBuildInput{
 		DSL: `
 version: "1.0"
 name: "test-workflow"
@@ -51,9 +51,9 @@ workflow:
 }
 
 func TestWorkflowService_BuildDAGWorkflow_InvalidDAGFileExtension(t *testing.T) {
-	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+	svc := NewDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
-	wf, _, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+	wf, _, err := svc.BuildDAGWorkflow(WorkflowBuildInput{
 		DAGFile: "workflow.txt",
 	})
 	require.Nil(t, wf)
@@ -64,9 +64,9 @@ func TestWorkflowService_BuildDAGWorkflow_InvalidDAGFileExtension(t *testing.T) 
 }
 
 func TestWorkflowService_BuildDAGWorkflow_SourceMismatch(t *testing.T) {
-	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+	svc := NewDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
-	wf, _, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+	wf, _, err := svc.BuildDAGWorkflow(WorkflowBuildInput{
 		Source: "dag_json",
 		DSL: `
 version: "1.0"
@@ -89,9 +89,9 @@ workflow:
 }
 
 func TestWorkflowService_BuildDAGWorkflow_AutoSourceConflict(t *testing.T) {
-	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+	svc := NewDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
-	wf, _, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+	wf, _, err := svc.BuildDAGWorkflow(WorkflowBuildInput{
 		DSL:     "version: \"1.0\"\nname: \"wf\"\nworkflow:\n  entry: \"n1\"\n  nodes: []\n",
 		DAGJSON: `{"name":"wf","entry":"n1","nodes":[]}`,
 	})
@@ -102,7 +102,7 @@ func TestWorkflowService_BuildDAGWorkflow_AutoSourceConflict(t *testing.T) {
 }
 
 func TestWorkflowService_ValidateDSL_InvalidYAML(t *testing.T) {
-	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+	svc := NewDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
 	result := svc.ValidateDSL("not: [valid")
 	assert.False(t, result.Valid)
@@ -111,7 +111,7 @@ func TestWorkflowService_ValidateDSL_InvalidYAML(t *testing.T) {
 }
 
 func TestWorkflowService_Execute_ExecutorNotConfigured(t *testing.T) {
-	svc := newDefaultWorkflowService(nil, dsl.NewParser())
+	svc := NewDefaultWorkflowService(nil, dsl.NewParser())
 
 	out, err := svc.Execute(context.Background(), &workflow.DAGWorkflow{}, "input", nil, nil)
 	require.Nil(t, out)
@@ -136,7 +136,7 @@ func TestWorkflowService_Execute_InjectsNodeEmitter(t *testing.T) {
 			return "ok", nil
 		},
 	}
-	svc := newDefaultWorkflowService(executor, dsl.NewParser())
+	svc := NewDefaultWorkflowService(executor, dsl.NewParser())
 
 	out, err := svc.Execute(context.Background(), &workflow.DAGWorkflow{}, "input", nil, func(event workflowobs.NodeEvent) {
 		emitted = event.NodeID == "n1"

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func setupToolProviderDB(t *testing.T) *gorm.DB {
 func TestToolProviderHandler_UpsertListDelete(t *testing.T) {
 	db := setupToolProviderDB(t)
 	runtime := &toolProviderRuntimeStub{}
-	handler := NewToolProviderHandler(NewGormToolProviderStore(db), runtime, zap.NewNop())
+	handler := NewToolProviderHandler(usecase.NewDefaultToolProviderService(NewGormToolProviderStore(db), runtime), zap.NewNop())
 
 	upsertReqBody := []byte(`{"api_key":"tv-key","timeout_seconds":20,"priority":10,"enabled":true}`)
 	w1 := httptest.NewRecorder()
@@ -70,7 +71,7 @@ func TestToolProviderHandler_UpsertListDelete(t *testing.T) {
 func TestToolProviderHandler_ValidateProviderSpecificFields(t *testing.T) {
 	db := setupToolProviderDB(t)
 	runtime := &toolProviderRuntimeStub{}
-	handler := NewToolProviderHandler(NewGormToolProviderStore(db), runtime, zap.NewNop())
+	handler := NewToolProviderHandler(usecase.NewDefaultToolProviderService(NewGormToolProviderStore(db), runtime), zap.NewNop())
 
 	// firecrawl requires api_key
 	w1 := httptest.NewRecorder()

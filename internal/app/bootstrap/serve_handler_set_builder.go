@@ -1,0 +1,428 @@
+package bootstrap
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/api/handlers"
+	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/usecase"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/cache"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	"github.com/BaSui01/agentflow/llm/observability"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
+	"github.com/BaSui01/agentflow/rag/core"
+	workflowpkg "github.com/BaSui01/agentflow/workflow"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+)
+
+const defaultServeChatServiceTimeout = 30 * time.Second
+
+// ServeHandlerSetBuildInput defines dependencies for serve-time handler assembly.
+type ServeHandlerSetBuildInput struct {
+	Cfg         *config.Config
+	DB          *gorm.DB
+	MongoClient *mongoclient.Client
+	Logger      *zap.Logger
+
+	ToolApprovalManager *hitl.InterruptManager
+	WorkflowHITLManager *hitl.InterruptManager
+
+	WireMongoStores func(resolver *agent.CachingResolver, discoveryRegistry *discovery.CapabilityRegistry) error
+}
+
+// ServeHandlerSet aggregates handlers and runtime dependencies built at startup.
+type ServeHandlerSet struct {
+	HealthHandler       *handlers.HealthHandler
+	ChatHandler         *handlers.ChatHandler
+	ChatService         usecase.ChatService
+	AgentHandler        *handlers.AgentHandler
+	APIKeyHandler       *handlers.APIKeyHandler
+	ToolRegistryHandler *handlers.ToolRegistryHandler
+	ToolProviderHandler *handlers.ToolProviderHandler
+	ToolApprovalHandler *handlers.ToolApprovalHandler
+	RAGHandler          *handlers.RAGHandler
+	WorkflowHandler     *handlers.WorkflowHandler
+	ProtocolHandler     *handlers.ProtocolHandler
+	MultimodalHandler   *handlers.MultimodalHandler
+	CostHandler         *handlers.CostHandler
+
+	MultimodalRedis   *redis.Client
+	ToolApprovalRedis *redis.Client
+
+	Provider      llm.Provider
+	ToolProvider  llm.Provider
+	BudgetManager *llmpolicy.TokenBudgetManager
+	CostTracker   *observability.CostTracker
+	LLMCache      *cache.MultiLevelCache
+	LLMMetrics    *observability.Metrics
+
+	DiscoveryRegistry *discovery.CapabilityRegistry
+	AgentRegistry     *agent.AgentRegistry
+	ToolingRuntime    *AgentToolingRuntime
+	CapabilityCatalog *CapabilityCatalog
+	Resolver          *agent.CachingResolver
+
+	CheckpointStore         agent.CheckpointStore
+	CheckpointManager       *agent.CheckpointManager
+	WorkflowCheckpointStore workflowpkg.CheckpointStore
+	RAGStore                core.VectorStore
+	RAGEmbedding            core.EmbeddingProvider
+}
+
+// BuildServeHandlerSet builds serve-time handlers and runtime dependencies in one entry.
+func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error) {
+	if in.Cfg == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+	if in.Logger == nil {
+		return nil, fmt.Errorf("logger is required")
+	}
+
+	set := &ServeHandlerSet{
+		HealthHandler: handlers.NewHealthHandler(in.Logger),
+	}
+	mainProviderMode := config.NormalizeLLMMainProviderMode(in.Cfg.LLM.MainProviderMode)
+
+	if in.DB != nil {
+		set.HealthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("database", func(ctx context.Context) error {
+			sqlDB, err := in.DB.DB()
+			if err != nil {
+				return err
+			}
+			return sqlDB.PingContext(ctx)
+		}))
+	}
+	if in.MongoClient != nil {
+		set.HealthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("mongodb", func(ctx context.Context) error {
+			return in.MongoClient.Ping(ctx)
+		}))
+	}
+
+	llmRuntime, err := BuildLLMHandlerRuntime(in.Cfg, in.DB, in.Logger)
+	if err != nil {
+		in.Logger.Warn("Failed to create LLM runtime, chat endpoints disabled",
+			zap.String("mode", mainProviderMode),
+			zap.String("provider", in.Cfg.LLM.DefaultProvider),
+			zap.Error(err))
+	} else if llmRuntime == nil {
+		in.Logger.Info("LLM main provider not configured, chat endpoints disabled",
+			zap.String("mode", mainProviderMode))
+	} else {
+		set.Provider = llmRuntime.Provider
+		set.ToolProvider = llmRuntime.ToolProvider
+		set.BudgetManager = llmRuntime.BudgetManager
+		set.CostTracker = llmRuntime.CostTracker
+		set.LLMCache = llmRuntime.Cache
+		set.LLMMetrics = llmRuntime.Metrics
+		set.CostHandler = handlers.NewCostHandler(llmRuntime.CostTracker, in.Logger)
+	}
+
+	set.DiscoveryRegistry, set.AgentRegistry = BuildAgentRegistries(in.Logger)
+
+	if in.DB != nil {
+		set.APIKeyHandler = handlers.NewAPIKeyHandler(
+			usecase.NewDefaultAPIKeyService(handlers.NewGormAPIKeyStore(in.DB)),
+			in.Logger,
+		)
+	}
+	if set.APIKeyHandler != nil {
+		in.Logger.Info("API key handler initialized")
+	} else {
+		in.Logger.Info("Database not available, API key management disabled")
+	}
+
+	if in.Cfg.Multimodal.Enabled {
+		if _, err := ValidateMultimodalReferenceBackend(in.Cfg); err != nil {
+			return nil, err
+		}
+
+		redisClient, referenceStore, err := BuildMultimodalRedisReferenceStore(
+			in.Cfg,
+			in.Cfg.Multimodal.ReferenceStoreKeyPrefix,
+			in.Cfg.Multimodal.ReferenceTTL,
+			in.Logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize multimodal redis reference store: %w", err)
+		}
+		set.MultimodalRedis = redisClient
+		set.HealthHandler.RegisterCheck(handlers.NewRedisHealthCheck("redis", func(ctx context.Context) error {
+			return set.MultimodalRedis.Ping(ctx).Err()
+		}))
+
+		var ledger observability.Ledger
+		if llmRuntime != nil {
+			ledger = llmRuntime.Ledger
+		}
+		multimodalRuntime, err := BuildMultimodalRuntime(
+			in.Cfg,
+			set.Provider,
+			set.BudgetManager,
+			ledger,
+			referenceStore,
+			in.Logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize multimodal runtime: %w", err)
+		}
+		set.MultimodalHandler = multimodalRuntime.Handler
+		in.Logger.Info("Multimodal framework handler initialized",
+			zap.String("reference_store_backend", multimodalRuntime.ReferenceBackend),
+			zap.Int("image_provider_count", multimodalRuntime.ImageProviderCount),
+			zap.Int("video_provider_count", multimodalRuntime.VideoProviderCount),
+			zap.Int64("reference_max_size_bytes", in.Cfg.Multimodal.ReferenceMaxSizeBytes),
+			zap.Duration("reference_ttl", in.Cfg.Multimodal.ReferenceTTL),
+		)
+	} else {
+		in.Logger.Info("Multimodal framework handler disabled by config")
+	}
+
+	protocolRuntime := BuildProtocolRuntime(in.Logger)
+	set.ProtocolHandler = handlers.NewProtocolHandler(protocolRuntime.MCPServer, protocolRuntime.A2AServer, in.Logger)
+	in.Logger.Info("Protocol handler initialized (MCP + A2A)")
+
+	ragRuntime, err := BuildRAGHandlerRuntime(in.Cfg, in.Logger)
+	if err != nil {
+		in.Logger.Warn("RAG handler disabled (failed to create embedding provider)",
+			zap.String("provider", in.Cfg.LLM.DefaultProvider),
+			zap.Error(err))
+	} else if ragRuntime == nil {
+		in.Logger.Info("RAG handler disabled (no LLM API key for embedding)")
+	} else {
+		set.RAGHandler = handlers.NewRAGHandler(usecase.NewDefaultRAGService(ragRuntime.Store, ragRuntime.EmbeddingProvider), in.Logger)
+		set.RAGStore = ragRuntime.Store
+		set.RAGEmbedding = ragRuntime.EmbeddingProvider
+		in.Logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
+			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
+	}
+
+	toolApprovalRedis, toolApprovalStore, toolApprovalStoreErr := BuildToolApprovalGrantStore(in.Cfg, in.Logger)
+	if toolApprovalStoreErr != nil {
+		return nil, fmt.Errorf("failed to build tool approval grant store: %w", toolApprovalStoreErr)
+	}
+	set.ToolApprovalRedis = toolApprovalRedis
+	toolApprovalHistoryStore, toolApprovalHistoryErr := BuildToolApprovalHistoryStore(in.Cfg, toolApprovalRedis)
+	if toolApprovalHistoryErr != nil {
+		return nil, fmt.Errorf("failed to build tool approval history store: %w", toolApprovalHistoryErr)
+	}
+
+	toolingRuntime, toolErr := BuildAgentToolingRuntime(AgentToolingOptions{
+		RetrievalStore:      set.RAGStore,
+		EmbeddingProvider:   set.RAGEmbedding,
+		MCPServer:           protocolRuntime.MCPServer,
+		EnableMCPTools:      true,
+		DB:                  in.DB,
+		ToolApprovalManager: in.ToolApprovalManager,
+		ToolApprovalConfig: ToolApprovalConfig{
+			Backend:           in.Cfg.HostedTools.Approval.Backend,
+			GrantTTL:          in.Cfg.HostedTools.Approval.GrantTTL,
+			Scope:             in.Cfg.HostedTools.Approval.Scope,
+			PersistPath:       in.Cfg.HostedTools.Approval.PersistPath,
+			RedisPrefix:       in.Cfg.HostedTools.Approval.RedisPrefix,
+			HistoryMaxEntries: in.Cfg.HostedTools.Approval.HistoryMaxEntries,
+			GrantStore:        toolApprovalStore,
+			HistoryStore:      toolApprovalHistoryStore,
+		},
+	}, in.Logger)
+	if toolErr != nil {
+		return nil, fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
+	}
+	set.ToolingRuntime = toolingRuntime
+
+	toolRuntimeAdapter := NewToolRegistryRuntimeAdapter(toolingRuntime, func(ctx context.Context) {
+		if set.Resolver != nil {
+			set.Resolver.ResetCache(ctx)
+			in.Logger.Info("Agent resolver cache reset after tool runtime reload")
+		}
+	})
+	if in.DB != nil && toolRuntimeAdapter != nil {
+		set.ToolRegistryHandler = handlers.NewToolRegistryHandler(
+			usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(in.DB), toolRuntimeAdapter),
+			in.Logger,
+		)
+	}
+	if set.ToolRegistryHandler != nil {
+		in.Logger.Info("Tool registry handler initialized")
+	} else {
+		in.Logger.Info("Tool registry handler disabled (database or tooling runtime unavailable)")
+	}
+	if in.DB != nil && toolRuntimeAdapter != nil {
+		set.ToolProviderHandler = handlers.NewToolProviderHandler(
+			usecase.NewDefaultToolProviderService(handlers.NewGormToolProviderStore(in.DB), toolRuntimeAdapter),
+			in.Logger,
+		)
+	}
+	if set.ToolProviderHandler != nil {
+		in.Logger.Info("Tool provider handler initialized")
+	} else {
+		in.Logger.Info("Tool provider handler disabled (database or tooling runtime unavailable)")
+	}
+	toolApprovalConfig := ToolApprovalConfig{
+		Backend:           in.Cfg.HostedTools.Approval.Backend,
+		GrantTTL:          in.Cfg.HostedTools.Approval.GrantTTL,
+		Scope:             in.Cfg.HostedTools.Approval.Scope,
+		PersistPath:       in.Cfg.HostedTools.Approval.PersistPath,
+		RedisPrefix:       in.Cfg.HostedTools.Approval.RedisPrefix,
+		HistoryMaxEntries: in.Cfg.HostedTools.Approval.HistoryMaxEntries,
+		GrantStore:        toolApprovalStore,
+		HistoryStore:      toolApprovalHistoryStore,
+	}
+	if in.ToolApprovalManager != nil {
+		set.ToolApprovalHandler = handlers.NewToolApprovalHandler(
+			usecase.NewDefaultToolApprovalService(&toolApprovalRuntime{
+				manager: in.ToolApprovalManager,
+				store:   defaultToolApprovalGrantStore(toolApprovalConfig, in.Logger),
+				history: defaultToolApprovalHistoryStore(toolApprovalConfig),
+				config:  toolApprovalConfig,
+			}, ToolApprovalWorkflowID()),
+			in.Logger,
+		)
+	}
+	if set.ToolApprovalHandler != nil {
+		in.Logger.Info("Tool approval handler initialized")
+	}
+
+	if toolingRuntime != nil {
+		set.CapabilityCatalog = BuildCapabilityCatalog(
+			toolingRuntime.Registry,
+			set.AgentRegistry,
+			multiagent.GlobalModeRegistry(),
+		)
+		if set.CapabilityCatalog != nil {
+			in.Logger.Info("Runtime capability catalog initialized",
+				zap.Int("agent_type_count", len(set.CapabilityCatalog.AgentTypes)),
+				zap.Int("tool_count", len(set.CapabilityCatalog.Tools)),
+				zap.Int("mode_count", len(set.CapabilityCatalog.Modes)))
+		}
+	}
+
+	if llmRuntime != nil && set.Provider != nil {
+		set.ChatService = buildServeChatService(llmRuntime.Provider, llmRuntime.PolicyManager, llmRuntime.Ledger, toolingRuntime, in.Logger)
+		set.ChatHandler = handlers.NewChatHandler(
+			set.ChatService,
+			in.Logger,
+		)
+		in.Logger.Info("Chat handler initialized with middleware chain",
+			zap.String("mode", mainProviderMode),
+			zap.String("provider", in.Cfg.LLM.DefaultProvider))
+	}
+
+	checkpointStore, ckptErr := BuildAgentCheckpointStore(in.Cfg, in.DB, in.Logger)
+	if ckptErr != nil {
+		return nil, fmt.Errorf("failed to build checkpoint store: %w", ckptErr)
+	}
+	set.CheckpointStore = checkpointStore
+	if checkpointStore != nil {
+		set.CheckpointManager = agent.NewCheckpointManager(checkpointStore, in.Logger)
+	}
+
+	if set.Provider != nil {
+		resolver := agent.NewCachingResolver(set.AgentRegistry, set.Provider, in.Logger).
+			WithDefaultModel(in.Cfg.Agent.Model)
+		if toolingRuntime != nil && toolingRuntime.ToolManager != nil {
+			resolver = resolver.WithToolManager(toolingRuntime.ToolManager)
+			if len(toolingRuntime.ToolNames) > 0 {
+				resolver = resolver.WithRuntimeTools(toolingRuntime.ToolNames)
+			}
+			in.Logger.Info("Agent tool manager initialized",
+				zap.Int("tool_count", len(toolingRuntime.ToolNames)),
+				zap.Strings("tools", toolingRuntime.ToolNames))
+		}
+		set.Resolver = resolver
+
+		if in.WireMongoStores != nil && in.MongoClient != nil && set.DiscoveryRegistry != nil {
+			if err := in.WireMongoStores(set.Resolver, set.DiscoveryRegistry); err != nil {
+				return nil, fmt.Errorf("failed to wire MongoDB stores: %w", err)
+			}
+		}
+
+		var ledger observability.Ledger
+		if llmRuntime != nil {
+			ledger = llmRuntime.Ledger
+		}
+		RegisterDefaultRuntimeAgentFactory(set.AgentRegistry, set.Provider, set.ToolProvider, set.CheckpointManager, ledger, in.Logger)
+		in.Logger.Info("Default runtime agent factory registered")
+
+		set.AgentHandler = handlers.NewAgentHandlerWithService(
+			BuildAgentService(set.DiscoveryRegistry, set.Resolver.Resolve),
+			nil,
+			in.Logger,
+		)
+		in.Logger.Info("Agent handler initialized with resolver")
+	} else {
+		set.AgentHandler = handlers.NewAgentHandlerWithService(
+			BuildAgentService(set.DiscoveryRegistry, nil),
+			nil,
+			in.Logger,
+		)
+		in.Logger.Info("Agent handler initialized without resolver (no LLM provider)")
+	}
+
+	workflowOpts := WorkflowRuntimeOptions{
+		LLMProvider:       set.Provider,
+		DefaultModel:      in.Cfg.Agent.Model,
+		HITLManager:       in.WorkflowHITLManager,
+		CheckpointStore:   set.CheckpointStore,
+		RetrievalStore:    set.RAGStore,
+		EmbeddingProvider: set.RAGEmbedding,
+	}
+	if set.Resolver != nil {
+		workflowOpts.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {
+			return set.Resolver.Resolve(ctx, agentID)
+		}
+	}
+	if in.DB != nil {
+		if wfStore, err := BuildWorkflowPostgreSQLCheckpointStore(context.Background(), in.DB); err == nil && wfStore != nil {
+			workflowOpts.WorkflowCheckpointStore = wfStore
+			set.WorkflowCheckpointStore = wfStore
+		}
+	}
+
+	workflowRuntime := BuildWorkflowRuntime(in.Logger, workflowOpts)
+	set.WorkflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), in.Logger)
+	in.Logger.Info("Workflow handler initialized")
+
+	in.Logger.Info("Handlers initialized")
+	return set, nil
+}
+
+func buildServeChatService(
+	provider llm.Provider,
+	policyManager *llmpolicy.Manager,
+	ledger observability.Ledger,
+	toolingRuntime *AgentToolingRuntime,
+	logger *zap.Logger,
+) usecase.ChatService {
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider:  provider,
+		PolicyManager: policyManager,
+		Ledger:        ledger,
+		Logger:        logger,
+	})
+	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
+	var toolManager agent.ToolManager
+	if toolingRuntime != nil {
+		toolManager = toolingRuntime.ToolManager
+	}
+	converter := handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(defaultServeChatServiceTimeout))
+	return usecase.NewDefaultChatService(
+		usecase.ChatRuntime{
+			Gateway:      gateway,
+			ChatProvider: chatProvider,
+			ToolManager:  toolManager,
+		},
+		converter,
+		logger,
+	)
+}

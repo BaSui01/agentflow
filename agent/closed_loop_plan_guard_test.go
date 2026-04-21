@@ -7,7 +7,7 @@ import (
 )
 
 func TestClosedLoopPlanDoc_RetainsRegressionGuardItems(t *testing.T) {
-	content, err := os.ReadFile("../docs/重构计划/闭环Agent完善计划-2026-03-25.md")
+	content, err := os.ReadFile("../docs/重构计划/归档/闭环Agent完善计划-2026-03-25.md")
 	if err != nil {
 		t.Fatalf("read plan doc: %v", err)
 	}

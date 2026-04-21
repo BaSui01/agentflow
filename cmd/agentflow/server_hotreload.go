@@ -10,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
@@ -80,11 +81,17 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	s.llmMetrics = llmMetrics
 	s.resolver = resolver
 
-	if s.chatHandler != nil {
-		s.chatHandler.UpdateRuntime(provider, policyManager, s.currentChatToolManager(), ledger)
-	} else if provider != nil && s.httpManager == nil {
-		s.chatHandler = handlers.NewChatHandlerWithRuntime(provider, policyManager, s.currentChatToolManager(), ledger, s.logger)
-	} else if provider != nil {
+	previousChatService := s.chatService
+	chatService := s.buildChatService(provider, policyManager, ledger)
+	if previousChatService != nil && chatService == nil {
+		chatService = previousChatService
+	}
+	s.chatService = chatService
+	if s.chatHandler != nil && previousChatService != chatService {
+		s.chatHandler.UpdateService(chatService)
+	} else if s.chatHandler == nil && chatService != nil && s.httpManager == nil {
+		s.chatHandler = handlers.NewChatHandler(chatService, s.logger)
+	} else if chatService != nil {
 		s.logger.Warn("LLM hot reload rebuilt chat runtime but chat routes were not bound at startup; restart required to activate chat endpoints")
 	}
 
@@ -104,15 +111,15 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		}
 	}
 	if s.agentHandler != nil {
+		var agentResolver usecase.AgentResolver
 		if resolver != nil {
-			s.agentHandler.UpdateResolver(resolver.Resolve)
-		} else {
-			s.agentHandler.UpdateResolver(nil)
+			agentResolver = resolver.Resolve
 		}
+		s.agentHandler.UpdateService(bootstrap.BuildAgentService(s.discoveryRegistry, agentResolver))
 	}
 
 	if s.workflowHandler != nil && workflowRuntime != nil {
-		s.workflowHandler.UpdateRuntime(workflowRuntime.Facade, workflowRuntime.Parser)
+		s.workflowHandler.UpdateService(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser))
 	}
 
 	if s.multimodalHandler != nil && cfg.Multimodal.Enabled {

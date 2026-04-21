@@ -13,6 +13,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -47,6 +48,7 @@ type Server struct {
 
 	healthHandler       *handlers.HealthHandler
 	chatHandler         *handlers.ChatHandler
+	chatService         usecase.ChatService
 	agentHandler        *handlers.AgentHandler
 	apiKeyHandler       *handlers.APIKeyHandler
 	toolRegistryHandler *handlers.ToolRegistryHandler

@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,6 +60,23 @@ func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 }
 
 func (m *mockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+func newChatHandlerForProvider(provider llm.Provider, logger *zap.Logger) *ChatHandler {
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       logger,
+	})
+	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
+	service := usecase.NewDefaultChatService(
+		usecase.ChatRuntime{
+			Gateway:      gateway,
+			ChatProvider: chatProvider,
+		},
+		newUsecaseChatConverter(NewDefaultChatConverter(defaultStreamTimeout)),
+		logger,
+	)
+	return NewChatHandler(service, logger)
+}
 
 // =============================================================================
 // 🧪 ChatHandler 测试
@@ -163,7 +182,7 @@ func TestChatHandler_HandleCompletion(t *testing.T) {
 				},
 			}
 
-			handler := NewChatHandler(provider, nil, logger)
+			handler := newChatHandlerForProvider(provider, logger)
 
 			body, err := json.Marshal(tt.request)
 			require.NoError(t, err)
@@ -235,7 +254,7 @@ func TestChatHandler_HandleStream(t *testing.T) {
 			},
 		}
 
-		handler := NewChatHandler(provider, nil, logger)
+		handler := newChatHandlerForProvider(provider, logger)
 
 		request := api.ChatRequest{
 			Model: "gpt-4",
@@ -260,7 +279,7 @@ func TestChatHandler_HandleStream(t *testing.T) {
 
 	t.Run("invalid request", func(t *testing.T) {
 		provider := &mockProvider{}
-		handler := NewChatHandler(provider, nil, logger)
+		handler := newChatHandlerForProvider(provider, logger)
 
 		request := api.ChatRequest{
 			// 缺少型号
@@ -284,7 +303,7 @@ func TestChatHandler_HandleStream(t *testing.T) {
 
 func TestChatHandler_ValidateChatRequest(t *testing.T) {
 	logger := zap.NewNop()
-	handler := NewChatHandler(nil, nil, logger)
+	handler := NewChatHandler(nil, logger)
 
 	tests := []struct {
 		name    string
@@ -402,7 +421,7 @@ func TestChatHandler_ValidateChatRequest(t *testing.T) {
 
 func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	logger := zap.NewNop()
-	handler := NewChatHandler(nil, nil, logger)
+	handler := NewChatHandler(nil, logger)
 	strict := true
 	includeServerSide := true
 	format := &api.ToolFormat{Type: "grammar", Syntax: "lark", Definition: "start: WORD"}
@@ -537,7 +556,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 }
 
 func TestChatHandler_HandleCapabilities(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(&openAICompatServiceStub{}, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/chat/capabilities", nil)

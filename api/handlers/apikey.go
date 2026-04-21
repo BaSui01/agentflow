@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -14,14 +15,13 @@ import (
 
 // APIKeyHandler 处理 API Key 管理的 CRUD 操作
 type APIKeyHandler struct {
-	svc    APIKeyService
+	svc    usecase.APIKeyService
 	logger *zap.Logger
 }
 
-// NewAPIKeyHandler 创建 APIKeyHandler
-func NewAPIKeyHandler(store APIKeyStore, logger *zap.Logger) *APIKeyHandler {
+func NewAPIKeyHandler(service usecase.APIKeyService, logger *zap.Logger) *APIKeyHandler {
 	return &APIKeyHandler{
-		svc:    NewDefaultAPIKeyService(store),
+		svc:    service,
 		logger: logger,
 	}
 }
@@ -189,7 +189,16 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp, svcErr := h.svc.CreateAPIKey(providerID, req)
+	resp, svcErr := h.svc.CreateAPIKey(providerID, usecase.CreateAPIKeyInput{
+		APIKey:       req.APIKey,
+		BaseURL:      req.BaseURL,
+		Label:        req.Label,
+		Priority:     req.Priority,
+		Weight:       req.Weight,
+		Enabled:      req.Enabled,
+		RateLimitRPM: req.RateLimitRPM,
+		RateLimitRPD: req.RateLimitRPD,
+	})
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return
@@ -242,7 +251,15 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp, svcErr := h.svc.UpdateAPIKey(providerID, keyID, req)
+	resp, svcErr := h.svc.UpdateAPIKey(providerID, keyID, usecase.UpdateAPIKeyInput{
+		BaseURL:      req.BaseURL,
+		Label:        req.Label,
+		Priority:     req.Priority,
+		Weight:       req.Weight,
+		Enabled:      req.Enabled,
+		RateLimitRPM: req.RateLimitRPM,
+		RateLimitRPD: req.RateLimitRPD,
+	})
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return

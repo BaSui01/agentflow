@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -26,8 +26,8 @@ type ToolRegistryRuntime interface {
 type ToolRegistryService interface {
 	List() ([]hosted.ToolRegistration, *types.Error)
 	ListTargets() ([]string, *types.Error)
-	Create(req createToolRegistrationRequest) (*hosted.ToolRegistration, *types.Error)
-	Update(ctx context.Context, id uint, req updateToolRegistrationRequest) (*hosted.ToolRegistration, *types.Error)
+	Create(req CreateToolRegistrationInput) (*hosted.ToolRegistration, *types.Error)
+	Update(ctx context.Context, id uint, req UpdateToolRegistrationInput) (*hosted.ToolRegistration, *types.Error)
 	Delete(id uint) *types.Error
 	Reload() *types.Error
 }
@@ -61,7 +61,7 @@ func (s *DefaultToolRegistryService) ListTargets() ([]string, *types.Error) {
 	return targets, nil
 }
 
-func (s *DefaultToolRegistryService) Create(req createToolRegistrationRequest) (*hosted.ToolRegistration, *types.Error) {
+func (s *DefaultToolRegistryService) Create(req CreateToolRegistrationInput) (*hosted.ToolRegistration, *types.Error) {
 	if s.runtime == nil {
 		return nil, types.NewInternalError("tool runtime is not configured")
 	}
@@ -102,7 +102,7 @@ func (s *DefaultToolRegistryService) Create(req createToolRegistrationRequest) (
 	return row, nil
 }
 
-func (s *DefaultToolRegistryService) Update(ctx context.Context, id uint, req updateToolRegistrationRequest) (*hosted.ToolRegistration, *types.Error) {
+func (s *DefaultToolRegistryService) Update(ctx context.Context, id uint, req UpdateToolRegistrationInput) (*hosted.ToolRegistration, *types.Error) {
 	if s.runtime == nil {
 		return nil, types.NewInternalError("tool runtime is not configured")
 	}

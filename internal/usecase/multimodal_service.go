@@ -1,12 +1,10 @@
-package handlers
+package usecase
 
 import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -15,60 +13,70 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
 )
 
-type multimodalService interface {
-	GenerateImage(ctx context.Context, req multimodalImageRequest) (*multimodalImageResult, error)
-	GenerateVideo(ctx context.Context, req multimodalVideoRequest) (*multimodalVideoResult, error)
+const defaultMultimodalNegativeText = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
+
+type MultimodalProviderResolver func(provider string) (string, error)
+
+// MultimodalRuntime captures the hot-swappable runtime dependencies used by MultimodalService.
+type MultimodalRuntime struct {
+	Gateway              llmcore.Gateway
+	Pipeline             multimodal.PromptPipeline
+	ResolveImageProvider MultimodalProviderResolver
+	ResolveVideoProvider MultimodalProviderResolver
+	ReferenceStore       storage.ReferenceStore
+	ReferenceTTL         time.Duration
+	ReferenceMaxSize     int64
 }
 
-type referenceLoader func(id string) ([]byte, string, bool)
-
-type defaultMultimodalService struct {
-	gateway              llmcore.Gateway
-	pipeline             multimodal.PromptPipeline
-	resolveImageProvider func(string) (string, error)
-	resolveVideoProvider func(string) (string, error)
-	loadReference        referenceLoader
-	referenceMaxSize     int64
+// MultimodalService encapsulates multimodal image/video execution.
+type MultimodalService interface {
+	GenerateImage(ctx context.Context, req MultimodalImageRequest) (*MultimodalImageResult, error)
+	GenerateVideo(ctx context.Context, req MultimodalVideoRequest) (*MultimodalVideoResult, error)
 }
 
-type multimodalImageResult struct {
-	Mode            string
-	Provider        string
-	EffectivePrompt string
-	NegativePrompt  string
-	Response        *image.GenerateResponse
+// DefaultMultimodalService is the default MultimodalService implementation.
+type DefaultMultimodalService struct {
+	runtimeRef RuntimeRef[MultimodalRuntime]
 }
 
-type multimodalVideoResult struct {
-	Mode            string
-	Provider        string
-	EffectivePrompt string
-	Response        *video.GenerateResponse
-}
-
-func newDefaultMultimodalService(
-	gateway llmcore.Gateway,
-	pipeline multimodal.PromptPipeline,
-	resolveImageProvider func(string) (string, error),
-	resolveVideoProvider func(string) (string, error),
-	loadReference referenceLoader,
-	referenceMaxSize int64,
-) multimodalService {
-	return &defaultMultimodalService{
-		gateway:              gateway,
-		pipeline:             pipeline,
-		resolveImageProvider: resolveImageProvider,
-		resolveVideoProvider: resolveVideoProvider,
-		loadReference:        loadReference,
-		referenceMaxSize:     referenceMaxSize,
+// NewDefaultMultimodalService constructs the default multimodal usecase service.
+func NewDefaultMultimodalService(
+	runtime MultimodalRuntime,
+) MultimodalService {
+	return &DefaultMultimodalService{
+		runtimeRef: NewAtomicRuntimeRef(runtime),
 	}
 }
 
-func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multimodalImageRequest) (*multimodalImageResult, error) {
-	providerName, err := s.resolveImageProvider(req.Provider)
+// UpdateRuntime swaps the service runtime in place.
+func (s *DefaultMultimodalService) UpdateRuntime(runtime MultimodalRuntime) {
+	if s == nil {
+		return
+	}
+	if s.runtimeRef == nil {
+		s.runtimeRef = NewAtomicRuntimeRef(runtime)
+		return
+	}
+	s.runtimeRef.Store(runtime)
+}
+
+func (s *DefaultMultimodalService) runtime() MultimodalRuntime {
+	if s == nil || s.runtimeRef == nil {
+		return MultimodalRuntime{}
+	}
+	return s.runtimeRef.Load()
+}
+
+func (s *DefaultMultimodalService) GenerateImage(ctx context.Context, req MultimodalImageRequest) (*MultimodalImageResult, error) {
+	runtime := s.runtime()
+	if runtime.Gateway == nil || runtime.ResolveImageProvider == nil || runtime.Pipeline == nil {
+		return nil, types.NewServiceUnavailableError("multimodal runtime is not configured")
+	}
+	providerName, err := runtime.ResolveImageProvider(req.Provider)
 	if err != nil {
 		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).
 			WithCause(err)
@@ -76,10 +84,10 @@ func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multim
 
 	negative := strings.TrimSpace(req.NegativePrompt)
 	if negative == "" {
-		negative = defaultNegativeText
+		negative = defaultMultimodalNegativeText
 	}
 
-	promptResult, err := s.pipeline.Build(ctx, multimodal.PromptContext{
+	promptResult, err := runtime.Pipeline.Build(ctx, multimodal.PromptContext{
 		Modality:       "image",
 		BasePrompt:     req.Prompt,
 		Advanced:       req.Advanced,
@@ -94,7 +102,7 @@ func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multim
 	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	result := &multimodalImageResult{
+	result := &MultimodalImageResult{
 		Provider:        providerName,
 		EffectivePrompt: promptResult.Prompt,
 		NegativePrompt:  promptResult.NegativePrompt,
@@ -102,11 +110,11 @@ func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multim
 
 	if req.ReferenceID != "" || strings.TrimSpace(req.ReferenceImageURL) != "" {
 		result.Mode = "image-to-image"
-		data, dataErr := s.resolveReferenceImage(timeoutCtx, req.ReferenceID, req.ReferenceImageURL)
+		data, dataErr := s.resolveReferenceImage(runtime, timeoutCtx, req.ReferenceID, req.ReferenceImageURL)
 		if dataErr != nil {
 			return nil, dataErr
 		}
-		gatewayResp, invokeErr := s.gateway.Invoke(timeoutCtx, &llmcore.UnifiedRequest{
+		gatewayResp, invokeErr := runtime.Gateway.Invoke(timeoutCtx, &llmcore.UnifiedRequest{
 			Capability:   llmcore.CapabilityImage,
 			ProviderHint: providerName,
 			ModelHint:    req.Model,
@@ -134,7 +142,7 @@ func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multim
 	}
 
 	result.Mode = "text-to-image"
-	gatewayResp, invokeErr := s.gateway.Invoke(timeoutCtx, &llmcore.UnifiedRequest{
+	gatewayResp, invokeErr := runtime.Gateway.Invoke(timeoutCtx, &llmcore.UnifiedRequest{
 		Capability:   llmcore.CapabilityImage,
 		ProviderHint: providerName,
 		ModelHint:    req.Model,
@@ -163,14 +171,18 @@ func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multim
 	return result, nil
 }
 
-func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multimodalVideoRequest) (*multimodalVideoResult, error) {
-	providerName, err := s.resolveVideoProvider(req.Provider)
+func (s *DefaultMultimodalService) GenerateVideo(ctx context.Context, req MultimodalVideoRequest) (*MultimodalVideoResult, error) {
+	runtime := s.runtime()
+	if runtime.Gateway == nil || runtime.ResolveVideoProvider == nil || runtime.Pipeline == nil {
+		return nil, types.NewServiceUnavailableError("multimodal runtime is not configured")
+	}
+	providerName, err := runtime.ResolveVideoProvider(req.Provider)
 	if err != nil {
 		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).
 			WithCause(err)
 	}
 
-	promptResult, err := s.pipeline.Build(ctx, multimodal.PromptContext{
+	promptResult, err := runtime.Pipeline.Build(ctx, multimodal.PromptContext{
 		Modality:       "video",
 		BasePrompt:     req.Prompt,
 		Advanced:       req.Advanced,
@@ -205,7 +217,7 @@ func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multim
 	if req.ReferenceID != "" || strings.TrimSpace(req.ReferenceImageURL) != "" {
 		mode = "image-to-video"
 		if req.ReferenceID != "" {
-			data, mimeType, ok := s.loadReference(req.ReferenceID)
+			data, mimeType, ok := s.getReference(runtime, req.ReferenceID)
 			if !ok {
 				return nil, types.NewError(types.ErrInvalidRequest, "reference_id not found or expired")
 			}
@@ -222,7 +234,7 @@ func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multim
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
-	gatewayResp, invokeErr := s.gateway.Invoke(timeoutCtx, &llmcore.UnifiedRequest{
+	gatewayResp, invokeErr := runtime.Gateway.Invoke(timeoutCtx, &llmcore.UnifiedRequest{
 		Capability:   llmcore.CapabilityVideo,
 		ProviderHint: providerName,
 		ModelHint:    req.Model,
@@ -239,7 +251,7 @@ func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multim
 		return nil, types.NewInternalError("invalid video gateway response")
 	}
 
-	return &multimodalVideoResult{
+	return &MultimodalVideoResult{
 		Mode:            mode,
 		Provider:        providerName,
 		EffectivePrompt: promptResult.Prompt,
@@ -247,9 +259,9 @@ func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multim
 	}, nil
 }
 
-func (s *defaultMultimodalService) resolveReferenceImage(ctx context.Context, referenceID, referenceURL string) ([]byte, error) {
+func (s *DefaultMultimodalService) resolveReferenceImage(runtime MultimodalRuntime, ctx context.Context, referenceID, referenceURL string) ([]byte, error) {
 	if referenceID != "" {
-		data, _, ok := s.loadReference(referenceID)
+		data, _, ok := s.getReference(runtime, referenceID)
 		if !ok {
 			return nil, types.NewError(types.ErrInvalidRequest, "reference_id not found or expired")
 		}
@@ -261,12 +273,27 @@ func (s *defaultMultimodalService) resolveReferenceImage(ctx context.Context, re
 		return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).
 			WithCause(urlErr)
 	}
-	data, _, dlErr := multimodal.DownloadReferenceImage(ctx, validatedURL, s.referenceMaxSize)
+	data, _, dlErr := multimodal.DownloadReferenceImage(ctx, validatedURL, runtime.ReferenceMaxSize)
 	if dlErr != nil {
 		return nil, types.NewError(types.ErrInvalidRequest, dlErr.Error()).
 			WithCause(dlErr)
 	}
 	return data, nil
+}
+
+func (s *DefaultMultimodalService) getReference(runtime MultimodalRuntime, id string) ([]byte, string, bool) {
+	if runtime.ReferenceStore == nil {
+		return nil, "", false
+	}
+	ref, ok := runtime.ReferenceStore.Get(id)
+	if !ok || ref == nil {
+		return nil, "", false
+	}
+	if runtime.ReferenceTTL > 0 && time.Since(ref.CreatedAt) > runtime.ReferenceTTL {
+		runtime.ReferenceStore.Delete(id)
+		return nil, "", false
+	}
+	return append([]byte(nil), ref.Data...), ref.MimeType, true
 }
 
 func attachReferenceImage(providerName string, req *video.GenerateRequest, data []byte, mimeType string) {
@@ -279,61 +306,4 @@ func attachReferenceImage(providerName string, req *video.GenerateRequest, data 
 		mimeType = "image/png"
 	}
 	req.ImageURL = fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
-}
-
-// httpStatusAndCodeFrom 将 error 映射为 HTTP 状态码与错误码，供 handler 与 service 共用。
-// 优先使用 types.Error 的 Code 与 HTTPStatus；非 types.Error 时根据错误文案推断 400 或 502。
-func httpStatusAndCodeFrom(err error) (status int, code types.ErrorCode) {
-	var typedErr *types.Error
-	if errors.As(err, &typedErr) && typedErr != nil {
-		code = typedErr.Code
-		if typedErr.HTTPStatus != 0 {
-			status = typedErr.HTTPStatus
-		} else {
-			status = errorCodeToHTTPStatus(typedErr.Code)
-		}
-		return status, code
-	}
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if strings.Contains(msg, "invalid") ||
-		strings.Contains(msg, "required") ||
-		strings.Contains(msg, "unsupported") ||
-		strings.Contains(msg, "not support") {
-		return http.StatusBadRequest, types.ErrInvalidRequest
-	}
-	return http.StatusBadGateway, types.ErrUpstreamError
-}
-
-func errorCodeToHTTPStatus(code types.ErrorCode) int {
-	switch code {
-	case types.ErrInvalidRequest, types.ErrAuthentication, types.ErrUnauthorized,
-		types.ErrForbidden, types.ErrToolValidation, types.ErrInputValidation,
-		types.ErrOutputValidation, types.ErrGuardrailsViolated:
-		return http.StatusBadRequest
-	case types.ErrModelNotFound, types.ErrAgentNotFound:
-		return http.StatusNotFound
-	case types.ErrRateLimit, types.ErrQuotaExceeded:
-		return http.StatusTooManyRequests
-	case types.ErrServiceUnavailable, types.ErrProviderUnavailable, types.ErrRoutingUnavailable:
-		return http.StatusServiceUnavailable
-	case types.ErrUpstreamTimeout, types.ErrTimeout:
-		return http.StatusGatewayTimeout
-	case types.ErrInternalError:
-		return http.StatusInternalServerError
-	default:
-		return http.StatusBadGateway
-	}
-}
-
-func toHTTPStatus(err error) int {
-	status, _ := httpStatusAndCodeFrom(err)
-	return status
-}
-
-func errorCodeFrom(err error, fallback types.ErrorCode) types.ErrorCode {
-	_, code := httpStatusAndCodeFrom(err)
-	if code != "" {
-		return code
-	}
-	return fallback
 }

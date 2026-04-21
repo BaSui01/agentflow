@@ -17,8 +17,8 @@ func loadServerHandlersRuntimeSource(t *testing.T) string {
 
 func TestRAGHandlerUsesBootstrapFactoryEntry(t *testing.T) {
 	src := loadServerHandlersRuntimeSource(t)
-	if !strings.Contains(src, "bootstrap.BuildRAGHandlerRuntime(") {
-		t.Fatal("RAG handler wiring must use bootstrap.BuildRAGHandlerRuntime")
+	if !strings.Contains(src, "bootstrap.BuildServeHandlerSet(") {
+		t.Fatal("RAG handler wiring must be delegated via bootstrap.BuildServeHandlerSet")
 	}
 	if strings.Contains(src, "rag.NewEmbeddingProviderFromConfig(") {
 		t.Fatal("cmd wiring must not directly call rag.NewEmbeddingProviderFromConfig")
@@ -32,11 +32,7 @@ func TestHandlerRuntimeWiringUsesBootstrapEntries(t *testing.T) {
 	src := loadServerHandlersRuntimeSource(t)
 
 	requiredEntries := []string{
-		"bootstrap.BuildLLMHandlerRuntime(",
-		"bootstrap.BuildMultimodalRuntime(",
-		"bootstrap.BuildProtocolRuntime(",
-		"bootstrap.BuildWorkflowRuntime(",
-		"bootstrap.BuildAgentHandler(",
+		"bootstrap.BuildServeHandlerSet(",
 	}
 	for _, entry := range requiredEntries {
 		if !strings.Contains(src, entry) {

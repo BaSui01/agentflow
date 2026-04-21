@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,34 +43,67 @@ func setupToolRegistryTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestBuildToolRegistryHandler(t *testing.T) {
-	db := setupToolRegistryTestDB(t)
-	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
-
-	assert.Nil(t, BuildToolRegistryHandler(nil, runtime, zap.NewNop()))
-	assert.Nil(t, BuildToolRegistryHandler(db, nil, zap.NewNop()))
-	assert.NotNil(t, BuildToolRegistryHandler(db, runtime, zap.NewNop()))
+func newToolRegistryHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *handlers.ToolRegistryHandler {
+	if db == nil || runtime == nil {
+		return nil
+	}
+	return handlers.NewToolRegistryHandler(
+		usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime),
+		zap.NewNop(),
+	)
 }
 
-func TestBuildToolProviderHandler(t *testing.T) {
+func newToolProviderHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *handlers.ToolProviderHandler {
+	if db == nil || runtime == nil {
+		return nil
+	}
+	return handlers.NewToolProviderHandler(
+		usecase.NewDefaultToolProviderService(handlers.NewGormToolProviderStore(db), runtime),
+		zap.NewNop(),
+	)
+}
+
+func newToolApprovalHandlerForTest(manager *hitl.InterruptManager) *handlers.ToolApprovalHandler {
+	if manager == nil {
+		return nil
+	}
+	config := ToolApprovalConfig{Backend: "memory"}
+	return handlers.NewToolApprovalHandler(
+		usecase.NewDefaultToolApprovalService(&toolApprovalRuntime{
+			manager: manager,
+			store:   defaultToolApprovalGrantStore(config, zap.NewNop()),
+			history: defaultToolApprovalHistoryStore(config),
+			config:  config,
+		}, "tool_approval"),
+		zap.NewNop(),
+	)
+}
+
+func TestToolRegistryHandlerConstruction(t *testing.T) {
 	db := setupToolRegistryTestDB(t)
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
 
-	assert.Nil(t, BuildToolProviderHandler(nil, runtime, zap.NewNop()))
-	assert.Nil(t, BuildToolProviderHandler(db, nil, zap.NewNop()))
-	assert.NotNil(t, BuildToolProviderHandler(db, runtime, zap.NewNop()))
+	assert.Nil(t, newToolRegistryHandler(nil, runtime))
+	assert.Nil(t, newToolRegistryHandler(db, nil))
+	assert.NotNil(t, newToolRegistryHandler(db, runtime))
+}
+
+func TestToolProviderHandlerConstruction(t *testing.T) {
+	db := setupToolRegistryTestDB(t)
+	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
+
+	assert.Nil(t, newToolProviderHandler(nil, runtime))
+	assert.Nil(t, newToolProviderHandler(db, nil))
+	assert.NotNil(t, newToolProviderHandler(db, runtime))
 }
 
 func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	db := setupToolRegistryTestDB(t)
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
-	toolHandler := BuildToolRegistryHandler(db, runtime, zap.NewNop())
-	providerHandler := BuildToolProviderHandler(db, runtime, zap.NewNop())
-	approvalHandler := BuildToolApprovalHandler(
+	toolHandler := newToolRegistryHandler(db, runtime)
+	providerHandler := newToolProviderHandler(db, runtime)
+	approvalHandler := newToolApprovalHandlerForTest(
 		hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop()),
-		"tool_approval",
-		ToolApprovalConfig{Backend: "memory"},
-		zap.NewNop(),
 	)
 	require.NotNil(t, toolHandler)
 	require.NotNil(t, providerHandler)
@@ -152,7 +186,7 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 }
 
 func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
-	chatHandler := handlers.NewChatHandler(nil, nil, zap.NewNop())
+	chatHandler := handlers.NewChatHandler(nil, zap.NewNop())
 	require.NotNil(t, chatHandler)
 
 	mux := http.NewServeMux()

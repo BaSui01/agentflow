@@ -4,21 +4,22 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 type ToolProviderHandler struct {
-	svc    ToolProviderService
+	svc    usecase.ToolProviderService
 	logger *zap.Logger
 }
 
-func NewToolProviderHandler(store ToolProviderStore, runtime ToolRegistryRuntime, logger *zap.Logger) *ToolProviderHandler {
+func NewToolProviderHandler(service usecase.ToolProviderService, logger *zap.Logger) *ToolProviderHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &ToolProviderHandler{
-		svc:    NewDefaultToolProviderService(store, runtime),
+		svc:    service,
 		logger: logger,
 	}
 }
@@ -69,7 +70,13 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 		req.Priority = 100
 	}
 
-	row, svcErr := h.svc.Upsert(provider, req)
+	row, svcErr := h.svc.Upsert(provider, usecase.UpsertToolProviderInput{
+		APIKey:         req.APIKey,
+		BaseURL:        req.BaseURL,
+		TimeoutSeconds: req.TimeoutSeconds,
+		Priority:       req.Priority,
+		Enabled:        req.Enabled,
+	})
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return

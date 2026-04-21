@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -55,7 +55,7 @@ type ToolApprovalHistoryEntry struct {
 type ToolApprovalService interface {
 	List(ctx context.Context, status string) ([]*hitl.Interrupt, *types.Error)
 	Get(ctx context.Context, interruptID string) (*hitl.Interrupt, *types.Error)
-	Resolve(ctx context.Context, interruptID string, approved bool, optionID string, comment string, userID string) *types.Error
+	Resolve(ctx context.Context, interruptID string, input ResolveToolApprovalInput) *types.Error
 	Stats(ctx context.Context) (*ToolApprovalStats, *types.Error)
 	Cleanup(ctx context.Context) (int, *types.Error)
 	ListGrants(ctx context.Context) ([]*ToolApprovalGrantView, *types.Error)
@@ -108,22 +108,15 @@ func (s *DefaultToolApprovalService) Get(ctx context.Context, interruptID string
 	return interrupt, nil
 }
 
-func (s *DefaultToolApprovalService) Resolve(
-	ctx context.Context,
-	interruptID string,
-	approved bool,
-	optionID string,
-	comment string,
-	userID string,
-) *types.Error {
+func (s *DefaultToolApprovalService) Resolve(ctx context.Context, interruptID string, input ResolveToolApprovalInput) *types.Error {
 	interrupt, err := s.Get(ctx, interruptID)
 	if err != nil {
 		return err
 	}
 
-	selectedOption := strings.TrimSpace(optionID)
+	selectedOption := strings.TrimSpace(input.OptionID)
 	if selectedOption == "" {
-		if approved {
+		if input.Approved {
 			selectedOption = "approve"
 		} else {
 			selectedOption = "reject"
@@ -136,9 +129,9 @@ func (s *DefaultToolApprovalService) Resolve(
 
 	resolveErr := s.runtime.ResolveInterrupt(ctx, interrupt.ID, &hitl.Response{
 		OptionID: selectedOption,
-		Comment:  strings.TrimSpace(comment),
-		Approved: approved,
-		UserID:   strings.TrimSpace(userID),
+		Comment:  strings.TrimSpace(input.Comment),
+		Approved: input.Approved,
+		UserID:   strings.TrimSpace(input.UserID),
 	})
 	if resolveErr != nil {
 		return types.NewInternalError("failed to resolve tool approval").WithCause(resolveErr)

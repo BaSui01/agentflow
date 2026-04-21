@@ -85,7 +85,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 		return nil, fmt.Errorf("not found")
 	}
 
-	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
+	handler := newTestHandlerWithResolver(reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "test-agent",
@@ -122,7 +122,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_ExecutionError(t *testing.
 		return ma, nil
 	}
 
-	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
+	handler := newTestHandlerWithResolver(reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "err-agent",
@@ -148,7 +148,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_NotFound(t *testing.T) {
 		return nil, fmt.Errorf("agent not found")
 	}
 
-	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
+	handler := newTestHandlerWithResolver(reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing-agent",
@@ -275,7 +275,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_NotFound(t *testing.T) {
 	resolver := func(ctx context.Context, agentID string) (agent.Agent, error) {
 		return nil, fmt.Errorf("not found")
 	}
-	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
+	handler := newTestHandlerWithResolver(reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing",
@@ -393,7 +393,7 @@ func TestRedisHealthCheck_Error(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_HandleProviderError_TypedError(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	typedErr := types.NewError(types.ErrRateLimit, "too many requests")
@@ -403,7 +403,7 @@ func TestChatHandler_HandleProviderError_TypedError(t *testing.T) {
 }
 
 func TestChatHandler_HandleProviderError_GenericError(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	handler.handleProviderError(w, errors.New("unknown error"))
@@ -526,7 +526,7 @@ func TestConvertStreamUsage_NonNil(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ConvertToLLMRequest_WithImages(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	apiReq := &api.ChatRequest{
 		Model: "gpt-4",
@@ -549,7 +549,7 @@ func TestChatHandler_ConvertToLLMRequest_WithImages(t *testing.T) {
 }
 
 func TestChatHandler_ConvertToLLMRequest_InvalidTimeout(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	apiReq := &api.ChatRequest{
 		Model: "gpt-4",
@@ -565,7 +565,7 @@ func TestChatHandler_ConvertToLLMRequest_InvalidTimeout(t *testing.T) {
 }
 
 func TestChatHandler_ConvertToLLMRequest_WithExtendedMessageFields(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	reasoning := "internal reasoning"
 	refusal := "cannot comply"
@@ -629,7 +629,7 @@ func TestChatHandler_HandleCompletion_ProviderError(t *testing.T) {
 		},
 	}
 
-	handler := NewChatHandler(provider, nil, zap.NewNop())
+	handler := newChatHandlerForProvider(provider, zap.NewNop())
 
 	request := api.ChatRequest{
 		Model: "gpt-4",
@@ -653,7 +653,7 @@ func TestChatHandler_HandleCompletion_ProviderError(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_HandleCompletion_WrongContentType(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -675,7 +675,7 @@ func TestChatHandler_HandleStream_ProviderError(t *testing.T) {
 		},
 	}
 
-	handler := NewChatHandler(provider, nil, zap.NewNop())
+	handler := newChatHandlerForProvider(provider, zap.NewNop())
 
 	request := api.ChatRequest{
 		Model: "gpt-4",
@@ -714,7 +714,7 @@ func TestChatHandler_HandleStream_StreamErrorChunk(t *testing.T) {
 		},
 	}
 
-	handler := NewChatHandler(provider, nil, zap.NewNop())
+	handler := newChatHandlerForProvider(provider, zap.NewNop())
 
 	request := api.ChatRequest{
 		Model: "gpt-4",
@@ -740,7 +740,7 @@ func TestChatHandler_HandleStream_StreamErrorChunk(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -755,7 +755,7 @@ func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
 }
 
 func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -773,7 +773,7 @@ func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ValidateChatRequest_NegativeMaxTokens(t *testing.T) {
-	handler := NewChatHandler(nil, nil, zap.NewNop())
+	handler := NewChatHandler(nil, zap.NewNop())
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -916,7 +916,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 		return ma, nil
 	}
 
-	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
+	handler := newTestHandlerWithResolver(reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "stream-agent",
@@ -951,7 +951,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T
 		return ma, nil
 	}
 
-	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
+	handler := newTestHandlerWithResolver(reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "err-stream",
@@ -996,7 +996,7 @@ func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 func TestHandleListAPIKeys_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
 	store := NewGormAPIKeyStore(db)
-	h := NewAPIKeyHandler(store, zap.NewNop())
+	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/abc/api-keys", nil)
 	req.SetPathValue("id", "abc")
@@ -1013,7 +1013,7 @@ func TestHandleListAPIKeys_InvalidProviderID(t *testing.T) {
 func TestHandleCreateAPIKey_MissingContentType(t *testing.T) {
 	db := setupTestDB(t)
 	store := NewGormAPIKeyStore(db)
-	h := NewAPIKeyHandler(store, zap.NewNop())
+	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	body, _ := json.Marshal(createAPIKeyRequest{APIKey: "sk-test", Label: "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/1/api-keys", bytes.NewReader(body))
@@ -1032,7 +1032,7 @@ func TestHandleCreateAPIKey_MissingContentType(t *testing.T) {
 func TestHandleUpdateAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
 	store := NewGormAPIKeyStore(db)
-	h := NewAPIKeyHandler(store, zap.NewNop())
+	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
 	body, _ := json.Marshal(updateAPIKeyRequest{Label: &newLabel})
@@ -1053,7 +1053,7 @@ func TestHandleUpdateAPIKey_InvalidProviderID(t *testing.T) {
 func TestHandleUpdateAPIKey_InvalidKeyID(t *testing.T) {
 	db := setupTestDB(t)
 	store := NewGormAPIKeyStore(db)
-	h := NewAPIKeyHandler(store, zap.NewNop())
+	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
 	body, _ := json.Marshal(updateAPIKeyRequest{Label: &newLabel})
@@ -1074,7 +1074,7 @@ func TestHandleUpdateAPIKey_InvalidKeyID(t *testing.T) {
 func TestHandleDeleteAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
 	store := NewGormAPIKeyStore(db)
-	h := NewAPIKeyHandler(store, zap.NewNop())
+	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/abc/api-keys/1", nil)
 	req.SetPathValue("id", "abc")
@@ -1092,7 +1092,7 @@ func TestHandleDeleteAPIKey_InvalidProviderID(t *testing.T) {
 func TestHandleAPIKeyStats_WithKeys(t *testing.T) {
 	db := setupTestDB(t)
 	store := NewGormAPIKeyStore(db)
-	h := NewAPIKeyHandler(store, zap.NewNop())
+	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{
 		ProviderID: 1, APIKey: "sk-stats-1", BaseURL: "https://api.test.com",

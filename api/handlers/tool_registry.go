@@ -7,24 +7,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // ToolRegistryHandler manages DB-backed hosted tool registrations.
 type ToolRegistryHandler struct {
-	svc    ToolRegistryService
+	svc    usecase.ToolRegistryService
 	logger *zap.Logger
 }
 
-func NewToolRegistryHandler(store hosted.ToolRegistryStore, runtime ToolRegistryRuntime, logger *zap.Logger) *ToolRegistryHandler {
+func NewToolRegistryHandler(service usecase.ToolRegistryService, logger *zap.Logger) *ToolRegistryHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &ToolRegistryHandler{
-		svc:    NewDefaultToolRegistryService(store, runtime),
+		svc:    service,
 		logger: logger,
 	}
 }
@@ -88,7 +88,13 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "name and target are required", h.logger)
 		return
 	}
-	row, svcErr := h.svc.Create(req)
+	row, svcErr := h.svc.Create(usecase.CreateToolRegistrationInput{
+		Name:        req.Name,
+		Description: req.Description,
+		Target:      req.Target,
+		Parameters:  req.Parameters,
+		Enabled:     req.Enabled,
+	})
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return
@@ -118,7 +124,13 @@ func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Reques
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
-	row, svcErr := h.svc.Update(r.Context(), id, req)
+	row, svcErr := h.svc.Update(r.Context(), id, usecase.UpdateToolRegistrationInput{
+		Name:        req.Name,
+		Description: req.Description,
+		Target:      req.Target,
+		Parameters:  req.Parameters,
+		Enabled:     req.Enabled,
+	})
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return

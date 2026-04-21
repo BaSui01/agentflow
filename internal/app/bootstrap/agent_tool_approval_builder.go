@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/redis/go-redis/v9"
@@ -1218,7 +1218,7 @@ func (r *toolApprovalRuntime) ResolveInterrupt(ctx context.Context, interruptID 
 	return nil
 }
 
-func (r *toolApprovalRuntime) GrantStats(ctx context.Context) (*handlers.ToolApprovalStats, error) {
+func (r *toolApprovalRuntime) GrantStats(ctx context.Context) (*usecase.ToolApprovalStats, error) {
 	count := 0
 	if r.store != nil {
 		grants, err := r.store.List(ctx)
@@ -1227,7 +1227,7 @@ func (r *toolApprovalRuntime) GrantStats(ctx context.Context) (*handlers.ToolApp
 		}
 		count = len(grants)
 	}
-	return &handlers.ToolApprovalStats{
+	return &usecase.ToolApprovalStats{
 		Backend:          strings.ToLower(strings.TrimSpace(r.config.Backend)),
 		Scope:            normalizeToolApprovalScope(r.config.Scope),
 		GrantTTL:         r.config.GrantTTL.String(),
@@ -1253,20 +1253,20 @@ func (r *toolApprovalRuntime) CleanupExpiredGrants(ctx context.Context) (int, er
 	return removed, nil
 }
 
-func (r *toolApprovalRuntime) ListGrants(ctx context.Context) ([]*handlers.ToolApprovalGrantView, error) {
+func (r *toolApprovalRuntime) ListGrants(ctx context.Context) ([]*usecase.ToolApprovalGrantView, error) {
 	if r.store == nil {
-		return []*handlers.ToolApprovalGrantView{}, nil
+		return []*usecase.ToolApprovalGrantView{}, nil
 	}
 	grants, err := r.store.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*handlers.ToolApprovalGrantView, 0, len(grants))
+	out := make([]*usecase.ToolApprovalGrantView, 0, len(grants))
 	for _, grant := range grants {
 		if grant == nil {
 			continue
 		}
-		out = append(out, &handlers.ToolApprovalGrantView{
+		out = append(out, &usecase.ToolApprovalGrantView{
 			Fingerprint: grant.Fingerprint,
 			ApprovalID:  grant.ApprovalID,
 			Scope:       grant.Scope,
@@ -1296,21 +1296,21 @@ func (r *toolApprovalRuntime) RevokeGrant(ctx context.Context, fingerprint strin
 	return nil
 }
 
-func (r *toolApprovalRuntime) ListHistory(ctx context.Context, limit int) ([]*handlers.ToolApprovalHistoryEntry, error) {
+func (r *toolApprovalRuntime) ListHistory(ctx context.Context, limit int) ([]*usecase.ToolApprovalHistoryEntry, error) {
 	if r.history == nil {
-		return []*handlers.ToolApprovalHistoryEntry{}, nil
+		return []*usecase.ToolApprovalHistoryEntry{}, nil
 	}
 	rows, err := r.history.List(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*handlers.ToolApprovalHistoryEntry, 0, len(rows))
+	out := make([]*usecase.ToolApprovalHistoryEntry, 0, len(rows))
 	for _, row := range rows {
 		if row == nil {
 			continue
 		}
 		cloned := *row
-		out = append(out, &handlers.ToolApprovalHistoryEntry{
+		out = append(out, &usecase.ToolApprovalHistoryEntry{
 			EventType:   cloned.EventType,
 			ApprovalID:  cloned.ApprovalID,
 			Fingerprint: cloned.Fingerprint,

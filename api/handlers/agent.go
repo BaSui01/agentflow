@@ -29,13 +29,10 @@ var validAgentID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 // AgentHandler Agent management handler
 type AgentHandler struct {
-	mu            sync.RWMutex
-	registry      discovery.Registry
-	agentRegistry *agent.AgentRegistry
-	resolver      usecase.AgentResolver
-	service       usecase.AgentService
-	logger        *zap.Logger
-	sessionMgr    *agent.SessionManager
+	mu         sync.RWMutex
+	service    usecase.AgentService
+	logger     *zap.Logger
+	sessionMgr *agent.SessionManager
 }
 
 // AgentInfo Agent information returned by the API
@@ -59,33 +56,26 @@ type AgentHealthResponse struct {
 	CheckedAt string  `json:"checked_at"`
 }
 
-// NewAgentHandler creates an Agent handler.
-// The resolver parameter is optional — if nil, execute/stream endpoints return 501.
-func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegistry, logger *zap.Logger, resolver ...usecase.AgentResolver) *AgentHandler {
-	h := &AgentHandler{
-		registry:      registry,
-		agentRegistry: agentRegistry,
-		logger:        logger,
-		sessionMgr:    agent.NewSessionManager(),
+// NewAgentHandlerWithService creates an Agent handler with an explicit AgentService.
+func NewAgentHandlerWithService(service usecase.AgentService, sessionMgr *agent.SessionManager, logger *zap.Logger) *AgentHandler {
+	if sessionMgr == nil {
+		sessionMgr = agent.NewSessionManager()
 	}
-	if len(resolver) > 0 {
-		h.UpdateResolver(resolver[0])
-	} else {
-		h.UpdateResolver(nil)
+	return &AgentHandler{
+		service:    service,
+		logger:     logger,
+		sessionMgr: sessionMgr,
 	}
-	return h
 }
 
-// UpdateResolver swaps the live resolver and rebuilds the backing service in
-// place so existing HTTP route bindings keep using the latest runtime wiring.
-func (h *AgentHandler) UpdateResolver(resolver usecase.AgentResolver) {
+// UpdateService swaps the live AgentService in place so existing HTTP route
+// bindings keep using the latest runtime wiring.
+func (h *AgentHandler) UpdateService(service usecase.AgentService) {
 	if h == nil {
 		return
 	}
-	service := usecase.NewDefaultAgentService(h.registry, resolver)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.resolver = resolver
 	h.service = service
 }
 
@@ -96,6 +86,15 @@ func (h *AgentHandler) currentService() usecase.AgentService {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.service
+}
+
+func (h *AgentHandler) currentServiceOrError() (usecase.AgentService, *types.Error) {
+	service := h.currentService()
+	if service == nil {
+		return nil, types.NewServiceUnavailableError("agent service is not configured").
+			WithHTTPStatus(http.StatusServiceUnavailable)
+	}
+	return service, nil
 }
 
 // =============================================================================
@@ -139,7 +138,11 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 		pageSize = 100
 	}
 
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrError()
+	if svcErr != nil {
+		h.handleAgentError(w, svcErr)
+		return
+	}
 	agents, svcErr := service.ListAgents(r.Context())
 	if svcErr != nil {
 		h.handleAgentError(w, svcErr)
@@ -192,7 +195,11 @@ func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrError()
+	if svcErr != nil {
+		h.handleAgentError(w, svcErr)
+		return
+	}
 	info, svcErr := service.GetAgent(r.Context(), agentID)
 	if svcErr != nil {
 		h.handleAgentError(w, svcErr)
@@ -231,7 +238,11 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		traceID = middleware.RequestIDFromContext(r.Context())
 	}
 	traceLogger := telemetry.LoggerWithTrace(r.Context(), h.logger)
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrError()
+	if svcErr != nil {
+		h.handleAgentError(w, svcErr)
+		return
+	}
 	resp, duration, execErr := service.ExecuteAgent(r.Context(), req, traceID)
 	if execErr != nil {
 		h.handleAgentError(w, execErr)
@@ -279,7 +290,11 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Preserve non-stream error semantics (404/501) before committing SSE headers.
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrError()
+	if svcErr != nil {
+		h.handleAgentError(w, svcErr)
+		return
+	}
 	if _, svcErr := service.ResolveForOperation(r.Context(), req.AgentID, usecase.AgentOperationStream); svcErr != nil {
 		h.handleAgentError(w, svcErr)
 		return
@@ -467,7 +482,11 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrError()
+	if svcErr != nil {
+		h.handleAgentError(w, svcErr)
+		return
+	}
 	info, svcErr := service.GetAgent(r.Context(), agentID)
 	if svcErr != nil {
 		h.handleAgentError(w, svcErr)

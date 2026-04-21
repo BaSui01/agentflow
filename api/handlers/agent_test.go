@@ -173,7 +173,11 @@ func newTestAgentInfo(name string, status discovery.AgentStatus) *discovery.Agen
 }
 
 func newTestHandler(reg *mockRegistry) *AgentHandler {
-	return NewAgentHandler(reg, nil, zap.NewNop())
+	return NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, nil), nil, zap.NewNop())
+}
+
+func newTestHandlerWithResolver(reg discovery.Registry, resolver usecase.AgentResolver) *AgentHandler {
+	return NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, resolver), nil, zap.NewNop())
 }
 
 // =============================================================================
