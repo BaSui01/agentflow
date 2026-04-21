@@ -39,6 +39,17 @@
 |----------|-------------|------------|
 | [🧭 Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | Official 12-month snapshot for chat, image, video, TTS, STT, and realtime model families | ⭐ |
 
+### 🧭 Documentation Layers
+
+| Layer | Start here | When to use it |
+|------|------------|----------------|
+| Official recent model families | [Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | You need a 12-month official snapshot for chat / image / video / speech families |
+| Unified project overview | [`../模型与媒体端点参考.md`](../模型与媒体端点参考.md) | You need the provider `/models` view plus unified media overview |
+| Current implemented capabilities | [`../多模态能力端点参考.md`](../多模态能力端点参考.md) | You need to know what the codebase actually implements today |
+| Image / video vendor integration | [`../视频与图像厂商及端点说明.md`](../视频与图像厂商及端点说明.md) | You need provider onboarding, shared keys, endpoint, and config details |
+| Hands-on tutorials | [Provider Configuration](./tutorials/02.ProviderConfiguration.md) / [Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | You want examples you can copy quickly |
+| Historical background | [`../多模态实现总结.md`](../多模态实现总结.md) / [`../多模态功能实现报告.md`](../多模态功能实现报告.md) | You need design history and implementation milestones |
+
 ---
 
 ## 🌟 Core Features
@@ -98,9 +109,9 @@
 ### 🖼️ Multimodal Capabilities
 
 - **Embedding**: OpenAI, Gemini, Cohere, Jina, Voyage
-- **Image**: DALL-E, Flux, Gemini
-- **Video**: Runway, Veo, Sora, Gemini, MiniMax
-- **Audio**: OpenAI TTS/STT, ElevenLabs, Deepgram
+- **Image**: `gpt-image-1`, Imagen 4, Flux, Stability, Ideogram, Tongyi, Zhipu, Baidu, Doubao, Tencent Hunyuan, Kling
+- **Video**: `sora-2`, Runway Gen-4.5 / `gen4_turbo`, Veo 3.1, Gemini, Kling, Luma, MiniMax, Seedance
+- **Audio**: `gpt-4o-mini-tts`, `gpt-4o-transcribe`, ElevenLabs, Deepgram
 - **Music**: Suno, MiniMax
 - **3D**: Meshy, Tripo
 - **Rerank**: Cohere, Qwen, GLM
@@ -162,7 +173,7 @@ func main() {
     provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
         BaseProviderConfig: providers.BaseProviderConfig{
             APIKey: os.Getenv("OPENAI_API_KEY"),
-            Model:  "gpt-4o-mini",
+            Model:  "gpt-5.4",
         },
     }, logger)
 
