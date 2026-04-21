@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -677,11 +678,23 @@ func TestSanitizeID(t *testing.T) {
 // --- execCommand mock ---
 
 func TestExecCommand(t *testing.T) {
-	cmd := execCommandContext(context.Background(), "echo", "hello")
+	command := "echo"
+	args := []string{"hello"}
+	expectedStdout := "hello\n"
+	if runtime.GOOS == "windows" {
+		command = "cmd"
+		args = []string{"/c", "echo", "hello"}
+		expectedStdout = "hello\r\n"
+	}
+	cmd := execCommandContext(context.Background(), command, args...)
 	cmd.SetStdin("input")
 	stdout, stderr, err := cmd.Run()
 	require.NoError(t, err)
-	assert.Equal(t, "hello\n", stdout)
+	if runtime.GOOS == "windows" {
+		assert.Contains(t, stdout, "hello")
+	} else {
+		assert.Equal(t, expectedStdout, stdout)
+	}
 	assert.Equal(t, "", stderr)
 	assert.Equal(t, 0, cmd.ExitCode())
 }
