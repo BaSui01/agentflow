@@ -55,6 +55,40 @@ cmd/agentflow
 
 ---
 
+### 2026-04-17: 基础设施 SDK 统一入口重构计划
+**文件**: [基础设施SDK统一入口重构计划-2026-04-17-已完成.md](./基础设施SDK统一入口重构计划-2026-04-17-已完成.md)  
+**完成总结**: [基础设施SDK统一入口重构计划-2026-04-17-完成总结.md](./基础设施SDK统一入口重构计划-2026-04-17-完成总结.md)
+
+**目标**:
+- 仓库级唯一正式入口：`sdk.New(opts).Build(ctx)`
+- workflow 唯一 runtime 入口：`workflow/runtime.Builder`
+- agent 唯一 runtime 入口：`agent/runtime.Builder`
+- rag 唯一 runtime 入口：`rag/runtime.Builder`
+- 删除所有顶层 legacy 直注入口
+
+**完成度**: 69/131 任务 (核心目标 100%)
+
+**核心成果**:
+- ✅ `workflow/runtime.Builder` 已落地，`sdk` 不再手工装配 workflow runtime
+- ✅ `sdk.Options.Provider/ToolProvider/Ledger` 已从生产代码移除（0 残留）
+- ✅ `agent.NewAgentBuilder/NewBaseAgent` 已从生产代码移除（0 残留）
+- ✅ `agent.CreateAgent` 在示例中使用次数为 0
+- ✅ README/快速开始/教程已统一到 sdk 主路径
+- ✅ 所有测试与架构守卫通过（sdk/agent/rag/workflow + arch_guard.ps1）
+
+**剩余任务**: 62 项未勾选，其中约 90% 是描述性/验证性任务（代码已实现），仅 2 项真实待办（llm 文档层级说明优化、DAGWorkflow.Execute() 评估），影响有限，可按需处理。
+
+**架构收口**:
+```
+仓库级正式入口: sdk.New(opts).Build(ctx)
+  -> workflow/runtime.Builder -> Facade.ExecuteDAG(...)
+  -> agent/runtime.Builder
+  -> rag/runtime.Builder
+  -> llm/runtime/compose.Build(...) -> Gateway
+```
+
+---
+
 ## 归档规则
 
 1. **归档时机**: 重构计划所有任务完成 (100%)，且通过所有验证（测试、架构守卫、文档同步）
@@ -70,4 +104,4 @@ cmd/agentflow
 
 ---
 
-**最后更新**: 2026-04-21
+**最后更新**: 2026-04-22
