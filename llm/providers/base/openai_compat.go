@@ -226,6 +226,9 @@ type OpenAICompatRequest struct {
 	StreamOptions       *StreamOptions        `json:"stream_options,omitempty"`
 	User                string                `json:"user,omitempty"`
 	Thinking            *Thinking             `json:"thinking,omitempty"`
+	EnableThinking      *bool                 `json:"enable_thinking,omitempty"`
+	ThinkingBudget      *int                  `json:"thinking_budget,omitempty"`
+	IncrementalOutput   *bool                 `json:"incremental_output,omitempty"`
 	MaxCompletionTokens *int                  `json:"max_completion_tokens,omitempty"`
 	ReasoningEffort     *string               `json:"reasoning_effort,omitempty"`
 

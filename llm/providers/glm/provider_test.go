@@ -52,7 +52,7 @@ func TestNewGLMProvider_Defaults(t *testing.T) {
 
 func TestGLMProvider_FallbackModel(t *testing.T) {
 	p := newGLMProvider(providers.GLMConfig{}, zap.NewNop())
-	assert.Equal(t, "glm-4-plus", p.Cfg.FallbackModel)
+	assert.Equal(t, "glm-5.1", p.Cfg.FallbackModel)
 }
 
 func TestGLMProvider_EndpointPath(t *testing.T) {
@@ -83,7 +83,7 @@ func TestGLMProvider_Completion(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
-			ID: "resp-1", Model: "glm-4-plus",
+			ID: "resp-1", Model: "glm-5.1",
 			Choices: []providerbase.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from GLM"}},
 			},
@@ -103,11 +103,11 @@ func TestGLMProvider_Completion(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, "glm", resp.Provider)
-	assert.Equal(t, "glm-4-plus", resp.Model)
+	assert.Equal(t, "glm-5.1", resp.Model)
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from GLM", resp.Choices[0].Message.Content)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
-	assert.Equal(t, "glm-4-plus", capturedRequest.Model)
+	assert.Equal(t, "glm-5.1", capturedRequest.Model)
 }
 
 func TestGLMProvider_Completion_Error(t *testing.T) {
@@ -161,7 +161,7 @@ func TestGLMProvider_Stream(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 
 		chunk := providerbase.OpenAICompatResponse{
-			ID: "stream-1", Model: "glm-4-plus",
+			ID: "stream-1", Model: "glm-5.1",
 			Choices: []providerbase.OpenAICompatChoice{
 				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},

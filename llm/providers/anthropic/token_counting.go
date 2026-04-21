@@ -19,7 +19,7 @@ func (p *ClaudeProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 		return nil, nil
 	}
 	system, messages := convertToClaudeMessages(req.Messages)
-	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
+	model := providerbase.ChooseModel(req, p.cfg.Model, defaultClaudeModel)
 	thinking, outputConfig, speed := buildClaudeReasoningControls(req, model)
 	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
 	if cacheErr != nil {

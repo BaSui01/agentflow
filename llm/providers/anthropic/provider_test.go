@@ -688,6 +688,35 @@ func TestBuildClaudeReasoningControls_ExtendedTooSmallDisablesThinking(t *testin
 	assert.Equal(t, anthropicsdk.OutputConfigEffort("medium"), outputConfig.Effort)
 }
 
+func TestValidateClaudeRequest_RejectsTemperatureAndTopPTogether(t *testing.T) {
+	err := validateClaudeRequest(&llm.ChatRequest{
+		Temperature: 0.7,
+		TopP:        0.9,
+	}, "claude-sonnet-4-6")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "either temperature or top_p")
+}
+
+func TestValidateClaudeRequest_RejectsOpus47SamplingOverrides(t *testing.T) {
+	err := validateClaudeRequest(&llm.ChatRequest{
+		TopP: 0.9,
+	}, "claude-opus-4-7")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Opus 4.7")
+}
+
+func TestValidateClaudeRequest_RejectsThinkingTemperature(t *testing.T) {
+	err := validateClaudeRequest(&llm.ChatRequest{
+		ReasoningMode: "extended",
+		Temperature:   0.3,
+	}, "claude-sonnet-4-6")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "thinking mode")
+}
+
 func TestClaudeProvider_Headers_FastModeBeta(t *testing.T) {
 	var capturedBeta string
 	var capturedQuery string

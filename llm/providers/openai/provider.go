@@ -49,6 +49,8 @@ type OpenAIProvider struct {
 	openaiCfg providers.OpenAIConfig
 }
 
+const defaultOpenAIModel = "gpt-5.4"
+
 // NewOpenAIProvider 创建新的 OpenAI 提供者实例.
 func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIProvider {
 	if cfg.BaseURL == "" {
@@ -62,7 +64,7 @@ func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIPr
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "gpt-5.2", // 2026: GPT-5.2
+			FallbackModel: defaultOpenAIModel,
 			Timeout:       cfg.Timeout,
 		}, logger),
 		openaiCfg: cfg,
@@ -523,7 +525,7 @@ func findResponseToolTypeByName(tools []any, name string) string {
 // buildResponsesRequest converts a ChatRequest to a Responses API request.
 func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIResponsesRequest {
 	body := openAIResponsesRequest{
-		Model:                providerbase.ChooseModel(req, p.openaiCfg.Model, "gpt-5.2"),
+		Model:                providerbase.ChooseModel(req, p.openaiCfg.Model, defaultOpenAIModel),
 		ToolChoice:           req.ToolChoice,
 		Store:                req.Store,
 		Metadata:             req.Metadata,

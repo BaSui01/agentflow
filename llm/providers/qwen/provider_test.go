@@ -42,7 +42,7 @@ func TestNewQwenProvider_Defaults(t *testing.T) {
 
 func TestQwenProvider_FallbackModel(t *testing.T) {
 	p := newQwenProvider(providers.QwenConfig{}, zap.NewNop())
-	assert.Equal(t, "qwen3-235b-a22b", p.Cfg.FallbackModel)
+	assert.Equal(t, "qwen3-max-2026-01-23", p.Cfg.FallbackModel)
 }
 
 func TestQwenProvider_EndpointPath(t *testing.T) {
@@ -70,7 +70,7 @@ func TestQwenProvider_Completion(t *testing.T) {
 		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
-			ID: "resp-1", Model: "qwen3-235b-a22b",
+			ID: "resp-1", Model: "qwen3-max-2026-01-23",
 			Choices: []providerbase.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from Qwen"}},
 			},
@@ -89,7 +89,7 @@ func TestQwenProvider_Completion(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "qwen", resp.Provider)
-	assert.Equal(t, "qwen3-235b-a22b", resp.Model)
+	assert.Equal(t, "qwen3-max-2026-01-23", resp.Model)
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from Qwen", resp.Choices[0].Message.Content)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
@@ -144,7 +144,7 @@ func TestQwenProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		chunk := providerbase.OpenAICompatResponse{
-			ID: "stream-1", Model: "qwen3-235b-a22b",
+			ID: "stream-1", Model: "qwen3-max-2026-01-23",
 			Choices: []providerbase.OpenAICompatChoice{
 				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
