@@ -50,7 +50,7 @@ func (s *LLMStep) Execute(ctx context.Context, input core.StepInput) (core.StepO
 		}
 	}
 
-	resp, err := s.Gateway.Invoke(ctx, req)
+	resp, err := core.InvokeGatewayLike(ctx, s.Gateway, req)
 	if err != nil {
 		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeLLM, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
@@ -91,7 +91,7 @@ func (s *LLMStep) buildRequest(input core.StepInput) *core.LLMRequest {
 }
 
 func (s *LLMStep) executeStreaming(ctx context.Context, req *core.LLMRequest, start time.Time) (core.StepOutput, error) {
-	stream, err := s.Gateway.Stream(ctx, req)
+	stream, err := core.StreamGatewayLike(ctx, s.Gateway, req)
 	if err != nil {
 		return core.StepOutput{}, err
 	}
