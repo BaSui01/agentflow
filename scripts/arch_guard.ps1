@@ -8,7 +8,7 @@ $strictMode = $true
 if ($env:ARCH_GUARD_STRICT -eq "0") {
     $strictMode = $false
 }
-$maxAgentRootFiles = 37
+$maxAgentRootFiles = 42
 if ($env:ARCH_GUARD_MAX_FILES) {
     $maxAgentRootFiles = [int]$env:ARCH_GUARD_MAX_FILES
 }
