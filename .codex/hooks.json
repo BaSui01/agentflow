@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .trellis/scripts/run-python.sh .codex/hooks/session-start.py",
+            "command": "python .codex/hooks/session-start.py",
             "timeout": 15,
             "statusMessage": "Loading Trellis context..."
           }
