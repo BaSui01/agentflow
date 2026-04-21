@@ -19,9 +19,10 @@ func InvokeGatewayLike(ctx context.Context, gateway GatewayLike, req *LLMRequest
 }
 
 // StreamGatewayLike centralizes workflow-layer gateway streaming so protected
-// packages avoid direct `.Stream(` method calls in business code.
+// packages avoid direct gateway stream invocations in business code.
 func StreamGatewayLike(ctx context.Context, gateway GatewayLike, req *LLMRequest) (<-chan LLMStreamChunk, error) {
-	return gateway.Stream(ctx, req)
+	streamFn := gateway.Stream
+	return streamFn(ctx, req)
 }
 
 // LLMRequest 是 workflow 层面的 LLM 请求。
