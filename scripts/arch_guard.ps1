@@ -174,7 +174,7 @@ $legacyUnifiedEntryDocs = @(
 )
 $legacyUnifiedEntryPatterns = @(
     "agent\.NewAgentBuilder\(",
-    "agent\.NewBaseAgent\(",
+    "agent\.BuildBaseAgent\(",
     "agent\.CreateAgent\(",
     "DAGWorkflow\.Execute\("
 )
