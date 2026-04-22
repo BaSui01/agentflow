@@ -63,7 +63,7 @@ func (m *mockAgent) Plan(ctx context.Context, input *agent.Input) (*agent.PlanRe
 
 func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("test-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("test-agent", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		id:   "test-agent",
@@ -110,7 +110,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_WithResolver_ExecutionError(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("err-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("err-agent", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		executeFn: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
@@ -171,7 +171,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_NotFound(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_NoResolver_AgentExists(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
@@ -312,7 +312,7 @@ func TestAgentHandler_HandleAgentHealth_InvalidID(t *testing.T) {
 
 func TestAgentHandler_HandleListAgents_Error(t *testing.T) {
 	reg := &mockRegistry{
-		agents: make(map[string]*discovery.AgentInfo),
+		agents: make(map[string]*tools.AgentInfo),
 		err:    errors.New("registry error"),
 	}
 	handler := newTestHandler(reg)
@@ -904,7 +904,7 @@ func TestResponseWriter_WriteWithoutHeader(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		executeFn: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
@@ -939,7 +939,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("err-stream", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("err-stream", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		executeFn: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
@@ -976,7 +976,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T
 
 func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 	reg := &mockRegistry{
-		agents: make(map[string]*discovery.AgentInfo),
+		agents: make(map[string]*tools.AgentInfo),
 		err:    errors.New("registry error"),
 	}
 	handler := newTestHandler(reg)
