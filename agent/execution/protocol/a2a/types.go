@@ -15,20 +15,3 @@ type ToolDefinition = shared.ToolDefinition
 type AgentCard = shared.AgentCard
 
 var NewAgentCard = shared.NewAgentCard
-
-// 验证AgentCard是否拥有所有需要的字段 。
-func (c *AgentCard) Validate() error {
-	if c.Name == "" {
-		return ErrMissingName
-	}
-	if c.Description == "" {
-		return ErrMissingDescription
-	}
-	if c.URL == "" {
-		return ErrMissingURL
-	}
-	if c.Version == "" {
-		return ErrMissingVersion
-	}
-	return nil
-}

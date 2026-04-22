@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -22,7 +21,7 @@ import (
 // A2AServer定义了A2A服务器操作的接口.
 type A2AServer interface {
 	// 注册代理在服务器上注册本地代理 。
-	RegisterAgent(agent agent.Agent) error
+	RegisterAgent(agent Agent) error
 	// Unregister Agent 从服务器中删除一个代理 。
 	UnregisterAgent(agentID string) error
 	// ServiHTTP 执行 http. 服务A2A请求的掌上电脑
@@ -67,7 +66,7 @@ type HTTPServer struct {
 	logger *zap.Logger
 
 	// 代理通过身份证储存注册代理
-	agents   map[string]agent.Agent
+	agents   map[string]Agent
 	agentsMu sync.RWMutex
 
 	// 代理卡缓存生成代理卡
@@ -121,7 +120,7 @@ func NewHTTPServer(config *ServerConfig) *HTTPServer {
 	return &HTTPServer{
 		config:        config,
 		logger:        config.Logger,
-		agents:        make(map[string]agent.Agent),
+		agents:        make(map[string]Agent),
 		agentCards:    make(map[string]*AgentCard),
 		asyncTasks:    make(map[string]*asyncTask),
 		cardGenerator: NewAgentCardGenerator(),
@@ -257,7 +256,7 @@ func (s *HTTPServer) convertFromPersistTask(persistTask *persistence.AsyncTask) 
 }
 
 // 注册代理在服务器上注册本地代理 。
-func (s *HTTPServer) RegisterAgent(ag agent.Agent) error {
+func (s *HTTPServer) RegisterAgent(ag Agent) error {
 	if ag == nil {
 		return fmt.Errorf("%w: nil agent", ErrInvalidMessage)
 	}
@@ -288,10 +287,10 @@ func (s *HTTPServer) RegisterAgent(ag agent.Agent) error {
 
 // 特工Adapter 适应代理。 代理ConfigProvider接口的代理服务器.
 type agentAdapter struct {
-	ag agent.Agent
+	ag Agent
 }
 
-func newAgentAdapter(ag agent.Agent) *agentAdapter {
+func newAgentAdapter(ag Agent) *agentAdapter {
 	return &agentAdapter{ag: ag}
 }
 
@@ -309,7 +308,7 @@ func (a *agentAdapter) Type() AgentType {
 
 func (a *agentAdapter) Description() string {
 	// 如果执行描述方法, 请尝试从代理获取描述
-	if desc, ok := a.ag.(interface{ Description() string }); ok {
+	if desc, ok := a.ag.(agentDescriber); ok {
 		return desc.Description()
 	}
 	// 基于名称和类型的默认描述
@@ -318,7 +317,7 @@ func (a *agentAdapter) Description() string {
 
 func (a *agentAdapter) Tools() []string {
 	// 执行工具方法时尝试从代理获取工具
-	if tools, ok := a.ag.(interface{ Tools() []string }); ok {
+	if tools, ok := a.ag.(agentToolProvider); ok {
 		return tools.Tools()
 	}
 	return nil
@@ -326,7 +325,7 @@ func (a *agentAdapter) Tools() []string {
 
 func (a *agentAdapter) Metadata() map[string]string {
 	// 如果执行元数据方法, 尝试从代理获取元数据
-	if meta, ok := a.ag.(interface{ Metadata() map[string]string }); ok {
+	if meta, ok := a.ag.(agentMetadataProvider); ok {
 		return meta.Metadata()
 	}
 	return nil
@@ -360,7 +359,7 @@ func (s *HTTPServer) GetAgentCard(agentID string) (*AgentCard, error) {
 }
 
 // 获得代理通过身份检索注册代理。
-func (s *HTTPServer) getAgent(agentID string) (agent.Agent, error) {
+func (s *HTTPServer) getAgent(agentID string) (Agent, error) {
 	s.agentsMu.RLock()
 	ag, ok := s.agents[agentID]
 	s.agentsMu.RUnlock()
@@ -373,7 +372,7 @@ func (s *HTTPServer) getAgent(agentID string) (agent.Agent, error) {
 }
 
 // 获得Default Agent 返回默认代理或第一个注册代理。
-func (s *HTTPServer) getDefaultAgent() (agent.Agent, error) {
+func (s *HTTPServer) getDefaultAgent() (Agent, error) {
 	s.agentsMu.RLock()
 	defer s.agentsMu.RUnlock()
 
@@ -666,7 +665,7 @@ func (s *HTTPServer) parseMessage(w http.ResponseWriter, r *http.Request) (*A2AM
 }
 
 // 路由Message 向合适的代理商传递消息。
-func (s *HTTPServer) routeMessage(msg *A2AMessage) (agent.Agent, error) {
+func (s *HTTPServer) routeMessage(msg *A2AMessage) (Agent, error) {
 	// 在“ 到” 字段中找到代理
 	agentID := strings.TrimSpace(msg.To)
 	if agentID == "" {
@@ -748,7 +747,7 @@ func fromPersistenceTaskStatus(status persistence.TaskStatus) string {
 }
 
 // 执行任务同步执行任务 。
-func (s *HTTPServer) executeTask(ctx context.Context, ag agent.Agent, msg *A2AMessage) (*A2AMessage, error) {
+func (s *HTTPServer) executeTask(ctx context.Context, ag Agent, msg *A2AMessage) (*A2AMessage, error) {
 	s.logger.Info("executing task",
 		zap.String("agent_id", ag.ID()),
 		zap.String("message_id", msg.ID),
@@ -762,7 +761,7 @@ func (s *HTTPServer) executeTask(ctx context.Context, ag agent.Agent, msg *A2AMe
 	}
 
 	// 创建代理输入
-	input := &agent.Input{
+	input := &ExecutionInput{
 		TraceID: msg.ID,
 		Content: content,
 		Context: map[string]any{
@@ -796,7 +795,7 @@ func (s *HTTPServer) executeTask(ctx context.Context, ag agent.Agent, msg *A2AMe
 }
 
 // 执行 AsyncTask 同步执行任务 。
-func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task *asyncTask) {
+func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag Agent, task *asyncTask) {
 	defer task.cancel()
 
 	// 处理状态更新

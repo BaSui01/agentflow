@@ -3,15 +3,16 @@ package a2a
 import (
 	"net/http"
 
+	shared "github.com/BaSui01/agentflow/agent/execution/protocol/a2a/shared"
 	"github.com/BaSui01/agentflow/types"
 )
 
 // 代理卡验证错误（映射到 types.ErrInvalidRequest）.
 var (
-	ErrMissingName        = types.NewError(types.ErrInvalidRequest, "agent card: missing name").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
-	ErrMissingDescription = types.NewError(types.ErrInvalidRequest, "agent card: missing description").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
-	ErrMissingURL         = types.NewError(types.ErrInvalidRequest, "agent card: missing url").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
-	ErrMissingVersion     = types.NewError(types.ErrInvalidRequest, "agent card: missing version").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingName        = shared.ErrMissingName
+	ErrMissingDescription = shared.ErrMissingDescription
+	ErrMissingURL         = shared.ErrMissingURL
+	ErrMissingVersion     = shared.ErrMissingVersion
 )
 
 // A2A 协议错误.

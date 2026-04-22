@@ -1,6 +1,19 @@
 package shared
 
-import "github.com/BaSui01/agentflow/agent/adapters/structured"
+import (
+	"net/http"
+
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
+	"github.com/BaSui01/agentflow/types"
+)
+
+// AgentCard validation errors.
+var (
+	ErrMissingName        = types.NewError(types.ErrInvalidRequest, "agent card: missing name").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingDescription = types.NewError(types.ErrInvalidRequest, "agent card: missing description").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingURL         = types.NewError(types.ErrInvalidRequest, "agent card: missing url").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingVersion     = types.NewError(types.ErrInvalidRequest, "agent card: missing version").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+)
 
 // CapabilityType 代表一种代理提供的能力类型。
 type CapabilityType string
@@ -141,6 +154,23 @@ func (c *AgentCard) GetTool(name string) *ToolDefinition {
 		if c.Tools[i].Name == name {
 			return &c.Tools[i]
 		}
+	}
+	return nil
+}
+
+// Validate ensures the AgentCard contains the required fields.
+func (c *AgentCard) Validate() error {
+	if c.Name == "" {
+		return ErrMissingName
+	}
+	if c.Description == "" {
+		return ErrMissingDescription
+	}
+	if c.URL == "" {
+		return ErrMissingURL
+	}
+	if c.Version == "" {
+		return ErrMissingVersion
 	}
 	return nil
 }

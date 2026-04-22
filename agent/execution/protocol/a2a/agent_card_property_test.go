@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/BaSui01/agentflow/types"
-
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/adapters/structured"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
@@ -24,25 +22,18 @@ import (
 type propMockAgent struct {
 	id          string
 	name        string
-	agentType   agent.AgentType
+	agentType   AgentType
 	description string
 	tools       []string
 	metadata    map[string]string
 }
 
-func (m *propMockAgent) ID() string                         { return m.id }
-func (m *propMockAgent) Name() string                       { return m.name }
-func (m *propMockAgent) Type() agent.AgentType              { return m.agentType }
-func (m *propMockAgent) State() agent.State                 { return agent.StateReady }
-func (m *propMockAgent) Init(ctx context.Context) error     { return nil }
-func (m *propMockAgent) Teardown(ctx context.Context) error { return nil }
-func (m *propMockAgent) Plan(ctx context.Context, input *agent.Input) (*agent.PlanResult, error) {
-	return nil, nil
+func (m *propMockAgent) ID() string      { return m.id }
+func (m *propMockAgent) Name() string    { return m.name }
+func (m *propMockAgent) Type() AgentType { return m.agentType }
+func (m *propMockAgent) Execute(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
+	return &ExecutionOutput{Content: "test"}, nil
 }
-func (m *propMockAgent) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
-	return &agent.Output{Content: "test"}, nil
-}
-func (m *propMockAgent) Observe(ctx context.Context, feedback *agent.Feedback) error { return nil }
 
 // 描述返回代理描述 。
 func (m *propMockAgent) Description() string { return m.description }
@@ -72,12 +63,12 @@ func TestProperty_AgentCard_Completeness(t *testing.T) {
 		agentID := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(rt, "agentID")
 		agentName := rapid.StringMatching(`[A-Z][a-zA-Z0-9 ]{2,30}`).Draw(rt, "agentName")
 		agentDesc := rapid.StringMatching(`[A-Za-z][a-zA-Z0-9 ,.]{10,100}`).Draw(rt, "agentDesc")
-		agentType := rapid.SampledFrom([]agent.AgentType{
-			agent.TypeAssistant,
-			agent.TypeAnalyzer,
-			agent.TypeTranslator,
-			agent.TypeSummarizer,
-			agent.TypeReviewer,
+		agentType := rapid.SampledFrom([]AgentType{
+			AgentTypeAssistant,
+			AgentTypeAnalyzer,
+			AgentTypeTranslator,
+			AgentTypeSummarizer,
+			AgentTypeReviewer,
 		}).Draw(rt, "agentType")
 		baseURL := rapid.SampledFrom([]string{
 			"https://api.example.com",
@@ -119,20 +110,20 @@ func TestProperty_AgentCard_Completeness(t *testing.T) {
 func TestProperty_AgentCard_CapabilitiesReflectAgentType(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		// 将代理类型映射到预期能力
-		typeCapabilities := map[agent.AgentType]string{
-			agent.TypeAssistant:  "chat",
-			agent.TypeAnalyzer:   "analysis",
-			agent.TypeTranslator: "translation",
-			agent.TypeSummarizer: "summarization",
-			agent.TypeReviewer:   "review",
+		typeCapabilities := map[AgentType]string{
+			AgentTypeAssistant:  "chat",
+			AgentTypeAnalyzer:   "analysis",
+			AgentTypeTranslator: "translation",
+			AgentTypeSummarizer: "summarization",
+			AgentTypeReviewer:   "review",
 		}
 
-		agentType := rapid.SampledFrom([]agent.AgentType{
-			agent.TypeAssistant,
-			agent.TypeAnalyzer,
-			agent.TypeTranslator,
-			agent.TypeSummarizer,
-			agent.TypeReviewer,
+		agentType := rapid.SampledFrom([]AgentType{
+			AgentTypeAssistant,
+			AgentTypeAnalyzer,
+			AgentTypeTranslator,
+			AgentTypeSummarizer,
+			AgentTypeReviewer,
 		}).Draw(rt, "agentType")
 
 		ag := &propMockAgent{
@@ -180,7 +171,7 @@ func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 		ag := &propMockAgent{
 			id:          agentID,
 			name:        "Tool Agent",
-			agentType:   agent.TypeAssistant,
+			agentType:   AgentTypeAssistant,
 			description: "Agent with tools",
 			tools:       toolNames,
 		}
@@ -224,7 +215,7 @@ func TestProperty_AgentCard_MetadataPreserved(t *testing.T) {
 		ag := &propMockAgent{
 			id:          "meta-agent",
 			name:        "Meta Agent",
-			agentType:   agent.TypeAssistant,
+			agentType:   AgentTypeAssistant,
 			description: "Agent with metadata",
 			metadata:    metadata,
 		}
@@ -260,7 +251,7 @@ func TestProperty_AgentCard_VersionFromMetadata(t *testing.T) {
 		ag := &propMockAgent{
 			id:          "versioned-agent",
 			name:        "Versioned Agent",
-			agentType:   agent.TypeAssistant,
+			agentType:   AgentTypeAssistant,
 			description: "Agent with version",
 			metadata: map[string]string{
 				"version": version,
@@ -289,7 +280,7 @@ func TestProperty_AgentCard_URLFormat(t *testing.T) {
 		ag := &propMockAgent{
 			id:          agentID,
 			name:        "URL Agent",
-			agentType:   agent.TypeAssistant,
+			agentType:   AgentTypeAssistant,
 			description: "Agent for URL testing",
 		}
 
@@ -315,7 +306,7 @@ func TestProperty_AgentCard_RegisteredAgentHasValidCard(t *testing.T) {
 		ag := &propMockAgent{
 			id:          agentID,
 			name:        agentName,
-			agentType:   agent.TypeAssistant,
+			agentType:   AgentTypeAssistant,
 			description: agentDesc,
 		}
 

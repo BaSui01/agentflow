@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
@@ -22,37 +21,25 @@ import (
 type routingTestAgent struct {
 	id           string
 	name         string
-	agentType    agent.AgentType
-	state        agent.State
+	agentType    AgentType
 	executeCalls int64
-	lastInput    *agent.Input
+	lastInput    *ExecutionInput
 	mu           sync.Mutex
-	executeFunc  func(ctx context.Context, input *agent.Input) (*agent.Output, error)
+	executeFunc  func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error)
 }
 
-func newRoutingTestAgent(id, name string, agentType agent.AgentType) *routingTestAgent {
+func newRoutingTestAgent(id, name string, agentType AgentType) *routingTestAgent {
 	return &routingTestAgent{
 		id:        id,
 		name:      name,
 		agentType: agentType,
-		state:     agent.StateReady,
 	}
 }
 
-func (m *routingTestAgent) ID() string            { return m.id }
-func (m *routingTestAgent) Name() string          { return m.name }
-func (m *routingTestAgent) Type() agent.AgentType { return m.agentType }
-func (m *routingTestAgent) State() agent.State    { return m.state }
-func (m *routingTestAgent) Init(ctx context.Context) error {
-	return nil
-}
-func (m *routingTestAgent) Teardown(ctx context.Context) error { return nil }
-
-func (m *routingTestAgent) Plan(ctx context.Context, input *agent.Input) (*agent.PlanResult, error) {
-	return &agent.PlanResult{Steps: []string{"step1"}}, nil
-}
-
-func (m *routingTestAgent) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
+func (m *routingTestAgent) ID() string      { return m.id }
+func (m *routingTestAgent) Name() string    { return m.name }
+func (m *routingTestAgent) Type() AgentType { return m.agentType }
+func (m *routingTestAgent) Execute(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
 	atomic.AddInt64(&m.executeCalls, 1)
 	m.mu.Lock()
 	m.lastInput = input
@@ -62,7 +49,7 @@ func (m *routingTestAgent) Execute(ctx context.Context, input *agent.Input) (*ag
 		return m.executeFunc(ctx, input)
 	}
 
-	return &agent.Output{
+	return &ExecutionOutput{
 		TraceID:      input.TraceID,
 		Content:      "mock response for: " + input.Content,
 		TokensUsed:   10,
@@ -71,15 +58,11 @@ func (m *routingTestAgent) Execute(ctx context.Context, input *agent.Input) (*ag
 	}, nil
 }
 
-func (m *routingTestAgent) Observe(ctx context.Context, feedback *agent.Feedback) error {
-	return nil
-}
-
 func (m *routingTestAgent) GetExecuteCallCount() int64 {
 	return atomic.LoadInt64(&m.executeCalls)
 }
 
-func (m *routingTestAgent) GetLastInput() *agent.Input {
+func (m *routingTestAgent) GetLastInput() *ExecutionInput {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.lastInput
@@ -103,14 +86,14 @@ func genValidAgentName() *rapid.Generator[string] {
 }
 
 // genValidAgentType生成一个有效的代理类型进行测试.
-func genValidAgentType() *rapid.Generator[agent.AgentType] {
-	return rapid.SampledFrom([]agent.AgentType{
-		agent.TypeGeneric,
-		agent.TypeAssistant,
-		agent.TypeAnalyzer,
-		agent.TypeTranslator,
-		agent.TypeSummarizer,
-		agent.TypeReviewer,
+func genValidAgentType() *rapid.Generator[AgentType] {
+	return rapid.SampledFrom([]AgentType{
+		AgentTypeGeneric,
+		AgentTypeAssistant,
+		AgentTypeAnalyzer,
+		AgentTypeTranslator,
+		AgentTypeSummarizer,
+		AgentTypeReviewer,
 	})
 }
 
@@ -235,7 +218,7 @@ func TestProperty_A2A_TaskRouting_InputPreserved(t *testing.T) {
 		agentName := genValidAgentName().Draw(rt, "agentName")
 
 		// 创建并注册模拟代理
-		testAg := newRoutingTestAgent(agentID, agentName, agent.TypeGeneric)
+		testAg := newRoutingTestAgent(agentID, agentName, AgentTypeGeneric)
 		err := server.RegisterAgent(testAg)
 		require.NoError(t, err, "Should register agent successfully")
 
@@ -351,7 +334,7 @@ func TestProperty_A2A_TaskRouting_UnregisteredAgentReturnsError(t *testing.T) {
 
 		// 注册默认代理
 		defaultAgentID := genValidAgentID().Draw(rt, "defaultAgentID")
-		defaultAgent := newRoutingTestAgent(defaultAgentID, "Default Agent", agent.TypeGeneric)
+		defaultAgent := newRoutingTestAgent(defaultAgentID, "Default Agent", AgentTypeGeneric)
 		err := server.RegisterAgent(defaultAgent)
 		require.NoError(t, err, "Should register default agent successfully")
 
@@ -381,7 +364,7 @@ func TestProperty_A2A_TaskRouting_EmptyTargetFallsBackToDefault(t *testing.T) {
 		server := NewHTTPServer(config)
 
 		defaultAgentID := genValidAgentID().Draw(rt, "defaultAgentID")
-		defaultAgent := newRoutingTestAgent(defaultAgentID, "Default Agent", agent.TypeGeneric)
+		defaultAgent := newRoutingTestAgent(defaultAgentID, "Default Agent", AgentTypeGeneric)
 		err := server.RegisterAgent(defaultAgent)
 		require.NoError(t, err, "Should register default agent successfully")
 
@@ -413,7 +396,7 @@ func TestProperty_A2A_TaskRouting_ContextPreserved(t *testing.T) {
 
 		// 生成随机代理属性
 		agentID := genValidAgentID().Draw(rt, "agentID")
-		testAg := newRoutingTestAgent(agentID, "Test Agent", agent.TypeGeneric)
+		testAg := newRoutingTestAgent(agentID, "Test Agent", AgentTypeGeneric)
 		err := server.RegisterAgent(testAg)
 		require.NoError(t, err, "Should register agent successfully")
 
@@ -463,13 +446,13 @@ func TestProperty_A2A_TaskRouting_ResponseFormat(t *testing.T) {
 
 		// 生成随机代理属性
 		agentID := genValidAgentID().Draw(rt, "agentID")
-		testAg := newRoutingTestAgent(agentID, "Test Agent", agent.TypeGeneric)
+		testAg := newRoutingTestAgent(agentID, "Test Agent", AgentTypeGeneric)
 
 		// 设置自定义响应
 		expectedContent := rapid.StringMatching(`[a-zA-Z0-9 ]{10,50}`).Draw(rt, "responseContent")
 		expectedTokens := rapid.IntRange(1, 1000).Draw(rt, "tokens")
-		testAg.executeFunc = func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
-			return &agent.Output{
+		testAg.executeFunc = func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
+			return &ExecutionOutput{
 				TraceID:      input.TraceID,
 				Content:      expectedContent,
 				TokensUsed:   expectedTokens,
@@ -527,7 +510,7 @@ func TestProperty_A2A_TaskRouting_Idempotent(t *testing.T) {
 
 		// 生成随机代理属性
 		agentID := genValidAgentID().Draw(rt, "agentID")
-		testAg := newRoutingTestAgent(agentID, "Test Agent", agent.TypeGeneric)
+		testAg := newRoutingTestAgent(agentID, "Test Agent", AgentTypeGeneric)
 		err := server.RegisterAgent(testAg)
 		require.NoError(t, err, "Should register agent successfully")
 
