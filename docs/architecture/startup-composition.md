@@ -13,7 +13,7 @@ This document defines the runtime startup chain and composition boundaries.
 - `api/handlers` stays focused on protocol conversion and delegates domain behavior.
 - `workflow` is the Layer 3 orchestrator; it is not an `agent` subtype and should only coordinate lower-level capabilities.
 - `agent` and `rag` are peer Layer 2 domain capabilities; either may be called directly from handler/usecase entrypoints.
-- Agent instantiation now converges on one Layer-2 runtime entry: `agent/runtime.Builder`. `agent.AgentRegistry` built-in typed factories and the synthetic base agent used by multi-agent hierarchical mode both delegate to the same runtime-backed construction path.
+- Agent instantiation now converges on one Layer-2 runtime entry: `agent/execution/runtime.Builder`. `agent.AgentRegistry` built-in typed factories and the synthetic base agent used by multi-agent hierarchical mode both delegate to the same runtime-backed construction path.
 
 ## Serve Boundary（已落地）
 
@@ -107,7 +107,7 @@ Notes:
   - LLM runtime setup (reusable main-provider assembly + default legacy multi-provider router path)
   - `BuildLLMHandlerRuntimeFromProvider(...)` now delegates to the public `llm/runtime/compose.Build(...)` seam so bootstrap and external projects reuse the same handler runtime wiring around any already-constructed main provider
   - `llm/runtime/compose.Runtime` now exposes a shared `Gateway`, so handler/runtime consumers reuse one unified chat entry instead of rebuilding provider-side adapters per domain
-  - `agent/runtime.Builder` unwraps gateway-backed provider adapters and injects the shared native gateway into `BaseAgent`, so agent execution does not bounce through `provider -> gateway -> provider adapter` inside the domain layer
+  - `agent/execution/runtime.Builder` unwraps gateway-backed provider adapters and injects the shared native gateway into `BaseAgent`, so agent execution does not bounce through `provider -> gateway -> provider adapter` inside the domain layer
   - `agent.NewAgentBuilder(...)` and `agent.AgentRegistry` now also accept direct gateway injection for advanced extension paths, while keeping provider-based APIs as compatibility entrypoints
   - chat middleware chain setup
   - policy/cache/metrics/budget runtime wiring
