@@ -26,7 +26,7 @@ func testGatewayFromProvider(provider llm.Provider) llmcore.Gateway {
 func TestDefaultAgentService_ExecuteAgent_InjectsRuntimeHandoffTargets(t *testing.T) {
 	var sawHandoffTool bool
 
-	source := agent.NewBaseAgent(testAgentConfigForUsecase("source-agent", "Source", "gpt-4o-mini"), testGatewayFromProvider(&usecaseTestProvider{
+	source := agent.BuildBaseAgent(testAgentConfigForUsecase("source-agent", "Source", "gpt-4o-mini"), testGatewayFromProvider(&usecaseTestProvider{
 		name:           "source",
 		supportsNative: true,
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -51,7 +51,7 @@ func TestDefaultAgentService_ExecuteAgent_InjectsRuntimeHandoffTargets(t *testin
 			}, nil
 		},
 	}), nil, nil, nil, zap.NewNop(), nil)
-	target := agent.NewBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
+	target := agent.BuildBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
 		name:           "target",
 		supportsNative: true,
 	}), nil, nil, nil, zap.NewNop(), nil)
@@ -94,7 +94,7 @@ func TestDefaultAgentService_ExecuteAgent_InjectsConfigLevelHandoffTargets(t *te
 
 	sourceCfg := testAgentConfigForUsecase("source-agent", "Source", "gpt-4o-mini")
 	sourceCfg.Runtime.Handoffs = []string{"target-agent", "target-agent"}
-	source := agent.NewBaseAgent(sourceCfg, testGatewayFromProvider(&usecaseTestProvider{
+	source := agent.BuildBaseAgent(sourceCfg, testGatewayFromProvider(&usecaseTestProvider{
 		name:           "source",
 		supportsNative: true,
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -116,7 +116,7 @@ func TestDefaultAgentService_ExecuteAgent_InjectsConfigLevelHandoffTargets(t *te
 			}, nil
 		},
 	}), nil, nil, nil, zap.NewNop(), nil)
-	target := agent.NewBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
+	target := agent.BuildBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
 		name:           "target",
 		supportsNative: true,
 	}), nil, nil, nil, zap.NewNop(), nil)

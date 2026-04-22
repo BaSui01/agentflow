@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
