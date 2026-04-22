@@ -49,7 +49,7 @@ func TestAgentArchitectureLayering(t *testing.T) {
 	}
 }
 
-// TestAgentRootFilesBudget 验证根目录文件数预算（目标 ≤ 10 个）
+// TestAgentRootFilesBudget 验证根目录文件数预算（目标 ≤ 9 个）
 func TestAgentRootFilesBudget(t *testing.T) {
 	agentDir := "."
 
@@ -65,7 +65,7 @@ func TestAgentRootFilesBudget(t *testing.T) {
 		}
 	}
 
-	const maxRootFiles = 10
+	const maxRootFiles = 9
 	if goFileCount > maxRootFiles {
 		t.Errorf("agent 根目录有 %d 个 .go 文件，超过预算 %d（目标：只保留最小公开面）", goFileCount, maxRootFiles)
 	}

@@ -41,7 +41,7 @@ func TestToolProvider_NilFallback(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, bus, logger, nil)
 
 	// toolProvider 应该为 nil
 	assert.Nil(t, testToolProvider(agent), "toolProvider 未设置时应为 nil")
@@ -64,7 +64,7 @@ func TestToolProvider_SetAndGet(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, nil, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, nil, logger, nil)
 
 	// 初始为 nil
 	assert.Nil(t, testToolProvider(agent))
@@ -111,7 +111,7 @@ func TestToolProvider_NoToolsUsesMainProvider(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, nil, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(mainProvider), nil, nil, nil, logger, nil)
 	setTestToolProvider(agent, toolProvider)
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
@@ -181,7 +181,7 @@ func TestToolProvider_XMLFallback_ChatCompletion(t *testing.T) {
 	config := testAgentConfig("test-dual-fc", "Dual FC Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
 	setTestToolProvider(agent, toolProvider)
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
@@ -241,7 +241,7 @@ func TestToolProvider_XMLFallback_StreamCompletion(t *testing.T) {
 	config := testAgentConfig("test-dual-fc-stream", "Dual FC Stream Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
 	// 不设置 toolProvider → chatProvider = mainProvider → 降级到 XML
 
 	ch, err := agent.StreamCompletion(context.Background(), []types.Message{
@@ -292,7 +292,7 @@ func TestToolProvider_XMLFallback_NilToolProvider(t *testing.T) {
 	config := testAgentConfig("test-fc-nil-tp", "FC Nil ToolProvider Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(mainProvider), nil, toolMgr, nil, logger, nil)
 	// 不设置 toolProvider → 退化到 mainProvider
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{

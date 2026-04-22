@@ -11,14 +11,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/agent/observability/evaluation"
-	"github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/agent/capabilities/memory"
+	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
+	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/integration/voice"
+	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	"github.com/BaSui01/agentflow/llm"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/pkg/cache"
@@ -694,83 +694,83 @@ Conclusion: The method is reproducible with detailed setup and references.`)
 func demoExecutionSubsystem(ctx context.Context, logger *zap.Logger) {
 	fmt.Println("\n--- 9. Execution Subsystem ---")
 
-	config := execution.DefaultSandboxConfig()
-	config.AllowedLanguages = []execution.Language{
-		execution.LangPython,
-		execution.Language("unknown"),
+	config := runtime.DefaultSandboxConfig()
+	config.AllowedLanguages = []runtime.Language{
+		runtime.LangPython,
+		runtime.Language("unknown"),
 	}
 
-	req := &execution.ExecutionRequest{
+	req := &runtime.ExecutionRequest{
 		ID:       "exec-demo",
-		Language: execution.Language("unknown"),
+		Language: runtime.Language("unknown"),
 		Code:     "print('demo')",
 		Timeout:  100 * time.Millisecond,
 	}
 
-	dockerBackend := execution.NewDockerBackend(logger)
+	dockerBackend := runtime.NewDockerBackend(logger)
 	_ = dockerBackend.Name()
-	sandbox := execution.NewSandboxExecutor(config, dockerBackend, logger)
+	sandbox := runtime.NewSandboxExecutor(config, dockerBackend, logger)
 	_, _ = sandbox.Execute(ctx, req)
 	_ = sandbox.Stats()
 	_ = sandbox.Cleanup()
 	_ = dockerBackend.Cleanup()
 
-	customDocker := execution.NewDockerBackendWithConfig(logger, execution.DockerBackendConfig{
+	customDocker := runtime.NewDockerBackendWithConfig(logger, runtime.DockerBackendConfig{
 		ContainerPrefix: "demo_",
 		CleanupOnExit:   true,
-		CustomImages: map[execution.Language]string{
-			execution.LangPython: "python:3.12-slim",
+		CustomImages: map[runtime.Language]string{
+			runtime.LangPython: "python:3.12-slim",
 		},
 	})
 	_ = customDocker.Name()
 	_, _ = customDocker.Execute(ctx, req, config)
 	_ = customDocker.Cleanup()
 
-	realDocker := execution.NewRealDockerBackend(logger)
+	realDocker := runtime.NewRealDockerBackend(logger)
 	_, _ = realDocker.Execute(ctx, req, config)
 	_ = realDocker.Cleanup()
 
-	processBackend := execution.NewProcessBackend(logger)
+	processBackend := runtime.NewProcessBackend(logger)
 	_ = processBackend.Name()
-	_, _ = processBackend.Execute(ctx, &execution.ExecutionRequest{
+	_, _ = processBackend.Execute(ctx, &runtime.ExecutionRequest{
 		ID:       "proc-disabled",
-		Language: execution.LangPython,
+		Language: runtime.LangPython,
 		Code:     "print('process')",
 	}, config)
 	_ = processBackend.Cleanup()
 
-	realProcess := execution.NewRealProcessBackend(logger, false)
-	_, _ = realProcess.Execute(ctx, &execution.ExecutionRequest{
+	realProcess := runtime.NewRealProcessBackend(logger, false)
+	_, _ = realProcess.Execute(ctx, &runtime.ExecutionRequest{
 		ID:       "real-proc-disabled",
-		Language: execution.LangPython,
+		Language: runtime.LangPython,
 		Code:     "print('safe')",
 	}, config)
 
-	processEnabled := execution.NewRealProcessBackend(logger, true)
-	_, _ = processEnabled.Execute(ctx, &execution.ExecutionRequest{
+	processEnabled := runtime.NewRealProcessBackend(logger, true)
+	_, _ = processEnabled.Execute(ctx, &runtime.ExecutionRequest{
 		ID:       "real-proc-enabled",
-		Language: execution.LangPython,
+		Language: runtime.LangPython,
 		Code:     "print('ok')",
 	}, config)
 
-	tool := execution.NewSandboxTool(sandbox, logger)
-	payload, _ := json.Marshal(execution.ExecutionRequest{
+	tool := runtime.NewSandboxTool(sandbox, logger)
+	payload, _ := json.Marshal(runtime.ExecutionRequest{
 		ID:       "tool-demo",
-		Language: execution.LangPython,
+		Language: runtime.LangPython,
 		Code:     "print('tool')",
 	})
 	_, _ = tool.Execute(ctx, payload)
 
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel()
-	_ = execution.PullImage(cancelCtx, "alpine:latest", logger)
-	_ = execution.EnsureImages(cancelCtx, []execution.Language{execution.LangPython}, logger)
+	_ = runtime.PullImage(cancelCtx, "alpine:latest", logger)
+	_ = runtime.EnsureImages(cancelCtx, []runtime.Language{runtime.LangPython}, logger)
 
-	step := execution.NewRetrievalStep(&demoRetriever{}, &demoReranker{}, logger)
+	step := runtime.NewRetrievalStep(&demoRetriever{}, &demoReranker{}, logger)
 	stepCtx := types.WithTraceID(ctx, "trace-exec")
 	stepCtx = types.WithRunID(stepCtx, "run-exec")
 	stepCtx = types.WithSpanID(stepCtx, "span-exec")
-	_, _ = step.Execute(stepCtx, execution.RetrievalStepRequest{
+	_, _ = step.Execute(stepCtx, runtime.RetrievalStepRequest{
 		Query: "retrieve execution docs",
 		TopK:  3,
 	})

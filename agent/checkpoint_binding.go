@@ -1200,6 +1200,11 @@ type CheckpointStore interface {
 
 var checkpointIDCounter uint64
 
+// GenerateCheckpointID exposes checkpoint ID generation to checkpoint persistence subpackages.
+func GenerateCheckpointID() string {
+	return generateCheckpointID()
+}
+
 // generateCheckpointID 生成检查点 ID
 func generateCheckpointID() string {
 	// 使用纳秒时间戳 + 原子计数器确保唯一性

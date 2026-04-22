@@ -20,7 +20,7 @@ import (
 // Mock Agent
 // ---------------------------------------------------------------------------
 
-type mockAgent struct {
+type multiAgentSystemMock struct {
 	id        string
 	name      string
 	agentType agent.AgentType
@@ -30,8 +30,8 @@ type mockAgent struct {
 	callCount atomic.Int32
 }
 
-func newMockAgent(id, name string) *mockAgent {
-	return &mockAgent{
+func newSystemMockAgent(id, name string) *multiAgentSystemMock {
+	return &multiAgentSystemMock{
 		id:        id,
 		name:      name,
 		agentType: agent.TypeGeneric,
@@ -41,27 +41,27 @@ func newMockAgent(id, name string) *mockAgent {
 	}
 }
 
-func (m *mockAgent) WithOutput(content string) *mockAgent {
+func (m *multiAgentSystemMock) WithOutput(content string) *multiAgentSystemMock {
 	m.output = &agent.Output{Content: content}
 	return m
 }
 
-func (m *mockAgent) WithError(err error) *mockAgent {
+func (m *multiAgentSystemMock) WithError(err error) *multiAgentSystemMock {
 	m.err = err
 	return m
 }
 
-func (m *mockAgent) ID() string                     { return m.id }
-func (m *mockAgent) Name() string                   { return m.name }
-func (m *mockAgent) Type() agent.AgentType          { return m.agentType }
-func (m *mockAgent) State() agent.State             { return m.state }
-func (m *mockAgent) Init(context.Context) error     { return nil }
-func (m *mockAgent) Teardown(context.Context) error { return nil }
-func (m *mockAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
+func (m *multiAgentSystemMock) ID() string                     { return m.id }
+func (m *multiAgentSystemMock) Name() string                   { return m.name }
+func (m *multiAgentSystemMock) Type() agent.AgentType          { return m.agentType }
+func (m *multiAgentSystemMock) State() agent.State             { return m.state }
+func (m *multiAgentSystemMock) Init(context.Context) error     { return nil }
+func (m *multiAgentSystemMock) Teardown(context.Context) error { return nil }
+func (m *multiAgentSystemMock) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return &agent.PlanResult{}, nil
 }
-func (m *mockAgent) Observe(context.Context, *agent.Feedback) error { return nil }
-func (m *mockAgent) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
+func (m *multiAgentSystemMock) Observe(context.Context, *agent.Feedback) error { return nil }
+func (m *multiAgentSystemMock) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
 	m.callCount.Add(1)
 	if m.err != nil {
 		return nil, m.err
@@ -91,8 +91,8 @@ func TestDefaultMultiAgentConfig(t *testing.T) {
 
 func TestNewMultiAgentSystem_CreatesAgentMap(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1")
-	a2 := newMockAgent("a2", "Agent2")
+	a1 := newSystemMockAgent("a1", "Agent1")
+	a2 := newSystemMockAgent("a2", "Agent2")
 
 	cfg := DefaultMultiAgentConfig()
 	sys := NewMultiAgentSystem([]agent.Agent{a1, a2}, cfg, zap.NewNop())
@@ -104,7 +104,7 @@ func TestNewMultiAgentSystem_CreatesAgentMap(t *testing.T) {
 
 func TestNewMultiAgentSystem_NilLogger(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1")
+	a1 := newSystemMockAgent("a1", "Agent1")
 	cfg := DefaultMultiAgentConfig()
 	sys := NewMultiAgentSystem([]agent.Agent{a1}, cfg, nil)
 	assert.NotNil(t, sys)
@@ -127,7 +127,7 @@ func TestNewMultiAgentSystem_PatternSelection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			a := newMockAgent("a1", "Agent1")
+			a := newSystemMockAgent("a1", "Agent1")
 			cfg := DefaultMultiAgentConfig()
 			cfg.Pattern = tt.pattern
 			sys := NewMultiAgentSystem([]agent.Agent{a}, cfg, zap.NewNop())
@@ -264,8 +264,8 @@ func TestMessageHub_RecoverMessagesWithoutStore(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_Debate(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithOutput("opinion A")
-	a2 := newMockAgent("a2", "Agent2").WithOutput("opinion B")
+	a1 := newSystemMockAgent("a1", "Agent1").WithOutput("opinion A")
+	a2 := newSystemMockAgent("a2", "Agent2").WithOutput("opinion B")
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternDebate
@@ -285,8 +285,8 @@ func TestMultiAgentSystem_Execute_Debate(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_Consensus(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithOutput("consensus answer")
-	a2 := newMockAgent("a2", "Agent2").WithOutput("consensus answer")
+	a1 := newSystemMockAgent("a1", "Agent1").WithOutput("consensus answer")
+	a2 := newSystemMockAgent("a2", "Agent2").WithOutput("consensus answer")
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternConsensus
@@ -301,8 +301,8 @@ func TestMultiAgentSystem_Execute_Consensus(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_Pipeline(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithOutput("step1 result")
-	a2 := newMockAgent("a2", "Agent2").WithOutput("step2 result")
+	a1 := newSystemMockAgent("a1", "Agent1").WithOutput("step1 result")
+	a2 := newSystemMockAgent("a2", "Agent2").WithOutput("step2 result")
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternPipeline
@@ -317,8 +317,8 @@ func TestMultiAgentSystem_Execute_Pipeline(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_Broadcast(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithOutput("broadcast result 1")
-	a2 := newMockAgent("a2", "Agent2").WithOutput("broadcast result 2")
+	a1 := newSystemMockAgent("a1", "Agent1").WithOutput("broadcast result 1")
+	a2 := newSystemMockAgent("a2", "Agent2").WithOutput("broadcast result 2")
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternBroadcast
@@ -337,7 +337,7 @@ func TestMultiAgentSystem_Execute_Broadcast(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_Network(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithOutput("network result")
+	a1 := newSystemMockAgent("a1", "Agent1").WithOutput("network result")
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternNetwork
@@ -356,8 +356,8 @@ func TestMultiAgentSystem_Execute_Network(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_AllAgentsFail_Broadcast(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithError(errors.New("fail1"))
-	a2 := newMockAgent("a2", "Agent2").WithError(errors.New("fail2"))
+	a1 := newSystemMockAgent("a1", "Agent1").WithError(errors.New("fail1"))
+	a2 := newSystemMockAgent("a2", "Agent2").WithError(errors.New("fail2"))
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternBroadcast
@@ -372,7 +372,7 @@ func TestMultiAgentSystem_Execute_AllAgentsFail_Broadcast(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_AllAgentsFail_Consensus(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithError(errors.New("fail"))
+	a1 := newSystemMockAgent("a1", "Agent1").WithError(errors.New("fail"))
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternConsensus
@@ -387,8 +387,8 @@ func TestMultiAgentSystem_Execute_AllAgentsFail_Consensus(t *testing.T) {
 
 func TestMultiAgentSystem_Execute_PipelineStageFailure(t *testing.T) {
 	t.Parallel()
-	a1 := newMockAgent("a1", "Agent1").WithOutput("ok")
-	a2 := newMockAgent("a2", "Agent2").WithError(errors.New("stage 2 failed"))
+	a1 := newSystemMockAgent("a1", "Agent1").WithOutput("ok")
+	a2 := newSystemMockAgent("a2", "Agent2").WithError(errors.New("stage 2 failed"))
 
 	cfg := DefaultMultiAgentConfig()
 	cfg.Pattern = PatternPipeline

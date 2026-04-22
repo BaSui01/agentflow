@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/BaSui01/agentflow/agent"
+	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -40,7 +40,7 @@ func RegisterDefaultRuntimeAgentFactory(
 			EnableSkills:         true,
 			EnableEnhancedMemory: true,
 			EnableObservability:  true,
-			SkillsConfig:         &skills.SkillManagerConfig{MaxLoadedSkills: 50},
+			SkillsConfig:         &agenttools.SkillManagerConfig{MaxLoadedSkills: 50},
 			MemoryManager:        mem,
 			ToolManager:          tm,
 			EventBus:             bus,

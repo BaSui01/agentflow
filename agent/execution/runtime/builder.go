@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent"
-	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
-	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
+	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
 	"github.com/BaSui01/agentflow/agent/capabilities/memory"
-	agentobs "github.com/BaSui01/agentflow/agent/observability/monitoring"
-	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
+	agentobs "github.com/BaSui01/agentflow/agent/observability/monitoring"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -56,7 +57,7 @@ type BuildOptions struct {
 	EventBus                 agent.EventBus
 	LSPClient                agent.LSPClientRunner
 	ExecutionOptionsResolver agent.ExecutionOptionsResolver
-	ChatRequestAdapter       agent.ChatRequestAdapter
+	ChatRequestAdapter       agentadapters.ChatRequestAdapter
 	ToolProtocolRuntime      agent.ToolProtocolRuntime
 	ReasoningRuntime         agent.ReasoningRuntime
 
@@ -98,7 +99,7 @@ func DefaultBuildOptions() BuildOptions {
 
 func enabled(all bool, v bool) bool { return all || v }
 
-// Builder 是 agent/runtime 的唯一构建入口。
+// Builder 是 agent/execution/runtime 的唯一构建入口。
 type Builder struct {
 	gateway     llmcore.Gateway
 	toolGateway llmcore.Gateway
@@ -182,7 +183,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
 
-	ag := agent.NewBaseAgent(
+	ag := agent.BuildBaseAgent(
 		cfg2,
 		b.gateway,
 		opts.MemoryManager,

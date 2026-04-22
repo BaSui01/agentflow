@@ -6,7 +6,6 @@ import (
 	"log"
 
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
-	"github.com/BaSui01/agentflow/agent/guardrails"
 	"go.uber.org/zap"
 )
 
@@ -27,8 +26,8 @@ func main() {
 	// 4. Output Filter + Registry Example
 	demonstrateOutputAndRegistries(ctx)
 
-	// 5. Guardcore Coordinator Example
-	demonstrateGuardcoreCoordinator(ctx)
+	// 5. Guardrails Coordinator Example
+	demonstrateGuardrailsCoordinator(ctx)
 
 	// 6. Shadow AI Advanced Example
 	demonstrateShadowAI(ctx)
@@ -217,9 +216,9 @@ func demonstrateOutputAndRegistries(ctx context.Context) {
 	fmt.Println("Output/registry paths wired")
 }
 
-// demonstrateGuardcoreCoordinator wires guardcore coordinator APIs.
-func demonstrateGuardcoreCoordinator(ctx context.Context) {
-	fmt.Println("--- 5. Guardcore Coordinator ---")
+// demonstrateGuardrailsCoordinator wires coordinator APIs from the guardrails capability package.
+func demonstrateGuardrailsCoordinator(ctx context.Context) {
+	fmt.Println("--- 5. Guardrails Coordinator ---")
 
 	cfg := guardrails.DefaultConfig()
 	cfg.BlockedKeywords = []string{"forbidden"}
@@ -227,7 +226,7 @@ func demonstrateGuardcoreCoordinator(ctx context.Context) {
 	cfg.PIIDetectionEnabled = true
 	cfg.MaxInputLength = 200
 
-	c := guardcore.NewCoordinator(cfg, zapLogger())
+	c := guardrails.NewCoordinator(cfg, zapLogger())
 	_, _ = c.ValidateInput(ctx, "this has forbidden keyword")
 	_, _, _ = c.ValidateOutput(ctx, "safe output")
 
@@ -283,4 +282,3 @@ func truncate(s string, maxLen int) string {
 	}
 	return string(runes[:maxLen]) + "..."
 }
-

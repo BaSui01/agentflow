@@ -1,10 +1,12 @@
-package agent
+package agent_test
 
 import (
 	"context"
 	"sync"
 	"testing"
 
+	. "github.com/BaSui01/agentflow/agent"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -16,14 +18,14 @@ import (
 // re-Locks), creating a window where concurrent writes could corrupt state.
 func TestFileCheckpointStore_Rollback_NoRaceWindow(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Seed two versions so we have something to rollback to.
 	cp1 := &Checkpoint{
-		ID:       generateCheckpointID(),
+		ID:       GenerateCheckpointID(),
 		ThreadID: "thread-race",
 		AgentID:  "agent-1",
 		State:    StateInit,
@@ -32,7 +34,7 @@ func TestFileCheckpointStore_Rollback_NoRaceWindow(t *testing.T) {
 	require.NoError(t, store.Save(ctx, cp1))
 
 	cp2 := &Checkpoint{
-		ID:       generateCheckpointID(),
+		ID:       GenerateCheckpointID(),
 		ThreadID: "thread-race",
 		AgentID:  "agent-1",
 		State:    StateRunning,
@@ -52,7 +54,7 @@ func TestFileCheckpointStore_Rollback_NoRaceWindow(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		cp3 := &Checkpoint{
-			ID:       generateCheckpointID(),
+			ID:       GenerateCheckpointID(),
 			ThreadID: "thread-race",
 			AgentID:  "agent-1",
 			State:    StateReady,
@@ -81,18 +83,18 @@ func TestFileCheckpointStore_Rollback_NoRaceWindow(t *testing.T) {
 // the new checkpoint should carry the state of the target version.
 func TestFileCheckpointStore_Rollback_Basic(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Create version 1 (StateInit) and version 2 (StateRunning).
 	require.NoError(t, store.Save(ctx, &Checkpoint{
-		ID: generateCheckpointID(), ThreadID: "t1", AgentID: "a1",
+		ID: GenerateCheckpointID(), ThreadID: "t1", AgentID: "a1",
 		State: StateInit, Metadata: map[string]any{},
 	}))
 	require.NoError(t, store.Save(ctx, &Checkpoint{
-		ID: generateCheckpointID(), ThreadID: "t1", AgentID: "a1",
+		ID: GenerateCheckpointID(), ThreadID: "t1", AgentID: "a1",
 		State: StateRunning, Metadata: map[string]any{},
 	}))
 

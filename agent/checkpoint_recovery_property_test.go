@@ -1,4 +1,4 @@
-package agent
+package agent_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/BaSui01/agentflow/agent"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -257,7 +259,7 @@ func TestProperty_CheckpointRecovery_WithCheckpointStore(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		// 设置
 		logger, _ := zap.NewDevelopment()
-		store, err := NewFileCheckpointStore(t.TempDir(), logger)
+		store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 		require.NoError(t, err)
 
 		// 生成测试参数
@@ -270,7 +272,7 @@ func TestProperty_CheckpointRecovery_WithCheckpointStore(t *testing.T) {
 
 		// 创建并保存代表部分执行的检查点
 		checkpoint := &Checkpoint{
-			ID:        generateCheckpointID(),
+			ID:        GenerateCheckpointID(),
 			ThreadID:  threadID,
 			AgentID:   agentID,
 			State:     StateRunning,

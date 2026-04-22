@@ -1,10 +1,12 @@
-package agent
+package agent_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
+	. "github.com/BaSui01/agentflow/agent"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -12,7 +14,7 @@ import (
 
 func TestCheckpointManager_CreateCheckpoint(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
@@ -39,7 +41,7 @@ func TestCheckpointManager_CreateCheckpoint(t *testing.T) {
 
 func TestCheckpointManager_RollbackToVersion(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
@@ -88,7 +90,7 @@ func TestCheckpointManager_RollbackToVersion(t *testing.T) {
 
 func TestCheckpointManager_CompareVersions(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
@@ -127,7 +129,7 @@ func TestCheckpointManager_CompareVersions(t *testing.T) {
 
 func TestCheckpointManager_AutoSave(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
@@ -158,13 +160,13 @@ func TestCheckpointManager_AutoSave(t *testing.T) {
 
 func TestCheckpointManager_LoadCheckpointForAgent(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
 	agent := &mockAgent{id: "test-agent", state: StateReady}
 	checkpoint := &Checkpoint{
-		ID:        generateCheckpointID(),
+		ID:        GenerateCheckpointID(),
 		ThreadID:  "thread-1",
 		AgentID:   "test-agent",
 		State:     StateRunning,
@@ -181,21 +183,21 @@ func TestCheckpointManager_LoadCheckpointForAgent(t *testing.T) {
 
 func TestCheckpointManager_LoadLatestCheckpointForAgent(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
 	agent := &mockAgent{id: "test-agent", state: StateReady}
 	threadID := "thread-1"
 	require.NoError(t, store.Save(context.Background(), &Checkpoint{
-		ID:        generateCheckpointID(),
+		ID:        GenerateCheckpointID(),
 		ThreadID:  threadID,
 		AgentID:   "test-agent",
 		State:     StateInit,
 		CreatedAt: time.Now().Add(-time.Minute),
 	}))
 	latest := &Checkpoint{
-		ID:        generateCheckpointID(),
+		ID:        GenerateCheckpointID(),
 		ThreadID:  threadID,
 		AgentID:   "test-agent",
 		State:     StateRunning,
@@ -212,7 +214,7 @@ func TestCheckpointManager_LoadLatestCheckpointForAgent(t *testing.T) {
 
 func TestCheckpointManager_SaveCheckpointPreservesLoopPersistenceFields(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)
@@ -280,7 +282,7 @@ func TestCheckpointManager_SaveCheckpointPreservesLoopPersistenceFields(t *testi
 
 func TestCheckpointManager_SaveCheckpointNormalizesLoopPersistenceFieldsFromExecutionContext(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	manager := NewCheckpointManager(store, logger)

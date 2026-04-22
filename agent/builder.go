@@ -1,23 +1,28 @@
 package agent
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"strings"
-
-	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
-	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
+	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/agent/capabilities/memory"
-	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/types"
-
-	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
+	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
+	"os"
+	"strings"
+	"sync"
+	"time"
 )
 
 // AgentBuilder 提供流式构建 Agent 的能力
@@ -64,7 +69,7 @@ type AgentBuilder struct {
 }
 
 // newAgentBuilder 创建 Agent 构建器。
-// 正式构造入口已收敛到 agent/runtime.Builder，这里仅保留包内构建核心。
+// 正式构造入口已收敛到 agent/execution/runtime.Builder，这里仅保留包内构建核心。
 func newAgentBuilder(config types.AgentConfig) *AgentBuilder {
 	ensureAgentType(&config)
 	b := &AgentBuilder{
@@ -450,7 +455,7 @@ func (b *AgentBuilder) ensureBuildLogger() {
 }
 
 func (b *AgentBuilder) newBaseAgent() *BaseAgent {
-	return NewBaseAgent(
+	return BuildBaseAgent(
 		b.config,
 		b.gateway,
 		b.memory,
@@ -872,4 +877,1316 @@ func registerReasoningPatternsForExposure(
 
 	idCfg := reasoning.DefaultIterativeDeepeningConfig()
 	registerDefaultReasoningPattern(registry, reasoning.NewIterativeDeepening(gateway, toolExecutor, idCfg, logger), logger)
+}
+
+// Merged from base_agent.go.
+
+// ExecutionFunc is the core agent execution function signature.
+type ExecutionFunc func(ctx context.Context, input *Input) (*Output, error)
+
+// ExecutionMiddleware wraps an ExecutionFunc, adding pre/post processing.
+// Call next to proceed to the next middleware (or the core executor).
+type ExecutionMiddleware func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error)
+
+// ExecutionPipeline chains middlewares around a core ExecutionFunc.
+type ExecutionPipeline struct {
+	middlewares []ExecutionMiddleware
+	core        ExecutionFunc
+}
+
+// NewExecutionPipeline creates a pipeline that wraps the given core function.
+func NewExecutionPipeline(core ExecutionFunc) *ExecutionPipeline {
+	return &ExecutionPipeline{core: core}
+}
+
+// Use appends one or more middlewares. They execute in the order added.
+func (p *ExecutionPipeline) Use(mws ...ExecutionMiddleware) {
+	p.middlewares = append(p.middlewares, mws...)
+}
+
+// Execute runs the full middleware chain followed by the core function.
+func (p *ExecutionPipeline) Execute(ctx context.Context, input *Input) (*Output, error) {
+	if input == nil {
+		return nil, NewError(types.ErrInputValidation, "pipeline input is nil")
+	}
+	fn := p.core
+	for i := len(p.middlewares) - 1; i >= 0; i-- {
+		mw := p.middlewares[i]
+		next := fn
+		fn = func(ctx context.Context, input *Input) (*Output, error) {
+			return mw(ctx, input, next)
+		}
+	}
+	return fn(ctx, input)
+}
+
+type enhancedCtxKey int
+
+const (
+	ctxKeySkillInstructions enhancedCtxKey = iota
+	ctxKeyMemoryContext
+)
+
+func withSkillInstructions(ctx context.Context, instructions []string) context.Context {
+	return context.WithValue(ctx, ctxKeySkillInstructions, instructions)
+}
+
+func skillInstructionsFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxKeySkillInstructions).([]string)
+	return v
+}
+
+func withMemoryContext(ctx context.Context, memCtx []string) context.Context {
+	return context.WithValue(ctx, ctxKeyMemoryContext, memCtx)
+}
+
+func memoryContextFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxKeyMemoryContext).([]string)
+	return v
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+func shallowCopyInput(in *Input) *Input {
+	cp := *in
+	if in.Context != nil {
+		cp.Context = make(map[string]any, len(in.Context))
+		for k, v := range in.Context {
+			cp.Context[k] = v
+		}
+	}
+	return &cp
+}
+
+func normalizeInstructionList(instructions []string) []string {
+	if len(instructions) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(instructions))
+	cleaned := make([]string, 0, len(instructions))
+	for _, instruction := range instructions {
+		instruction = strings.TrimSpace(instruction)
+		if instruction == "" {
+			continue
+		}
+		if _, exists := unique[instruction]; exists {
+			continue
+		}
+		unique[instruction] = struct{}{}
+		cleaned = append(cleaned, instruction)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+func explainabilityTimelineRecorder(obs ObservabilityRunner) ExplainabilityTimelineRecorder {
+	recorder, _ := obs.(ExplainabilityTimelineRecorder)
+	return recorder
+}
+
+// BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
+type BaseAgent struct {
+	config               types.AgentConfig
+	promptBundle         PromptBundle
+	runtimeGuardrailsCfg *guardrails.GuardrailsConfig
+	state                State
+	stateMu              sync.RWMutex
+	execSem              *semaphore.Weighted // 执行信号量，控制并发执行数（默认1）
+	execCount            int64               // 当前活跃执行数（配合并发状态机）
+	configMu             sync.RWMutex        // 配置互斥锁，与 execSem 分离，避免配置方法与 Execute 争用
+
+	mainGateway          llmcore.Gateway
+	toolGateway          llmcore.Gateway
+	mainProviderCompat   llm.Provider
+	toolProviderCompat   llm.Provider
+	gatewayProviderCache llm.Provider
+	toolGatewayProvider  llm.Provider
+	ledger               observability.Ledger
+	memory               MemoryManager
+	toolManager          ToolManager
+	retriever            RetrievalProvider
+	toolState            ToolStateProvider
+	bus                  EventBus
+
+	recentMemory   []MemoryRecord // 缓存最近加载的记忆
+	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
+	memoryFacade   *UnifiedMemoryFacade
+	logger         *zap.Logger
+
+	// 上下文工程相关
+	contextManager       ContextManager // 上下文管理器（可选）
+	contextEngineEnabled bool           // 是否启用上下文工程
+	ephemeralPrompt      *EphemeralPromptLayerBuilder
+	traceFeedbackPlanner TraceFeedbackPlanner
+	memoryRuntime        MemoryRuntime
+
+	// 2026 Guardrails 功能
+	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
+	inputValidatorChain *guardrails.ValidatorChain
+	outputValidator     *guardrails.OutputValidator
+	guardrailsEnabled   bool
+
+	// Composite sub-managers
+	extensions  *ExtensionRegistry
+	persistence *PersistenceStores
+	guardrails  *GuardrailsManager
+	memoryCache *MemoryCache
+
+	reasoningRegistry *reasoning.PatternRegistry
+	reasoningSelector ReasoningModeSelector
+	completionJudge   CompletionJudge
+	checkpointManager *CheckpointManager
+	optionsResolver   ExecutionOptionsResolver
+	requestAdapter    agentadapters.ChatRequestAdapter
+	toolProtocol      ToolProtocolRuntime
+	reasoningRuntime  ReasoningRuntime
+}
+
+// BuildBaseAgent 创建基础 Agent
+func BuildBaseAgent(
+	cfg types.AgentConfig,
+	gateway llmcore.Gateway,
+	memory MemoryManager,
+	toolManager ToolManager,
+	bus EventBus,
+	logger *zap.Logger,
+	ledger observability.Ledger,
+) *BaseAgent {
+	ensureAgentType(&cfg)
+	if logger == nil {
+		panic("agent.BaseAgent: logger is required and cannot be nil")
+	}
+	agentLogger := logger.With(zap.String("agent_id", cfg.Core.ID), zap.String("agent_type", cfg.Core.Type))
+
+	ba := &BaseAgent{
+		config:               cfg,
+		promptBundle:         promptBundleFromConfig(cfg),
+		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.ExecutionOptions().Control.Guardrails),
+		state:                StateInit,
+		mainGateway:          gateway,
+		mainProviderCompat:   compatProviderFromGateway(gateway),
+		ledger:               ledger,
+		memory:               memory,
+		toolManager:          toolManager,
+		bus:                  bus,
+		logger:               agentLogger,
+		ephemeralPrompt:      NewEphemeralPromptLayerBuilder(),
+		traceFeedbackPlanner: NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter()),
+		reasoningSelector:    NewDefaultReasoningModeSelector(),
+		completionJudge:      NewDefaultCompletionJudge(),
+		optionsResolver:      NewDefaultExecutionOptionsResolver(),
+		requestAdapter:       agentadapters.NewDefaultChatRequestAdapter(),
+		toolProtocol:         NewDefaultToolProtocolRuntime(),
+		execSem:              semaphore.NewWeighted(1),
+	}
+
+	// Initialize composite sub-managers for pipeline steps
+	ba.extensions = NewExtensionRegistry(agentLogger)
+	ba.persistence = NewPersistenceStores(agentLogger)
+	ba.guardrails = NewGuardrailsManager(agentLogger)
+	ba.memoryCache = NewMemoryCache(cfg.Core.ID, memory, agentLogger)
+	ba.memoryFacade = NewUnifiedMemoryFacade(memory, nil, agentLogger)
+	ba.memoryRuntime = NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return ba.memoryFacade }, func() MemoryManager { return ba.memory }, agentLogger)
+
+	// 如果配置, 初始化守护栏
+	if ba.runtimeGuardrailsCfg != nil {
+		ba.initGuardrails(ba.runtimeGuardrailsCfg)
+	}
+
+	return ba
+}
+
+// toolManagerExecutor is a pure delegator with event publishing.
+// Whitelist filtering is handled upstream in prepareChatRequest, so this
+// executor no longer duplicates that logic.
+type toolManagerExecutor struct {
+	mgr     ToolManager
+	agentID string
+	bus     EventBus
+}
+
+func newToolManagerExecutor(mgr ToolManager, agentID string, _ []string, bus EventBus) toolManagerExecutor {
+	return toolManagerExecutor{mgr: mgr, agentID: agentID, bus: bus}
+}
+
+func (e toolManagerExecutor) Execute(ctx context.Context, calls []types.ToolCall) []llmtools.ToolResult {
+	traceID, _ := types.TraceID(ctx)
+	runID, _ := types.RunID(ctx)
+	promptVer, _ := types.PromptBundleVersion(ctx)
+
+	publish := func(stage string, call types.ToolCall, errMsg string) {
+		if e.bus == nil {
+			return
+		}
+		e.bus.Publish(&ToolCallEvent{
+			AgentID_:            e.agentID,
+			RunID:               runID,
+			TraceID:             traceID,
+			PromptBundleVersion: promptVer,
+			ToolCallID:          call.ID,
+			ToolName:            call.Name,
+			Stage:               stage,
+			Error:               errMsg,
+			Timestamp_:          time.Now(),
+		})
+	}
+
+	for _, c := range calls {
+		publish("start", c, "")
+	}
+
+	if e.mgr == nil {
+		out := make([]llmtools.ToolResult, len(calls))
+		for i, c := range calls {
+			out[i] = llmtools.ToolResult{ToolCallID: c.ID, Name: c.Name, Error: "tool manager not configured"}
+			publish("end", c, out[i].Error)
+		}
+		return out
+	}
+
+	results := e.mgr.ExecuteForAgent(ctx, e.agentID, calls)
+	for i, c := range calls {
+		errMsg := ""
+		if i < len(results) {
+			errMsg = results[i].Error
+		}
+		publish("end", c, errMsg)
+	}
+	return results
+}
+
+func (e toolManagerExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) llmtools.ToolResult {
+	res := e.Execute(ctx, []types.ToolCall{call})
+	if len(res) == 0 {
+		return llmtools.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: "no tool result"}
+	}
+	return res[0]
+}
+
+// ID 返回 Agent ID
+func (b *BaseAgent) ID() string { return b.config.Core.ID }
+
+// Name 返回 Agent 名称
+func (b *BaseAgent) Name() string { return b.config.Core.Name }
+
+// Type 返回 Agent 类型
+func (b *BaseAgent) Type() AgentType { return AgentType(b.config.Core.Type) }
+
+// State 返回当前状态
+func (b *BaseAgent) State() State {
+	b.stateMu.RLock()
+	defer b.stateMu.RUnlock()
+	return b.state
+}
+
+// Transition 状态转换（带校验）
+func (b *BaseAgent) Transition(ctx context.Context, to State) error {
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+
+	from := b.state
+	if !CanTransition(from, to) {
+		return ErrInvalidTransition{From: from, To: to}
+	}
+
+	b.state = to
+	b.logger.Info("state transition",
+		zap.String("agent_id", b.config.Core.ID),
+		zap.String("from", string(from)),
+		zap.String("to", string(to)),
+	)
+
+	// 发布状态变更事件
+	if b.bus != nil {
+		b.bus.Publish(&StateChangeEvent{
+			AgentID_:   b.config.Core.ID,
+			FromState:  from,
+			ToState:    to,
+			Timestamp_: time.Now(),
+		})
+	}
+
+	return nil
+}
+
+// Init 初始化 Agent
+func (b *BaseAgent) Init(ctx context.Context) error {
+	b.logger.Info("initializing agent")
+
+	// 加载记忆（如果有）并缓存
+	if b.memory != nil {
+		records, err := b.memory.LoadRecent(ctx, b.config.Core.ID, MemoryShortTerm, defaultMaxRecentMemory)
+		if err != nil {
+			b.logger.Warn("failed to load memory", zap.Error(err))
+		} else {
+			b.recentMemoryMu.Lock()
+			b.recentMemory = records
+			b.recentMemoryMu.Unlock()
+		}
+	}
+
+	return b.Transition(ctx, StateReady)
+}
+
+// Teardown 清理资源
+func (b *BaseAgent) Teardown(ctx context.Context) error {
+	b.logger.Info("tearing down agent")
+	return b.extensions.TeardownExtensions(ctx)
+}
+
+// execLockWaitTimeout 短超时等待，避免并发请求直接返回 ErrAgentBusy
+const execLockWaitTimeout = 100 * time.Millisecond
+
+// TryLockExec 尝试获取执行槽位，防止并发执行超出限制。
+// 在超时时间内（默认 100ms）会等待，而非立即返回失败。
+func (b *BaseAgent) TryLockExec() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), execLockWaitTimeout)
+	defer cancel()
+	return b.execSem.Acquire(ctx, 1) == nil
+}
+
+// UnlockExec 释放执行槽位。
+func (b *BaseAgent) UnlockExec() {
+	b.execSem.Release(1)
+}
+
+// SetMaxConcurrency 设置 Agent 的最大并发执行数（默认 1）。
+// 如果当前有执行在进行，会等待它们完成后才生效。
+func (b *BaseAgent) SetMaxConcurrency(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	// 获取全部旧容量，确保没有正在执行的请求
+	_ = b.execSem.Acquire(context.Background(), 1)
+	b.execSem.Release(1)
+	b.execSem = semaphore.NewWeighted(int64(n))
+}
+
+// EnsureReady 确保 Agent 处于就绪状态
+func (b *BaseAgent) EnsureReady() error {
+	state := b.State()
+	if state != StateReady && state != StateRunning {
+		return ErrAgentNotReady
+	}
+	return nil
+}
+
+// SaveMemory 保存记忆并同步更新本地缓存
+func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryKind, metadata map[string]any) error {
+	if b.memory == nil {
+		return nil
+	}
+
+	rec := MemoryRecord{
+		AgentID:   b.config.Core.ID,
+		Kind:      kind,
+		Content:   content,
+		Metadata:  metadata,
+		CreatedAt: time.Now(),
+	}
+
+	if err := b.memory.Save(ctx, rec); err != nil {
+		return err
+	}
+
+	// Write-through: keep the in-process cache consistent so that
+	// subsequent Execute() calls within the same agent instance see
+	// the newly saved record without a full reload.
+	b.recentMemoryMu.Lock()
+	b.recentMemory = append(b.recentMemory, rec)
+	if len(b.recentMemory) > defaultMaxRecentMemory {
+		b.recentMemory = b.recentMemory[len(b.recentMemory)-defaultMaxRecentMemory:]
+	}
+	b.recentMemoryMu.Unlock()
+
+	return nil
+}
+
+// RecallMemory 检索记忆
+func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
+	if b.memory == nil {
+		return []MemoryRecord{}, nil
+	}
+	return b.memory.Search(ctx, b.config.Core.ID, query, topK)
+}
+
+// MainGateway 返回主请求链路使用的 gateway。
+func (b *BaseAgent) MainGateway() llmcore.Gateway {
+	if b == nil {
+		return nil
+	}
+	return b.mainGateway
+}
+
+func (b *BaseAgent) hasMainExecutionSurface() bool {
+	return b != nil && b.MainGateway() != nil
+}
+
+func (b *BaseAgent) hasDedicatedToolExecutionSurface() bool {
+	if b == nil {
+		return false
+	}
+	return b.toolGateway != nil
+}
+
+// ToolGateway 返回工具调用链路使用的 gateway（未配置时回退到主 gateway）。
+func (b *BaseAgent) ToolGateway() llmcore.Gateway {
+	if b == nil {
+		return nil
+	}
+	if b.toolGateway == nil {
+		return b.MainGateway()
+	}
+	return b.toolGateway
+}
+
+// SetToolGateway injects a pre-built shared tool gateway.
+func (b *BaseAgent) SetToolGateway(gw llmcore.Gateway) {
+	b.toolGateway = gw
+	b.toolProviderCompat = compatProviderFromGateway(gw)
+	b.toolGatewayProvider = nil
+}
+
+// SetGateway injects a pre-built shared Gateway instance.
+func (b *BaseAgent) SetGateway(gw llmcore.Gateway) {
+	b.mainGateway = gw
+	b.mainProviderCompat = compatProviderFromGateway(gw)
+	b.gatewayProviderCache = nil
+}
+
+func (b *BaseAgent) gatewayProvider() llm.Provider {
+	gateway := b.MainGateway()
+	if gateway != nil {
+		if b.gatewayProviderCache != nil {
+			return b.gatewayProviderCache
+		}
+		return llmgateway.NewChatProviderAdapter(gateway, b.mainProviderCompat)
+	}
+	return nil
+}
+
+func (b *BaseAgent) gatewayToolProvider() llm.Provider {
+	if b.hasDedicatedToolExecutionSurface() {
+		toolGateway := b.ToolGateway()
+		if toolGateway != nil {
+			if b.toolGatewayProvider != nil {
+				return b.toolGatewayProvider
+			}
+			return llmgateway.NewChatProviderAdapter(toolGateway, b.toolProviderCompat)
+		}
+	}
+	return b.gatewayProvider()
+}
+
+type providerBackedGateway interface {
+	ChatProvider() llm.Provider
+}
+
+func compatProviderFromGateway(gateway llmcore.Gateway) llm.Provider {
+	if gateway == nil {
+		return nil
+	}
+	backed, ok := gateway.(providerBackedGateway)
+	if !ok {
+		return nil
+	}
+	return backed.ChatProvider()
+}
+
+func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llmcore.Gateway {
+	if provider == nil {
+		return nil
+	}
+	return llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Ledger:       ledger,
+		Logger:       logger,
+	})
+}
+
+// maxReActIterations 返回 ReAct 最大迭代次数，默认 10
+func (b *BaseAgent) maxReActIterations() int {
+	if value := b.config.ExecutionOptions().Control.MaxReActIterations; value > 0 {
+		return value
+	}
+	return 10
+}
+
+// Memory 返回记忆管理器
+func (b *BaseAgent) Memory() MemoryManager { return b.memory }
+
+// Tools 返回工具注册中心
+func (b *BaseAgent) Tools() ToolManager { return b.toolManager }
+
+// SetRetrievalProvider configures retrieval-backed context injection.
+func (b *BaseAgent) SetRetrievalProvider(provider RetrievalProvider) {
+	b.retriever = provider
+}
+
+// SetToolStateProvider configures tool/artifact state-backed context injection.
+func (b *BaseAgent) SetToolStateProvider(provider ToolStateProvider) {
+	b.toolState = provider
+}
+
+// Config 返回配置
+func (b *BaseAgent) Config() types.AgentConfig { return b.config }
+
+// Logger 返回日志器
+func (b *BaseAgent) Logger() *zap.Logger { return b.logger }
+
+// SetContextManager 设置上下文管理器
+func (b *BaseAgent) SetContextManager(cm ContextManager) {
+	b.contextManager = cm
+	b.contextEngineEnabled = cm != nil
+	if cm != nil {
+		b.logger.Info("context manager enabled")
+	}
+}
+
+// ContextEngineEnabled 返回上下文工程是否启用
+func (b *BaseAgent) ContextEngineEnabled() bool {
+	return b.contextEngineEnabled
+}
+
+// SetPromptStore sets the prompt store provider.
+func (b *BaseAgent) SetPromptStore(store PromptStoreProvider) {
+	b.persistence.SetPromptStore(store)
+}
+
+// SetConversationStore sets the conversation store provider.
+func (b *BaseAgent) SetConversationStore(store ConversationStoreProvider) {
+	b.persistence.SetConversationStore(store)
+}
+
+// SetRunStore sets the run store provider.
+func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
+	b.persistence.SetRunStore(store)
+}
+
+// SetReasoningRegistry stores the reasoning registry used by the default loop executor.
+func (b *BaseAgent) SetReasoningRegistry(registry *reasoning.PatternRegistry) {
+	b.reasoningRegistry = registry
+}
+
+// ReasoningRegistry returns the configured reasoning registry.
+func (b *BaseAgent) ReasoningRegistry() *reasoning.PatternRegistry {
+	return b.reasoningRegistry
+}
+
+// SetReasoningModeSelector stores the mode selector used by the default loop executor.
+func (b *BaseAgent) SetReasoningModeSelector(selector ReasoningModeSelector) {
+	b.reasoningSelector = selector
+}
+
+// SetExecutionOptionsResolver stores the resolver used by request preparation.
+func (b *BaseAgent) SetExecutionOptionsResolver(resolver ExecutionOptionsResolver) {
+	if resolver == nil {
+		b.optionsResolver = NewDefaultExecutionOptionsResolver()
+		return
+	}
+	b.optionsResolver = resolver
+}
+
+func (b *BaseAgent) executionOptionsResolver() ExecutionOptionsResolver {
+	if b.optionsResolver == nil {
+		return NewDefaultExecutionOptionsResolver()
+	}
+	return b.optionsResolver
+}
+
+// SetChatRequestAdapter stores the adapter used to build ChatRequest DTOs.
+func (b *BaseAgent) SetChatRequestAdapter(adapter agentadapters.ChatRequestAdapter) {
+	if adapter == nil {
+		b.requestAdapter = agentadapters.NewDefaultChatRequestAdapter()
+		return
+	}
+	b.requestAdapter = adapter
+}
+
+func (b *BaseAgent) chatRequestAdapter() agentadapters.ChatRequestAdapter {
+	if b.requestAdapter == nil {
+		return agentadapters.NewDefaultChatRequestAdapter()
+	}
+	return b.requestAdapter
+}
+
+// SetToolProtocolRuntime stores the runtime that materializes tool execution.
+func (b *BaseAgent) SetToolProtocolRuntime(runtime ToolProtocolRuntime) {
+	if runtime == nil {
+		b.toolProtocol = NewDefaultToolProtocolRuntime()
+		return
+	}
+	b.toolProtocol = runtime
+}
+
+func (b *BaseAgent) toolProtocolRuntime() ToolProtocolRuntime {
+	if b.toolProtocol == nil {
+		return NewDefaultToolProtocolRuntime()
+	}
+	return b.toolProtocol
+}
+
+// SetReasoningRuntime stores the runtime that unifies reasoning selection,
+// execution, and reflection for the default loop executor.
+func (b *BaseAgent) SetReasoningRuntime(runtime ReasoningRuntime) {
+	b.reasoningRuntime = runtime
+}
+
+func (b *BaseAgent) loopSelector(executionOptions types.ExecutionOptions, options EnhancedExecutionOptions) ReasoningModeSelector {
+	base := b.reasoningSelector
+	if base == nil {
+		base = NewDefaultReasoningModeSelector()
+	}
+	if !(options.UseReflection && b.extensions.ReflectionExecutor() != nil) {
+		return base
+	}
+	return reasoningModeSelectorFunc(func(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+		selection := base.Select(ctx, input, state, registry, reflectionEnabled)
+		if executionOptions.Control.DisablePlanner {
+			return selection
+		}
+		if strings.TrimSpace(selection.Mode) == "" || selection.Mode == ReasoningModeReact {
+			selection.Mode = ReasoningModeReflection
+		}
+		return selection
+	})
+}
+
+func (b *BaseAgent) effectiveReasoningRuntime(options types.ExecutionOptions, enhanced EnhancedExecutionOptions) ReasoningRuntime {
+	if b.reasoningRuntime != nil {
+		return b.reasoningRuntime
+	}
+	return NewDefaultReasoningRuntime(
+		options,
+		b.reasoningRegistry,
+		enhanced.UseReflection && b.extensions.ReflectionExecutor() != nil,
+		b.loopSelector(options, enhanced),
+		b.loopStepExecutor(enhanced),
+		b.loopReflectionStep(enhanced),
+	)
+}
+
+func (b *BaseAgent) initGuardrails(cfg *guardrails.GuardrailsConfig) {
+	b.guardrailsEnabled = true
+	b.inputValidatorChain = guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{
+		Mode: guardrails.ChainModeCollectAll,
+	})
+	for _, v := range cfg.InputValidators {
+		b.inputValidatorChain.Add(v)
+	}
+	if cfg.MaxInputLength > 0 {
+		b.inputValidatorChain.Add(guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
+			MaxLength: cfg.MaxInputLength,
+			Action:    guardrails.LengthActionReject,
+		}))
+	}
+	if len(cfg.BlockedKeywords) > 0 {
+		b.inputValidatorChain.Add(guardrails.NewKeywordValidator(&guardrails.KeywordValidatorConfig{
+			BlockedKeywords: cfg.BlockedKeywords,
+			CaseSensitive:   false,
+		}))
+	}
+	if cfg.InjectionDetection {
+		b.inputValidatorChain.Add(guardrails.NewInjectionDetector(nil))
+	}
+	if cfg.PIIDetectionEnabled {
+		b.inputValidatorChain.Add(guardrails.NewPIIDetector(nil))
+	}
+	b.outputValidator = guardrails.NewOutputValidator(&guardrails.OutputValidatorConfig{
+		Validators:     cfg.OutputValidators,
+		Filters:        cfg.OutputFilters,
+		EnableAuditLog: true,
+	})
+	b.logger.Info("guardrails initialized",
+		zap.Int("input_validators", b.inputValidatorChain.Len()),
+		zap.Bool("pii_detection", cfg.PIIDetectionEnabled),
+		zap.Bool("injection_detection", cfg.InjectionDetection),
+	)
+}
+
+func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	b.runtimeGuardrailsCfg = cfg
+	b.config.Features.Guardrails = typesGuardrailsFromRuntime(cfg)
+	if cfg == nil {
+		b.guardrailsEnabled = false
+		b.inputValidatorChain = nil
+		b.outputValidator = nil
+		return
+	}
+	b.initGuardrails(cfg)
+}
+
+func (b *BaseAgent) GuardrailsEnabled() bool {
+	b.configMu.RLock()
+	defer b.configMu.RUnlock()
+	return b.guardrailsEnabled
+}
+
+func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.inputValidatorChain == nil {
+		b.inputValidatorChain = guardrails.NewValidatorChain(nil)
+		b.guardrailsEnabled = true
+	}
+	b.inputValidatorChain.Add(v)
+}
+
+func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.outputValidator == nil {
+		b.outputValidator = guardrails.NewOutputValidator(nil)
+		b.guardrailsEnabled = true
+	}
+	b.outputValidator.AddValidator(v)
+}
+
+func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
+	if b.outputValidator == nil {
+		b.outputValidator = guardrails.NewOutputValidator(nil)
+		b.guardrailsEnabled = true
+	}
+	b.outputValidator.AddFilter(f)
+}
+
+type GuardrailsManager = guardrails.Manager
+
+func NewGuardrailsManager(logger *zap.Logger) *GuardrailsManager {
+	return guardrails.NewManager(logger)
+}
+
+func NewGuardrailsCoordinator(config *guardrails.GuardrailsConfig, logger *zap.Logger) *guardrails.Coordinator {
+	return guardrails.NewCoordinator(config, logger)
+}
+
+// SetTraceFeedbackPlanner stores the planner used to decide whether recent
+// trace synopsis/history should be injected back into runtime prompt layers.
+func (b *BaseAgent) SetTraceFeedbackPlanner(planner TraceFeedbackPlanner) {
+	if planner == nil {
+		b.traceFeedbackPlanner = NewComposedTraceFeedbackPlanner(NewRuleBasedTraceFeedbackPlanner(), NewHintTraceFeedbackAdapter())
+		return
+	}
+	b.traceFeedbackPlanner = planner
+}
+
+// SetMemoryRuntime stores memory recall/observe runtime used by execute path.
+func (b *BaseAgent) SetMemoryRuntime(runtime MemoryRuntime) {
+	if runtime == nil {
+		b.memoryRuntime = NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade { return b.memoryFacade }, func() MemoryManager { return b.memory }, b.logger)
+		return
+	}
+	b.memoryRuntime = runtime
+}
+
+// SetCompletionJudge stores the completion judge used by the default loop executor.
+func (b *BaseAgent) SetCompletionJudge(judge CompletionJudge) {
+	b.completionJudge = judge
+}
+
+// SetCheckpointManager stores the checkpoint manager used by the default loop executor.
+func (b *BaseAgent) SetCheckpointManager(manager *CheckpointManager) {
+	b.checkpointManager = manager
+}
+
+func (b *BaseAgent) observabilityMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		startTime := time.Now()
+		traceID := input.TraceID
+		sessionID := traceID
+		if input != nil && strings.TrimSpace(input.ChannelID) != "" {
+			sessionID = strings.TrimSpace(input.ChannelID)
+		}
+		b.extensions.ObservabilitySystemExt().StartTrace(traceID, b.ID())
+		if recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder); ok {
+			recorder.StartExplainabilityTrace(traceID, sessionID, b.ID())
+		}
+
+		output, err := next(ctx, input)
+
+		if err != nil {
+			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "failed", err)
+			if recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder); ok {
+				recorder.EndExplainabilityTrace(traceID, false, "", err.Error())
+			}
+			return nil, err
+		}
+		duration := time.Since(startTime)
+		if options.RecordMetrics {
+			b.extensions.ObservabilitySystemExt().RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
+		}
+		if options.RecordTrace {
+			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "completed", nil)
+		}
+		if recorder, ok := b.extensions.ObservabilitySystemExt().(ExplainabilityRecorder); ok {
+			recorder.EndExplainabilityTrace(traceID, true, output.Content, "")
+		}
+		b.logger.Info("enhanced execution completed",
+			zap.String("trace_id", input.TraceID),
+			zap.Duration("total_duration", duration),
+			zap.Int("tokens_used", output.TokensUsed),
+			zap.Any("prompt_layer_ids", output.Metadata["applied_prompt_layer_ids"]),
+			zap.Any("context_plan", output.Metadata["context_plan"]),
+		)
+		return output, nil
+	}
+}
+
+func (b *BaseAgent) skillsMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		query := options.SkillsQuery
+		if query == "" {
+			query = input.Content
+		}
+		b.logger.Debug("discovering skills", zap.String("trace_id", input.TraceID), zap.String("query", query))
+
+		var skillInstructions []string
+		found, err := b.extensions.SkillManagerExt().DiscoverSkills(ctx, query)
+		if err != nil {
+			b.logger.Warn("skill discovery failed", zap.String("trace_id", input.TraceID), zap.Error(err))
+		} else {
+			for _, s := range found {
+				if s == nil {
+					continue
+				}
+				skillInstructions = append(skillInstructions, s.GetInstructions())
+			}
+			b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
+		}
+
+		skillInstructions = normalizeInstructionList(skillInstructions)
+		if len(skillInstructions) > 0 {
+			input = shallowCopyInput(input)
+			if input.Context == nil {
+				input.Context = make(map[string]any, 1)
+			}
+			input.Context["skill_context"] = append([]string(nil), skillInstructions...)
+		}
+		ctx = withSkillInstructions(ctx, skillInstructions)
+		return next(ctx, input)
+	}
+}
+
+func (b *BaseAgent) memoryLoadMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		var memoryContext []string
+		if options.LoadWorkingMemory {
+			b.logger.Debug("loading working memory", zap.String("trace_id", input.TraceID))
+			working, err := b.extensions.EnhancedMemoryExt().LoadWorking(ctx, b.ID())
+			if err != nil {
+				b.logger.Warn("failed to load working memory", zap.String("trace_id", input.TraceID), zap.Error(err))
+			} else {
+				for _, entry := range working {
+					if entry.Content != "" {
+						memoryContext = append(memoryContext, entry.Content)
+					}
+				}
+				b.logger.Info("working memory loaded", zap.String("trace_id", input.TraceID), zap.Int("count", len(working)))
+			}
+		}
+		if options.LoadShortTermMemory {
+			b.logger.Debug("loading short-term memory", zap.String("trace_id", input.TraceID))
+			shortTerm, err := b.extensions.EnhancedMemoryExt().LoadShortTerm(ctx, b.ID(), 5)
+			if err != nil {
+				b.logger.Warn("failed to load short-term memory", zap.String("trace_id", input.TraceID), zap.Error(err))
+			} else {
+				for _, entry := range shortTerm {
+					if entry.Content != "" {
+						memoryContext = append(memoryContext, entry.Content)
+					}
+				}
+				b.logger.Info("short-term memory loaded", zap.String("trace_id", input.TraceID), zap.Int("count", len(shortTerm)))
+			}
+		}
+
+		if len(memoryContext) > 0 {
+			input = shallowCopyInput(input)
+			if input.Context == nil {
+				input.Context = make(map[string]any, 1)
+			}
+			input.Context["memory_context"] = append([]string(nil), memoryContext...)
+		}
+		ctx = withMemoryContext(ctx, memoryContext)
+		return next(ctx, input)
+	}
+}
+
+func (b *BaseAgent) promptEnhancerMiddleware() ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		b.logger.Debug("enhancing prompt", zap.String("trace_id", input.TraceID))
+		contextStr := ""
+		if si := skillInstructionsFromCtx(ctx); len(si) > 0 {
+			contextStr += "Skills: " + fmt.Sprintf("%v", si) + "\n"
+		}
+		if mc := memoryContextFromCtx(ctx); len(mc) > 0 {
+			contextStr += "Memory: " + fmt.Sprintf("%v", mc) + "\n"
+		}
+
+		enhanced, err := b.extensions.PromptEnhancerExt().EnhanceUserPrompt(input.Content, contextStr)
+		if err != nil {
+			b.logger.Warn("prompt enhancement failed", zap.String("trace_id", input.TraceID), zap.Error(err))
+		} else {
+			input = shallowCopyInput(input)
+			input.Content = enhanced
+			b.logger.Info("prompt enhanced", zap.String("trace_id", input.TraceID))
+		}
+		return next(ctx, input)
+	}
+}
+
+func (b *BaseAgent) memorySaveMiddleware() ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		output, err := next(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		if b.memoryRuntime != nil {
+			return output, nil
+		}
+		b.logger.Debug("saving to enhanced memory", zap.String("trace_id", input.TraceID))
+		b.extensions.SaveToEnhancedMemory(ctx, b.ID(), input, output, false)
+		return output, nil
+	}
+}
+
+// Merged from loop_control_policy.go.
+
+const (
+	defaultLoopIterationBudget       = 3
+	defaultReflectionIterationBudget = 3
+	defaultQualityThreshold          = 0.7
+	internalBudgetScope              = "strategy_internal"
+)
+
+type LoopControlPolicy struct {
+	LoopIterationBudget       int
+	ReflectionIterationBudget int
+	RetryBudget               int
+	QualityThreshold          float64
+	CriticPrompt              string
+}
+
+func (b *BaseAgent) loopControlPolicy() LoopControlPolicy {
+	b.configMu.RLock()
+	defer b.configMu.RUnlock()
+
+	policy := LoopControlPolicy{
+		LoopIterationBudget:       defaultLoopIterationBudget,
+		ReflectionIterationBudget: defaultReflectionIterationBudget,
+		QualityThreshold:          defaultQualityThreshold,
+	}
+
+	control := b.config.ExecutionOptions().Control
+	if reflectionCfg := control.Reflection; reflectionCfg != nil {
+		if reflectionCfg.MaxIterations > 0 {
+			policy.ReflectionIterationBudget = reflectionCfg.MaxIterations
+		}
+		if reflectionCfg.MinQuality > 0 {
+			policy.QualityThreshold = reflectionCfg.MinQuality
+		}
+		if strings.TrimSpace(reflectionCfg.CriticPrompt) != "" {
+			policy.CriticPrompt = reflectionCfg.CriticPrompt
+		}
+	}
+	if policy.ReflectionIterationBudget <= 0 {
+		policy.ReflectionIterationBudget = defaultReflectionIterationBudget
+	}
+	if control.MaxLoopIterations > 0 {
+		policy.LoopIterationBudget = control.MaxLoopIterations
+	}
+	if guardrailsCfg := b.runtimeGuardrailsCfg; guardrailsCfg != nil {
+		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
+	} else if guardrailsCfg := control.Guardrails; guardrailsCfg != nil {
+		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
+	}
+
+	return policy
+}
+
+func reflectionExecutorConfigFromPolicy(policy LoopControlPolicy) ReflectionExecutorConfig {
+	config := DefaultReflectionExecutorConfig()
+	if policy.ReflectionIterationBudget > 0 {
+		config.MaxIterations = policy.ReflectionIterationBudget
+	}
+	if policy.QualityThreshold > 0 {
+		config.MinQuality = policy.QualityThreshold
+	}
+	if strings.TrimSpace(policy.CriticPrompt) != "" {
+		config.CriticPrompt = policy.CriticPrompt
+	}
+	return config
+}
+
+func runtimeGuardrailsFromPolicy(policy LoopControlPolicy, cfg *guardrails.GuardrailsConfig) *guardrails.GuardrailsConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := *cfg
+	cloned.MaxRetries = policy.RetryBudget
+	return &cloned
+}
+
+func normalizeTopLevelStopReason(stopReason string, internalCause string) string {
+	switch strings.TrimSpace(stopReason) {
+	case "", "stop", "completed":
+		if strings.TrimSpace(internalCause) != "" {
+			return string(StopReasonSolved)
+		}
+		return string(StopReasonSolved)
+	case string(StopReasonSolved),
+		string(StopReasonTimeout),
+		string(StopReasonBlocked),
+		string(StopReasonNeedHuman),
+		string(StopReasonValidationFailed),
+		string(StopReasonToolFailureUnrecoverable):
+		return strings.TrimSpace(stopReason)
+	case string(StopReasonMaxIterations):
+		if isInternalBudgetCause(internalCause) {
+			return string(StopReasonBlocked)
+		}
+		return string(StopReasonMaxIterations)
+	default:
+		if isInternalBudgetCause(stopReason) || isInternalBudgetCause(internalCause) {
+			return string(StopReasonBlocked)
+		}
+		return strings.TrimSpace(stopReason)
+	}
+}
+
+func isInternalBudgetCause(cause string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(cause))
+	switch normalized {
+	case "react_iteration_budget_exhausted",
+		"reflection_iteration_budget_exhausted",
+		"reflexion_trial_budget_exhausted",
+		"plan_execute_replan_budget_exhausted",
+		"dynamic_planner_backtrack_budget_exhausted",
+		"dynamic_planner_plan_depth_budget_exhausted",
+		"dynamic_planner_confidence_budget_exhausted":
+		return true
+	default:
+		return false
+	}
+}
+
+// Merged from extension_registry.go.
+
+// ExtensionRegistry encapsulates the 9 optional extension fields extracted from BaseAgent.
+type ExtensionRegistry struct {
+	reflectionExecutor  ReflectionRunner
+	toolSelector        DynamicToolSelectorRunner
+	promptEnhancer      PromptEnhancerRunner
+	skillManager        SkillDiscoverer
+	mcpServer           MCPServerRunner
+	lspClient           LSPClientRunner
+	lspLifecycle        LSPLifecycleOwner
+	enhancedMemory      EnhancedMemoryRunner
+	observabilitySystem ObservabilityRunner
+	logger              *zap.Logger
+}
+
+// NewExtensionRegistry creates a new ExtensionRegistry.
+func NewExtensionRegistry(logger *zap.Logger) *ExtensionRegistry {
+	return &ExtensionRegistry{logger: logger}
+}
+
+// EnableReflection enables the reflection mechanism.
+func (r *ExtensionRegistry) EnableReflection(executor ReflectionRunner) {
+	r.reflectionExecutor = executor
+	r.logger.Info("reflection enabled")
+}
+
+// EnableToolSelection enables dynamic tool selection.
+func (r *ExtensionRegistry) EnableToolSelection(selector DynamicToolSelectorRunner) {
+	r.toolSelector = selector
+	r.logger.Info("tool selection enabled")
+}
+
+// EnablePromptEnhancer enables prompt enhancement.
+func (r *ExtensionRegistry) EnablePromptEnhancer(enhancer PromptEnhancerRunner) {
+	r.promptEnhancer = enhancer
+	r.logger.Info("prompt enhancer enabled")
+}
+
+// EnableSkills enables the skills system.
+func (r *ExtensionRegistry) EnableSkills(manager SkillDiscoverer) {
+	r.skillManager = manager
+	r.logger.Info("skills system enabled")
+}
+
+// EnableMCP enables MCP integration.
+func (r *ExtensionRegistry) EnableMCP(server MCPServerRunner) {
+	r.mcpServer = server
+	r.logger.Info("MCP integration enabled")
+}
+
+// EnableLSP enables LSP integration.
+func (r *ExtensionRegistry) EnableLSP(client LSPClientRunner) {
+	r.lspClient = client
+	r.logger.Info("LSP integration enabled")
+}
+
+// EnableLSPWithLifecycle enables LSP with an optional lifecycle owner.
+func (r *ExtensionRegistry) EnableLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) {
+	r.lspClient = client
+	r.lspLifecycle = lifecycle
+	r.logger.Info("LSP integration enabled with lifecycle")
+}
+
+// EnableEnhancedMemory enables the enhanced memory system.
+func (r *ExtensionRegistry) EnableEnhancedMemory(memorySystem EnhancedMemoryRunner) {
+	r.enhancedMemory = memorySystem
+	r.logger.Info("enhanced memory enabled")
+}
+
+// EnableObservability enables the observability system.
+func (r *ExtensionRegistry) EnableObservability(obsSystem ObservabilityRunner) {
+	r.observabilitySystem = obsSystem
+	r.logger.Info("observability enabled")
+}
+
+// ReflectionExecutor returns the reflection runner.
+func (r *ExtensionRegistry) ReflectionExecutor() ReflectionRunner { return r.reflectionExecutor }
+
+// ToolSelector returns the tool selector runner.
+func (r *ExtensionRegistry) ToolSelector() DynamicToolSelectorRunner { return r.toolSelector }
+
+// PromptEnhancerExt returns the prompt enhancer runner.
+func (r *ExtensionRegistry) PromptEnhancerExt() PromptEnhancerRunner { return r.promptEnhancer }
+
+// SkillManagerExt returns the skill discoverer.
+func (r *ExtensionRegistry) SkillManagerExt() SkillDiscoverer { return r.skillManager }
+
+// MCPServerExt returns the MCP server runner.
+func (r *ExtensionRegistry) MCPServerExt() MCPServerRunner { return r.mcpServer }
+
+// LSPClientExt returns the LSP client runner.
+func (r *ExtensionRegistry) LSPClientExt() LSPClientRunner { return r.lspClient }
+
+// LSPLifecycleExt returns the LSP lifecycle owner.
+func (r *ExtensionRegistry) LSPLifecycleExt() LSPLifecycleOwner { return r.lspLifecycle }
+
+// EnhancedMemoryExt returns the enhanced memory runner.
+func (r *ExtensionRegistry) EnhancedMemoryExt() EnhancedMemoryRunner { return r.enhancedMemory }
+
+// ObservabilitySystemExt returns the observability runner.
+func (r *ExtensionRegistry) ObservabilitySystemExt() ObservabilityRunner {
+	return r.observabilitySystem
+}
+
+// GetFeatureStatus returns a map of feature name to enabled status.
+func (r *ExtensionRegistry) GetFeatureStatus() map[string]bool {
+	return map[string]bool{
+		"reflection":      r.reflectionExecutor != nil,
+		"tool_selection":  r.toolSelector != nil,
+		"prompt_enhancer": r.promptEnhancer != nil,
+		"skills":          r.skillManager != nil,
+		"mcp":             r.mcpServer != nil,
+		"lsp":             r.lspClient != nil,
+		"enhanced_memory": r.enhancedMemory != nil,
+		"observability":   r.observabilitySystem != nil,
+	}
+}
+
+// TeardownExtensions cleans up extension resources.
+func (r *ExtensionRegistry) TeardownExtensions(ctx context.Context) error {
+	if r.lspLifecycle != nil {
+		if err := r.lspLifecycle.Close(); err != nil {
+			r.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
+		}
+		return nil
+	}
+	if r.lspClient != nil {
+		if err := r.lspClient.Shutdown(ctx); err != nil {
+			r.logger.Warn("failed to shutdown lsp client", zap.Error(err))
+		}
+	}
+	return nil
+}
+
+// SaveToEnhancedMemory saves output to enhanced memory and records an episode.
+func (r *ExtensionRegistry) SaveToEnhancedMemory(ctx context.Context, agentID string, input *Input, output *Output, useReflection bool) {
+	if r.enhancedMemory == nil {
+		return
+	}
+	metadata := map[string]any{
+		"trace_id": input.TraceID,
+		"tokens":   output.TokensUsed,
+		"cost":     output.Cost,
+	}
+	if err := r.enhancedMemory.SaveShortTerm(ctx, agentID, output.Content, metadata); err != nil {
+		r.logger.Warn("failed to save short-term memory", zap.Error(err))
+	}
+	event := &types.EpisodicEvent{
+		ID:        fmt.Sprintf("%s-%d", agentID, time.Now().UnixNano()),
+		AgentID:   agentID,
+		Type:      "task_execution",
+		Content:   output.Content,
+		Timestamp: time.Now(),
+		Duration:  output.Duration,
+		Context: map[string]any{
+			"trace_id":   input.TraceID,
+			"tokens":     output.TokensUsed,
+			"cost":       output.Cost,
+			"reflection": useReflection,
+		},
+	}
+	if err := r.enhancedMemory.RecordEpisode(ctx, event); err != nil {
+		r.logger.Warn("failed to record episode", zap.Error(err))
+	}
+}
+
+// ValidateConfiguration validates that enabled features have their executors set.
+func (r *ExtensionRegistry) ValidateConfiguration(cfg types.AgentConfig) []string {
+	var errors []string
+	if cfg.IsReflectionEnabled() && r.reflectionExecutor == nil {
+		errors = append(errors, "reflection enabled but executor not set")
+	}
+	if cfg.IsToolSelectionEnabled() && r.toolSelector == nil {
+		errors = append(errors, "tool selection enabled but selector not set")
+	}
+	if cfg.IsPromptEnhancerEnabled() && r.promptEnhancer == nil {
+		errors = append(errors, "prompt enhancer enabled but enhancer not set")
+	}
+	if cfg.IsSkillsEnabled() && r.skillManager == nil {
+		errors = append(errors, "skills enabled but manager not set")
+	}
+	if cfg.IsMCPEnabled() && r.mcpServer == nil {
+		errors = append(errors, "MCP enabled but server not set")
+	}
+	if cfg.IsLSPEnabled() && r.lspClient == nil {
+		errors = append(errors, "LSP enabled but client not set")
+	}
+	if cfg.IsMemoryEnabled() && r.enhancedMemory == nil {
+		errors = append(errors, "enhanced memory enabled but system not set")
+	}
+	if cfg.IsObservabilityEnabled() && r.observabilitySystem == nil {
+		errors = append(errors, "observability enabled but system not set")
+	}
+	return errors
+}
+
+// ExecuteWithReflection delegates to the reflection executor.
+func (r *ExtensionRegistry) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
+	if r.reflectionExecutor == nil {
+		return nil, NewError(types.ErrAgentNotReady, "reflection executor not set")
+	}
+	return r.reflectionExecutor.ExecuteWithReflection(ctx, input)
 }

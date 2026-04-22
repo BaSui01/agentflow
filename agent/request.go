@@ -1,14 +1,22 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	agenthandoff "github.com/BaSui01/agentflow/agent/adapters/handoff"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	"github.com/BaSui01/agentflow/llm"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	"github.com/BaSui01/agentflow/types"
+	"go.uber.org/zap"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/types"
 )
 
 // ExecutionOptionsResolver resolves a provider-agnostic runtime view from the
@@ -609,4 +617,1740 @@ func effectiveToolModel(mainModel string, configuredToolModel string) string {
 		return v
 	}
 	return mainModel
+}
+
+const (
+	toolRiskSafeRead         = "safe_read"
+	toolRiskRequiresApproval = "requires_approval"
+	toolRiskUnknown          = "unknown"
+)
+
+func classifyToolRiskByName(name string) string {
+	switch strings.TrimSpace(name) {
+	case "web_search", "file_search", "retrieval", "read_file", "list_directory":
+		return toolRiskSafeRead
+	case "write_file", "edit_file", "run_command", "code_execution":
+		return toolRiskRequiresApproval
+	default:
+		if strings.HasPrefix(strings.TrimSpace(name), "mcp_") {
+			return toolRiskRequiresApproval
+		}
+		return toolRiskUnknown
+	}
+}
+
+func groupToolRisks(names []string) map[string][]string {
+	grouped := map[string][]string{
+		toolRiskSafeRead:         {},
+		toolRiskRequiresApproval: {},
+		toolRiskUnknown:          {},
+	}
+	for _, name := range normalizeStringSlice(names) {
+		risk := classifyToolRiskByName(name)
+		grouped[risk] = append(grouped[risk], name)
+	}
+	return grouped
+}
+
+// PreparedToolProtocol is the runtime-resolved tool execution bundle consumed
+// by completion flows.
+type PreparedToolProtocol struct {
+	Executor     llmtools.ToolExecutor
+	HandoffTools map[string]RuntimeHandoffTarget
+	ToolRisks    map[string]string
+	AllowedTools []string
+}
+
+// ToolProtocolRuntime resolves the tool execution contract for a prepared request.
+type ToolProtocolRuntime interface {
+	Prepare(owner *BaseAgent, pr *preparedRequest) *PreparedToolProtocol
+	Execute(ctx context.Context, prepared *PreparedToolProtocol, calls []types.ToolCall) []types.ToolResult
+	ToMessages(results []types.ToolResult) []types.Message
+}
+
+// DefaultToolProtocolRuntime preserves the current runtime behavior while
+// centralizing handoff + tool manager orchestration behind a single interface.
+type DefaultToolProtocolRuntime struct{}
+
+func NewDefaultToolProtocolRuntime() ToolProtocolRuntime {
+	return DefaultToolProtocolRuntime{}
+}
+
+func (DefaultToolProtocolRuntime) Prepare(owner *BaseAgent, pr *preparedRequest) *PreparedToolProtocol {
+	if pr == nil || owner == nil {
+		return &PreparedToolProtocol{
+			Executor: toolManagerExecutor{},
+		}
+	}
+	allowed := append([]string(nil), pr.options.Tools.AllowedTools...)
+	base := newToolManagerExecutor(owner.toolManager, owner.config.Core.ID, allowed, owner.bus)
+	executor := llmtools.ToolExecutor(base)
+	if len(pr.handoffTools) > 0 {
+		targets := make([]RuntimeHandoffTarget, 0, len(pr.handoffTools))
+		for _, target := range pr.handoffTools {
+			targets = append(targets, target)
+		}
+		executor = newRuntimeHandoffExecutor(owner, base, targets)
+	}
+	return &PreparedToolProtocol{
+		Executor:     executor,
+		HandoffTools: cloneRuntimeHandoffMap(pr.handoffTools),
+		ToolRisks:    cloneStringMap(pr.toolRisks),
+		AllowedTools: allowed,
+	}
+}
+
+func (DefaultToolProtocolRuntime) Execute(ctx context.Context, prepared *PreparedToolProtocol, calls []types.ToolCall) []types.ToolResult {
+	if prepared == nil || prepared.Executor == nil {
+		return nil
+	}
+	return prepared.Executor.Execute(ctx, calls)
+}
+
+func (DefaultToolProtocolRuntime) ToMessages(results []types.ToolResult) []types.Message {
+	if len(results) == 0 {
+		return nil
+	}
+	out := make([]types.Message, 0, len(results))
+	for _, result := range results {
+		out = append(out, result.ToMessage())
+	}
+	return out
+}
+
+type runtimeHandoffTargetsKey struct{}
+type runtimeConversationMessagesKey struct{}
+
+const (
+	internalContextHandoffMessages = "_agentflow_handoff_messages"
+	internalContextParentHandoff   = "_agentflow_parent_handoff"
+	internalContextFromAgentID     = "_agentflow_from_agent_id"
+	internalContextHandoffTool     = "_agentflow_handoff_tool"
+)
+
+type RuntimeHandoffTarget struct {
+	Agent       Agent
+	ToolName    string
+	Description string
+}
+
+type runtimeHandoffCallArgs struct {
+	Input   string `json:"input,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+func WithRuntimeHandoffTargets(ctx context.Context, targets []RuntimeHandoffTarget) context.Context {
+	filtered := cloneRuntimeHandoffTargets(targets)
+	if len(filtered) == 0 {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, runtimeHandoffTargetsKey{}, filtered)
+}
+
+func runtimeHandoffTargetsFromContext(ctx context.Context, currentAgentID string) []RuntimeHandoffTarget {
+	if ctx == nil {
+		return nil
+	}
+	raw, _ := ctx.Value(runtimeHandoffTargetsKey{}).([]RuntimeHandoffTarget)
+	if len(raw) == 0 {
+		return nil
+	}
+	currentAgentID = strings.TrimSpace(currentAgentID)
+	out := make([]RuntimeHandoffTarget, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, target := range raw {
+		if target.Agent == nil {
+			continue
+		}
+		if currentAgentID != "" && strings.TrimSpace(target.Agent.ID()) == currentAgentID {
+			continue
+		}
+		name := runtimeHandoffToolName(target.ToolName, target.Agent.ID())
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, RuntimeHandoffTarget{
+			Agent:       target.Agent,
+			ToolName:    name,
+			Description: runtimeHandoffToolDescription(target.Description, target.Agent),
+		})
+	}
+	return out
+}
+
+func cloneRuntimeHandoffTargets(targets []RuntimeHandoffTarget) []RuntimeHandoffTarget {
+	if len(targets) == 0 {
+		return nil
+	}
+	out := make([]RuntimeHandoffTarget, 0, len(targets))
+	seen := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		if target.Agent == nil {
+			continue
+		}
+		name := runtimeHandoffToolName(target.ToolName, target.Agent.ID())
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, RuntimeHandoffTarget{
+			Agent:       target.Agent,
+			ToolName:    name,
+			Description: runtimeHandoffToolDescription(target.Description, target.Agent),
+		})
+	}
+	return out
+}
+
+func cloneRuntimeHandoffMap(in map[string]RuntimeHandoffTarget) map[string]RuntimeHandoffTarget {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]RuntimeHandoffTarget, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func WithRuntimeConversationMessages(ctx context.Context, messages []types.Message) context.Context {
+	if len(messages) == 0 {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cloned := make([]types.Message, len(messages))
+	copy(cloned, messages)
+	return context.WithValue(ctx, runtimeConversationMessagesKey{}, cloned)
+}
+
+func runtimeConversationMessagesFromContext(ctx context.Context) []types.Message {
+	if ctx == nil {
+		return nil
+	}
+	raw, _ := ctx.Value(runtimeConversationMessagesKey{}).([]types.Message)
+	if len(raw) == 0 {
+		return nil
+	}
+	cloned := make([]types.Message, len(raw))
+	copy(cloned, raw)
+	return cloned
+}
+
+func runtimeHandoffToolName(override string, agentID string) string {
+	if trimmed := strings.TrimSpace(override); trimmed != "" {
+		return trimmed
+	}
+	s := strings.ToLower(strings.TrimSpace(agentID))
+	s = strings.ReplaceAll(s, " ", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	if s == "" {
+		s = "agent"
+	}
+	return "transfer_to_" + s
+}
+
+func runtimeHandoffToolDescription(override string, target Agent) string {
+	if trimmed := strings.TrimSpace(override); trimmed != "" {
+		return trimmed
+	}
+	if target == nil {
+		return "Handoff to another agent to handle the request."
+	}
+	name := strings.TrimSpace(target.Name())
+	if name == "" {
+		name = strings.TrimSpace(target.ID())
+	}
+	if name == "" {
+		return "Handoff to another agent to handle the request."
+	}
+	return fmt.Sprintf("Handoff to the %s agent to continue handling the request.", name)
+}
+
+func runtimeHandoffToolSchema(target RuntimeHandoffTarget) types.ToolSchema {
+	return types.ToolSchema{
+		Type:        types.ToolTypeFunction,
+		Name:        runtimeHandoffToolName(target.ToolName, target.Agent.ID()),
+		Description: runtimeHandoffToolDescription(target.Description, target.Agent),
+		Parameters: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"input":{"type":"string","description":"Optional transfer prompt for the next agent."},
+				"task":{"type":"string","description":"Optional concise task description for the next agent."},
+				"message":{"type":"string","description":"Optional handoff note for the next agent."}
+			},
+			"additionalProperties":false
+		}`),
+	}
+}
+
+func handoffMessagesFromInputContext(values map[string]any) []types.Message {
+	if len(values) == 0 {
+		return nil
+	}
+	raw, ok := values[internalContextHandoffMessages]
+	if !ok {
+		return nil
+	}
+	messages, ok := raw.([]types.Message)
+	if !ok || len(messages) == 0 {
+		return nil
+	}
+	cloned := make([]types.Message, len(messages))
+	copy(cloned, messages)
+	return cloned
+}
+
+func publicInputContext(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		switch key {
+		case internalContextHandoffMessages, internalContextParentHandoff, internalContextFromAgentID, internalContextHandoffTool:
+			continue
+		case "memory_context", "retrieval_context", "tool_state", "skill_context", "checkpoint_id":
+			continue
+		default:
+			out[key] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+type runtimeHandoffExecutor struct {
+	base    toolManagerExecutor
+	owner   *BaseAgent
+	targets map[string]RuntimeHandoffTarget
+}
+
+func newRuntimeHandoffExecutor(owner *BaseAgent, base toolManagerExecutor, targets []RuntimeHandoffTarget) *runtimeHandoffExecutor {
+	targetMap := make(map[string]RuntimeHandoffTarget, len(targets))
+	for _, target := range targets {
+		name := runtimeHandoffToolName(target.ToolName, target.Agent.ID())
+		target.ToolName = name
+		target.Description = runtimeHandoffToolDescription(target.Description, target.Agent)
+		targetMap[name] = target
+	}
+	return &runtimeHandoffExecutor{
+		base:    base,
+		owner:   owner,
+		targets: targetMap,
+	}
+}
+
+func (e *runtimeHandoffExecutor) Execute(ctx context.Context, calls []types.ToolCall) []types.ToolResult {
+	if len(calls) == 0 {
+		return nil
+	}
+	results := make([]types.ToolResult, 0, len(calls))
+	for _, call := range calls {
+		results = append(results, e.ExecuteOne(ctx, call))
+	}
+	return results
+}
+
+func (e *runtimeHandoffExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) types.ToolResult {
+	if target, ok := e.targets[call.Name]; ok {
+		return e.executeRuntimeHandoff(ctx, target, call)
+	}
+	return e.base.ExecuteOne(ctx, call)
+}
+
+func (e *runtimeHandoffExecutor) ExecuteOneStream(ctx context.Context, call types.ToolCall) <-chan llmtools.ToolStreamEvent {
+	ch := make(chan llmtools.ToolStreamEvent, 1)
+	go func() {
+		defer close(ch)
+		result := e.ExecuteOne(ctx, call)
+		if result.Error != "" {
+			ch <- llmtools.ToolStreamEvent{
+				Type:     llmtools.ToolStreamError,
+				ToolName: call.Name,
+				Error:    fmt.Errorf("%s", result.Error),
+			}
+			return
+		}
+		ch <- llmtools.ToolStreamEvent{
+			Type:     llmtools.ToolStreamComplete,
+			ToolName: call.Name,
+			Data:     result,
+		}
+	}()
+	return ch
+}
+
+func (e *runtimeHandoffExecutor) executeRuntimeHandoff(ctx context.Context, target RuntimeHandoffTarget, call types.ToolCall) types.ToolResult {
+	if e.owner == nil || target.Agent == nil {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: "handoff target is not configured"}
+	}
+
+	manager := agenthandoff.NewHandoffManager(e.owner.logger)
+	manager.RegisterAgent(runtimeHandoffAgentAdapter{agent: target.Agent})
+
+	taskInput, taskDescription := parseRuntimeHandoffCall(call)
+	conversationMessages := runtimeConversationMessagesFromContext(ctx)
+	if len(conversationMessages) > 0 {
+		conversationMessages = append(conversationMessages, types.Message{
+			Role:      types.RoleAssistant,
+			ToolCalls: []types.ToolCall{call},
+		})
+	}
+
+	ho, err := manager.Handoff(ctx, agenthandoff.HandoffOptions{
+		FromAgentID: e.owner.ID(),
+		ToAgentID:   target.Agent.ID(),
+		Task: agenthandoff.Task{
+			Type:        "agent_handoff",
+			Description: taskDescription,
+			Input:       taskInput,
+			Metadata: map[string]any{
+				"tool_call_id": call.ID,
+				"tool_name":    call.Name,
+			},
+		},
+		Context: agenthandoff.HandoffContext{
+			ConversationID: e.owner.ID(),
+			Messages:       conversationMessages,
+		},
+		Wait:                    true,
+		ToolNameOverride:        target.ToolName,
+		ToolDescriptionOverride: target.Description,
+		OnHandoff: func(ctx context.Context, handoff *agenthandoff.Handoff) error {
+			emitRuntimeHandoffAgentUpdated(ctx, target.Agent, handoff)
+			return nil
+		},
+	})
+	if err != nil {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: err.Error()}
+	}
+	if ho == nil || ho.Result == nil {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: "handoff completed without a result"}
+	}
+	if ho.Result.Error != "" {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: ho.Result.Error}
+	}
+
+	payload := types.ToolResultControl{
+		Type: types.ToolResultControlTypeHandoff,
+		Handoff: &types.ToolResultHandoff{
+			HandoffID:       ho.ID,
+			FromAgentID:     ho.FromAgentID,
+			ToAgentID:       ho.ToAgentID,
+			ToAgentName:     target.Agent.Name(),
+			TransferMessage: ho.TransferMessage,
+			Output:          fmt.Sprintf("%v", ho.Result.Output),
+		},
+	}
+	if runtimePayload, ok := ho.Result.Output.(runtimeHandoffOutput); ok {
+		payload.Handoff.Output = runtimePayload.Content
+		payload.Handoff.Metadata = runtimePayload.Metadata
+		payload.Handoff.Provider = runtimePayload.Provider
+		payload.Handoff.Model = runtimePayload.Model
+		payload.Handoff.TokensUsed = runtimePayload.TokensUsed
+		payload.Handoff.FinishReason = runtimePayload.FinishReason
+		payload.Handoff.ReasoningContent = runtimePayload.ReasoningContent
+	}
+	raw, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: marshalErr.Error()}
+	}
+
+	return types.ToolResult{
+		ToolCallID: call.ID,
+		Name:       call.Name,
+		Result:     raw,
+	}
+}
+
+func parseRuntimeHandoffCall(call types.ToolCall) (string, string) {
+	var args runtimeHandoffCallArgs
+	if len(call.Arguments) > 0 {
+		_ = json.Unmarshal(call.Arguments, &args)
+	}
+	input := strings.TrimSpace(firstNonEmpty(args.Input, args.Task, args.Message, call.Input))
+	if input == "" {
+		input = fmt.Sprintf("Continue handling the request via %s.", call.Name)
+	}
+	description := strings.TrimSpace(firstNonEmpty(args.Task, args.Message, input))
+	if description == "" {
+		description = input
+	}
+	return input, description
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+type runtimeHandoffAgentAdapter struct {
+	agent Agent
+}
+
+func (a runtimeHandoffAgentAdapter) ID() string { return a.agent.ID() }
+
+func (a runtimeHandoffAgentAdapter) Capabilities() []agenthandoff.AgentCapability {
+	return []agenthandoff.AgentCapability{{
+		Name:      a.agent.Name(),
+		TaskTypes: []string{"agent_handoff"},
+		Priority:  1,
+	}}
+}
+
+func (a runtimeHandoffAgentAdapter) CanHandle(agenthandoff.Task) bool { return true }
+func (a runtimeHandoffAgentAdapter) AcceptHandoff(context.Context, *agenthandoff.Handoff) error {
+	return nil
+}
+
+func (a runtimeHandoffAgentAdapter) ExecuteHandoff(ctx context.Context, ho *agenthandoff.Handoff) (*agenthandoff.HandoffResult, error) {
+	traceID, _ := types.TraceID(ctx)
+	input := &Input{
+		TraceID:   traceID,
+		ChannelID: ho.Context.ConversationID,
+		Content:   strings.TrimSpace(fmt.Sprintf("%v", ho.Task.Input)),
+		Context: map[string]any{
+			internalContextHandoffMessages: ho.Context.Messages,
+			internalContextParentHandoff:   ho.ID,
+			internalContextFromAgentID:     ho.FromAgentID,
+			internalContextHandoffTool:     ho.ToolName,
+		},
+	}
+	if input.Content == "" {
+		input.Content = ho.Task.Description
+	}
+	output, err := a.agent.Execute(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if output == nil {
+		return &agenthandoff.HandoffResult{Output: ""}, nil
+	}
+	return &agenthandoff.HandoffResult{
+		Output: runtimeHandoffOutput{
+			Content:          output.Content,
+			Metadata:         cloneMetadata(output.Metadata),
+			TokensUsed:       output.TokensUsed,
+			FinishReason:     output.FinishReason,
+			ReasoningContent: output.ReasoningContent,
+		},
+	}, nil
+}
+
+type runtimeHandoffOutput struct {
+	Content          string         `json:"content"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+	Provider         string         `json:"provider,omitempty"`
+	Model            string         `json:"model,omitempty"`
+	TokensUsed       int            `json:"tokens_used,omitempty"`
+	FinishReason     string         `json:"finish_reason,omitempty"`
+	ReasoningContent *string        `json:"reasoning_content,omitempty"`
+}
+
+func emitRuntimeHandoffAgentUpdated(ctx context.Context, target Agent, handoff *agenthandoff.Handoff) {
+	emit, ok := runtimeStreamEmitterFromContext(ctx)
+	if !ok || target == nil {
+		return
+	}
+	emit(RuntimeStreamEvent{
+		Type:         RuntimeStreamStatus,
+		SDKEventType: SDKAgentUpdatedEvent,
+		Timestamp:    time.Now(),
+		CurrentStage: "handoff",
+		Data: map[string]any{
+			"status": "agent_updated",
+			"new_agent": map[string]any{
+				"id":   target.ID(),
+				"name": target.Name(),
+				"type": target.Type(),
+			},
+			"handoff_id":       handoff.ID,
+			"from_agent_id":    handoff.FromAgentID,
+			"to_agent_id":      handoff.ToAgentID,
+			"transfer_message": handoff.TransferMessage,
+		},
+	})
+}
+
+// Merged from ephemeral_prompt.go.
+
+// EphemeralPromptLayerBuilder builds request-scoped prompt layers that should
+// not mutate the stable system prompt bundle.
+type EphemeralPromptLayerBuilder struct{}
+
+type EphemeralPromptLayerInput struct {
+	PublicContext            map[string]any
+	TraceID                  string
+	TenantID                 string
+	UserID                   string
+	ChannelID                string
+	TraceFeedbackPlan        *TraceFeedbackPlan
+	TraceSynopsis            string
+	TraceHistorySummary      string
+	TraceHistoryEventCount   int
+	CheckpointID             string
+	AllowedTools             []string
+	ToolsDisabled            bool
+	AcceptanceCriteria       []string
+	ToolVerificationRequired bool
+	CodeVerificationRequired bool
+	ContextStatus            *agentcontext.Status
+}
+
+func NewEphemeralPromptLayerBuilder() *EphemeralPromptLayerBuilder {
+	return &EphemeralPromptLayerBuilder{}
+}
+
+func (b *EphemeralPromptLayerBuilder) Build(input EphemeralPromptLayerInput) []agentcontext.PromptLayer {
+	layers := make([]agentcontext.PromptLayer, 0, 7)
+	if layer := buildSessionOverlayLayer(input); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildTraceFeedbackPlanLayer(input.TraceFeedbackPlan); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildTraceSynopsisLayer(input.TraceSynopsis); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildTraceHistoryLayer(input.TraceHistorySummary, input.TraceHistoryEventCount); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildToolGuidanceLayer(input); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildVerificationGateLayer(input); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if layer := buildContextPressureLayer(input.ContextStatus); layer != nil {
+		layers = append(layers, *layer)
+	}
+	if len(layers) == 0 {
+		return nil
+	}
+	return layers
+}
+
+func buildSessionOverlayLayer(input EphemeralPromptLayerInput) *agentcontext.PromptLayer {
+	payload := make(map[string]any, len(input.PublicContext)+5)
+	if traceID := strings.TrimSpace(input.TraceID); traceID != "" {
+		payload["trace_id"] = traceID
+	}
+	if tenantID := strings.TrimSpace(input.TenantID); tenantID != "" {
+		payload["tenant_id"] = tenantID
+	}
+	if userID := strings.TrimSpace(input.UserID); userID != "" {
+		payload["user_id"] = userID
+	}
+	if channelID := strings.TrimSpace(input.ChannelID); channelID != "" {
+		payload["channel_id"] = channelID
+	}
+	for key, value := range input.PublicContext {
+		payload[key] = value
+	}
+	checkpointID := strings.TrimSpace(input.CheckpointID)
+	if checkpointID != "" {
+		payload["checkpoint_id"] = checkpointID
+	}
+	if len(payload) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil || len(raw) == 0 {
+		return nil
+	}
+	return &agentcontext.PromptLayer{
+		ID:       "session_overlay",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  "<session_overlay>\n" + string(raw) + "\n</session_overlay>",
+		Priority: 90,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind":     "session_overlay",
+			"checkpoint_id":  checkpointID,
+			"session_fields": sortedKeys(payload),
+		},
+	}
+}
+
+func buildTraceFeedbackPlanLayer(plan *TraceFeedbackPlan) *agentcontext.PromptLayer {
+	if plan == nil || strings.TrimSpace(plan.Summary) == "" {
+		return nil
+	}
+	var body strings.Builder
+	body.WriteString("<trace_feedback_plan>\n")
+	if strings.TrimSpace(plan.Goal) != "" {
+		body.WriteString("Goal: " + plan.Goal + "\n")
+	}
+	if plan.RecommendedAction != "" {
+		body.WriteString("Recommended action: " + string(plan.RecommendedAction) + "\n")
+	}
+	if strings.TrimSpace(plan.PrimaryLayer) != "" {
+		body.WriteString("Primary layer: " + plan.PrimaryLayer + "\n")
+	}
+	if strings.TrimSpace(plan.SecondaryLayer) != "" {
+		body.WriteString("Secondary layer: " + plan.SecondaryLayer + "\n")
+	}
+	if plan.InjectMemoryRecall {
+		body.WriteString("Memory recall: enabled\n")
+	}
+	if strings.TrimSpace(plan.PlannerID) != "" {
+		body.WriteString("Planner: " + plan.PlannerID)
+		if strings.TrimSpace(plan.PlannerVersion) != "" {
+			body.WriteString("@" + plan.PlannerVersion)
+		}
+		body.WriteString("\n")
+	}
+	if plan.Confidence > 0 {
+		body.WriteString("Confidence: " + formatTraceFeedbackFloat(plan.Confidence) + "\n")
+	}
+	if len(plan.Reasons) > 0 {
+		body.WriteString("Reasons: " + strings.Join(plan.Reasons, ", ") + "\n")
+	}
+	body.WriteString("Decision: " + plan.Summary + "\n")
+	body.WriteString("</trace_feedback_plan>")
+	return &agentcontext.PromptLayer{
+		ID:       "trace_feedback_plan",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  body.String(),
+		Priority: 89,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind":           "trace_feedback_plan",
+			"goal":                 plan.Goal,
+			"recommended_action":   string(plan.RecommendedAction),
+			"primary_layer":        plan.PrimaryLayer,
+			"secondary_layer":      plan.SecondaryLayer,
+			"inject_memory_recall": plan.InjectMemoryRecall,
+			"planner_id":           plan.PlannerID,
+			"planner_version":      plan.PlannerVersion,
+			"confidence":           plan.Confidence,
+			"selected_layers":      cloneStringSlice(plan.SelectedLayers),
+			"suppressed_layers":    cloneStringSlice(plan.SuppressedLayers),
+			"score":                plan.Score,
+			"planner_metadata":     cloneAnyMap(plan.Metadata),
+		},
+	}
+}
+
+func formatTraceFeedbackFloat(v float64) string {
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
+}
+
+func cloneAnyMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func buildTraceSynopsisLayer(synopsis string) *agentcontext.PromptLayer {
+	synopsis = strings.TrimSpace(synopsis)
+	if synopsis == "" {
+		return nil
+	}
+	return &agentcontext.PromptLayer{
+		ID:       "trace_synopsis",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  "<trace_synopsis>\nRecent completed execution summary for this session: " + synopsis + "\n</trace_synopsis>",
+		Priority: 89,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind": "trace_synopsis",
+			"source":     "explainability",
+		},
+	}
+}
+
+func buildTraceHistoryLayer(summary string, eventCount int) *agentcontext.PromptLayer {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return nil
+	}
+	countText := ""
+	if eventCount > 0 {
+		countText = fmt.Sprintf(" (%d earlier timeline events compressed)", eventCount)
+	}
+	return &agentcontext.PromptLayer{
+		ID:       "trace_history",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  "<trace_history>\nCompressed prior execution history" + countText + ": " + summary + "\n</trace_history>",
+		Priority: 84,
+		Sticky:   false,
+		Metadata: map[string]any{
+			"layer_kind":                "trace_history",
+			"source":                    "explainability",
+			"compressed_timeline_count": eventCount,
+		},
+	}
+}
+
+func buildToolGuidanceLayer(input EphemeralPromptLayerInput) *agentcontext.PromptLayer {
+	if input.ToolsDisabled {
+		return &agentcontext.PromptLayer{
+			ID:       "tool_guidance",
+			Type:     agentcontext.SegmentEphemeral,
+			Content:  "<tool_guidance>\nTools are disabled for this request. Do not plan around tool usage.\n</tool_guidance>",
+			Priority: 88,
+			Sticky:   true,
+			Metadata: map[string]any{"layer_kind": "tool_guidance", "tools_disabled": true},
+		}
+	}
+	tools := normalizeStringSlice(input.AllowedTools)
+	if len(tools) == 0 {
+		return nil
+	}
+	grouped := groupToolRisks(tools)
+	var body strings.Builder
+	body.WriteString("<tool_guidance>\n")
+	body.WriteString("Available tools are grouped by permission risk for this request.\n")
+	if len(grouped[toolRiskSafeRead]) > 0 {
+		body.WriteString("Safe read tools: " + strings.Join(grouped[toolRiskSafeRead], ", ") + ".\n")
+	}
+	if len(grouped[toolRiskRequiresApproval]) > 0 {
+		body.WriteString("Approval-required tools: " + strings.Join(grouped[toolRiskRequiresApproval], ", ") + ". Request approval before relying on mutating, execution, or MCP actions.\n")
+	}
+	if len(grouped[toolRiskUnknown]) > 0 {
+		body.WriteString("Unknown-risk tools: " + strings.Join(grouped[toolRiskUnknown], ", ") + ". Treat them conservatively and avoid them unless clearly needed.\n")
+	}
+	body.WriteString("</tool_guidance>")
+	return &agentcontext.PromptLayer{
+		ID:       "tool_guidance",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  body.String(),
+		Priority: 88,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind":              "tool_guidance",
+			"allowed_tools":           tools,
+			"safe_read_tools":         grouped[toolRiskSafeRead],
+			"approval_required_tools": grouped[toolRiskRequiresApproval],
+			"unknown_risk_tools":      grouped[toolRiskUnknown],
+			"tools_disabled":          false,
+		},
+	}
+}
+
+func buildVerificationGateLayer(input EphemeralPromptLayerInput) *agentcontext.PromptLayer {
+	criteria := normalizeStringSlice(input.AcceptanceCriteria)
+	if len(criteria) == 0 && !input.ToolVerificationRequired && !input.CodeVerificationRequired {
+		return nil
+	}
+	var body strings.Builder
+	body.WriteString("<verification_gate>\n")
+	body.WriteString("Do not treat the task as complete until all applicable verification gates are satisfied.\n")
+	if len(criteria) > 0 {
+		body.WriteString("Acceptance criteria:\n")
+		for _, item := range criteria {
+			body.WriteString("- " + item + "\n")
+		}
+	}
+	if input.ToolVerificationRequired {
+		body.WriteString("- Tool-backed claims require verification before completion.\n")
+	}
+	if input.CodeVerificationRequired {
+		body.WriteString("- Code changes require implementation-oriented verification before completion.\n")
+	}
+	body.WriteString("</verification_gate>")
+	return &agentcontext.PromptLayer{
+		ID:       "verification_gate",
+		Type:     agentcontext.SegmentEphemeral,
+		Content:  body.String(),
+		Priority: 87,
+		Sticky:   true,
+		Metadata: map[string]any{
+			"layer_kind":                 "verification_gate",
+			"acceptance_criteria":        criteria,
+			"acceptance_criteria_count":  len(criteria),
+			"tool_verification_required": input.ToolVerificationRequired,
+			"code_verification_required": input.CodeVerificationRequired,
+		},
+	}
+}
+
+func buildContextPressureLayer(status *agentcontext.Status) *agentcontext.PromptLayer {
+	if status == nil || status.Level < agentcontext.LevelNormal {
+		return nil
+	}
+	level := strings.ToLower(status.Level.String())
+	usagePercent := 0
+	if status.UsageRatio > 0 {
+		usagePercent = int(status.UsageRatio * 100)
+	}
+	return &agentcontext.PromptLayer{
+		ID:   "context_pressure",
+		Type: agentcontext.SegmentEphemeral,
+		Content: fmt.Sprintf(
+			"<context_pressure>\nContext usage is at %d%% of the available budget (%s). Be concise, avoid repeating prior context, and focus on unresolved items only.\n</context_pressure>",
+			usagePercent,
+			level,
+		),
+		Priority: 75,
+		Sticky:   false,
+		Metadata: map[string]any{
+			"usage_ratio":     status.UsageRatio,
+			"level":           status.Level.String(),
+			"recommendation":  status.Recommendation,
+			"current_tokens":  status.CurrentTokens,
+			"max_tokens":      status.MaxTokens,
+			"ephemeral_layer": "context_pressure",
+		},
+	}
+}
+
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	// Keys are tiny here; a stable O(n^2) insertion sort is enough and keeps this helper local.
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
+}
+
+// Merged from trace_feedback.go.
+
+type TraceFeedbackAction string
+
+const (
+	TraceFeedbackSkip               TraceFeedbackAction = "skip"
+	TraceFeedbackSynopsisOnly       TraceFeedbackAction = "synopsis_only"
+	TraceFeedbackHistoryOnly        TraceFeedbackAction = "history_only"
+	TraceFeedbackMemoryRecallOnly   TraceFeedbackAction = "memory_recall_only"
+	TraceFeedbackSynopsisAndHistory TraceFeedbackAction = "synopsis_and_history"
+)
+
+type TraceFeedbackSignals struct {
+	HasPriorSynopsis        bool
+	HasCompressedHistory    bool
+	HasMemoryRuntime        bool
+	Resume                  bool
+	Handoff                 bool
+	MultiAgent              bool
+	Verification            bool
+	ComplexTask             bool
+	ContextPressure         string
+	UsageRatio              float64
+	AcceptanceCriteriaCount int
+	CompressedEventCount    int
+}
+
+type TraceFeedbackPlan struct {
+	PlannerID             string
+	PlannerVersion        string
+	Confidence            float64
+	Metadata              map[string]any
+	InjectSynopsis        bool
+	InjectHistory         bool
+	InjectMemoryRecall    bool
+	Score                 int
+	SynopsisThreshold     int
+	HistoryThreshold      int
+	MemoryRecallThreshold int
+	Signals               TraceFeedbackSignals
+	Reasons               []string
+	SelectedLayers        []string
+	SuppressedLayers      []string
+	Goal                  string
+	RecommendedAction     TraceFeedbackAction
+	PrimaryLayer          string
+	SecondaryLayer        string
+	Summary               string
+}
+
+type TraceFeedbackPlanningInput struct {
+	AgentID   string
+	TraceID   string
+	SessionID string
+
+	UserInput *Input
+
+	Signals  TraceFeedbackSignals
+	Snapshot ExplainabilitySynopsisSnapshot
+	Config   TraceFeedbackConfig
+}
+
+type TraceFeedbackPlanner interface {
+	Plan(input *TraceFeedbackPlanningInput) TraceFeedbackPlan
+}
+
+type TraceFeedbackPlanAdapter interface {
+	ID() string
+	Supports(input *TraceFeedbackPlanningInput) bool
+	Apply(input *TraceFeedbackPlanningInput, plan *TraceFeedbackPlan)
+}
+
+type TraceFeedbackConfig struct {
+	Enabled              bool
+	ComplexityThreshold  int
+	SynopsisMinScore     int
+	HistoryMinScore      int
+	MemoryRecallMinScore int
+	HistoryMaxUsageRatio float64
+}
+
+type RuleBasedTraceFeedbackPlanner struct{}
+
+type ComposedTraceFeedbackPlanner struct {
+	Base     TraceFeedbackPlanner
+	Adapters []TraceFeedbackPlanAdapter
+}
+
+type HintTraceFeedbackAdapter struct{}
+
+func NewRuleBasedTraceFeedbackPlanner() *RuleBasedTraceFeedbackPlanner {
+	return &RuleBasedTraceFeedbackPlanner{}
+}
+
+func NewComposedTraceFeedbackPlanner(base TraceFeedbackPlanner, adapters ...TraceFeedbackPlanAdapter) *ComposedTraceFeedbackPlanner {
+	if base == nil {
+		base = NewRuleBasedTraceFeedbackPlanner()
+	}
+	filtered := make([]TraceFeedbackPlanAdapter, 0, len(adapters))
+	for _, adapter := range adapters {
+		if adapter != nil {
+			filtered = append(filtered, adapter)
+		}
+	}
+	return &ComposedTraceFeedbackPlanner{Base: base, Adapters: filtered}
+}
+
+func NewHintTraceFeedbackAdapter() *HintTraceFeedbackAdapter {
+	return &HintTraceFeedbackAdapter{}
+}
+
+func (a *HintTraceFeedbackAdapter) ID() string { return "hint_trace_feedback_adapter" }
+
+func (a *HintTraceFeedbackAdapter) Supports(input *TraceFeedbackPlanningInput) bool {
+	return input != nil && input.UserInput != nil && input.UserInput.Context != nil
+}
+
+func DefaultTraceFeedbackConfig() TraceFeedbackConfig {
+	return TraceFeedbackConfig{
+		Enabled:              true,
+		ComplexityThreshold:  2,
+		SynopsisMinScore:     2,
+		HistoryMinScore:      3,
+		MemoryRecallMinScore: 2,
+		HistoryMaxUsageRatio: 0.85,
+	}
+}
+
+func TraceFeedbackConfigFromAgentConfig(cfg types.AgentConfig) TraceFeedbackConfig {
+	out := DefaultTraceFeedbackConfig()
+	contextCfg := cfg.ExecutionOptions().Control.Context
+	if contextCfg == nil {
+		return out
+	}
+	out.Enabled = contextCfg.TraceFeedbackEnabled
+	if contextCfg.TraceFeedbackComplexityThreshold > 0 {
+		out.ComplexityThreshold = contextCfg.TraceFeedbackComplexityThreshold
+	}
+	if contextCfg.TraceSynopsisMinScore > 0 {
+		out.SynopsisMinScore = contextCfg.TraceSynopsisMinScore
+	}
+	if contextCfg.TraceHistoryMinScore > 0 {
+		out.HistoryMinScore = contextCfg.TraceHistoryMinScore
+	}
+	if contextCfg.TraceMemoryRecallMinScore > 0 {
+		out.MemoryRecallMinScore = contextCfg.TraceMemoryRecallMinScore
+	}
+	if contextCfg.TraceHistoryMaxUsageRatio > 0 {
+		out.HistoryMaxUsageRatio = contextCfg.TraceHistoryMaxUsageRatio
+	}
+	return out
+}
+
+func (p *RuleBasedTraceFeedbackPlanner) Plan(in *TraceFeedbackPlanningInput) TraceFeedbackPlan {
+	if in == nil {
+		return TraceFeedbackPlan{}
+	}
+	plan := TraceFeedbackPlan{
+		PlannerID:             "rule_based_trace_feedback_planner",
+		PlannerVersion:        "v1",
+		Confidence:            0.8,
+		Metadata:              map[string]any{"planner_kind": "rule_based"},
+		SynopsisThreshold:     in.Config.SynopsisMinScore,
+		HistoryThreshold:      in.Config.HistoryMinScore,
+		MemoryRecallThreshold: in.Config.MemoryRecallMinScore,
+		Signals:               in.Signals,
+	}
+	if !in.Config.Enabled || (!plan.Signals.HasPriorSynopsis && !plan.Signals.HasCompressedHistory) {
+		plan.RecommendedAction = TraceFeedbackSkip
+		plan.Goal = "fresh_turn"
+		plan.Summary = "trace feedback disabled or no prior synopsis available"
+		plan.Confidence = 1.0
+		plan.Metadata["decision_basis"] = "disabled_or_missing_snapshot"
+		return plan
+	}
+
+	if plan.Signals.Resume {
+		plan.Score += 3
+		plan.Reasons = append(plan.Reasons, "resume")
+	}
+	if plan.Signals.Handoff {
+		plan.Score += 2
+		plan.Reasons = append(plan.Reasons, "handoff")
+	}
+	if plan.Signals.MultiAgent {
+		plan.Score += 2
+		plan.Reasons = append(plan.Reasons, "multi_agent")
+	}
+	if plan.Signals.Verification {
+		plan.Score += 2
+		plan.Reasons = append(plan.Reasons, "verification_gate")
+	}
+	if plan.Signals.ComplexTask {
+		plan.Score += 1
+		plan.Reasons = append(plan.Reasons, "complex_task")
+	}
+	if plan.Signals.ContextPressure != "" && plan.Signals.ContextPressure != agentcontext.LevelNone.String() {
+		plan.Score += 1
+		plan.Reasons = append(plan.Reasons, "context_pressure")
+	}
+
+	hardSignals := plan.Signals.Resume || plan.Signals.Verification || plan.Signals.Handoff || plan.Signals.MultiAgent
+	plan.InjectSynopsis = plan.Signals.HasPriorSynopsis && plan.Score >= plan.SynopsisThreshold
+	plan.InjectHistory = plan.Signals.HasCompressedHistory &&
+		plan.Score >= plan.HistoryThreshold &&
+		(plan.Signals.UsageRatio == 0 || plan.Signals.UsageRatio <= in.Config.HistoryMaxUsageRatio)
+	plan.InjectMemoryRecall = plan.Signals.HasMemoryRuntime &&
+		plan.Score >= plan.MemoryRecallThreshold &&
+		(plan.Signals.ContextPressure == "" ||
+			(plan.Signals.ContextPressure != agentcontext.LevelAggressive.String() &&
+				plan.Signals.ContextPressure != agentcontext.LevelEmergency.String()))
+
+	if !hardSignals && plan.Score < in.Config.ComplexityThreshold {
+		plan.InjectSynopsis = false
+		plan.InjectHistory = false
+		plan.InjectMemoryRecall = false
+		plan.Reasons = append(plan.Reasons, "below_complexity_threshold")
+	}
+
+	if plan.Signals.ContextPressure == agentcontext.LevelAggressive.String() || plan.Signals.ContextPressure == agentcontext.LevelEmergency.String() {
+		plan.InjectHistory = false
+		plan.SuppressedLayers = append(plan.SuppressedLayers, "trace_history")
+		plan.Reasons = append(plan.Reasons, "history_suppressed_by_pressure")
+	}
+	if plan.Signals.ContextPressure == agentcontext.LevelAggressive.String() || plan.Signals.ContextPressure == agentcontext.LevelEmergency.String() {
+		plan.InjectMemoryRecall = false
+		plan.SuppressedLayers = append(plan.SuppressedLayers, "memory_recall")
+		plan.Reasons = append(plan.Reasons, "memory_recall_suppressed_by_pressure")
+	}
+
+	if plan.InjectSynopsis {
+		plan.SelectedLayers = append(plan.SelectedLayers, "trace_synopsis")
+	} else if plan.Signals.HasPriorSynopsis {
+		plan.SuppressedLayers = append(plan.SuppressedLayers, "trace_synopsis")
+	}
+	if plan.InjectHistory {
+		plan.SelectedLayers = append(plan.SelectedLayers, "trace_history")
+	} else if plan.Signals.HasCompressedHistory && !containsString(plan.SuppressedLayers, "trace_history") {
+		plan.SuppressedLayers = append(plan.SuppressedLayers, "trace_history")
+	}
+	if plan.InjectMemoryRecall {
+		plan.SelectedLayers = append(plan.SelectedLayers, "memory_recall")
+	} else if plan.Signals.HasMemoryRuntime && !containsString(plan.SuppressedLayers, "memory_recall") {
+		plan.SuppressedLayers = append(plan.SuppressedLayers, "memory_recall")
+	}
+
+	plan.SelectedLayers = normalizeStringSlice(plan.SelectedLayers)
+	plan.SuppressedLayers = normalizeStringSlice(plan.SuppressedLayers)
+	plan.Goal = deriveTraceFeedbackGoal(plan.Signals)
+	plan.RecommendedAction, plan.PrimaryLayer, plan.SecondaryLayer = deriveTraceFeedbackAction(plan)
+	plan.Confidence = deriveTraceFeedbackConfidence(plan)
+	plan.Metadata["decision_basis"] = "rule_based_scoring"
+	plan.Metadata["complexity_threshold"] = in.Config.ComplexityThreshold
+	plan.Metadata["synopsis_available"] = plan.Signals.HasPriorSynopsis
+	plan.Metadata["history_available"] = plan.Signals.HasCompressedHistory
+	plan.Summary = buildTraceFeedbackSummary(plan, in.Config)
+	return plan
+}
+
+func (p *ComposedTraceFeedbackPlanner) Plan(input *TraceFeedbackPlanningInput) TraceFeedbackPlan {
+	plan := p.Base.Plan(input)
+	applied := make([]string, 0, len(p.Adapters))
+	for _, adapter := range p.Adapters {
+		if adapter == nil || !adapter.Supports(input) {
+			continue
+		}
+		adapter.Apply(input, &plan)
+		applied = append(applied, adapter.ID())
+	}
+	if plan.Metadata == nil {
+		plan.Metadata = map[string]any{}
+	}
+	plan.Metadata["adapter_ids"] = applied
+	return plan
+}
+
+func (a *HintTraceFeedbackAdapter) Apply(input *TraceFeedbackPlanningInput, plan *TraceFeedbackPlan) {
+	if !a.Supports(input) || plan == nil {
+		return
+	}
+	ctx := input.UserInput.Context
+	if contextBool(input.UserInput, "trace_feedback_force_skip") {
+		plan.InjectSynopsis = false
+		plan.InjectHistory = false
+		plan.InjectMemoryRecall = false
+		plan.SelectedLayers = nil
+		plan.SuppressedLayers = normalizeStringSlice([]string{"trace_synopsis", "trace_history", "memory_recall"})
+		plan.RecommendedAction = TraceFeedbackSkip
+		plan.Goal = "operator_forced_skip"
+		plan.Reasons = appendUniqueString(plan.Reasons, "force_skip")
+	}
+	if contextBool(input.UserInput, "trace_feedback_force_synopsis") {
+		plan.InjectSynopsis = true
+		plan.SelectedLayers = appendUniqueString(plan.SelectedLayers, "trace_synopsis")
+		plan.SuppressedLayers = removeString(plan.SuppressedLayers, "trace_synopsis")
+		if plan.RecommendedAction == TraceFeedbackSkip {
+			plan.RecommendedAction = TraceFeedbackSynopsisOnly
+		}
+		plan.Goal = fallbackString(contextString(input.UserInput, "trace_feedback_goal"), plan.Goal)
+		plan.Reasons = appendUniqueString(plan.Reasons, "force_synopsis")
+	}
+	if contextBool(input.UserInput, "trace_feedback_force_history") {
+		plan.InjectHistory = true
+		plan.SelectedLayers = appendUniqueString(plan.SelectedLayers, "trace_history")
+		plan.SuppressedLayers = removeString(plan.SuppressedLayers, "trace_history")
+		if plan.InjectSynopsis {
+			plan.RecommendedAction = TraceFeedbackSynopsisAndHistory
+		} else {
+			plan.RecommendedAction = TraceFeedbackHistoryOnly
+		}
+		plan.Goal = fallbackString(contextString(input.UserInput, "trace_feedback_goal"), plan.Goal)
+		plan.Reasons = appendUniqueString(plan.Reasons, "force_history")
+	}
+	if contextBool(input.UserInput, "trace_feedback_force_memory_recall") {
+		plan.InjectMemoryRecall = true
+		plan.SelectedLayers = appendUniqueString(plan.SelectedLayers, "memory_recall")
+		plan.SuppressedLayers = removeString(plan.SuppressedLayers, "memory_recall")
+		plan.Goal = fallbackString(contextString(input.UserInput, "trace_feedback_goal"), plan.Goal)
+		plan.Reasons = appendUniqueString(plan.Reasons, "force_memory_recall")
+	}
+	if value := strings.TrimSpace(contextString(input.UserInput, "trace_feedback_primary_layer")); value != "" {
+		plan.PrimaryLayer = value
+		plan.Metadata["hint_primary_layer"] = value
+	}
+	if value := strings.TrimSpace(contextString(input.UserInput, "trace_feedback_secondary_layer")); value != "" {
+		plan.SecondaryLayer = value
+		plan.Metadata["hint_secondary_layer"] = value
+	}
+	if value := strings.TrimSpace(contextString(input.UserInput, "trace_feedback_goal")); value != "" {
+		plan.Goal = value
+		plan.Metadata["hint_goal"] = value
+	}
+	if len(ctx) > 0 {
+		plan.Metadata["adapter_count"] = 1
+	}
+	plan.SelectedLayers = normalizeStringSlice(plan.SelectedLayers)
+	plan.SuppressedLayers = normalizeStringSlice(plan.SuppressedLayers)
+	plan.PlannerID = "composed_trace_feedback_planner"
+	plan.PlannerVersion = "v1"
+	plan.Metadata["planner_kind"] = "composed"
+	plan.Summary = buildTraceFeedbackSummary(*plan, input.Config)
+}
+
+func collectTraceFeedbackSignals(input *Input, status *agentcontext.Status, snapshot ExplainabilitySynopsisSnapshot, hasMemoryRuntime bool) TraceFeedbackSignals {
+	signals := TraceFeedbackSignals{
+		HasPriorSynopsis:     strings.TrimSpace(snapshot.Synopsis) != "",
+		HasCompressedHistory: strings.TrimSpace(snapshot.CompressedHistory) != "",
+		HasMemoryRuntime:     hasMemoryRuntime,
+		CompressedEventCount: snapshot.CompressedEventCount,
+	}
+	if input != nil && input.Context != nil {
+		if checkpointID, ok := input.Context["checkpoint_id"].(string); ok && strings.TrimSpace(checkpointID) != "" {
+			signals.Resume = true
+		}
+		signals.Verification = contextBool(input, "tool_verification_required") || contextBool(input, "code_task") || contextBool(input, "requires_code")
+		signals.ComplexTask = contextBool(input, "complex_task") || contextString(input, "task_type") != ""
+		if value, ok := intOverrideFromContext(input.Context, "top_level_loop_budget"); ok && value > 1 {
+			signals.ComplexTask = true
+		}
+		if value, ok := intOverrideFromContext(input.Context, "max_loop_iterations"); ok && value > 1 {
+			signals.ComplexTask = true
+		}
+		if _, ok := input.Context["agent_ids"]; ok {
+			signals.MultiAgent = true
+		}
+		if _, ok := input.Context["aggregation_strategy"]; ok {
+			signals.MultiAgent = true
+		}
+		if _, ok := input.Context["max_rounds"]; ok {
+			signals.MultiAgent = true
+		}
+		signals.Handoff = len(handoffMessagesFromInputContext(input.Context)) > 0
+	}
+	if input != nil {
+		signals.AcceptanceCriteriaCount = len(normalizeStringSlice(acceptanceCriteriaForValidation(input, nil)))
+		if signals.AcceptanceCriteriaCount > 0 {
+			signals.Verification = true
+		}
+	}
+	if status != nil {
+		signals.ContextPressure = status.Level.String()
+		signals.UsageRatio = status.UsageRatio
+	}
+	return signals
+}
+
+func buildTraceFeedbackSummary(plan TraceFeedbackPlan, cfg TraceFeedbackConfig) string {
+	parts := make([]string, 0, 8)
+	if strings.TrimSpace(plan.Goal) != "" {
+		parts = append(parts, "goal="+plan.Goal)
+	}
+	if plan.RecommendedAction != "" {
+		parts = append(parts, "action="+string(plan.RecommendedAction))
+	}
+	if strings.TrimSpace(plan.PrimaryLayer) != "" {
+		parts = append(parts, "primary="+plan.PrimaryLayer)
+	}
+	if strings.TrimSpace(plan.SecondaryLayer) != "" {
+		parts = append(parts, "secondary="+plan.SecondaryLayer)
+	}
+	if len(plan.SelectedLayers) > 0 {
+		parts = append(parts, "inject="+strings.Join(plan.SelectedLayers, ","))
+	}
+	if len(plan.SuppressedLayers) > 0 {
+		parts = append(parts, "suppress="+strings.Join(plan.SuppressedLayers, ","))
+	}
+	parts = append(parts, "score="+itoa(plan.Score))
+	parts = append(parts, "thresholds="+itoa(cfg.SynopsisMinScore)+"/"+itoa(cfg.HistoryMinScore)+"/"+itoa(cfg.MemoryRecallMinScore))
+	if len(plan.Reasons) > 0 {
+		parts = append(parts, "reasons="+strings.Join(plan.Reasons, ","))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func deriveTraceFeedbackGoal(signals TraceFeedbackSignals) string {
+	switch {
+	case signals.Resume:
+		return "resume_prior_execution"
+	case signals.Handoff:
+		return "continue_handoff_context"
+	case signals.MultiAgent:
+		return "preserve_collaboration_context"
+	case signals.Verification:
+		return "preserve_verification_context"
+	case signals.ComplexTask:
+		return "retain_complex_task_context"
+	case signals.ContextPressure == agentcontext.LevelNormal.String() ||
+		signals.ContextPressure == agentcontext.LevelAggressive.String() ||
+		signals.ContextPressure == agentcontext.LevelEmergency.String():
+		return "preserve_essential_context_only"
+	default:
+		return "fresh_turn"
+	}
+}
+
+func deriveTraceFeedbackAction(plan TraceFeedbackPlan) (action TraceFeedbackAction, primary, secondary string) {
+	switch {
+	case plan.InjectSynopsis && plan.InjectHistory:
+		return TraceFeedbackSynopsisAndHistory, "trace_synopsis", "trace_history"
+	case plan.InjectSynopsis:
+		return TraceFeedbackSynopsisOnly, "trace_synopsis", ""
+	case plan.InjectHistory:
+		return TraceFeedbackHistoryOnly, "trace_history", ""
+	case plan.InjectMemoryRecall:
+		return TraceFeedbackMemoryRecallOnly, "memory_recall", ""
+	default:
+		return TraceFeedbackSkip, "", ""
+	}
+}
+
+func deriveTraceFeedbackConfidence(plan TraceFeedbackPlan) float64 {
+	confidence := 0.45
+	if len(plan.SelectedLayers) > 0 {
+		confidence += 0.2
+	}
+	if plan.Score >= plan.SynopsisThreshold {
+		confidence += 0.15
+	}
+	if plan.Score >= plan.HistoryThreshold {
+		confidence += 0.1
+	}
+	if len(plan.Reasons) > 0 {
+		confidence += 0.05
+	}
+	if confidence > 1.0 {
+		return 1.0
+	}
+	return confidence
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(target) {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(values []string, target string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(target) {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func itoa(v int) string {
+	if v == 0 {
+		return "0"
+	}
+	sign := ""
+	if v < 0 {
+		sign = "-"
+		v = -v
+	}
+	var digits [20]byte
+	i := len(digits)
+	for v > 0 {
+		i--
+		digits[i] = byte('0' + (v % 10))
+		v /= 10
+	}
+	return sign + string(digits[i:])
+}
+
+// Merged from remote_tool_transport.go.
+
+type RemoteToolTargetKind string
+
+const (
+	RemoteToolTargetHTTP  RemoteToolTargetKind = "http"
+	RemoteToolTargetMCP   RemoteToolTargetKind = "mcp"
+	RemoteToolTargetA2A   RemoteToolTargetKind = "a2a"
+	RemoteToolTargetStdio RemoteToolTargetKind = "stdio"
+)
+
+type remoteHTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+type remoteMCPToolCaller interface {
+	CallTool(ctx context.Context, name string, args map[string]any) (any, error)
+}
+
+type remoteA2ATaskSender interface {
+	SendTask(ctx context.Context, endpoint string, fromAgentID string, payload map[string]any) (any, error)
+}
+
+type remoteTransportFactory func(ctx context.Context, target RemoteToolTarget) (mcpproto.Transport, error)
+
+// RemoteToolTarget describes a concrete remote invocation endpoint.
+type RemoteToolTarget struct {
+	Kind             RemoteToolTargetKind
+	Endpoint         string
+	ToolName         string
+	Headers          map[string]string
+	Command          string
+	Args             []string
+	AgentID          string
+	HTTPClient       remoteHTTPDoer
+	MCPClient        remoteMCPToolCaller
+	A2ASender        remoteA2ATaskSender
+	TransportFactory remoteTransportFactory
+}
+
+// ToolInvocationRequest is the provider-agnostic input for a remote tool call.
+type ToolInvocationRequest struct {
+	ToolName  string            `json:"tool_name,omitempty"`
+	Arguments json.RawMessage   `json:"arguments,omitempty"`
+	Input     string            `json:"input,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+// ToolInvocationResult is the normalized remote call output.
+type ToolInvocationResult struct {
+	Result   json.RawMessage   `json:"result"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// RemoteToolTransport normalizes HTTP / MCP / A2A / stdio remote invocations.
+type RemoteToolTransport interface {
+	Invoke(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error)
+}
+
+// DefaultRemoteToolTransport is the repository's shared remote tool adapter.
+type DefaultRemoteToolTransport struct {
+	httpClient remoteHTTPDoer
+	logger     *zap.Logger
+}
+
+func NewDefaultRemoteToolTransport(logger *zap.Logger) RemoteToolTransport {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &DefaultRemoteToolTransport{
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		logger:     logger.With(zap.String("component", "remote_tool_transport")),
+	}
+}
+
+func (t *DefaultRemoteToolTransport) Invoke(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error) {
+	switch target.Kind {
+	case RemoteToolTargetHTTP:
+		return t.invokeHTTP(ctx, target, req)
+	case RemoteToolTargetMCP:
+		return t.invokeMCP(ctx, target, req)
+	case RemoteToolTargetA2A:
+		return t.invokeA2A(ctx, target, req)
+	case RemoteToolTargetStdio:
+		return t.invokeStdio(ctx, target, req)
+	default:
+		return ToolInvocationResult{}, fmt.Errorf("unsupported remote tool target kind %q", target.Kind)
+	}
+}
+
+func (t *DefaultRemoteToolTransport) invokeHTTP(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error) {
+	body, err := json.Marshal(map[string]any{
+		"tool_name": chooseRemoteToolName(target, req),
+		"arguments": decodeRemoteArguments(req.Arguments),
+		"input":     strings.TrimSpace(req.Input),
+		"metadata":  cloneStringMap(req.Metadata),
+	})
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(target.Endpoint), bytes.NewReader(body))
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	for key, value := range target.Headers {
+		httpReq.Header.Set(key, value)
+	}
+	client := target.HTTPClient
+	if client == nil {
+		client = t.httpClient
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ToolInvocationResult{}, fmt.Errorf("http remote tool returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	result, err := normalizeRemoteJSONResult(raw)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	return ToolInvocationResult{Result: result}, nil
+}
+
+func (t *DefaultRemoteToolTransport) invokeMCP(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error) {
+	caller, cleanup, err := t.resolveMCPCaller(ctx, target)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	result, err := caller.CallTool(ctx, chooseRemoteToolName(target, req), decodeRemoteArgumentsMap(req.Arguments))
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	raw, err := normalizeRemoteValueResult(result)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	return ToolInvocationResult{Result: raw}, nil
+}
+
+func (t *DefaultRemoteToolTransport) invokeStdio(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error) {
+	stdioTarget := target
+	stdioTarget.Kind = RemoteToolTargetMCP
+	if stdioTarget.TransportFactory == nil {
+		stdioTarget.TransportFactory = func(context.Context, RemoteToolTarget) (mcpproto.Transport, error) {
+			return mcpproto.NewStdioTransport(strings.TrimSpace(target.Command), target.Args...)
+		}
+	}
+	return t.invokeMCP(ctx, stdioTarget, req)
+}
+
+func (t *DefaultRemoteToolTransport) invokeA2A(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error) {
+	payload := map[string]any{
+		"tool_name": chooseRemoteToolName(target, req),
+		"arguments": decodeRemoteArguments(req.Arguments),
+		"input":     strings.TrimSpace(req.Input),
+		"metadata":  cloneStringMap(req.Metadata),
+	}
+	if target.A2ASender != nil {
+		value, err := target.A2ASender.SendTask(ctx, strings.TrimSpace(target.Endpoint), firstNonEmpty(strings.TrimSpace(target.AgentID), "agentflow"), payload)
+		if err != nil {
+			return ToolInvocationResult{}, err
+		}
+		raw, err := normalizeRemoteValueResult(value)
+		if err != nil {
+			return ToolInvocationResult{}, err
+		}
+		return ToolInvocationResult{Result: raw}, nil
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"id":        strings.TrimSpace(target.ToolName) + "-remote-task",
+		"type":      "task",
+		"from":      firstNonEmpty(strings.TrimSpace(target.AgentID), "agentflow"),
+		"to":        strings.TrimSpace(target.Endpoint),
+		"payload":   payload,
+		"timestamp": time.Now().UTC(),
+	})
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(strings.TrimSpace(target.Endpoint), "/")+"/a2a/messages", bytes.NewReader(body))
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	for key, value := range target.Headers {
+		httpReq.Header.Set(key, value)
+	}
+	client := target.HTTPClient
+	if client == nil {
+		client = t.httpClient
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	defer resp.Body.Close()
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ToolInvocationResult{}, fmt.Errorf("a2a remote tool returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(rawBody, &envelope); err != nil {
+		return ToolInvocationResult{}, err
+	}
+	if msgType, ok := envelope["type"]; ok {
+		var typ string
+		if err := json.Unmarshal(msgType, &typ); err == nil && typ == "error" {
+			return ToolInvocationResult{}, fmt.Errorf("a2a remote tool returned error response")
+		}
+	}
+	payloadRaw := envelope["payload"]
+	raw, err := normalizeRemoteJSONResult(payloadRaw)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	return ToolInvocationResult{Result: raw}, nil
+}
+
+func (t *DefaultRemoteToolTransport) resolveMCPCaller(ctx context.Context, target RemoteToolTarget) (remoteMCPToolCaller, func(), error) {
+	if target.MCPClient != nil {
+		return target.MCPClient, nil, nil
+	}
+	factory := target.TransportFactory
+	if factory == nil {
+		return nil, nil, fmt.Errorf("mcp remote target requires MCPClient or TransportFactory")
+	}
+	transport, err := factory(ctx, target)
+	if err != nil {
+		return nil, nil, err
+	}
+	client := mcpproto.NewDefaultMCPClient(transport, t.logger)
+	if err := client.Initialize(ctx); err != nil {
+		_ = transport.Close()
+		return nil, nil, err
+	}
+	return client, func() {
+		_ = transport.Close()
+	}, nil
+}
+
+func chooseRemoteToolName(target RemoteToolTarget, req ToolInvocationRequest) string {
+	return firstNonEmpty(strings.TrimSpace(req.ToolName), strings.TrimSpace(target.ToolName))
+}
+
+func decodeRemoteArguments(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	return value
+}
+
+func decodeRemoteArgumentsMap(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var value map[string]any
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return map[string]any{}
+	}
+	return value
+}
+
+func normalizeRemoteJSONResult(raw []byte) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return json.RawMessage("null"), nil
+	}
+	if !json.Valid(trimmed) {
+		encoded, err := json.Marshal(string(trimmed))
+		return encoded, err
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &envelope); err == nil {
+		if result, ok := envelope["result"]; ok && len(result) > 0 {
+			return result, nil
+		}
+	}
+	return json.RawMessage(trimmed), nil
+}
+
+func normalizeRemoteValueResult(value any) (json.RawMessage, error) {
+	if value == nil {
+		return json.RawMessage("null"), nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return normalizeRemoteJSONResult(raw)
 }

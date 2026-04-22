@@ -542,7 +542,7 @@ func TestRollback_CallbackNotification(t *testing.T) {
 | 33-57 | Agent 接口、ContextManager 接口 | agent/base.go（保留） |
 | 59-93 | Input/Output/PlanResult/Feedback 类型 | agent/base.go（保留） |
 | 95-121 | Config 结构体 | agent/base.go（保留） |
-| 123-185 | BaseAgent 结构体 + NewBaseAgent | agent/base.go（保留） |
+| 123-185 | BaseAgent 结构体 + BuildBaseAgent | agent/base.go（保留） |
 | 187-238 | initGuardrails | agent/base.go（保留） |
 | 240-348 | toolManagerExecutor | agent/base.go（保留） |
 | 350-415 | ID/Name/Type/State/Transition/Init/Teardown | agent/base.go（保留） |
@@ -643,7 +643,7 @@ func parsePlanSteps(content string) []string {
 - Agent 接口、ContextManager 接口
 - Input/Output/PlanResult/Feedback 类型
 - Config 结构体
-- BaseAgent 结构体 + NewBaseAgent + initGuardrails
+- BaseAgent 结构体 + BuildBaseAgent + initGuardrails
 - toolManagerExecutor 及其方法
 - ID/Name/Type/State/Transition/Init/Teardown
 - TryLockExec/UnlockExec/EnsureReady/SaveMemory/RecallMemory

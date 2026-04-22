@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -19,19 +18,17 @@ import (
 type mockAgent struct {
 	id        string
 	name      string
-	agentType agent.AgentType
-	state     agent.State
-	execFunc  func(ctx context.Context, input *agent.Input) (*agent.Output, error)
+	agentType AgentType
+	execFunc  func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error)
 }
 
 func newMockAgent(id, name string) *mockAgent {
 	return &mockAgent{
 		id:        id,
 		name:      name,
-		agentType: agent.TypeGeneric,
-		state:     agent.StateReady,
-		execFunc: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
-			return &agent.Output{
+		agentType: AgentTypeGeneric,
+		execFunc: func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
+			return &ExecutionOutput{
 				TraceID:  input.TraceID,
 				Content:  "mock response for: " + input.Content,
 				Duration: 100 * time.Millisecond,
@@ -40,19 +37,12 @@ func newMockAgent(id, name string) *mockAgent {
 	}
 }
 
-func (m *mockAgent) ID() string                         { return m.id }
-func (m *mockAgent) Name() string                       { return m.name }
-func (m *mockAgent) Type() agent.AgentType              { return m.agentType }
-func (m *mockAgent) State() agent.State                 { return m.state }
-func (m *mockAgent) Init(ctx context.Context) error     { return nil }
-func (m *mockAgent) Teardown(ctx context.Context) error { return nil }
-func (m *mockAgent) Plan(ctx context.Context, input *agent.Input) (*agent.PlanResult, error) {
-	return &agent.PlanResult{Steps: []string{"step1"}}, nil
-}
-func (m *mockAgent) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
+func (m *mockAgent) ID() string      { return m.id }
+func (m *mockAgent) Name() string    { return m.name }
+func (m *mockAgent) Type() AgentType { return m.agentType }
+func (m *mockAgent) Execute(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
 	return m.execFunc(ctx, input)
 }
-func (m *mockAgent) Observe(ctx context.Context, feedback *agent.Feedback) error { return nil }
 
 func TestHTTPServer_RegisterAgent(t *testing.T) {
 	server := NewHTTPServer(&ServerConfig{
@@ -323,12 +313,12 @@ func TestHTTPServer_CancelTask(t *testing.T) {
 
 	// 创建缓冲代理
 	ag := newMockAgent("slow-agent", "Slow Agent")
-	ag.execFunc = func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
+	ag.execFunc = func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-time.After(5 * time.Second):
-			return &agent.Output{Content: "done"}, nil
+			return &ExecutionOutput{Content: "done"}, nil
 		}
 	}
 	_ = server.RegisterAgent(ag)
@@ -353,7 +343,7 @@ func TestHTTPServer_CancelTask(t *testing.T) {
 
 func TestAgentAdapter(t *testing.T) {
 	ag := newMockAgent("test-id", "Test Name")
-	ag.agentType = agent.TypeAssistant
+	ag.agentType = AgentTypeAssistant
 
 	adapter := newAgentAdapter(ag)
 

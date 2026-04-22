@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/agent/observability/hitl"
-	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -73,8 +74,8 @@ type ServeHandlerSet struct {
 	CapabilityCatalog *CapabilityCatalog
 	Resolver          *agent.CachingResolver
 
-	CheckpointStore         agent.CheckpointStore
-	CheckpointManager       *agent.CheckpointManager
+	CheckpointStore         agentcheckpoint.Store
+	CheckpointManager       *agentcheckpoint.Manager
 	WorkflowCheckpointStore workflowpkg.CheckpointStore
 	RAGStore                core.VectorStore
 	RAGEmbedding            core.EmbeddingProvider
@@ -324,7 +325,7 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 	set.CheckpointStore = checkpointStore
 	if checkpointStore != nil {
-		set.CheckpointManager = agent.NewCheckpointManager(checkpointStore, in.Logger)
+		set.CheckpointManager = agentcheckpoint.NewManager(checkpointStore, in.Logger)
 	}
 
 	if llmRuntime != nil && llmRuntime.Gateway != nil {

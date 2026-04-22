@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -354,7 +353,7 @@ func TestHTTPServer_HandleSyncMessage_ExecuteError(t *testing.T) {
 	ag := &mockAgent{
 		id:   "test-agent",
 		name: "Test Agent",
-		execFunc: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
+		execFunc: func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
 			return nil, fmt.Errorf("execution failed")
 		},
 	}

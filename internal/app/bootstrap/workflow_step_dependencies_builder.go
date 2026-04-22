@@ -9,8 +9,9 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/capabilities/planning"
 	"github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
@@ -31,7 +32,7 @@ type WorkflowRuntimeOptions struct {
 	AgentResolver           WorkflowAgentResolver
 	RetrievalStore          ragcore.VectorStore
 	EmbeddingProvider       ragcore.EmbeddingProvider
-	CheckpointStore         agent.CheckpointStore
+	CheckpointStore         agentcheckpoint.Store
 	WorkflowCheckpointStore workflow.CheckpointStore
 	HITLManager             *hitl.InterruptManager
 }
@@ -42,7 +43,7 @@ func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engi
 	if hitlManager == nil {
 		hitlManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), logger)
 	}
-	requester := deliberation.NewHITLInterruptAdapter(hitlManager)
+	requester := planning.NewHITLInterruptAdapter(hitlManager)
 	_ = ensureAutoApproveHITL(hitlManager, logger)
 	agentExecutor := resolverAgentExecutor{
 		resolver: opts.AgentResolver,
@@ -62,16 +63,16 @@ func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engi
 func buildHostedWorkflowTools(opts WorkflowRuntimeOptions, logger *zap.Logger) (*hosted.ToolRegistry, *hosted.CodeExecTool) {
 	registry := hosted.NewToolRegistry(logger)
 
-	sandboxCfg := execution.DefaultSandboxConfig()
-	sandboxCfg.Mode = execution.ModeNative
-	sandboxCfg.AllowedLanguages = []execution.Language{
-		execution.LangPython,
-		execution.LangJavaScript,
-		execution.LangBash,
-		execution.LangGo,
+	sandboxCfg := runtime.DefaultSandboxConfig()
+	sandboxCfg.Mode = runtime.ModeNative
+	sandboxCfg.AllowedLanguages = []runtime.Language{
+		runtime.LangPython,
+		runtime.LangJavaScript,
+		runtime.LangBash,
+		runtime.LangGo,
 	}
-	sandbox := execution.NewSandboxExecutor(sandboxCfg, execution.NewRealProcessBackend(logger, false), logger)
-	adapter := execution.NewHostedAdapter(sandbox, logger)
+	sandbox := runtime.NewSandboxExecutor(sandboxCfg, runtime.NewRealProcessBackend(logger, false), logger)
+	adapter := runtime.NewHostedAdapter(sandbox, logger)
 	codeTool := hosted.NewCodeExecTool(hosted.CodeExecConfig{
 		Executor: adapter,
 		Logger:   logger,
@@ -291,26 +292,26 @@ func (a hostedToolRegistryAdapter) ExecuteTool(ctx context.Context, name string,
 }
 
 type hitlHumanInputHandler struct {
-	requester deliberation.InterruptRequester
+	requester planning.InterruptRequester
 }
 
 func (h hitlHumanInputHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
 	if h.requester == nil {
 		return nil, fmt.Errorf("workflow hitl requester is not configured")
 	}
-	hitlOptions := make([]deliberation.ApprovalOption, 0, len(options))
+	hitlOptions := make([]planning.ApprovalOption, 0, len(options))
 	for idx, opt := range options {
 		id := opt
 		if id == "" {
 			id = fmt.Sprintf("option_%d", idx+1)
 		}
-		hitlOptions = append(hitlOptions, deliberation.ApprovalOption{
+		hitlOptions = append(hitlOptions, planning.ApprovalOption{
 			ID:    id,
 			Label: opt,
 		})
 	}
 
-	resp, err := h.requester.RequestApproval(ctx, deliberation.ApprovalRequest{
+	resp, err := h.requester.RequestApproval(ctx, planning.ApprovalRequest{
 		Title:       "Workflow human input required",
 		Description: prompt,
 		Options:     hitlOptions,
@@ -430,8 +431,18 @@ type ragHostedRetrievalStore struct {
 	embedder ragcore.EmbeddingProvider
 }
 
+func buildWorkflowCheckpointManager(opts WorkflowRuntimeOptions) workflow.CheckpointManager {
+	if opts.WorkflowCheckpointStore != nil {
+		return checkpointStoreManagerAdapter{store: opts.WorkflowCheckpointStore}
+	}
+	if opts.CheckpointStore == nil {
+		return nil
+	}
+	return workflowCheckpointManagerAdapter{manager: agentcheckpoint.NewManager(opts.CheckpointStore, nil)}
+}
+
 type workflowCheckpointManagerAdapter struct {
-	manager *agent.CheckpointManager
+	manager *agentcheckpoint.Manager
 }
 
 func (a workflowCheckpointManagerAdapter) SaveCheckpoint(ctx context.Context, cp *workflow.EnhancedCheckpoint) error {
@@ -475,16 +486,6 @@ type checkpointStoreManagerAdapter struct {
 
 func (a checkpointStoreManagerAdapter) SaveCheckpoint(ctx context.Context, cp *workflow.EnhancedCheckpoint) error {
 	return a.store.Save(ctx, cp)
-}
-
-func buildWorkflowCheckpointManager(opts WorkflowRuntimeOptions) workflow.CheckpointManager {
-	if opts.WorkflowCheckpointStore != nil {
-		return checkpointStoreManagerAdapter{store: opts.WorkflowCheckpointStore}
-	}
-	if opts.CheckpointStore == nil {
-		return nil
-	}
-	return workflowCheckpointManagerAdapter{manager: agent.NewCheckpointManager(opts.CheckpointStore, nil)}
 }
 
 func ensureAutoApproveHITL(manager *hitl.InterruptManager, logger *zap.Logger) *hitl.InterruptManager {

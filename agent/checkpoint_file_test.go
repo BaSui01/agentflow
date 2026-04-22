@@ -1,4 +1,4 @@
-package agent
+package agent_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/BaSui01/agentflow/agent"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -19,7 +21,7 @@ func TestFileCheckpointStore_SaveAndLoad(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -60,7 +62,7 @@ func TestFileCheckpointStore_LoadLatest(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -68,7 +70,7 @@ func TestFileCheckpointStore_LoadLatest(t *testing.T) {
 	// 保存多个检查点
 	for i := 1; i <= 3; i++ {
 		checkpoint := &Checkpoint{
-			ID:        generateCheckpointID(),
+			ID:        GenerateCheckpointID(),
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			State:     StateReady,
@@ -91,7 +93,7 @@ func TestFileCheckpointStore_List(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -99,7 +101,7 @@ func TestFileCheckpointStore_List(t *testing.T) {
 	// 保存多个检查点
 	for i := 1; i <= 5; i++ {
 		checkpoint := &Checkpoint{
-			ID:        generateCheckpointID(),
+			ID:        GenerateCheckpointID(),
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			State:     StateReady,
@@ -132,7 +134,7 @@ func TestFileCheckpointStore_Delete(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -163,7 +165,7 @@ func TestFileCheckpointStore_DeleteThread(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -171,7 +173,7 @@ func TestFileCheckpointStore_DeleteThread(t *testing.T) {
 	// 保存多个检查点
 	for i := 1; i <= 3; i++ {
 		checkpoint := &Checkpoint{
-			ID:        generateCheckpointID(),
+			ID:        GenerateCheckpointID(),
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			State:     StateReady,
@@ -197,7 +199,7 @@ func TestFileCheckpointStore_Versioning(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -205,7 +207,7 @@ func TestFileCheckpointStore_Versioning(t *testing.T) {
 	// 保存多个版本
 	for i := 1; i <= 3; i++ {
 		checkpoint := &Checkpoint{
-			ID:        generateCheckpointID(),
+			ID:        GenerateCheckpointID(),
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			State:     StateReady,
@@ -238,7 +240,7 @@ func TestFileCheckpointStore_Rollback(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -246,7 +248,7 @@ func TestFileCheckpointStore_Rollback(t *testing.T) {
 	// 保存多个版本
 	for i := 1; i <= 3; i++ {
 		checkpoint := &Checkpoint{
-			ID:        generateCheckpointID(),
+			ID:        GenerateCheckpointID(),
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			State:     StateReady,
@@ -283,7 +285,7 @@ func TestFileCheckpointStore_ConcurrentAccess(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -297,7 +299,7 @@ func TestFileCheckpointStore_ConcurrentAccess(t *testing.T) {
 			// 在 goroutine 内部生成唯一 ID,避免竞态条件
 			time.Sleep(time.Millisecond) // 确保时间戳不同
 			checkpoint := &Checkpoint{
-				ID:        generateCheckpointID(),
+				ID:        GenerateCheckpointID(),
 				ThreadID:  "thread-1",
 				AgentID:   "agent-1",
 				State:     StateReady,
@@ -326,7 +328,7 @@ func TestFileCheckpointStore_DirectoryStructure(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	logger, _ := zap.NewDevelopment()
-	store, err := NewFileCheckpointStore(tmpDir, logger)
+	store, err := agentcheckpoint.NewFileCheckpointStore(tmpDir, logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()

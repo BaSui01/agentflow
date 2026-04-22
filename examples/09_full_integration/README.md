@@ -23,4 +23,4 @@ go run main.go
 
 ## 代码说明
 
-四个场景逐步展示从单 Agent 增强到多 Agent 协作的完整架构。多 Agent 章节保留了 legacy `hierarchical/collaboration` surface 以兼容旧方案；新的多 Agent 接入默认应优先使用 `agent/team`。无 API Key 时所有子系统仍会正常初始化，仅跳过 LLM 调用部分。
+四个场景逐步展示从单 Agent 增强到多 Agent 协作的完整架构。多 Agent 章节保留了 legacy `hierarchical/collaboration` surface 以兼容旧方案；新的多 Agent 接入默认应优先使用 `agent/collaboration/team`。无 API Key 时所有子系统仍会正常初始化，仅跳过 LLM 调用部分。

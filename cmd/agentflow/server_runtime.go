@@ -6,17 +6,17 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agentmemory "github.com/BaSui01/agentflow/agent/capabilities/memory"
+	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
-	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
-	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/metrics"
@@ -93,10 +93,10 @@ type Server struct {
 	ragStore                core.VectorStore
 	ragEmbedding            core.EmbeddingProvider
 
-	auditLogger *tools.DefaultAuditLogger
+	auditLogger *llmtools.DefaultAuditLogger
 	abTester    *evaluation.ABTester
 
-	enhancedMemory *memory.EnhancedMemorySystem
+	enhancedMemory *agentmemory.EnhancedMemorySystem
 
 	wg sync.WaitGroup
 }

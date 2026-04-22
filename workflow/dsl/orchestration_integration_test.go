@@ -6,7 +6,6 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
 	"github.com/BaSui01/agentflow/workflow/engine"
@@ -18,12 +17,12 @@ type mockOrchestrationAgent struct {
 	out string
 }
 
-func (m *mockOrchestrationAgent) ID() string                                   { return m.id }
-func (m *mockOrchestrationAgent) Name() string                                  { return m.id }
-func (m *mockOrchestrationAgent) Type() agent.AgentType                         { return agent.TypeGeneric }
-func (m *mockOrchestrationAgent) State() agent.State                            { return agent.StateReady }
-func (m *mockOrchestrationAgent) Init(context.Context) error                    { return nil }
-func (m *mockOrchestrationAgent) Teardown(context.Context) error                { return nil }
+func (m *mockOrchestrationAgent) ID() string                     { return m.id }
+func (m *mockOrchestrationAgent) Name() string                   { return m.id }
+func (m *mockOrchestrationAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (m *mockOrchestrationAgent) State() agent.State             { return agent.StateReady }
+func (m *mockOrchestrationAgent) Init(context.Context) error     { return nil }
+func (m *mockOrchestrationAgent) Teardown(context.Context) error { return nil }
 func (m *mockOrchestrationAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return nil, nil
 }
@@ -84,7 +83,7 @@ workflow:
 		t.Fatal("workflow is nil")
 	}
 
-	sharedState := collaboration.NewInMemorySharedState()
+	sharedState := multiagent.NewInMemorySharedState()
 	exec := workflow.NewDAGExecutor(nil, zap.NewNop())
 	facade := workflow.NewFacade(exec)
 

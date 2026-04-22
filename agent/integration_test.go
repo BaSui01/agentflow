@@ -148,7 +148,7 @@ func TestBaseAgent_ExportConfiguration(t *testing.T) {
 }
 
 func TestBaseAgent_ValidateConfiguration_NoProvider(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("test-1", "Test", ""), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
+	ba := BuildBaseAgent(testAgentConfig("test-1", "Test", ""), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
 
 	err := ba.ValidateConfiguration()
 	require.Error(t, err)
@@ -162,7 +162,7 @@ func TestBaseAgent_ValidateConfiguration_Success(t *testing.T) {
 }
 
 func TestBaseAgent_ValidateConfiguration_WithExternalGatewayOnly(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("test-1", "Test", "gpt-4"), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
+	ba := BuildBaseAgent(testAgentConfig("test-1", "Test", "gpt-4"), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
 	ba.SetGateway(llmgateway.New(llmgateway.Config{
 		ChatProvider: &testProvider{name: "gateway-provider"},
 		Logger:       zap.NewNop(),
@@ -173,7 +173,7 @@ func TestBaseAgent_ValidateConfiguration_WithExternalGatewayOnly(t *testing.T) {
 }
 
 func TestBaseAgent_PrepareChatRequest_WithExternalGatewayOnly(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("test-1", "Test", "gpt-4"), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
+	ba := BuildBaseAgent(testAgentConfig("test-1", "Test", "gpt-4"), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
 	ba.SetGateway(llmgateway.New(llmgateway.Config{
 		ChatProvider: &testProvider{name: "gateway-provider"},
 		Logger:       zap.NewNop(),
@@ -197,7 +197,7 @@ func TestBaseAgent_ValidateConfiguration_MissingExecutors(t *testing.T) {
 	cfg.Extensions.LSP = &types.LSPConfig{Enabled: true}
 	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
 	cfg.Extensions.Observability = &types.ObservabilityConfig{Enabled: true}
-	ba := NewBaseAgent(cfg, testGatewayFromProvider(&testProvider{name: "test"}), nil, nil, nil, zap.NewNop(), nil)
+	ba := BuildBaseAgent(cfg, testGatewayFromProvider(&testProvider{name: "test"}), nil, nil, nil, zap.NewNop(), nil)
 
 	err := ba.ValidateConfiguration()
 	require.Error(t, err)
@@ -238,7 +238,7 @@ func TestBaseAgent_Execute_DefaultClosedLoopInvokesPlanAndObserve(t *testing.T) 
 		},
 	}
 
-	ag := NewBaseAgent(testAgentConfig("loop-agent", "LoopAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, bus, logger, nil)
+	ag := BuildBaseAgent(testAgentConfig("loop-agent", "LoopAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, bus, logger, nil)
 	require.NoError(t, ag.Init(context.Background()))
 	ag.SetCompletionJudge(NewDefaultCompletionJudge())
 	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
@@ -285,7 +285,7 @@ func TestBaseAgent_Execute_DefaultClosedLoopConsumesReasoningRegistry(t *testing
 	registry := reasoning.NewPatternRegistry()
 	require.NoError(t, registry.Register(integrationReasoningPatternStub{name: ReasoningModePlanAndExecute}))
 
-	ag := NewBaseAgent(testAgentConfig("reasoning-agent", "ReasoningAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	ag := BuildBaseAgent(testAgentConfig("reasoning-agent", "ReasoningAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
 	require.NoError(t, ag.Init(context.Background()))
 	ag.SetReasoningRegistry(registry)
 	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
@@ -361,7 +361,7 @@ func TestBaseAgent_Execute_DefaultClosedLoopReflectsWithinMainChain(t *testing.T
 
 	cfg := testAgentConfig("reflect-agent", "ReflectAgent", "gpt-4")
 	cfg.Runtime.MaxReActIterations = 1
-	ag := NewBaseAgent(cfg, testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	ag := BuildBaseAgent(cfg, testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
 	require.NoError(t, ag.Init(context.Background()))
 	ag.EnableReflection(&integrationLoopReflectionRunner{})
 	ag.SetCompletionJudge(judge)
@@ -403,7 +403,7 @@ func TestBaseAgent_Execute_DefaultClosedLoopNeedsValidationAndToolVerificationBe
 		},
 	}
 
-	ag := NewBaseAgent(testAgentConfig("validate-agent", "ValidateAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	ag := BuildBaseAgent(testAgentConfig("validate-agent", "ValidateAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
 	require.NoError(t, ag.Init(context.Background()))
 	ag.SetCompletionJudge(NewDefaultCompletionJudge())
 	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
@@ -442,7 +442,7 @@ func TestBaseAgent_Execute_DefaultClosedLoopKeepsCodeTaskOpenWithoutVerification
 		},
 	}
 
-	ag := NewBaseAgent(testAgentConfig("code-validate-agent", "CodeValidateAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	ag := BuildBaseAgent(testAgentConfig("code-validate-agent", "CodeValidateAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
 	require.NoError(t, ag.Init(context.Background()))
 	ag.SetCompletionJudge(NewDefaultCompletionJudge())
 	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
@@ -478,7 +478,7 @@ func TestBaseAgent_Execute_DefaultClosedLoopHonorsRunConfigMaxLoopIterations(t *
 		},
 	}
 
-	ag := NewBaseAgent(testAgentConfig("budget-agent", "BudgetAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	ag := BuildBaseAgent(testAgentConfig("budget-agent", "BudgetAgent", "gpt-4"), testGatewayFromProvider(provider), &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
 	require.NoError(t, ag.Init(context.Background()))
 	ag.SetCompletionJudge(&integrationCompletionJudgeStub{decisions: []*CompletionDecision{
 		{Decision: LoopDecisionContinue, Reason: "need another pass"},
@@ -573,7 +573,7 @@ func TestAsPromptEnhancerRunner(t *testing.T) {
 // ============================================================
 
 func newTestBaseAgent() *BaseAgent {
-	return NewBaseAgent(testAgentConfig("test-agent", "TestAgent", ""), testGatewayFromProvider(&testProvider{name: "test"}), nil, nil, nil, zap.NewNop(), nil)
+	return BuildBaseAgent(testAgentConfig("test-agent", "TestAgent", ""), testGatewayFromProvider(&testProvider{name: "test"}), nil, nil, nil, zap.NewNop(), nil)
 }
 
 type integTestReflectionRunner struct{}
