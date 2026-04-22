@@ -5,8 +5,8 @@
 正式入口口径：
 
 - 仓库级正式入口：`sdk.New(opts).Build(ctx)`
-- `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `agent.NewAgentBuilder`、`agent.CreateAgent`、`agent.NewBaseAgent` 仅保留给高级扩展场景，不作为默认接入方式
+- `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
+- `agent.NewAgentBuilder`、`agent.CreateAgent`、`agent.BuildBaseAgent` 仅保留给高级扩展场景，不作为默认接入方式
 
 ## 前提条件
 
@@ -98,10 +98,10 @@ go run main.go
 
 ## `agent` 子模块 runtime 入口
 
-如果你明确只在 `agent` 子模块内装配运行时，推荐入口是 `agent/runtime.Builder`：
+如果你明确只在 `agent` 子模块内装配运行时，推荐入口是 `agent/execution/runtime.Builder`：
 
 ```go
-import runtime "github.com/BaSui01/agentflow/agent/runtime"
+import runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
 import llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 
 opts := runtime.DefaultBuildOptions()
@@ -118,7 +118,7 @@ ag, err := runtime.NewBuilder(gateway, logger).
 
 ## 并发与运行时策略
 
-默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/runtime.Builder` 管理运行时能力；`agent.NewAgentBuilder` 更适合需要逐项注入底层依赖的高级扩展场景。
+默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/execution/runtime.Builder` 管理运行时能力；`agent.NewAgentBuilder` 更适合需要逐项注入底层依赖的高级扩展场景。
 
 > 注意：并发上限仍受底层 Provider 的速率限制和机器资源约束。
 
