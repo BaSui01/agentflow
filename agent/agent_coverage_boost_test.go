@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -1351,7 +1351,7 @@ func TestPersistenceStores_UpdateRunStatus_WithStore(t *testing.T) {
 
 func TestBaseAgent_GatewayProvider_WithLedger(t *testing.T) {
 	prov := &testMockProvider{}
-	ag := NewBaseAgent(
+	ag := BuildBaseAgent(
 		testConfig("gw-ledger"), testGatewayFromProvider(
 
 			prov),
@@ -1369,7 +1369,7 @@ func TestBaseAgent_GatewayProvider_WithLedger(t *testing.T) {
 func TestBaseAgent_GatewayToolProvider_WithLedger(t *testing.T) {
 	prov := &testMockProvider{}
 	toolProv := &testMockProvider{}
-	ag := NewBaseAgent(
+	ag := BuildBaseAgent(
 		testConfig("gw-tool-ledger"), testGatewayFromProvider(
 
 			prov),
@@ -1387,7 +1387,7 @@ func TestBaseAgent_GatewayToolProvider_WithLedger(t *testing.T) {
 
 func TestBaseAgent_GatewayToolProvider_NoToolProvider(t *testing.T) {
 	prov := &testMockProvider{}
-	ag := NewBaseAgent(
+	ag := BuildBaseAgent(
 		testConfig("gw-no-tool"), testGatewayFromProvider(
 
 			prov),

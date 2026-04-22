@@ -8,18 +8,24 @@ import (
 )
 
 func TestLoopExecutor_DoesNotReadLegacyControlFallbacks(t *testing.T) {
-	content, err := os.ReadFile(filepath.Join(".", "loop_executor.go"))
+	content, err := os.ReadFile(filepath.Join(".", "integration.go"))
 	if err != nil {
-		t.Fatalf("read loop_executor.go: %v", err)
+		t.Fatalf("read integration.go: %v", err)
 	}
 	text := string(content)
+	start := strings.Index(text, "// Merged from loop_executor.go.")
+	end := strings.Index(text, "// Merged from loop_executor_runtime.go.")
+	if start == -1 || end == -1 || end <= start {
+		t.Fatal("integration.go must keep explicit merged loop executor section markers")
+	}
+	text = text[start:end]
 	for _, needle := range []string{
 		"ResolveRunConfig(",
 		"DisablePlannerEnabled(",
 		"topLevelLoopBudget(",
 	} {
 		if strings.Contains(text, needle) {
-			t.Fatalf("loop_executor.go must not depend on legacy control fallback %q", needle)
+			t.Fatalf("integration.go must not depend on legacy control fallback %q", needle)
 		}
 	}
 }
@@ -33,12 +39,11 @@ func TestChatRequestConstruction_IsCentralizedInAdapter(t *testing.T) {
 		t.Fatal("request.go must not construct ChatRequest directly; use ChatRequestAdapter")
 	}
 
-	adapterContent, err := os.ReadFile(filepath.Join(".", "chat_request_adapter.go"))
+	adapterContent, err := os.ReadFile(filepath.Join(".", "adapters", "chat.go"))
 	if err != nil {
-		t.Fatalf("read chat_request_adapter.go: %v", err)
+		t.Fatalf("read adapters/chat.go: %v", err)
 	}
 	if !strings.Contains(string(adapterContent), "ChatRequest{") {
-		t.Fatal("chat_request_adapter.go must remain the primary ChatRequest construction surface")
+		t.Fatal("agent/adapters/chat.go must remain the primary ChatRequest construction surface")
 	}
 }
-

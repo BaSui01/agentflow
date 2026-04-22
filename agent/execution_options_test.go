@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -111,7 +112,7 @@ func TestChatRequestAdapter(t *testing.T) {
 		Tags:     []string{"unit"},
 	}
 
-	req, err := NewDefaultChatRequestAdapter().Build(options, []types.Message{{Role: llm.RoleUser, Content: "hello"}})
+	req, err := agentadapters.NewDefaultChatRequestAdapter().Build(options, []types.Message{{Role: llm.RoleUser, Content: "hello"}})
 	require.NoError(t, err)
 	require.NotNil(t, req)
 	assert.Equal(t, "gpt-4o", req.Model)
@@ -132,7 +133,7 @@ func TestChatRequestAdapter(t *testing.T) {
 }
 
 func TestPrepareChatRequest_UsesResolvedExecutionOptions(t *testing.T) {
-	agent := NewBaseAgent(
+	agent := BuildBaseAgent(
 		testAgentConfig("agent-1", "Agent", "base-model"),
 		testGatewayFromProvider(&testProvider{name: "main", supportsNative: true}),
 		nil,
@@ -184,7 +185,7 @@ func TestPrepareChatRequest_UsesResolvedExecutionOptions(t *testing.T) {
 }
 
 func TestPrepareChatRequest_UsesInjectedResolverAndAdapter(t *testing.T) {
-	agent := NewBaseAgent(
+	agent := BuildBaseAgent(
 		testAgentConfig("agent-1", "Agent", "base-model"),
 		testGatewayFromProvider(&testProvider{name: "main", supportsNative: true}),
 		nil,
