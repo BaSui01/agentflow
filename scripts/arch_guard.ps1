@@ -209,6 +209,66 @@ foreach ($dir in $protectedGatewayDirs) {
     }
 }
 
+# Rule 5.5: agent/ 顶层目录必须严格等于 8 层 allowlist；Phase-5 清零的目录不得回潮。
+$agentAllowedTopDirs = @(
+    "adapters",
+    "capabilities",
+    "collaboration",
+    "core",
+    "execution",
+    "integration",
+    "observability",
+    "persistence"
+)
+$agentBannedTopDirs = @(
+    # Phase-2~4 合并/下沉的目录
+    "memorycore",
+    "guardcore",
+    "deliberation",
+    "teamadapter",
+    "crews",
+    "discovery",
+    "longrunning",
+    # Phase-5 清零的 20 个空目录
+    "artifacts",
+    "context",
+    "conversation",
+    "declarative",
+    "deployment",
+    "evaluation",
+    "handoff",
+    "hitl",
+    "hosted",
+    "k8s",
+    "lsp",
+    "multiagent",
+    "orchestration",
+    "planner",
+    "reasoning",
+    "runtime",
+    "skills",
+    "streaming",
+    "structured",
+    "voice",
+    # Phase-5 合并到 agent/core/
+    "internalcore"
+)
+$agentTopDirs = Get-ChildItem agent -Directory | Select-Object -ExpandProperty Name
+foreach ($dir in $agentTopDirs) {
+    if ($agentBannedTopDirs -contains $dir) {
+        $errors += "[LAYOUT] agent/$dir/ 已在 Phase-2~5 清零，禁止回潮；应保持 8 层 allowlist"
+        continue
+    }
+    if ($agentAllowedTopDirs -notcontains $dir) {
+        $errors += "[LAYOUT] agent/$dir/ 不在 8 层 allowlist (adapters/capabilities/collaboration/core/execution/integration/observability/persistence)"
+    }
+}
+foreach ($required in $agentAllowedTopDirs) {
+    if ($agentTopDirs -notcontains $required) {
+        $errors += "[LAYOUT] 目标架构层 agent/$required/ 缺失，重构未完成"
+    }
+}
+
 # Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
 Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
 & go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentUnifiedBuilderEntryPoints|PublicUnifiedEntrypointDocs|AgentOfficialRuntimeEntrypointDocs|OfficialEntrypointDocsConsistency|PublicProductSurfaceDocsExamplesConsistency|AgentExecutionOptionsArchitectureGuards|AgentRootPackageFileBudget|AgentRootPublicSurfaceBudget|RootLayoutBudget|PkgOneFileDirectoryAllowlist)$" .

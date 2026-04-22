@@ -514,17 +514,15 @@ agentflow/
 │   ├── base.go               # Core types, public state/errors, EventBus
 │   ├── builder.go            # BaseAgent + AgentBuilder consolidation surface
 │   ├── checkpoint_binding.go # Public checkpoint types and manager entry
-│   ├── defensive_prompt.go   # Defensive prompt / OutputSchema
 │   ├── integration.go        # Execute/Plan/Observe and closed-loop runtime chain
 │   ├── interfaces.go         # Extension interfaces and public reflection/tool-selector surface
-│   ├── prompt_bundle.go      # PromptBundle / PromptEnhancer
 │   ├── registry.go           # AgentRegistry and public runtime registration surface
 │   ├── request.go            # RunConfig / request-runtime protocol entry
 │   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff/teamadapter)
 │   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
 │   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)
-│   ├── core/                 # Target core-layer namespace (kept as minimal skeleton during refactor)
-│   ├── execution/            # Execution layer (runtime/context/protocol/orchestration)
+│   ├── core/                 # Core layer (registry/helpers/extension contracts)
+│   ├── execution/            # Execution layer (runtime/context/loop/protocol/orchestration)
 │   ├── integration/          # Integration layer (deployment/hosted/k8s/lsp/voice)
 │   ├── observability/        # Observability layer (monitoring/evaluation/hitl)
 │   └── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
