@@ -29,7 +29,7 @@ func TestBaseAgentExecute_ResumesFromLatestCheckpointOnMainChain(t *testing.T) {
 			}, nil
 		},
 	}
-	agent := NewBaseAgent(testAgentConfig("agent-1", "Agent", "gpt-4"), testGatewayFromProvider(provider), nil, nil, nil, zap.NewNop(), nil)
+	agent := BuildBaseAgent(testAgentConfig("agent-1", "Agent", "gpt-4"), testGatewayFromProvider(provider), nil, nil, nil, zap.NewNop(), nil)
 	requireReadyAgent(t, agent)
 
 	store := newInMemoryCheckpointStore()
@@ -143,7 +143,7 @@ func TestBaseAgentExecute_ResumesLoopFieldsFromExecutionContextMapping(t *testin
 			}, nil
 		},
 	}
-	agent := NewBaseAgent(testAgentConfig("agent-2", "Agent", "gpt-4"), testGatewayFromProvider(provider), nil, nil, nil, zap.NewNop(), nil)
+	agent := BuildBaseAgent(testAgentConfig("agent-2", "Agent", "gpt-4"), testGatewayFromProvider(provider), nil, nil, nil, zap.NewNop(), nil)
 	requireReadyAgent(t, agent)
 
 	store := newInMemoryCheckpointStore()
@@ -215,7 +215,7 @@ func TestBaseAgentExecute_ResumesLoopFieldsFromExecutionContextMapping(t *testin
 }
 
 func TestPrepareResumeInput_RejectsCheckpointForDifferentAgent(t *testing.T) {
-	agent := NewBaseAgent(testAgentConfig("agent-expected", "Agent", "gpt-4"), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
+	agent := BuildBaseAgent(testAgentConfig("agent-expected", "Agent", "gpt-4"), testGatewayFromProvider(nil), nil, nil, nil, zap.NewNop(), nil)
 	store := newInMemoryCheckpointStore()
 	manager := NewCheckpointManager(store, zap.NewNop())
 	agent.SetCheckpointManager(manager)

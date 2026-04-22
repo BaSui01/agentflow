@@ -72,7 +72,7 @@ func (h *inProcessMCPHandlerStub) HandleRequest(_ context.Context, msg *mcpproto
 }
 
 func TestToolProtocolRuntime_ExecuteDelegatesToToolManager(t *testing.T) {
-	agent := NewBaseAgent(
+	agent := BuildBaseAgent(
 		testAgentConfig("agent-1", "Agent", "gpt-4"),
 		testGatewayFromProvider(&testProvider{name: "main", supportsNative: true}),
 		nil,
@@ -113,11 +113,11 @@ func TestToolProtocolRuntime_ExecuteDelegatesToToolManager(t *testing.T) {
 }
 
 func TestToolProtocolRuntime_PrepareWrapsRuntimeHandoffExecutor(t *testing.T) {
-	source := NewBaseAgent(testAgentConfig("source-agent", "Source", "gpt-4"), testGatewayFromProvider(&testProvider{
+	source := BuildBaseAgent(testAgentConfig("source-agent", "Source", "gpt-4"), testGatewayFromProvider(&testProvider{
 		name:           "source",
 		supportsNative: true,
 	}), nil, nil, nil, zap.NewNop(), nil)
-	target := NewBaseAgent(testAgentConfig("target-agent", "Target", "gpt-4"), testGatewayFromProvider(&testProvider{
+	target := BuildBaseAgent(testAgentConfig("target-agent", "Target", "gpt-4"), testGatewayFromProvider(&testProvider{
 		name:           "target",
 		supportsNative: true,
 	}), nil, nil, nil, zap.NewNop(), nil)

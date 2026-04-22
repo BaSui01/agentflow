@@ -11,7 +11,7 @@ import (
 )
 
 func TestPrepareChatRequest_AppendsRuntimeHandoffTools(t *testing.T) {
-	source := NewBaseAgent(testAgentConfig("source-agent", "Source", "gpt-4"), testGatewayFromProvider(&testProvider{
+	source := BuildBaseAgent(testAgentConfig("source-agent", "Source", "gpt-4"), testGatewayFromProvider(&testProvider{
 		name:           "source",
 		supportsNative: true,
 	}),
@@ -28,7 +28,7 @@ func TestPrepareChatRequest_AppendsRuntimeHandoffTools(t *testing.T) {
 		}, nil, zap.NewNop(), nil)
 
 	source.config.Runtime.Tools = []string{"search"}
-	target := NewBaseAgent(testAgentConfig("target-agent", "Target", "gpt-4"), testGatewayFromProvider(&testProvider{
+	target := BuildBaseAgent(testAgentConfig("target-agent", "Target", "gpt-4"), testGatewayFromProvider(&testProvider{
 		name:           "target",
 		supportsNative: true,
 	}),
@@ -142,8 +142,8 @@ func TestBaseAgent_Execute_WithRuntimeHandoff_EmitsSDKEvents(t *testing.T) {
 		},
 	}
 
-	source := NewBaseAgent(testAgentConfig("source-agent", "Source", "gpt-4o-mini"), testGatewayFromProvider(sourceProvider), nil, nil, nil, zap.NewNop(), nil)
-	target := NewBaseAgent(testAgentConfig("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(targetProvider), nil, nil, nil, zap.NewNop(), nil)
+	source := BuildBaseAgent(testAgentConfig("source-agent", "Source", "gpt-4o-mini"), testGatewayFromProvider(sourceProvider), nil, nil, nil, zap.NewNop(), nil)
+	target := BuildBaseAgent(testAgentConfig("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(targetProvider), nil, nil, nil, zap.NewNop(), nil)
 	if err := source.Init(context.Background()); err != nil {
 		t.Fatalf("source init failed: %v", err)
 	}
