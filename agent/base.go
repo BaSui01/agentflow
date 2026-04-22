@@ -2,11 +2,15 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -345,3 +349,439 @@ var validTransitions = map[State][]State{
 	StateCompleted: {StateReady, StateInit},
 	StateFailed:    {StateReady, StateInit},
 }
+
+type CodeValidationLanguage string
+
+const (
+	CodeLangPython     CodeValidationLanguage = "python"
+	CodeLangJavaScript CodeValidationLanguage = "javascript"
+	CodeLangTypeScript CodeValidationLanguage = "typescript"
+	CodeLangGo         CodeValidationLanguage = "go"
+	CodeLangRust       CodeValidationLanguage = "rust"
+	CodeLangBash       CodeValidationLanguage = "bash"
+)
+
+type CodeValidator struct{}
+
+func NewCodeValidator() *CodeValidator { return &CodeValidator{} }
+
+func (v *CodeValidator) Validate(lang CodeValidationLanguage, code string) []string {
+	if strings.TrimSpace(code) == "" {
+		return nil
+	}
+	patterns := map[CodeValidationLanguage][]string{
+		CodeLangPython:     {"import os", "os.system", "subprocess.", "eval(", "exec("},
+		CodeLangJavaScript: {"require('child_process')", "require(\"child_process\")", "child_process", "eval(", "new Function("},
+		CodeLangTypeScript: {"require('child_process')", "require(\"child_process\")", "child_process", "eval(", "new Function("},
+		CodeLangGo:         {"os/exec", "exec.Command", "syscall."},
+		CodeLangRust:       {"unsafe", "std::process::Command", "libc::"},
+		CodeLangBash:       {"rm -rf", "curl ", "wget ", "chmod 777", "sudo "},
+	}
+	checks := patterns[lang]
+	if len(checks) == 0 {
+		return nil
+	}
+	warnings := make([]string, 0, len(checks))
+	seen := make(map[string]struct{}, len(checks))
+	for _, needle := range checks {
+		if strings.Contains(code, needle) {
+			if _, ok := seen[needle]; ok {
+				continue
+			}
+			seen[needle] = struct{}{}
+			warnings = append(warnings, "potentially dangerous pattern: "+needle)
+		}
+	}
+	return warnings
+}
+
+type ErrInvalidTransition struct {
+	From State
+	To   State
+}
+
+func (e ErrInvalidTransition) Error() string {
+	return fmt.Sprintf("invalid state transition: %s -> %s", e.From, e.To)
+}
+
+func (e ErrInvalidTransition) ToAgentError() *Error {
+	return NewError(types.ErrInvalidTransition, e.Error()).
+		WithMetadata("from_state", e.From).
+		WithMetadata("to_state", e.To)
+}
+
+type Error struct {
+	Base      *types.Error   `json:"base,inline"`
+	AgentID   string         `json:"agent_id,omitempty"`
+	AgentType AgentType      `json:"agent_type,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+}
+
+func (e *Error) Error() string {
+	if e.Base != nil {
+		return e.Base.Error()
+	}
+	return "[UNKNOWN] agent error"
+}
+
+func (e *Error) Unwrap() error {
+	if e.Base != nil {
+		return e.Base.Unwrap()
+	}
+	return nil
+}
+
+func NewError(code types.ErrorCode, message string) *Error {
+	return &Error{
+		Base:      types.NewError(code, message),
+		Timestamp: time.Now(),
+		Metadata:  make(map[string]any),
+	}
+}
+
+func NewErrorWithCause(code types.ErrorCode, message string, cause error) *Error {
+	return &Error{
+		Base:      types.NewError(code, message).WithCause(cause),
+		Timestamp: time.Now(),
+		Metadata:  make(map[string]any),
+	}
+}
+
+func (e *Error) WithAgent(id string, agentType AgentType) *Error {
+	e.AgentID = id
+	e.AgentType = agentType
+	return e
+}
+
+func (e *Error) WithRetryable(retryable bool) *Error {
+	e.Base.Retryable = retryable
+	return e
+}
+
+func (e *Error) WithMetadata(key string, value any) *Error {
+	if e.Metadata == nil {
+		e.Metadata = make(map[string]any)
+	}
+	e.Metadata[key] = value
+	return e
+}
+
+func (e *Error) WithCause(cause error) *Error {
+	e.Base.Cause = cause
+	return e
+}
+
+func IsRetryable(err error) bool {
+	if e, ok := err.(*Error); ok {
+		return e.Base.Retryable
+	}
+	return types.IsRetryable(err)
+}
+
+func GetErrorCode(err error) types.ErrorCode {
+	if e, ok := err.(*Error); ok {
+		return e.Base.Code
+	}
+	return types.GetErrorCode(err)
+}
+
+type GuardrailsErrorType string
+
+const (
+	GuardrailsErrorTypeInput  GuardrailsErrorType = "input"
+	GuardrailsErrorTypeOutput GuardrailsErrorType = "output"
+)
+
+type GuardrailsError struct {
+	Type    GuardrailsErrorType          `json:"type"`
+	Message string                       `json:"message"`
+	Errors  []guardrails.ValidationError `json:"errors"`
+}
+
+func (e *GuardrailsError) Error() string {
+	if len(e.Errors) == 0 {
+		return fmt.Sprintf("guardrails %s validation failed: %s", e.Type, e.Message)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("guardrails %s validation failed: %s [", e.Type, e.Message))
+	for i, err := range e.Errors {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(fmt.Sprintf("%s: %s", err.Code, err.Message))
+	}
+	sb.WriteString("]")
+	return sb.String()
+}
+
+var (
+	ErrProviderNotSet         = NewError(types.ErrProviderNotSet, "LLM provider not configured")
+	ErrAgentNotReady          = NewError(types.ErrAgentNotReady, "agent not in ready state")
+	ErrAgentBusy              = NewError(types.ErrAgentBusy, "agent is busy executing another task")
+	ErrNoResponse             = NewError(types.ErrLLMResponseEmpty, "LLM returned no response")
+	ErrNoChoices              = NewError(types.ErrLLMResponseEmpty, "LLM returned no choices")
+	ErrPlanGenerationFailed   = NewError(types.ErrAgentExecution, "plan generation failed")
+	ErrExecutionFailed        = NewError(types.ErrAgentExecution, "execution failed")
+	ErrInputValidationFailed  = NewError(types.ErrInputValidation, "input validation error")
+	ErrOutputValidationFailed = NewError(types.ErrOutputValidation, "output validation error")
+)
+
+type EventType = types.AgentEventType
+
+const (
+	EventStateChange       EventType = types.AgentEventStateChange
+	EventToolCall          EventType = types.AgentEventToolCall
+	EventFeedback          EventType = types.AgentEventFeedback
+	EventApprovalRequested EventType = types.AgentEventApprovalRequested
+	EventApprovalResponded EventType = types.AgentEventApprovalResponded
+	EventSubagentCompleted EventType = types.AgentEventSubagentCompleted
+	EventAgentRunStart     EventType = types.AgentEventRunStart
+	EventAgentRunComplete  EventType = types.AgentEventRunComplete
+	EventAgentRunError     EventType = types.AgentEventRunError
+)
+
+var subscriptionCounter int64
+
+type Event interface {
+	Timestamp() time.Time
+	Type() EventType
+}
+
+type EventHandler func(Event)
+
+type EventBus interface {
+	Publish(event Event)
+	Subscribe(eventType EventType, handler EventHandler) string
+	Unsubscribe(subscriptionID string)
+	Stop()
+}
+
+type SimpleEventBus struct {
+	mu             sync.RWMutex
+	handlers       map[EventType]map[string]EventHandler
+	eventChannel   chan Event
+	done           chan struct{}
+	loopDone       chan struct{}
+	stopOnce       sync.Once
+	handlerWg      sync.WaitGroup
+	logger         *zap.Logger
+	panicErrChan   chan<- error
+	panicErrChanMu sync.RWMutex
+}
+
+func NewEventBus(logger ...*zap.Logger) EventBus {
+	var l *zap.Logger
+	if len(logger) > 0 && logger[0] != nil {
+		l = logger[0]
+	} else {
+		panic("agent.EventBus: logger is required and cannot be nil")
+	}
+	bus := &SimpleEventBus{
+		handlers:     make(map[EventType]map[string]EventHandler),
+		eventChannel: make(chan Event, 100),
+		done:         make(chan struct{}),
+		loopDone:     make(chan struct{}),
+		logger:       l,
+	}
+	go bus.processEvents()
+	return bus
+}
+
+func (b *SimpleEventBus) Publish(event Event) {
+	select {
+	case b.eventChannel <- event:
+	case <-b.done:
+	default:
+		b.logger.Warn("event dropped: channel full",
+			zap.String("event_type", string(event.Type())),
+			zap.Time("timestamp", event.Timestamp()),
+		)
+	}
+}
+
+func (b *SimpleEventBus) Subscribe(eventType EventType, handler EventHandler) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.handlers[eventType] == nil {
+		b.handlers[eventType] = make(map[string]EventHandler)
+	}
+	id := fmt.Sprintf("%s-%d", eventType, atomic.AddInt64(&subscriptionCounter, 1))
+	b.handlers[eventType][id] = handler
+	return id
+}
+
+func (b *SimpleEventBus) SetPanicErrorChan(ch chan<- error) {
+	b.panicErrChanMu.Lock()
+	defer b.panicErrChanMu.Unlock()
+	b.panicErrChan = ch
+}
+
+func (b *SimpleEventBus) Unsubscribe(subscriptionID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for eventType, handlers := range b.handlers {
+		if _, ok := handlers[subscriptionID]; ok {
+			delete(handlers, subscriptionID)
+			if len(handlers) == 0 {
+				delete(b.handlers, eventType)
+			}
+			return
+		}
+	}
+}
+
+func (b *SimpleEventBus) processEvents() {
+	defer close(b.loopDone)
+	for {
+		select {
+		case event := <-b.eventChannel:
+			b.dispatchEvent(event)
+		case <-b.done:
+			for {
+				select {
+				case event := <-b.eventChannel:
+					b.dispatchEvent(event)
+				default:
+					return
+				}
+			}
+		}
+	}
+}
+
+func (b *SimpleEventBus) dispatchEvent(event Event) {
+	b.mu.RLock()
+	src := b.handlers[event.Type()]
+	handlers := make([]EventHandler, 0, len(src))
+	for _, h := range src {
+		handlers = append(handlers, h)
+	}
+	b.mu.RUnlock()
+	b.handlerWg.Add(len(handlers))
+	for _, handler := range handlers {
+		h := handler
+		go func() {
+			defer b.handlerWg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					err := panicPayloadToError(r)
+					b.logger.Error("event handler panicked",
+						zap.Any("recover", r),
+						zap.Error(err),
+						zap.String("event_type", string(event.Type())),
+						zap.Stack("stack"),
+					)
+					b.panicErrChanMu.RLock()
+					ch := b.panicErrChan
+					b.panicErrChanMu.RUnlock()
+					if ch != nil {
+						select {
+						case ch <- err:
+						default:
+						}
+					}
+				}
+			}()
+			done := make(chan struct{})
+			timer := time.AfterFunc(5*time.Second, func() {
+				select {
+				case <-done:
+				default:
+					b.logger.Warn("event handler timed out",
+						zap.String("event_type", string(event.Type())),
+					)
+				}
+			})
+			defer func() {
+				close(done)
+				timer.Stop()
+			}()
+			h(event)
+		}()
+	}
+}
+
+func (b *SimpleEventBus) Stop() {
+	b.stopOnce.Do(func() {
+		close(b.done)
+	})
+	<-b.loopDone
+	b.handlerWg.Wait()
+}
+
+type StateChangeEvent struct {
+	AgentID_   string
+	FromState  State
+	ToState    State
+	Timestamp_ time.Time
+}
+
+func (e *StateChangeEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *StateChangeEvent) Type() EventType      { return EventStateChange }
+
+type ToolCallEvent struct {
+	AgentID_            string
+	RunID               string
+	TraceID             string
+	PromptBundleVersion string
+	ToolCallID          string
+	ToolName            string
+	Stage               string
+	Error               string
+	Timestamp_          time.Time
+}
+
+func (e *ToolCallEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *ToolCallEvent) Type() EventType      { return EventToolCall }
+
+type FeedbackEvent struct {
+	AgentID_     string
+	FeedbackType string
+	Content      string
+	Data         map[string]any
+	Timestamp_   time.Time
+}
+
+func (e *FeedbackEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *FeedbackEvent) Type() EventType      { return EventFeedback }
+
+type AgentRunStartEvent struct {
+	AgentID_    string
+	TraceID     string
+	RunID       string
+	ParentRunID string
+	Timestamp_  time.Time
+}
+
+func (e *AgentRunStartEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *AgentRunStartEvent) Type() EventType      { return EventAgentRunStart }
+
+type AgentRunCompleteEvent struct {
+	AgentID_         string
+	TraceID          string
+	RunID            string
+	ParentRunID      string
+	LatencyMs        int64
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	Cost             float64
+	Timestamp_       time.Time
+}
+
+func (e *AgentRunCompleteEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *AgentRunCompleteEvent) Type() EventType      { return EventAgentRunComplete }
+
+type AgentRunErrorEvent struct {
+	AgentID_    string
+	TraceID     string
+	RunID       string
+	ParentRunID string
+	LatencyMs   int64
+	Error       string
+	Timestamp_  time.Time
+}
+
+func (e *AgentRunErrorEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *AgentRunErrorEvent) Type() EventType      { return EventAgentRunError }
