@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	agentpkg "github.com/BaSui01/agentflow/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -23,7 +22,7 @@ type postgresRecord struct {
 	id        string
 	threadID  string
 	version   int
-	state     agentpkg.State
+	state     string
 	data      []byte
 	createdAt time.Time
 }
@@ -42,7 +41,7 @@ func (c *mockPostgresClient) Exec(_ context.Context, query string, args ...any) 
 			id:        args[0].(string),
 			threadID:  args[1].(string),
 			version:   args[3].(int),
-			state:     agentpkg.State(fmt.Sprint(args[4])),
+			state:     fmt.Sprint(args[4]),
 			data:      append([]byte(nil), args[5].([]byte)...),
 			createdAt: args[6].(time.Time),
 		}
@@ -240,8 +239,8 @@ func TestPostgreSQLCheckpointStore_SaveLoadAndListVersions(t *testing.T) {
 	client := newMockPostgresClient()
 	store := NewPostgreSQLCheckpointStore(client, zap.NewNop())
 
-	cp1 := &agentpkg.Checkpoint{ID: "cp-1", ThreadID: "t1", AgentID: "a1", State: agentpkg.StateInit, CreatedAt: time.Now().Add(-time.Minute)}
-	cp2 := &agentpkg.Checkpoint{ID: "cp-2", ThreadID: "t1", AgentID: "a1", State: agentpkg.StateReady, CreatedAt: time.Now()}
+	cp1 := &Checkpoint{ID: "cp-1", ThreadID: "t1", AgentID: "a1", State: "init", CreatedAt: time.Now().Add(-time.Minute)}
+	cp2 := &Checkpoint{ID: "cp-2", ThreadID: "t1", AgentID: "a1", State: "ready", CreatedAt: time.Now()}
 
 	require.NoError(t, store.Save(context.Background(), cp1))
 	require.NoError(t, store.Save(context.Background(), cp2))
@@ -269,7 +268,7 @@ func TestPostgreSQLCheckpointStore_Rollback(t *testing.T) {
 	client := newMockPostgresClient()
 	store := NewPostgreSQLCheckpointStore(client, zap.NewNop())
 
-	cp := &agentpkg.Checkpoint{ID: "cp-1", ThreadID: "t1", AgentID: "a1", State: agentpkg.StateReady, CreatedAt: time.Now()}
+	cp := &Checkpoint{ID: "cp-1", ThreadID: "t1", AgentID: "a1", State: "ready", CreatedAt: time.Now()}
 	require.NoError(t, store.Save(context.Background(), cp))
 
 	require.NoError(t, store.Rollback(context.Background(), "t1", 1))

@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	planningcap "github.com/BaSui01/agentflow/agent/capabilities/planning"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	executionloop "github.com/BaSui01/agentflow/agent/execution/loop"
+	agentfeatures "github.com/BaSui01/agentflow/agent/integration"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -17,44 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-// EnhancedExecutionOptions 增强执行选项
-type EnhancedExecutionOptions struct {
-	UseReflection bool
-
-	UseToolSelection bool
-
-	UsePromptEnhancer bool
-
-	UseSkills   bool
-	SkillsQuery string
-
-	UseEnhancedMemory   bool
-	LoadWorkingMemory   bool
-	LoadShortTermMemory bool
-	SaveToMemory        bool
-
-	UseObservability bool
-	RecordMetrics    bool
-	RecordTrace      bool
-}
-
-// DefaultEnhancedExecutionOptions 默认增强执行选项
-func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
-	return EnhancedExecutionOptions{
-		UseReflection:       false,
-		UseToolSelection:    false,
-		UsePromptEnhancer:   false,
-		UseSkills:           false,
-		UseEnhancedMemory:   false,
-		LoadWorkingMemory:   true,
-		LoadShortTermMemory: true,
-		SaveToMemory:        true,
-		UseObservability:    true,
-		RecordMetrics:       true,
-		RecordTrace:         true,
-	}
-}
 
 // EnableReflection 启用 Reflection 机制
 func (b *BaseAgent) EnableReflection(executor ReflectionRunner) {
@@ -241,9 +205,7 @@ type LoopReflectionResult struct {
 
 // GetFeatureStatus 获取功能启用状态
 func (b *BaseAgent) GetFeatureStatus() map[string]bool {
-	status := b.extensions.GetFeatureStatus()
-	status["context_manager"] = b.contextManager != nil
-	return status
+	return agentfeatures.FeatureStatus(b.extensions.GetFeatureStatus(), b.contextManager != nil)
 }
 
 // PrintFeatureStatus 打印功能状态
@@ -266,12 +228,7 @@ func (b *BaseAgent) PrintFeatureStatus() {
 
 // ValidateConfiguration 验证配置
 func (b *BaseAgent) ValidateConfiguration() error {
-	validationErrors := b.extensions.ValidateConfiguration(b.config)
-
-	if !b.hasMainExecutionSurface() {
-		validationErrors = append(validationErrors, "provider not set")
-	}
-
+	validationErrors := agentfeatures.ConfigurationValidationErrors(b.extensions.ValidateConfiguration(b.config), b.hasMainExecutionSurface())
 	if len(validationErrors) > 0 {
 		return NewError(types.ErrInputValidation, "configuration validation failed: "+strings.Join(validationErrors, "; "))
 	}
@@ -282,60 +239,12 @@ func (b *BaseAgent) ValidateConfiguration() error {
 
 // GetFeatureMetrics 获取功能使用指标
 func (b *BaseAgent) GetFeatureMetrics() map[string]any {
-	status := b.GetFeatureStatus()
-	executionOptions := b.config.ExecutionOptions()
-
-	metrics := map[string]any{
-		"agent_id":   b.ID(),
-		"agent_name": b.Name(),
-		"agent_type": string(b.Type()),
-		"features":   status,
-		"config": map[string]any{
-			"model":       executionOptions.Model.Model,
-			"provider":    executionOptions.Model.Provider,
-			"max_tokens":  executionOptions.Model.MaxTokens,
-			"temperature": executionOptions.Model.Temperature,
-		},
-	}
-
-	enabledCount := 0
-	for _, enabled := range status {
-		if enabled {
-			enabledCount++
-		}
-	}
-	metrics["enabled_features_count"] = enabledCount
-	metrics["total_features_count"] = len(status)
-
-	return metrics
+	return agentfeatures.FeatureMetrics(b.ID(), b.Name(), string(b.Type()), b.GetFeatureStatus(), b.config.ExecutionOptions())
 }
 
 // ExportConfiguration 导出配置（用于持久化或分享）
 func (b *BaseAgent) ExportConfiguration() map[string]any {
-	executionOptions := b.config.ExecutionOptions()
-	return map[string]any{
-		"id":              b.config.Core.ID,
-		"name":            b.config.Core.Name,
-		"type":            b.config.Core.Type,
-		"description":     b.config.Core.Description,
-		"model":           executionOptions.Model.Model,
-		"provider":        executionOptions.Model.Provider,
-		"runtime_model":   executionOptions.Model,
-		"runtime_control": executionOptions.Control,
-		"runtime_tools":   executionOptions.Tools,
-		"features": map[string]bool{
-			"reflection":      b.config.IsReflectionEnabled(),
-			"tool_selection":  b.config.IsToolSelectionEnabled(),
-			"prompt_enhancer": b.config.IsPromptEnhancerEnabled(),
-			"skills":          b.config.IsSkillsEnabled(),
-			"mcp":             b.config.IsMCPEnabled(),
-			"lsp":             b.config.IsLSPEnabled(),
-			"enhanced_memory": b.config.IsMemoryEnabled(),
-			"observability":   b.config.IsObservabilityEnabled(),
-		},
-		"tools":    executionOptions.Tools.AllowedTools,
-		"metadata": b.config.Metadata,
-	}
+	return agentfeatures.ExportConfiguration(b.config)
 }
 
 // Merged from completion.go.
@@ -1345,141 +1254,6 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 	return pr.chatProvider.Stream(ctx, pr.req)
 }
 
-// =============================================================================
-// Runtime Stream Events
-// =============================================================================
-
-type runtimeStreamEmitterKey struct{}
-
-// RuntimeStreamEventType identifies the kind of runtime stream event.
-type RuntimeStreamEventType string
-type SDKStreamEventType string
-type SDKRunItemEventName string
-
-const (
-	RuntimeStreamToken        RuntimeStreamEventType = "token"
-	RuntimeStreamReasoning    RuntimeStreamEventType = "reasoning"
-	RuntimeStreamToolCall     RuntimeStreamEventType = "tool_call"
-	RuntimeStreamToolResult   RuntimeStreamEventType = "tool_result"
-	RuntimeStreamToolProgress RuntimeStreamEventType = "tool_progress"
-	RuntimeStreamApproval     RuntimeStreamEventType = "approval"
-	RuntimeStreamSession      RuntimeStreamEventType = "session"
-	RuntimeStreamStatus       RuntimeStreamEventType = "status"
-	RuntimeStreamSteering     RuntimeStreamEventType = "steering"
-	RuntimeStreamStopAndSend  RuntimeStreamEventType = "stop_and_send"
-)
-
-const (
-	SDKRawResponseEvent  SDKStreamEventType = "raw_response_event"
-	SDKRunItemEvent      SDKStreamEventType = "run_item_stream_event"
-	SDKAgentUpdatedEvent SDKStreamEventType = "agent_updated_stream_event"
-)
-
-const (
-	SDKMessageOutputCreated SDKRunItemEventName = "message_output_created"
-	SDKHandoffRequested     SDKRunItemEventName = "handoff_requested"
-	SDKToolCalled           SDKRunItemEventName = "tool_called"
-	SDKToolSearchCalled     SDKRunItemEventName = "tool_search_called"
-	SDKToolSearchOutput     SDKRunItemEventName = "tool_search_output_created"
-	SDKToolOutput           SDKRunItemEventName = "tool_output"
-	SDKReasoningCreated     SDKRunItemEventName = "reasoning_item_created"
-	SDKApprovalRequested    SDKRunItemEventName = "approval_requested"
-	SDKApprovalResponse     SDKRunItemEventName = "approval_response"
-	SDKMCPApprovalRequested SDKRunItemEventName = "mcp_approval_requested"
-	SDKMCPApprovalResponse  SDKRunItemEventName = "mcp_approval_response"
-	SDKMCPListTools         SDKRunItemEventName = "mcp_list_tools"
-)
-
-var SDKHandoffOccured = SDKRunItemEventName(handoffOccuredEventName())
-
-func handoffOccuredEventName() string {
-	return string([]byte{'h', 'a', 'n', 'd', 'o', 'f', 'f', '_', 'o', 'c', 'c', 'u', 'r', 'e', 'd'})
-}
-
-// RuntimeToolCall carries tool invocation metadata in a stream event.
-type RuntimeToolCall struct {
-	ID        string          `json:"id,omitempty"`
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
-}
-
-// RuntimeToolResult carries tool execution results in a stream event.
-type RuntimeToolResult struct {
-	ToolCallID string          `json:"tool_call_id,omitempty"`
-	Name       string          `json:"name"`
-	Result     json.RawMessage `json:"result,omitempty"`
-	Error      string          `json:"error,omitempty"`
-	Duration   time.Duration   `json:"duration,omitempty"`
-}
-
-// RuntimeStreamEvent is a single event emitted during streamed Agent execution.
-type RuntimeStreamEvent struct {
-	Type            RuntimeStreamEventType `json:"type"`
-	SDKEventType    SDKStreamEventType     `json:"sdk_event_type,omitempty"`
-	SDKEventName    SDKRunItemEventName    `json:"sdk_event_name,omitempty"`
-	Timestamp       time.Time              `json:"timestamp"`
-	Token           string                 `json:"token,omitempty"`
-	Delta           string                 `json:"delta,omitempty"`
-	Reasoning       string                 `json:"reasoning,omitempty"`
-	ToolCall        *RuntimeToolCall       `json:"tool_call,omitempty"`
-	ToolResult      *RuntimeToolResult     `json:"tool_result,omitempty"`
-	ToolCallID      string                 `json:"tool_call_id,omitempty"`
-	ToolName        string                 `json:"tool_name,omitempty"`
-	Data            any                    `json:"data,omitempty"`
-	SteeringContent string                 `json:"steering_content,omitempty"` // steering 确认内容
-	CurrentStage    string                 `json:"current_stage,omitempty"`
-	IterationCount  int                    `json:"iteration_count,omitempty"`
-	SelectedMode    string                 `json:"selected_reasoning_mode,omitempty"`
-	StopReason      string                 `json:"stop_reason,omitempty"`
-	CheckpointID    string                 `json:"checkpoint_id,omitempty"`
-	Resumable       bool                   `json:"resumable,omitempty"`
-}
-
-// RuntimeStreamEmitter is a callback that receives runtime stream events.
-type RuntimeStreamEmitter func(RuntimeStreamEvent)
-
-// WithRuntimeStreamEmitter stores an emitter in the context.
-func WithRuntimeStreamEmitter(ctx context.Context, emit RuntimeStreamEmitter) context.Context {
-	if emit == nil {
-		return ctx
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, runtimeStreamEmitterKey{}, emit)
-}
-
-func runtimeStreamEmitterFromContext(ctx context.Context) (RuntimeStreamEmitter, bool) {
-	if ctx == nil {
-		return nil, false
-	}
-	v := ctx.Value(runtimeStreamEmitterKey{})
-	if v == nil {
-		return nil, false
-	}
-	emit, ok := v.(RuntimeStreamEmitter)
-	return emit, ok && emit != nil
-}
-
-func emitRuntimeStatus(emit RuntimeStreamEmitter, status string, event RuntimeStreamEvent) {
-	if emit == nil {
-		return
-	}
-	event.Type = RuntimeStreamStatus
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now()
-	}
-	if event.Data == nil {
-		event.Data = map[string]any{"status": status}
-	} else if payload, ok := event.Data.(map[string]any); ok {
-		if _, exists := payload["status"]; !exists {
-			payload["status"] = status
-		}
-		event.Data = payload
-	}
-	emit(event)
-}
-
 func emitCompletionLoopStatus(emit RuntimeStreamEmitter, iteration int, selectedMode, stopReason string) {
 	normalizedStopReason := normalizeTopLevelStopReason(stopReason, stopReason)
 	emitRuntimeStatus(emit, "completion_judge_decision", RuntimeStreamEvent{
@@ -1546,51 +1320,7 @@ func runtimeHandoffToolRequested(pr *preparedRequest, toolName string) bool {
 // defaultCostCalc is a package-level cost calculator for estimating LLM call costs.
 var defaultCostCalc = observability.NewCostCalculator()
 
-const submitNumberedPlanTool = "submit_numbered_plan"
-
-type numberedPlanSubmission struct {
-	Steps []string `json:"steps"`
-}
-
-func numberedPlanToolSchema() types.ToolSchema {
-	strict := true
-	return types.ToolSchema{
-		Type:        types.ToolTypeFunction,
-		Name:        submitNumberedPlanTool,
-		Description: "Submit the ordered execution steps for the task.",
-		Parameters: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"steps": {
-					"type": "array",
-					"items": {"type": "string"},
-					"minItems": 1,
-					"description": "Ordered execution steps."
-				}
-			},
-			"required": ["steps"],
-			"additionalProperties": false
-		}`),
-		Strict: &strict,
-	}
-}
-
-func parseNumberedPlanToolCall(message types.Message) ([]string, error) {
-	for _, call := range message.ToolCalls {
-		if call.Name != submitNumberedPlanTool {
-			continue
-		}
-		var submission numberedPlanSubmission
-		if err := json.Unmarshal(call.Arguments, &submission); err != nil {
-			return nil, fmt.Errorf("decode numbered plan tool call: %w", err)
-		}
-		if len(submission.Steps) == 0 {
-			return nil, fmt.Errorf("numbered plan tool call did not include steps")
-		}
-		return submission.Steps, nil
-	}
-	return nil, fmt.Errorf("numbered plan tool call not found")
-}
+const submitNumberedPlanTool = planningcap.SubmitNumberedPlanTool
 
 // Plan 生成执行计划
 // 使用 LLM 分析任务并生成详细的执行步骤
@@ -1611,7 +1341,7 @@ Requirements:
 - Keep each step directly executable
 - Prefer tool-first actions when tools are needed
 - Mention dependencies or risks only when they affect execution
-- Do not answer with prose outside the tool call`, input.Content, submitNumberedPlanTool)
+- Do not answer with prose outside the tool call`, input.Content, planningcap.SubmitNumberedPlanTool)
 
 	messages := []types.Message{
 		{
@@ -1632,7 +1362,7 @@ Requirements:
 	if !nativeToolSupport && b.mainProviderCompat != nil {
 		nativeToolSupport = b.mainProviderCompat.SupportsNativeFunctionCalling()
 	}
-	pr.req.Tools = []types.ToolSchema{numberedPlanToolSchema()}
+	pr.req.Tools = []types.ToolSchema{planningcap.NumberedPlanToolSchema()}
 	pr.req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
 	if nativeToolSupport {
 		pr.req.ToolCallMode = types.ToolCallModeNative
@@ -1650,7 +1380,7 @@ Requirements:
 		return nil, NewError(types.ErrLLMResponseEmpty, "plan generation returned no choices")
 	}
 	choice := resp.FirstChoice()
-	steps, parseErr := parseNumberedPlanToolCall(choice.Message)
+	steps, parseErr := planningcap.ParseNumberedPlanToolCall(choice.Message)
 	if parseErr != nil {
 		return nil, NewErrorWithCause(types.ErrAgentExecution, "plan generation did not return tool call", parseErr)
 	}

@@ -5,7 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
+	promptcap "github.com/BaSui01/agentflow/agent/capabilities/prompt"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
+	agentfeatures "github.com/BaSui01/agentflow/agent/integration"
+	agentevents "github.com/BaSui01/agentflow/agent/observability/events"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
+	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/types"
@@ -13,6 +18,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -127,6 +133,847 @@ type MemoryObservationInput = memorycore.MemoryObservationInput
 type MemoryRuntime = memorycore.MemoryRuntime
 
 type UnifiedMemoryFacade = memorycore.UnifiedMemoryFacade
+
+type PromptBundle = promptcap.PromptBundle
+
+type SystemPrompt = promptcap.SystemPrompt
+
+type Example = promptcap.Example
+
+type MemoryConfig = promptcap.MemoryConfig
+
+type PlanConfig = promptcap.PlanConfig
+
+type ReflectionConfig = promptcap.ReflectionConfig
+
+type PromptEnhancerConfig = promptcap.PromptEnhancerConfig
+
+type PromptEnhancer = promptcap.PromptEnhancer
+
+type EnhancedExecutionOptions = agentfeatures.EnhancedExecutionOptions
+
+type RuntimeStreamEventType = agentevents.RuntimeStreamEventType
+
+type SDKStreamEventType = agentevents.SDKStreamEventType
+
+type SDKRunItemEventName = agentevents.SDKRunItemEventName
+
+type RuntimeToolCall = agentevents.RuntimeToolCall
+
+type RuntimeToolResult = agentevents.RuntimeToolResult
+
+type RuntimeStreamEvent = agentevents.RuntimeStreamEvent
+
+type RuntimeStreamEmitter = agentevents.RuntimeStreamEmitter
+
+const (
+	RuntimeStreamToken        = agentevents.RuntimeStreamToken
+	RuntimeStreamReasoning    = agentevents.RuntimeStreamReasoning
+	RuntimeStreamToolCall     = agentevents.RuntimeStreamToolCall
+	RuntimeStreamToolResult   = agentevents.RuntimeStreamToolResult
+	RuntimeStreamToolProgress = agentevents.RuntimeStreamToolProgress
+	RuntimeStreamApproval     = agentevents.RuntimeStreamApproval
+	RuntimeStreamSession      = agentevents.RuntimeStreamSession
+	RuntimeStreamStatus       = agentevents.RuntimeStreamStatus
+	RuntimeStreamSteering     = agentevents.RuntimeStreamSteering
+	RuntimeStreamStopAndSend  = agentevents.RuntimeStreamStopAndSend
+)
+
+const (
+	SDKRawResponseEvent  = agentevents.SDKRawResponseEvent
+	SDKRunItemEvent      = agentevents.SDKRunItemEvent
+	SDKAgentUpdatedEvent = agentevents.SDKAgentUpdatedEvent
+)
+
+const (
+	SDKMessageOutputCreated = agentevents.SDKMessageOutputCreated
+	SDKHandoffRequested     = agentevents.SDKHandoffRequested
+	SDKToolCalled           = agentevents.SDKToolCalled
+	SDKToolSearchCalled     = agentevents.SDKToolSearchCalled
+	SDKToolSearchOutput     = agentevents.SDKToolSearchOutput
+	SDKToolOutput           = agentevents.SDKToolOutput
+	SDKReasoningCreated     = agentevents.SDKReasoningCreated
+	SDKApprovalRequested    = agentevents.SDKApprovalRequested
+	SDKApprovalResponse     = agentevents.SDKApprovalResponse
+	SDKMCPApprovalRequested = agentevents.SDKMCPApprovalRequested
+	SDKMCPApprovalResponse  = agentevents.SDKMCPApprovalResponse
+	SDKMCPListTools         = agentevents.SDKMCPListTools
+)
+
+var SDKHandoffOccured = agentevents.SDKHandoffOccured
+
+type PromptTemplateLibrary = promptcap.PromptTemplateLibrary
+
+type PromptTemplate = promptcap.PromptTemplate
+
+type DefensivePromptConfig = promptcap.DefensivePromptConfig
+
+type FailureMode = promptcap.FailureMode
+
+type OutputSchema = promptcap.OutputSchema
+
+type GuardRail = promptcap.GuardRail
+
+type InjectionDefenseConfig = promptcap.InjectionDefenseConfig
+
+type DefensivePromptEnhancer = promptcap.DefensivePromptEnhancer
+
+type CheckpointDiff struct {
+	ThreadID     string        `json:"thread_id"`
+	Version1     int           `json:"version1"`
+	Version2     int           `json:"version2"`
+	StateChanged bool          `json:"state_changed"`
+	OldState     State         `json:"old_state"`
+	NewState     State         `json:"new_state"`
+	MessagesDiff string        `json:"messages_diff"`
+	MetadataDiff string        `json:"metadata_diff"`
+	TimeDiff     time.Duration `json:"time_diff"`
+}
+
+type Checkpoint struct {
+	ID                  string               `json:"id"`
+	ThreadID            string               `json:"thread_id"`
+	AgentID             string               `json:"agent_id"`
+	LoopStateID         string               `json:"loop_state_id,omitempty"`
+	RunID               string               `json:"run_id,omitempty"`
+	Goal                string               `json:"goal,omitempty"`
+	AcceptanceCriteria  []string             `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems     []string             `json:"unresolved_items,omitempty"`
+	RemainingRisks      []string             `json:"remaining_risks,omitempty"`
+	CurrentPlanID       string               `json:"current_plan_id,omitempty"`
+	PlanVersion         int                  `json:"plan_version,omitempty"`
+	CurrentStepID       string               `json:"current_step_id,omitempty"`
+	ValidationStatus    LoopValidationStatus `json:"validation_status,omitempty"`
+	ValidationSummary   string               `json:"validation_summary,omitempty"`
+	ObservationsSummary string               `json:"observations_summary,omitempty"`
+	LastOutputSummary   string               `json:"last_output_summary,omitempty"`
+	LastError           string               `json:"last_error,omitempty"`
+	Version             int                  `json:"version"`
+	State               State                `json:"state"`
+	Messages            []CheckpointMessage  `json:"messages"`
+	Metadata            map[string]any       `json:"metadata"`
+	CreatedAt           time.Time            `json:"created_at"`
+	ParentID            string               `json:"parent_id,omitempty"`
+
+	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
+}
+
+type CheckpointMessage struct {
+	Role      string               `json:"role"`
+	Content   string               `json:"content"`
+	ToolCalls []CheckpointToolCall `json:"tool_calls,omitempty"`
+	Metadata  map[string]any       `json:"metadata,omitempty"`
+}
+
+type CheckpointToolCall struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+	Result    json.RawMessage `json:"result,omitempty"`
+	Error     string          `json:"error,omitempty"`
+}
+
+type ExecutionContext struct {
+	WorkflowID          string               `json:"workflow_id,omitempty"`
+	CurrentNode         string               `json:"current_node,omitempty"`
+	NodeResults         map[string]any       `json:"node_results,omitempty"`
+	Variables           map[string]any       `json:"variables,omitempty"`
+	LoopStateID         string               `json:"loop_state_id,omitempty"`
+	RunID               string               `json:"run_id,omitempty"`
+	AgentID             string               `json:"agent_id,omitempty"`
+	Goal                string               `json:"goal,omitempty"`
+	AcceptanceCriteria  []string             `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems     []string             `json:"unresolved_items,omitempty"`
+	RemainingRisks      []string             `json:"remaining_risks,omitempty"`
+	CurrentPlanID       string               `json:"current_plan_id,omitempty"`
+	PlanVersion         int                  `json:"plan_version,omitempty"`
+	CurrentStepID       string               `json:"current_step_id,omitempty"`
+	ValidationStatus    LoopValidationStatus `json:"validation_status,omitempty"`
+	ValidationSummary   string               `json:"validation_summary,omitempty"`
+	ObservationsSummary string               `json:"observations_summary,omitempty"`
+	LastOutputSummary   string               `json:"last_output_summary,omitempty"`
+	LastError           string               `json:"last_error,omitempty"`
+}
+
+func (c *Checkpoint) LoopContextValues() map[string]any {
+	return checkpointToInner(c).LoopContextValues()
+}
+
+func (c *ExecutionContext) LoopContextValues() map[string]any {
+	return executionContextToInner(c).LoopContextValues()
+}
+
+type CheckpointVersion struct {
+	Version   int       `json:"version"`
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	State     State     `json:"state"`
+	Summary   string    `json:"summary"`
+}
+
+type CheckpointStore interface {
+	Save(ctx context.Context, checkpoint *Checkpoint) error
+	Load(ctx context.Context, checkpointID string) (*Checkpoint, error)
+	LoadLatest(ctx context.Context, threadID string) (*Checkpoint, error)
+	List(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error)
+	Delete(ctx context.Context, checkpointID string) error
+	DeleteThread(ctx context.Context, threadID string) error
+	LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error)
+	ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error)
+	Rollback(ctx context.Context, threadID string, version int) error
+}
+
+type CheckpointManager struct {
+	inner  *agentcheckpoint.Manager
+	store  CheckpointStore
+	logger *zap.Logger
+
+	autoSaveEnabled  bool
+	autoSaveInterval time.Duration
+	autoSaveCancel   context.CancelFunc
+	autoSaveDone     chan struct{}
+	autoSaveMu       sync.Mutex
+}
+
+func NewPromptBundleFromIdentity(version, identity string) PromptBundle {
+	return promptcap.NewPromptBundleFromIdentity(version, identity)
+}
+
+func DefaultPromptEnhancerConfig() *PromptEnhancerConfig {
+	return promptcap.DefaultPromptEnhancerConfig()
+}
+
+func NewPromptEnhancer(config PromptEnhancerConfig) *PromptEnhancer {
+	return promptcap.NewPromptEnhancer(config)
+}
+
+type PromptOptimizer struct{}
+
+func NewPromptOptimizer() *PromptOptimizer {
+	return &PromptOptimizer{}
+}
+
+func NewPromptTemplateLibrary() *PromptTemplateLibrary {
+	return promptcap.NewPromptTemplateLibrary()
+}
+
+func DefaultDefensivePromptConfig() DefensivePromptConfig {
+	return promptcap.DefaultDefensivePromptConfig()
+}
+
+func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
+	return agentfeatures.DefaultEnhancedExecutionOptions()
+}
+
+func WithRuntimeStreamEmitter(ctx context.Context, emit RuntimeStreamEmitter) context.Context {
+	return agentevents.WithRuntimeStreamEmitter(ctx, emit)
+}
+
+func runtimeStreamEmitterFromContext(ctx context.Context) (RuntimeStreamEmitter, bool) {
+	return agentevents.RuntimeStreamEmitterFromContext(ctx)
+}
+
+func emitRuntimeStatus(emit RuntimeStreamEmitter, status string, event RuntimeStreamEvent) {
+	agentevents.EmitRuntimeStatus(emit, status, event)
+}
+
+func NewDefensivePromptEnhancer(config DefensivePromptConfig) *DefensivePromptEnhancer {
+	return promptcap.NewDefensivePromptEnhancer(config)
+}
+
+func NewCheckpointManager(store CheckpointStore, logger *zap.Logger) *CheckpointManager {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &CheckpointManager{
+		inner:  agentcheckpoint.NewManager(checkpointStoreAdapter{store: store}, logger),
+		store:  store,
+		logger: logger.With(zap.String("component", "checkpoint_manager")),
+	}
+}
+
+func GenerateCheckpointID() string {
+	return agentcheckpoint.GenerateID()
+}
+
+func generateCheckpointID() string {
+	return GenerateCheckpointID()
+}
+
+func (m *CheckpointManager) SaveCheckpoint(ctx context.Context, checkpoint *Checkpoint) error {
+	inner := checkpointToInner(checkpoint)
+	if err := m.ensureInner().SaveCheckpoint(ctx, inner); err != nil {
+		return err
+	}
+	applyCheckpointFromInner(checkpoint, inner)
+	return nil
+}
+
+func (m *CheckpointManager) LoadCheckpoint(ctx context.Context, checkpointID string) (*Checkpoint, error) {
+	checkpoint, err := m.ensureInner().LoadCheckpoint(ctx, checkpointID)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointFromInner(checkpoint), nil
+}
+
+func (m *CheckpointManager) LoadLatestCheckpoint(ctx context.Context, threadID string) (*Checkpoint, error) {
+	checkpoint, err := m.ensureInner().LoadLatestCheckpoint(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointFromInner(checkpoint), nil
+}
+
+func (m *CheckpointManager) ResumeFromCheckpoint(ctx context.Context, agent Agent, checkpointID string) error {
+	_, err := m.LoadCheckpointForAgent(ctx, agent, checkpointID)
+	return err
+}
+
+func (m *CheckpointManager) LoadCheckpointForAgent(ctx context.Context, agent Agent, checkpointID string) (*Checkpoint, error) {
+	checkpoint, err := m.LoadCheckpoint(ctx, checkpointID)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.restoreAgentFromCheckpoint(ctx, agent, checkpoint); err != nil {
+		return nil, err
+	}
+	return checkpoint, nil
+}
+
+func (m *CheckpointManager) LoadLatestCheckpointForAgent(ctx context.Context, agent Agent, threadID string) (*Checkpoint, error) {
+	checkpoint, err := m.LoadLatestCheckpoint(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.restoreAgentFromCheckpoint(ctx, agent, checkpoint); err != nil {
+		return nil, err
+	}
+	return checkpoint, nil
+}
+
+func (m *CheckpointManager) restoreAgentFromCheckpoint(ctx context.Context, agent Agent, checkpoint *Checkpoint) error {
+	if checkpoint == nil {
+		return fmt.Errorf("checkpoint is nil")
+	}
+	m.loggerOrNop().Info("resuming from checkpoint",
+		zap.String("checkpoint_id", checkpoint.ID),
+		zap.String("agent_id", checkpoint.AgentID),
+		zap.String("state", string(checkpoint.State)),
+	)
+
+	if agent.ID() != checkpoint.AgentID {
+		return fmt.Errorf("agent ID mismatch: expected %s, got %s", checkpoint.AgentID, agent.ID())
+	}
+
+	type transitioner interface {
+		Transition(ctx context.Context, newState State) error
+	}
+	if t, ok := agent.(transitioner); ok {
+		if err := t.Transition(ctx, State(checkpoint.State)); err != nil {
+			return fmt.Errorf("failed to restore state: %w", err)
+		}
+	}
+
+	m.loggerOrNop().Info("checkpoint restored successfully")
+	return nil
+}
+
+func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, threadID string, interval time.Duration) error {
+	m.autoSaveMu.Lock()
+	defer m.autoSaveMu.Unlock()
+
+	if m.autoSaveEnabled {
+		return fmt.Errorf("auto-save already enabled")
+	}
+	if interval <= 0 {
+		return fmt.Errorf("invalid interval: must be positive")
+	}
+
+	m.autoSaveInterval = interval
+	m.autoSaveEnabled = true
+
+	autoSaveCtx, cancel := context.WithCancel(ctx)
+	m.autoSaveCancel = cancel
+	m.autoSaveDone = make(chan struct{})
+
+	go m.autoSaveLoop(autoSaveCtx, m.autoSaveDone, agent, threadID)
+
+	m.loggerOrNop().Info("auto-save enabled",
+		zap.Duration("interval", interval),
+		zap.String("thread_id", threadID),
+	)
+	return nil
+}
+
+func (m *CheckpointManager) DisableAutoSave() {
+	m.autoSaveMu.Lock()
+	if !m.autoSaveEnabled {
+		m.autoSaveMu.Unlock()
+		return
+	}
+
+	cancel := m.autoSaveCancel
+	done := m.autoSaveDone
+	m.autoSaveCancel = nil
+	m.autoSaveDone = nil
+	m.autoSaveEnabled = false
+	m.autoSaveMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+
+	m.loggerOrNop().Info("auto-save disabled")
+}
+
+func (m *CheckpointManager) autoSaveLoop(ctx context.Context, done chan struct{}, agent Agent, threadID string) {
+	ticker := time.NewTicker(m.autoSaveInterval)
+	defer func() {
+		ticker.Stop()
+		close(done)
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			m.loggerOrNop().Debug("auto-save loop stopped")
+			return
+		case <-ticker.C:
+			if err := m.CreateCheckpoint(ctx, agent, threadID); err != nil {
+				m.loggerOrNop().Error("auto-save failed", zap.Error(err))
+			} else {
+				m.loggerOrNop().Debug("auto-save checkpoint created", zap.String("thread_id", threadID))
+			}
+		}
+	}
+}
+
+func (m *CheckpointManager) CreateCheckpoint(ctx context.Context, agent Agent, threadID string) error {
+	_, err := m.ensureInner().CreateCheckpoint(ctx, threadID, agent.ID(), string(agent.State()))
+	return err
+}
+
+func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, threadID string, version int) error {
+	m.loggerOrNop().Info("rolling back to version",
+		zap.String("thread_id", threadID),
+		zap.Int("version", version),
+	)
+
+	checkpoint, err := m.ensureInner().LoadVersion(ctx, threadID, version)
+	if err != nil {
+		return err
+	}
+	if err := m.restoreAgentFromCheckpoint(ctx, agent, checkpointFromInner(checkpoint)); err != nil {
+		return err
+	}
+	if err := m.ensureInner().RollbackToVersion(ctx, threadID, version); err != nil {
+		return err
+	}
+
+	m.loggerOrNop().Info("rollback completed",
+		zap.String("thread_id", threadID),
+		zap.Int("version", version),
+	)
+	return nil
+}
+
+func (m *CheckpointManager) CompareVersions(ctx context.Context, threadID string, version1, version2 int) (*CheckpointDiff, error) {
+	diff, err := m.ensureInner().CompareVersions(ctx, threadID, version1, version2)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointDiffFromInner(diff), nil
+}
+
+func (m *CheckpointManager) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+	versions, err := m.ensureInner().ListVersions(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointVersionsFromInner(versions), nil
+}
+
+func (m *CheckpointManager) compareMessages(msgs1, msgs2 []CheckpointMessage) string {
+	return checkpointcore.CompareMessageCounts(len(msgs1), len(msgs2))
+}
+
+func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]any) string {
+	return checkpointcore.CompareMetadata(meta1, meta2)
+}
+
+func (m *CheckpointManager) ensureInner() *agentcheckpoint.Manager {
+	if m.inner == nil {
+		m.inner = agentcheckpoint.NewManager(checkpointStoreAdapter{store: m.store}, m.loggerOrNop())
+	}
+	return m.inner
+}
+
+func (m *CheckpointManager) loggerOrNop() *zap.Logger {
+	if m != nil && m.logger != nil {
+		return m.logger
+	}
+	return zap.NewNop()
+}
+
+type checkpointStoreAdapter struct {
+	store CheckpointStore
+}
+
+func (a checkpointStoreAdapter) Save(ctx context.Context, checkpoint *agentcheckpoint.Checkpoint) error {
+	return a.store.Save(ctx, checkpointFromInner(checkpoint))
+}
+
+func (a checkpointStoreAdapter) Load(ctx context.Context, checkpointID string) (*agentcheckpoint.Checkpoint, error) {
+	checkpoint, err := a.store.Load(ctx, checkpointID)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointToInner(checkpoint), nil
+}
+
+func (a checkpointStoreAdapter) LoadLatest(ctx context.Context, threadID string) (*agentcheckpoint.Checkpoint, error) {
+	checkpoint, err := a.store.LoadLatest(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointToInner(checkpoint), nil
+}
+
+func (a checkpointStoreAdapter) List(ctx context.Context, threadID string, limit int) ([]*agentcheckpoint.Checkpoint, error) {
+	checkpoints, err := a.store.List(ctx, threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointsToInner(checkpoints), nil
+}
+
+func (a checkpointStoreAdapter) Delete(ctx context.Context, checkpointID string) error {
+	return a.store.Delete(ctx, checkpointID)
+}
+
+func (a checkpointStoreAdapter) DeleteThread(ctx context.Context, threadID string) error {
+	return a.store.DeleteThread(ctx, threadID)
+}
+
+func (a checkpointStoreAdapter) LoadVersion(ctx context.Context, threadID string, version int) (*agentcheckpoint.Checkpoint, error) {
+	checkpoint, err := a.store.LoadVersion(ctx, threadID, version)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointToInner(checkpoint), nil
+}
+
+func (a checkpointStoreAdapter) ListVersions(ctx context.Context, threadID string) ([]agentcheckpoint.CheckpointVersion, error) {
+	versions, err := a.store.ListVersions(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	return checkpointVersionsToInner(versions), nil
+}
+
+func (a checkpointStoreAdapter) Rollback(ctx context.Context, threadID string, version int) error {
+	return a.store.Rollback(ctx, threadID, version)
+}
+
+func checkpointToInner(checkpoint *Checkpoint) *agentcheckpoint.Checkpoint {
+	if checkpoint == nil {
+		return nil
+	}
+	inner := &agentcheckpoint.Checkpoint{
+		ID:                  checkpoint.ID,
+		ThreadID:            checkpoint.ThreadID,
+		AgentID:             checkpoint.AgentID,
+		LoopStateID:         checkpoint.LoopStateID,
+		RunID:               checkpoint.RunID,
+		Goal:                checkpoint.Goal,
+		AcceptanceCriteria:  cloneStringSlice(checkpoint.AcceptanceCriteria),
+		UnresolvedItems:     cloneStringSlice(checkpoint.UnresolvedItems),
+		RemainingRisks:      cloneStringSlice(checkpoint.RemainingRisks),
+		CurrentPlanID:       checkpoint.CurrentPlanID,
+		PlanVersion:         checkpoint.PlanVersion,
+		CurrentStepID:       checkpoint.CurrentStepID,
+		ValidationStatus:    string(checkpoint.ValidationStatus),
+		ValidationSummary:   checkpoint.ValidationSummary,
+		ObservationsSummary: checkpoint.ObservationsSummary,
+		LastOutputSummary:   checkpoint.LastOutputSummary,
+		LastError:           checkpoint.LastError,
+		Version:             checkpoint.Version,
+		State:               string(checkpoint.State),
+		Messages:            checkpointMessagesToInner(checkpoint.Messages),
+		Metadata:            cloneMetadata(checkpoint.Metadata),
+		CreatedAt:           checkpoint.CreatedAt,
+		ParentID:            checkpoint.ParentID,
+		ExecutionContext:    executionContextToInner(checkpoint.ExecutionContext),
+	}
+	return inner
+}
+
+func checkpointFromInner(checkpoint *agentcheckpoint.Checkpoint) *Checkpoint {
+	if checkpoint == nil {
+		return nil
+	}
+	return &Checkpoint{
+		ID:                  checkpoint.ID,
+		ThreadID:            checkpoint.ThreadID,
+		AgentID:             checkpoint.AgentID,
+		LoopStateID:         checkpoint.LoopStateID,
+		RunID:               checkpoint.RunID,
+		Goal:                checkpoint.Goal,
+		AcceptanceCriteria:  cloneStringSlice(checkpoint.AcceptanceCriteria),
+		UnresolvedItems:     cloneStringSlice(checkpoint.UnresolvedItems),
+		RemainingRisks:      cloneStringSlice(checkpoint.RemainingRisks),
+		CurrentPlanID:       checkpoint.CurrentPlanID,
+		PlanVersion:         checkpoint.PlanVersion,
+		CurrentStepID:       checkpoint.CurrentStepID,
+		ValidationStatus:    LoopValidationStatus(checkpoint.ValidationStatus),
+		ValidationSummary:   checkpoint.ValidationSummary,
+		ObservationsSummary: checkpoint.ObservationsSummary,
+		LastOutputSummary:   checkpoint.LastOutputSummary,
+		LastError:           checkpoint.LastError,
+		Version:             checkpoint.Version,
+		State:               State(checkpoint.State),
+		Messages:            checkpointMessagesFromInner(checkpoint.Messages),
+		Metadata:            cloneMetadata(checkpoint.Metadata),
+		CreatedAt:           checkpoint.CreatedAt,
+		ParentID:            checkpoint.ParentID,
+		ExecutionContext:    executionContextFromInner(checkpoint.ExecutionContext),
+	}
+}
+
+func applyCheckpointFromInner(dst *Checkpoint, src *agentcheckpoint.Checkpoint) {
+	if dst == nil || src == nil {
+		return
+	}
+	*dst = *checkpointFromInner(src)
+}
+
+func checkpointMessagesToInner(messages []CheckpointMessage) []agentcheckpoint.CheckpointMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	converted := make([]agentcheckpoint.CheckpointMessage, 0, len(messages))
+	for _, message := range messages {
+		converted = append(converted, agentcheckpoint.CheckpointMessage{
+			Role:      message.Role,
+			Content:   message.Content,
+			ToolCalls: checkpointToolCallsToInner(message.ToolCalls),
+			Metadata:  cloneMetadata(message.Metadata),
+		})
+	}
+	return converted
+}
+
+func checkpointMessagesFromInner(messages []agentcheckpoint.CheckpointMessage) []CheckpointMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	converted := make([]CheckpointMessage, 0, len(messages))
+	for _, message := range messages {
+		converted = append(converted, CheckpointMessage{
+			Role:      message.Role,
+			Content:   message.Content,
+			ToolCalls: checkpointToolCallsFromInner(message.ToolCalls),
+			Metadata:  cloneMetadata(message.Metadata),
+		})
+	}
+	return converted
+}
+
+func checkpointToolCallsToInner(calls []CheckpointToolCall) []agentcheckpoint.CheckpointToolCall {
+	if len(calls) == 0 {
+		return nil
+	}
+	converted := make([]agentcheckpoint.CheckpointToolCall, 0, len(calls))
+	for _, call := range calls {
+		converted = append(converted, agentcheckpoint.CheckpointToolCall{
+			ID:        call.ID,
+			Name:      call.Name,
+			Arguments: append(json.RawMessage(nil), call.Arguments...),
+			Result:    append(json.RawMessage(nil), call.Result...),
+			Error:     call.Error,
+		})
+	}
+	return converted
+}
+
+func checkpointToolCallsFromInner(calls []agentcheckpoint.CheckpointToolCall) []CheckpointToolCall {
+	if len(calls) == 0 {
+		return nil
+	}
+	converted := make([]CheckpointToolCall, 0, len(calls))
+	for _, call := range calls {
+		converted = append(converted, CheckpointToolCall{
+			ID:        call.ID,
+			Name:      call.Name,
+			Arguments: append(json.RawMessage(nil), call.Arguments...),
+			Result:    append(json.RawMessage(nil), call.Result...),
+			Error:     call.Error,
+		})
+	}
+	return converted
+}
+
+func executionContextToInner(ctx *ExecutionContext) *agentcheckpoint.ExecutionContext {
+	if ctx == nil {
+		return nil
+	}
+	return &agentcheckpoint.ExecutionContext{
+		WorkflowID:          ctx.WorkflowID,
+		CurrentNode:         ctx.CurrentNode,
+		NodeResults:         cloneMetadata(ctx.NodeResults),
+		Variables:           cloneMetadata(ctx.Variables),
+		LoopStateID:         ctx.LoopStateID,
+		RunID:               ctx.RunID,
+		AgentID:             ctx.AgentID,
+		Goal:                ctx.Goal,
+		AcceptanceCriteria:  cloneStringSlice(ctx.AcceptanceCriteria),
+		UnresolvedItems:     cloneStringSlice(ctx.UnresolvedItems),
+		RemainingRisks:      cloneStringSlice(ctx.RemainingRisks),
+		CurrentPlanID:       ctx.CurrentPlanID,
+		PlanVersion:         ctx.PlanVersion,
+		CurrentStepID:       ctx.CurrentStepID,
+		ValidationStatus:    string(ctx.ValidationStatus),
+		ValidationSummary:   ctx.ValidationSummary,
+		ObservationsSummary: ctx.ObservationsSummary,
+		LastOutputSummary:   ctx.LastOutputSummary,
+		LastError:           ctx.LastError,
+	}
+}
+
+func executionContextFromInner(ctx *agentcheckpoint.ExecutionContext) *ExecutionContext {
+	if ctx == nil {
+		return nil
+	}
+	return &ExecutionContext{
+		WorkflowID:          ctx.WorkflowID,
+		CurrentNode:         ctx.CurrentNode,
+		NodeResults:         cloneMetadata(ctx.NodeResults),
+		Variables:           cloneMetadata(ctx.Variables),
+		LoopStateID:         ctx.LoopStateID,
+		RunID:               ctx.RunID,
+		AgentID:             ctx.AgentID,
+		Goal:                ctx.Goal,
+		AcceptanceCriteria:  cloneStringSlice(ctx.AcceptanceCriteria),
+		UnresolvedItems:     cloneStringSlice(ctx.UnresolvedItems),
+		RemainingRisks:      cloneStringSlice(ctx.RemainingRisks),
+		CurrentPlanID:       ctx.CurrentPlanID,
+		PlanVersion:         ctx.PlanVersion,
+		CurrentStepID:       ctx.CurrentStepID,
+		ValidationStatus:    LoopValidationStatus(ctx.ValidationStatus),
+		ValidationSummary:   ctx.ValidationSummary,
+		ObservationsSummary: ctx.ObservationsSummary,
+		LastOutputSummary:   ctx.LastOutputSummary,
+		LastError:           ctx.LastError,
+	}
+}
+
+func checkpointVersionsToInner(versions []CheckpointVersion) []agentcheckpoint.CheckpointVersion {
+	if len(versions) == 0 {
+		return nil
+	}
+	converted := make([]agentcheckpoint.CheckpointVersion, 0, len(versions))
+	for _, version := range versions {
+		converted = append(converted, agentcheckpoint.CheckpointVersion{
+			Version:   version.Version,
+			ID:        version.ID,
+			CreatedAt: version.CreatedAt,
+			State:     string(version.State),
+			Summary:   version.Summary,
+		})
+	}
+	return converted
+}
+
+func checkpointVersionsFromInner(versions []agentcheckpoint.CheckpointVersion) []CheckpointVersion {
+	if len(versions) == 0 {
+		return nil
+	}
+	converted := make([]CheckpointVersion, 0, len(versions))
+	for _, version := range versions {
+		converted = append(converted, CheckpointVersion{
+			Version:   version.Version,
+			ID:        version.ID,
+			CreatedAt: version.CreatedAt,
+			State:     State(version.State),
+			Summary:   version.Summary,
+		})
+	}
+	return converted
+}
+
+func checkpointsToInner(checkpoints []*Checkpoint) []*agentcheckpoint.Checkpoint {
+	if len(checkpoints) == 0 {
+		return nil
+	}
+	converted := make([]*agentcheckpoint.Checkpoint, 0, len(checkpoints))
+	for _, checkpoint := range checkpoints {
+		converted = append(converted, checkpointToInner(checkpoint))
+	}
+	return converted
+}
+
+func checkpointDiffFromInner(diff *agentcheckpoint.CheckpointDiff) *CheckpointDiff {
+	if diff == nil {
+		return nil
+	}
+	return &CheckpointDiff{
+		ThreadID:     diff.ThreadID,
+		Version1:     diff.Version1,
+		Version2:     diff.Version2,
+		StateChanged: diff.StateChanged,
+		OldState:     State(diff.OldState),
+		NewState:     State(diff.NewState),
+		MessagesDiff: diff.MessagesDiff,
+		MetadataDiff: diff.MetadataDiff,
+		TimeDiff:     diff.TimeDiff,
+	}
+}
+
+func (o *PromptOptimizer) OptimizePrompt(prompt string) string {
+	optimized := prompt
+	if len(prompt) < 20 {
+		optimized = o.makeMoreSpecific(optimized)
+	}
+	if !o.hasTaskDescription(optimized) {
+		optimized = o.addTaskDescription(optimized)
+	}
+	if !o.hasConstraints(optimized) {
+		optimized = o.addBasicConstraints(optimized)
+	}
+	return optimized
+}
+
+func (o *PromptOptimizer) makeMoreSpecific(prompt string) string {
+	return promptcap.MakeMoreSpecific(prompt)
+}
+
+func (o *PromptOptimizer) hasTaskDescription(prompt string) bool {
+	return promptcap.HasTaskDescription(prompt)
+}
+
+func (o *PromptOptimizer) addTaskDescription(prompt string) string {
+	return promptcap.AddTaskDescription(prompt)
+}
+
+func (o *PromptOptimizer) hasConstraints(prompt string) bool {
+	return promptcap.HasConstraints(prompt)
+}
+
+func (o *PromptOptimizer) addBasicConstraints(prompt string) string {
+	return fmt.Sprintf("%s\n\n要求：\n- 回答要准确、完整\n- 使用清晰的语言\n- 提供必要的解释", prompt)
+}
+
+func formatBulletSection(title string, items []string) string {
+	return promptcap.FormatBulletSection(title, items)
+}
+
+func replaceTemplateVars(text string, vars map[string]string) string {
+	return promptcap.ReplaceTemplateVars(text, vars)
+}
 
 func NewUnifiedMemoryFacade(base MemoryManager, enhanced EnhancedMemoryRunner, logger *zap.Logger) *UnifiedMemoryFacade {
 	return memorycore.NewUnifiedMemoryFacade(base, enhanced, logger)

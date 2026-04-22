@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	agentpkg "github.com/BaSui01/agentflow/agent"
 	"go.uber.org/zap"
 )
 
@@ -35,13 +34,13 @@ func NewFileCheckpointStore(basePath string, logger *zap.Logger) (*FileCheckpoin
 }
 
 // Save persists a checkpoint.
-func (s *FileCheckpointStore) Save(_ context.Context, checkpoint *agentpkg.Checkpoint) error {
+func (s *FileCheckpointStore) Save(_ context.Context, checkpoint *Checkpoint) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveLocked(checkpoint)
 }
 
-func (s *FileCheckpointStore) saveLocked(checkpoint *agentpkg.Checkpoint) error {
+func (s *FileCheckpointStore) saveLocked(checkpoint *Checkpoint) error {
 	if checkpoint.Version == 0 {
 		versions, err := s.listVersionsUnlocked(checkpoint.ThreadID)
 		if err == nil && len(versions) > 0 {
@@ -96,7 +95,7 @@ func (s *FileCheckpointStore) saveLocked(checkpoint *agentpkg.Checkpoint) error 
 }
 
 // Load retrieves a checkpoint by ID.
-func (s *FileCheckpointStore) Load(_ context.Context, checkpointID string) (*agentpkg.Checkpoint, error) {
+func (s *FileCheckpointStore) Load(_ context.Context, checkpointID string) (*Checkpoint, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -124,7 +123,7 @@ func (s *FileCheckpointStore) Load(_ context.Context, checkpointID string) (*age
 }
 
 // LoadLatest retrieves the latest checkpoint for a thread.
-func (s *FileCheckpointStore) LoadLatest(_ context.Context, threadID string) (*agentpkg.Checkpoint, error) {
+func (s *FileCheckpointStore) LoadLatest(_ context.Context, threadID string) (*Checkpoint, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -145,7 +144,7 @@ func (s *FileCheckpointStore) LoadLatest(_ context.Context, threadID string) (*a
 }
 
 // List enumerates checkpoints for a thread.
-func (s *FileCheckpointStore) List(_ context.Context, threadID string, limit int) ([]*agentpkg.Checkpoint, error) {
+func (s *FileCheckpointStore) List(_ context.Context, threadID string, limit int) ([]*Checkpoint, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -153,12 +152,12 @@ func (s *FileCheckpointStore) List(_ context.Context, threadID string, limit int
 	entries, err := os.ReadDir(checkpointsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []*agentpkg.Checkpoint{}, nil
+			return []*Checkpoint{}, nil
 		}
 		return nil, fmt.Errorf("failed to read checkpoints directory: %w", err)
 	}
 
-	checkpoints := make([]*agentpkg.Checkpoint, 0)
+	checkpoints := make([]*Checkpoint, 0)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -237,7 +236,7 @@ func (s *FileCheckpointStore) DeleteThread(_ context.Context, threadID string) e
 }
 
 // LoadVersion retrieves a checkpoint by thread/version.
-func (s *FileCheckpointStore) LoadVersion(_ context.Context, threadID string, version int) (*agentpkg.Checkpoint, error) {
+func (s *FileCheckpointStore) LoadVersion(_ context.Context, threadID string, version int) (*Checkpoint, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -257,7 +256,7 @@ func (s *FileCheckpointStore) LoadVersion(_ context.Context, threadID string, ve
 }
 
 // ListVersions lists all versions for a thread.
-func (s *FileCheckpointStore) ListVersions(_ context.Context, threadID string) ([]agentpkg.CheckpointVersion, error) {
+func (s *FileCheckpointStore) ListVersions(_ context.Context, threadID string) ([]CheckpointVersion, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.listVersionsUnlocked(threadID)
@@ -273,7 +272,7 @@ func (s *FileCheckpointStore) Rollback(_ context.Context, threadID string, versi
 		return fmt.Errorf("list versions for rollback: %w", err)
 	}
 
-	var targetCheckpoint *agentpkg.Checkpoint
+	var targetCheckpoint *Checkpoint
 	for _, v := range versions {
 		if v.Version == version {
 			checkpointFile := filepath.Join(s.threadDir(threadID), "checkpoints", fmt.Sprintf("%s.json", v.ID))
@@ -314,13 +313,13 @@ func (s *FileCheckpointStore) threadDir(threadID string) string {
 	return filepath.Join(s.basePath, "threads", threadID)
 }
 
-func (s *FileCheckpointStore) loadCheckpointFile(filePath string) (*agentpkg.Checkpoint, error) {
+func (s *FileCheckpointStore) loadCheckpointFile(filePath string) (*Checkpoint, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read checkpoint file: %w", err)
 	}
 
-	var checkpoint agentpkg.Checkpoint
+	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
@@ -328,10 +327,10 @@ func (s *FileCheckpointStore) loadCheckpointFile(filePath string) (*agentpkg.Che
 	return &checkpoint, nil
 }
 
-func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *agentpkg.Checkpoint) error {
+func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *Checkpoint) error {
 	versionsFile := filepath.Join(s.threadDir(threadID), "versions.json")
 
-	var versions []agentpkg.CheckpointVersion
+	var versions []CheckpointVersion
 	if data, err := os.ReadFile(versionsFile); err == nil {
 		if err := json.Unmarshal(data, &versions); err != nil {
 			return fmt.Errorf("failed to unmarshal versions: %w", err)
@@ -341,7 +340,7 @@ func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *a
 	found := false
 	for i, v := range versions {
 		if v.Version == checkpoint.Version {
-			versions[i] = agentpkg.CheckpointVersion{
+			versions[i] = CheckpointVersion{
 				Version:   checkpoint.Version,
 				ID:        checkpoint.ID,
 				CreatedAt: checkpoint.CreatedAt,
@@ -354,7 +353,7 @@ func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *a
 	}
 
 	if !found {
-		versions = append(versions, agentpkg.CheckpointVersion{
+		versions = append(versions, CheckpointVersion{
 			Version:   checkpoint.Version,
 			ID:        checkpoint.ID,
 			CreatedAt: checkpoint.CreatedAt,
@@ -379,18 +378,18 @@ func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *a
 	return nil
 }
 
-func (s *FileCheckpointStore) listVersionsUnlocked(threadID string) ([]agentpkg.CheckpointVersion, error) {
+func (s *FileCheckpointStore) listVersionsUnlocked(threadID string) ([]CheckpointVersion, error) {
 	versionsFile := filepath.Join(s.threadDir(threadID), "versions.json")
 
 	data, err := os.ReadFile(versionsFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []agentpkg.CheckpointVersion{}, nil
+			return []CheckpointVersion{}, nil
 		}
 		return nil, fmt.Errorf("failed to read versions file: %w", err)
 	}
 
-	var versions []agentpkg.CheckpointVersion
+	var versions []CheckpointVersion
 	if err := json.Unmarshal(data, &versions); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal versions: %w", err)
 	}

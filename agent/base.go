@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -272,6 +273,315 @@ func (s *LoopState) LastObservation() (LoopObservation, bool) {
 		return LoopObservation{}, false
 	}
 	return s.Observations[len(s.Observations)-1], true
+}
+
+func (s *LoopState) CheckpointVariables() map[string]any {
+	if s == nil {
+		return nil
+	}
+	s.normalizeCheckpointFields()
+	data := loopStateCheckpointCore(s)
+	variables := data.Variables()
+	if len(s.Observations) > 0 {
+		variables["loop_observations"] = append([]LoopObservation(nil), s.Observations...)
+	}
+	return variables
+}
+
+func (s *LoopState) PopulateCheckpoint(checkpoint *Checkpoint) {
+	if s == nil || checkpoint == nil {
+		return
+	}
+	variables := s.CheckpointVariables()
+	metadata := cloneMetadata(checkpoint.Metadata)
+	if metadata == nil {
+		metadata = make(map[string]any, len(variables))
+	}
+	for key, value := range variables {
+		metadata[key] = value
+	}
+	var executionContext *ExecutionContext
+	if checkpoint.ExecutionContext != nil {
+		copied := *checkpoint.ExecutionContext
+		executionContext = &copied
+	} else {
+		executionContext = &ExecutionContext{}
+	}
+	if executionContext.Variables == nil {
+		executionContext.Variables = make(map[string]any, len(variables))
+	}
+	for key, value := range variables {
+		executionContext.Variables[key] = value
+	}
+	checkpoint.AgentID = s.AgentID
+	checkpoint.LoopStateID = s.LoopStateID
+	checkpoint.RunID = s.RunID
+	checkpoint.Goal = s.Goal
+	checkpoint.AcceptanceCriteria = cloneStringSlice(s.AcceptanceCriteria)
+	checkpoint.UnresolvedItems = cloneStringSlice(s.UnresolvedItems)
+	checkpoint.RemainingRisks = cloneStringSlice(s.RemainingRisks)
+	checkpoint.CurrentPlanID = s.CurrentPlanID
+	checkpoint.PlanVersion = s.PlanVersion
+	checkpoint.CurrentStepID = s.CurrentStepID
+	checkpoint.ValidationStatus = s.ValidationStatus
+	checkpoint.ValidationSummary = s.ValidationSummary
+	checkpoint.ObservationsSummary = s.ObservationsSummary
+	checkpoint.LastOutputSummary = s.LastOutputSummary
+	checkpoint.LastError = s.LastError
+	checkpoint.Metadata = metadata
+	executionContext.CurrentNode = string(s.CurrentStage)
+	executionContext.LoopStateID = s.LoopStateID
+	executionContext.RunID = s.RunID
+	executionContext.AgentID = s.AgentID
+	executionContext.Goal = s.Goal
+	executionContext.AcceptanceCriteria = cloneStringSlice(s.AcceptanceCriteria)
+	executionContext.UnresolvedItems = cloneStringSlice(s.UnresolvedItems)
+	executionContext.RemainingRisks = cloneStringSlice(s.RemainingRisks)
+	executionContext.CurrentPlanID = s.CurrentPlanID
+	executionContext.PlanVersion = s.PlanVersion
+	executionContext.CurrentStepID = s.CurrentStepID
+	executionContext.ValidationStatus = s.ValidationStatus
+	executionContext.ValidationSummary = s.ValidationSummary
+	executionContext.ObservationsSummary = s.ObservationsSummary
+	executionContext.LastOutputSummary = s.LastOutputSummary
+	executionContext.LastError = s.LastError
+	checkpoint.ExecutionContext = executionContext
+}
+
+func (s *LoopState) restoreFromContext(values map[string]any) {
+	if s == nil || len(values) == 0 {
+		return
+	}
+	if observations, ok := loopContextObservations(values, "loop_observations", "observations"); ok {
+		data := loopStateCheckpointCore(s)
+		data.Observations = checkpointCoreObservations(observations)
+		data.RestoreFromContext(values, func() string {
+			s.SyncCurrentStep()
+			return s.CurrentStepID
+		})
+		applyLoopStateCheckpointCore(s, data)
+		return
+	}
+	data := loopStateCheckpointCore(s)
+	data.RestoreFromContext(values, func() string {
+		s.SyncCurrentStep()
+		return s.CurrentStepID
+	})
+	applyLoopStateCheckpointCore(s, data)
+}
+
+func (s *LoopState) normalizeCheckpointFields() {
+	if s == nil {
+		return
+	}
+	hadPlanSlice := s.Plan != nil
+	hadObservationsSlice := s.Observations != nil
+	data := loopStateCheckpointCore(s)
+	data.Normalize(func() string {
+		s.SyncCurrentStep()
+		return s.CurrentStepID
+	})
+	applyLoopStateCheckpointCore(s, data)
+	if hadPlanSlice && s.Plan == nil {
+		s.Plan = []string{}
+	}
+	if hadObservationsSlice && s.Observations == nil {
+		s.Observations = []LoopObservation{}
+	}
+}
+
+func (s *LoopState) ApplyValidationResult(result *LoopValidationResult) {
+	if s == nil || result == nil {
+		return
+	}
+	data := loopStateCheckpointCore(s)
+	data.ApplyValidationResult(checkpointcore.ValidationResult{
+		AcceptanceCriteria: result.AcceptanceCriteria,
+		UnresolvedItems:    result.UnresolvedItems,
+		RemainingRisks:     result.RemainingRisks,
+		Status:             string(result.Status),
+		Summary:            result.Summary,
+		Reason:             result.Reason,
+	}, func() string {
+		s.SyncCurrentStep()
+		return s.CurrentStepID
+	})
+	applyLoopStateCheckpointCore(s, data)
+}
+
+func buildLoopPlanID(loopStateID string, planVersion int) string {
+	return checkpointcore.BuildLoopPlanID(loopStateID, planVersion)
+}
+
+func derivePlanVersion(observations []LoopObservation) int {
+	return checkpointcore.DerivePlanVersion(checkpointCoreObservations(observations))
+}
+
+func summarizeObservations(observations []LoopObservation) string {
+	return checkpointcore.SummarizeObservations(checkpointCoreObservations(observations))
+}
+
+func summarizeLastOutput(output *Output, observations []LoopObservation) string {
+	lastOutputContent := ""
+	if output != nil {
+		lastOutputContent = output.Content
+	}
+	return checkpointcore.SummarizeLastOutput(lastOutputContent, checkpointCoreObservations(observations))
+}
+
+func summarizeLastError(observations []LoopObservation) string {
+	return checkpointcore.SummarizeLastError(checkpointCoreObservations(observations))
+}
+
+func summarizeValidationState(status LoopValidationStatus, unresolvedItems, remainingRisks []string) string {
+	return checkpointcore.SummarizeValidationState(string(status), unresolvedItems, remainingRisks)
+}
+
+func summarizeText(text string) string {
+	return checkpointcore.SummarizeText(text)
+}
+
+func loopContextString(values map[string]any, keys ...string) (string, bool) {
+	return checkpointcore.ContextString(values, keys...)
+}
+
+func loopContextStrings(values map[string]any, keys ...string) ([]string, bool) {
+	return checkpointcore.ContextStrings(values, keys...)
+}
+
+func loopContextInt(values map[string]any, keys ...string) (int, bool) {
+	return checkpointcore.ContextInt(values, keys...)
+}
+
+func loopContextFloat(values map[string]any, keys ...string) (float64, bool) {
+	return checkpointcore.ContextFloat(values, keys...)
+}
+
+func loopContextBool(values map[string]any, keys ...string) (value, ok bool) {
+	return checkpointcore.ContextBool(values, keys...)
+}
+
+func loopContextObservations(values map[string]any, keys ...string) ([]LoopObservation, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		observations, ok := raw.([]LoopObservation)
+		if ok && len(observations) > 0 {
+			return append([]LoopObservation(nil), observations...), true
+		}
+	}
+	return nil, false
+}
+
+func cloneStringSlice(values []string) []string {
+	return checkpointcore.CloneStringSlice(values)
+}
+
+func normalizeStringSlice(values []string) []string {
+	return checkpointcore.NormalizeStringSlice(values)
+}
+
+func loopStateCheckpointCore(state *LoopState) checkpointcore.LoopStateData {
+	lastOutputContent := ""
+	if state != nil && state.LastOutput != nil {
+		lastOutputContent = state.LastOutput.Content
+	}
+	return checkpointcore.LoopStateData{
+		LoopStateID:           state.LoopStateID,
+		RunID:                 state.RunID,
+		AgentID:               state.AgentID,
+		Goal:                  state.Goal,
+		Plan:                  append([]string(nil), state.Plan...),
+		AcceptanceCriteria:    cloneStringSlice(state.AcceptanceCriteria),
+		UnresolvedItems:       cloneStringSlice(state.UnresolvedItems),
+		RemainingRisks:        cloneStringSlice(state.RemainingRisks),
+		CurrentPlanID:         state.CurrentPlanID,
+		PlanVersion:           state.PlanVersion,
+		CurrentStepID:         state.CurrentStepID,
+		CurrentStage:          string(state.CurrentStage),
+		Iteration:             state.Iteration,
+		MaxIterations:         state.MaxIterations,
+		Decision:              string(state.Decision),
+		StopReason:            string(state.StopReason),
+		SelectedReasoningMode: state.SelectedReasoningMode,
+		Confidence:            state.Confidence,
+		NeedHuman:             state.NeedHuman,
+		CheckpointID:          state.CheckpointID,
+		Resumable:             state.Resumable,
+		ValidationStatus:      string(state.ValidationStatus),
+		ValidationSummary:     state.ValidationSummary,
+		ObservationsSummary:   state.ObservationsSummary,
+		LastOutputSummary:     state.LastOutputSummary,
+		LastError:             state.LastError,
+		Observations:          checkpointCoreObservations(state.Observations),
+		LastOutputContent:     lastOutputContent,
+	}
+}
+
+func applyLoopStateCheckpointCore(state *LoopState, data checkpointcore.LoopStateData) {
+	state.LoopStateID = data.LoopStateID
+	state.RunID = data.RunID
+	state.AgentID = data.AgentID
+	state.Goal = data.Goal
+	state.Plan = append([]string(nil), data.Plan...)
+	state.AcceptanceCriteria = cloneStringSlice(data.AcceptanceCriteria)
+	state.UnresolvedItems = cloneStringSlice(data.UnresolvedItems)
+	state.RemainingRisks = cloneStringSlice(data.RemainingRisks)
+	state.CurrentPlanID = data.CurrentPlanID
+	state.PlanVersion = data.PlanVersion
+	state.CurrentStepID = data.CurrentStepID
+	state.CurrentStage = LoopStage(data.CurrentStage)
+	state.Iteration = data.Iteration
+	state.MaxIterations = data.MaxIterations
+	state.Decision = LoopDecision(data.Decision)
+	state.StopReason = StopReason(data.StopReason)
+	state.SelectedReasoningMode = data.SelectedReasoningMode
+	state.Confidence = data.Confidence
+	state.NeedHuman = data.NeedHuman
+	state.CheckpointID = data.CheckpointID
+	state.Resumable = data.Resumable
+	state.ValidationStatus = LoopValidationStatus(data.ValidationStatus)
+	state.ValidationSummary = data.ValidationSummary
+	state.ObservationsSummary = data.ObservationsSummary
+	state.LastOutputSummary = data.LastOutputSummary
+	state.LastError = data.LastError
+	state.Observations = loopObservationsFromCore(data.Observations)
+}
+
+func checkpointCoreObservations(observations []LoopObservation) []checkpointcore.Observation {
+	if len(observations) == 0 {
+		return nil
+	}
+	converted := make([]checkpointcore.Observation, 0, len(observations))
+	for _, observation := range observations {
+		converted = append(converted, checkpointcore.Observation{
+			Stage:     string(observation.Stage),
+			Content:   observation.Content,
+			Error:     observation.Error,
+			Metadata:  cloneMetadata(observation.Metadata),
+			Iteration: observation.Iteration,
+		})
+	}
+	return converted
+}
+
+func loopObservationsFromCore(observations []checkpointcore.Observation) []LoopObservation {
+	if len(observations) == 0 {
+		return nil
+	}
+	converted := make([]LoopObservation, 0, len(observations))
+	for _, observation := range observations {
+		converted = append(converted, LoopObservation{
+			Stage:     LoopStage(observation.Stage),
+			Content:   observation.Content,
+			Error:     observation.Error,
+			Metadata:  cloneMetadata(observation.Metadata),
+			Iteration: observation.Iteration,
+		})
+	}
+	return converted
 }
 
 // MemoryKind 记忆类型。

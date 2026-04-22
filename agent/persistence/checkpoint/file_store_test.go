@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	agentpkg "github.com/BaSui01/agentflow/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -16,11 +15,11 @@ func TestFileCheckpointStore_SaveAndLoad(t *testing.T) {
 	store, err := NewFileCheckpointStore(t.TempDir(), zap.NewNop())
 	require.NoError(t, err)
 
-	cp := &agentpkg.Checkpoint{
+	cp := &Checkpoint{
 		ID:        "cp-1",
 		ThreadID:  "thread-1",
 		AgentID:   "agent-1",
-		State:     agentpkg.StateReady,
+		State:     "ready",
 		CreatedAt: time.Now(),
 	}
 
@@ -38,12 +37,12 @@ func TestFileCheckpointStore_Rollback(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 1; i <= 2; i++ {
-		cp := &agentpkg.Checkpoint{
+		cp := &Checkpoint{
 			ID:        fmt.Sprintf("cp-%d", i),
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			Version:   i,
-			State:     agentpkg.StateReady,
+			State:     "ready",
 			CreatedAt: time.Now().Add(time.Duration(i) * time.Second),
 		}
 		require.NoError(t, store.Save(context.Background(), cp))

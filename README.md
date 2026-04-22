@@ -520,17 +520,15 @@ agentflow/
 │   ├── base.go               # 核心类型与公共状态/错误/EventBus
 │   ├── builder.go            # BaseAgent + AgentBuilder 收口面
 │   ├── checkpoint_binding.go # Checkpoint 公共类型与管理入口
-│   ├── defensive_prompt.go   # Defensive prompt / OutputSchema
 │   ├── integration.go        # Execute/Plan/Observe + 闭环执行主链
 │   ├── interfaces.go         # 扩展接口、Reflection/ToolSelector 等公开面
-│   ├── prompt_bundle.go      # PromptBundle / PromptEnhancer
 │   ├── registry.go           # AgentRegistry 与公开运行时注册能力
 │   ├── request.go            # RunConfig / request/runtime protocol 入口
 │   ├── adapters/             # 适配层（chat/declarative/structured/handoff/teamadapter）
 │   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
 │   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）
-│   ├── core/                 # 目标核心层命名空间（当前保留最小骨架）
-│   ├── execution/            # 执行层（runtime/context/protocol/orchestration）
+│   ├── core/                 # 核心层（registry/helpers/extension contracts）
+│   ├── execution/            # 执行层（runtime/context/loop/protocol/orchestration）
 │   ├── integration/          # 集成层（deployment/hosted/k8s/lsp/voice）
 │   ├── observability/        # 可观测层（monitoring/evaluation/hitl）
 │   └── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）

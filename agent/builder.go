@@ -11,7 +11,8 @@ import (
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
-	agentcore "github.com/BaSui01/agentflow/agent/internalcore"
+	agentcore "github.com/BaSui01/agentflow/agent/core"
+	loopcore "github.com/BaSui01/agentflow/agent/execution/loop"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -1849,18 +1850,18 @@ func (b *BaseAgent) memorySaveMiddleware() ExecutionMiddleware {
 
 // Merged from loop_control_policy.go.
 
-type LoopControlPolicy = agentcore.LoopControlPolicy
+type LoopControlPolicy = loopcore.LoopControlPolicy
 
 const internalBudgetScope = "strategy_internal"
 
 func (b *BaseAgent) loopControlPolicy() LoopControlPolicy {
 	b.configMu.RLock()
 	defer b.configMu.RUnlock()
-	return agentcore.LoopControlPolicyFromConfig(b.config, b.runtimeGuardrailsCfg)
+	return loopcore.LoopControlPolicyFromConfig(b.config, b.runtimeGuardrailsCfg)
 }
 
 func reflectionExecutorConfigFromPolicy(policy LoopControlPolicy) ReflectionExecutorConfig {
-	coreConfig := agentcore.ReflectionPolicyConfigFromPolicy(policy)
+	coreConfig := loopcore.ReflectionPolicyConfigFromPolicy(policy)
 	config := DefaultReflectionExecutorConfig()
 	if coreConfig.MaxIterations > 0 {
 		config.MaxIterations = coreConfig.MaxIterations
@@ -1875,11 +1876,11 @@ func reflectionExecutorConfigFromPolicy(policy LoopControlPolicy) ReflectionExec
 }
 
 func runtimeGuardrailsFromPolicy(policy LoopControlPolicy, cfg *guardrails.GuardrailsConfig) *guardrails.GuardrailsConfig {
-	return agentcore.RuntimeGuardrailsFromPolicy(policy, cfg)
+	return loopcore.RuntimeGuardrailsFromPolicy(policy, cfg)
 }
 
 func normalizeTopLevelStopReason(stopReason string, internalCause string) string {
-	return agentcore.NormalizeTopLevelStopReason(stopReason, internalCause, agentcore.StopReasons{
+	return loopcore.NormalizeTopLevelStopReason(stopReason, internalCause, loopcore.StopReasons{
 		Solved:                   string(StopReasonSolved),
 		Timeout:                  string(StopReasonTimeout),
 		Blocked:                  string(StopReasonBlocked),
@@ -1891,7 +1892,7 @@ func normalizeTopLevelStopReason(stopReason string, internalCause string) string
 }
 
 func isInternalBudgetCause(cause string) bool {
-	return agentcore.IsInternalBudgetCause(cause)
+	return loopcore.IsInternalBudgetCause(cause)
 }
 
 type ExtensionRegistry struct {

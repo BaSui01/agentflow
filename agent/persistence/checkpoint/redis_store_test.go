@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	agentpkg "github.com/BaSui01/agentflow/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -105,9 +104,9 @@ func TestRedisCheckpointStore_SaveAndLoad(t *testing.T) {
 	client := newMockRedisClient()
 	store := NewRedisCheckpointStore(client, "test", time.Hour, zap.NewNop())
 
-	cp := &agentpkg.Checkpoint{
+	cp := &Checkpoint{
 		ID: "cp-1", ThreadID: "t1", AgentID: "a1",
-		State: agentpkg.StateReady, CreatedAt: time.Now(),
+		State: "ready", CreatedAt: time.Now(),
 	}
 
 	err := store.Save(context.Background(), cp)
@@ -117,15 +116,15 @@ func TestRedisCheckpointStore_SaveAndLoad(t *testing.T) {
 	loaded, err := store.Load(context.Background(), "cp-1")
 	require.NoError(t, err)
 	assert.Equal(t, "cp-1", loaded.ID)
-	assert.Equal(t, agentpkg.StateReady, loaded.State)
+	assert.Equal(t, "ready", loaded.State)
 }
 
 func TestRedisCheckpointStore_LoadLatest(t *testing.T) {
 	client := newMockRedisClient()
 	store := NewRedisCheckpointStore(client, "test", time.Hour, zap.NewNop())
 
-	cp1 := &agentpkg.Checkpoint{ID: "cp-1", ThreadID: "t1", CreatedAt: time.Now().Add(-time.Hour)}
-	cp2 := &agentpkg.Checkpoint{ID: "cp-2", ThreadID: "t1", CreatedAt: time.Now()}
+	cp1 := &Checkpoint{ID: "cp-1", ThreadID: "t1", CreatedAt: time.Now().Add(-time.Hour)}
+	cp2 := &Checkpoint{ID: "cp-2", ThreadID: "t1", CreatedAt: time.Now()}
 	require.NoError(t, store.Save(context.Background(), cp1))
 	require.NoError(t, store.Save(context.Background(), cp2))
 
@@ -139,7 +138,7 @@ func TestRedisCheckpointStore_List(t *testing.T) {
 	store := NewRedisCheckpointStore(client, "test", time.Hour, zap.NewNop())
 
 	for i := 0; i < 3; i++ {
-		cp := &agentpkg.Checkpoint{
+		cp := &Checkpoint{
 			ID: fmt.Sprintf("cp-%d", i), ThreadID: "t1",
 			CreatedAt: time.Now().Add(time.Duration(i) * time.Minute),
 		}
@@ -155,7 +154,7 @@ func TestRedisCheckpointStore_DeleteAndDeleteThread(t *testing.T) {
 	client := newMockRedisClient()
 	store := NewRedisCheckpointStore(client, "test", time.Hour, zap.NewNop())
 
-	cp := &agentpkg.Checkpoint{ID: "cp-1", ThreadID: "t1", CreatedAt: time.Now()}
+	cp := &Checkpoint{ID: "cp-1", ThreadID: "t1", CreatedAt: time.Now()}
 	require.NoError(t, store.Save(context.Background(), cp))
 
 	require.NoError(t, store.Delete(context.Background(), "cp-1"))
@@ -172,12 +171,12 @@ func TestRedisCheckpointStore_LoadVersionAndRollback(t *testing.T) {
 	client := newMockRedisClient()
 	store := NewRedisCheckpointStore(client, "test", time.Hour, zap.NewNop())
 
-	cp := &agentpkg.Checkpoint{ID: "cp-1", ThreadID: "t1", State: agentpkg.StateReady, CreatedAt: time.Now()}
+	cp := &Checkpoint{ID: "cp-1", ThreadID: "t1", State: "ready", CreatedAt: time.Now()}
 	require.NoError(t, store.Save(context.Background(), cp))
 
 	loaded, err := store.LoadVersion(context.Background(), "t1", 1)
 	require.NoError(t, err)
-	assert.Equal(t, agentpkg.StateReady, loaded.State)
+	assert.Equal(t, "ready", loaded.State)
 
 	require.NoError(t, store.Rollback(context.Background(), "t1", 1))
 	versions, err := store.ListVersions(context.Background(), "t1")
