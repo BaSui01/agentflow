@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"sort"
 	"time"
 )
 
@@ -156,91 +155,4 @@ func (s *errorCheckpointStore) ListVersions(_ context.Context, _ string) ([]Chec
 }
 func (s *errorCheckpointStore) Rollback(_ context.Context, _ string, _ int) error {
 	return fmt.Errorf("error")
-}
-
-// mockRedisClient implements RedisClient for testing.
-type mockRedisClient struct {
-	data  map[string][]byte
-	zsets map[string][]zsetEntry
-}
-
-type zsetEntry struct {
-	score  float64
-	member string
-}
-
-func newMockRedisClient() *mockRedisClient {
-	return &mockRedisClient{
-		data:  make(map[string][]byte),
-		zsets: make(map[string][]zsetEntry),
-	}
-}
-
-func (c *mockRedisClient) Set(_ context.Context, key string, value []byte, _ time.Duration) error {
-	c.data[key] = value
-	return nil
-}
-
-func (c *mockRedisClient) Get(_ context.Context, key string) ([]byte, error) {
-	v, ok := c.data[key]
-	if !ok {
-		return nil, fmt.Errorf("key not found: %s", key)
-	}
-	return v, nil
-}
-
-func (c *mockRedisClient) Delete(_ context.Context, key string) error {
-	delete(c.data, key)
-	return nil
-}
-
-func (c *mockRedisClient) Keys(_ context.Context, pattern string) ([]string, error) {
-	// Support prefix glob matching (e.g., "prefix:*")
-	var keys []string
-	prefix := ""
-	if idx := len(pattern) - 1; idx >= 0 && pattern[idx] == '*' {
-		prefix = pattern[:idx]
-	}
-	for k := range c.data {
-		if prefix == "" || len(k) >= len(prefix) && k[:len(prefix)] == prefix {
-			keys = append(keys, k)
-		}
-	}
-	sort.Strings(keys)
-	return keys, nil
-}
-
-func (c *mockRedisClient) ZAdd(_ context.Context, key string, score float64, member string) error {
-	c.zsets[key] = append(c.zsets[key], zsetEntry{score: score, member: member})
-	return nil
-}
-
-func (c *mockRedisClient) ZRevRange(_ context.Context, key string, start, stop int64) ([]string, error) {
-	entries := c.zsets[key]
-	if len(entries) == 0 {
-		return nil, nil
-	}
-	// Sort by score descending
-	sorted := make([]zsetEntry, len(entries))
-	copy(sorted, entries)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].score > sorted[j].score
-	})
-	end := int(stop) + 1
-	if end > len(sorted) {
-		end = len(sorted)
-	}
-	startIdx := int(start)
-	if startIdx >= len(sorted) {
-		return nil, nil
-	}
-	var result []string
-	for i := startIdx; i < end; i++ {
-		result = append(result, sorted[i].member)
-	}
-	return result, nil
-}
-
-func (c *mockRedisClient) ZRemRangeByScore(_ context.Context, _, _, _ string) error {
-	return nil
 }
