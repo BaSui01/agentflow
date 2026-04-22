@@ -186,6 +186,7 @@ type LoopState struct {
 	LastError             string               `json:"last_error,omitempty"`
 	LastOutput            *Output              `json:"-"`
 	Observations          []LoopObservation    `json:"observations,omitempty"`
+	reflectionCritiques   []Critique
 }
 
 // NewLoopState creates a new loop state seeded from input.

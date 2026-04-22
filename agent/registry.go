@@ -11,11 +11,11 @@ import (
 	"time"
 
 	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	registrycore "github.com/BaSui01/agentflow/agent/collaboration/multiagent/registrycore"
 	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 )
@@ -900,10 +900,7 @@ func (m *ManagedLSP) Close() error {
 
 // executionResult bundles the outcome of an async execution into a single value,
 // eliminating the dual-channel select race between resultCh and errorCh.
-type executionResult struct {
-	Output *Output
-	Err    error
-}
+type executionResult = registrycore.ExecutionResult[Output]
 
 // AsyncExecutor 异步 Agent 执行器（基于 Anthropic 2026 标准）
 // 支持异步 Subagent 创建和实时协调
@@ -924,54 +921,29 @@ func NewAsyncExecutor(agent Agent, logger *zap.Logger) *AsyncExecutor {
 
 // ExecuteAsync 异步执行任务
 func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncExecution, error) {
-	execution := &AsyncExecution{
-		ID:        generateExecutionID(),
-		AgentID:   e.agent.ID(),
-		Input:     input,
-		status:    ExecutionStatusRunning,
-		StartTime: time.Now(),
-		doneCh:    make(chan struct{}),
-	}
+	execution := newAsyncExecution(generateExecutionID(), e.agent.ID(), input)
 
 	e.logger.Info("starting async execution",
 		zap.String("execution_id", execution.ID),
 		zap.String("agent_id", e.agent.ID()),
 	)
 
-	// 异步执行
-	go func(ctx context.Context) {
-		ctx, span := otel.Tracer("agent").Start(ctx, "async_execution")
-		defer span.End()
-
-		defer func() {
-			if r := recover(); r != nil {
-				panicErr := fmt.Errorf("async execution panicked: %v", r)
-				e.logger.Error("async execution panicked",
-					zap.String("execution_id", execution.ID),
-					zap.Any("recover", r),
-					zap.Stack("stack"),
-				)
-				execution.setFailed(panicErr)
-				execution.notifyDone(executionResult{Err: panicErr})
-			}
-		}()
-
-		select {
-		case <-ctx.Done():
-			execution.setFailed(ctx.Err())
-			execution.notifyDone(executionResult{Err: ctx.Err()})
-			return
-		default:
-		}
-
-		output, err := e.agent.Execute(ctx, input)
-		if err != nil {
-			execution.setFailed(err)
-		} else {
-			execution.setCompleted(output)
-		}
-		execution.notifyDone(executionResult{Output: output, Err: err})
-	}(ctx)
+	registrycore.RunExecution(registrycore.ExecutionRunner[Input, Output, Agent, *AsyncExecution]{
+		Context:      ctx,
+		Agent:        e.agent,
+		Input:        input,
+		Exec:         execution,
+		ExecutionID:  execution.ID,
+		AgentID:      e.agent.ID(),
+		Logger:       e.logger,
+		TracerName:   "agent",
+		SpanName:     "async_execution",
+		PanicMessage: "async execution panicked",
+		Execute: func(execCtx context.Context, agent Agent, execInput *Input) (*Output, error) {
+			return agent.Execute(execCtx, execInput)
+		},
+		Callbacks: asyncExecutionCallbacks(),
+	})
 
 	return execution, nil
 }
@@ -987,47 +959,32 @@ func (e *AsyncExecutor) ExecuteWithSubagents(ctx context.Context, input *Input, 
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// 2. 启动所有 Subagents
-	executions := make([]*AsyncExecution, len(subagents))
-	for i, subagent := range subagents {
-		exec, err := e.manager.SpawnSubagent(execCtx, subagent, input)
-		if err != nil {
+	results, err := registrycore.CollectParallelResults(registrycore.ParallelExecutionConfig[Input, Output, Agent, *AsyncExecution]{
+		Context:   execCtx,
+		Input:     input,
+		Subagents: subagents,
+		Spawn:     e.manager.SpawnSubagent,
+		Wait: func(exec *AsyncExecution, waitCtx context.Context) (*Output, error) {
+			return exec.Wait(waitCtx)
+		},
+		OnSpawnError: func(subagent Agent, err error) {
 			e.logger.Warn("failed to spawn subagent",
 				zap.String("subagent_id", subagent.ID()),
 				zap.String("task_type", "subagent_parallel"),
 				zap.Error(err),
 			)
-			continue
-		}
-		executions[i] = exec
-	}
-
-	// 3. 等待所有 Subagents 完成
-	results := make([]*Output, 0, len(executions))
-	for _, exec := range executions {
-		if exec == nil {
-			continue
-		}
-
-		output, err := exec.Wait(ctx)
-		if err != nil {
+		},
+		OnWaitError: func(exec *AsyncExecution, err error) {
 			e.logger.Warn("subagent execution failed",
 				zap.String("execution_id", exec.ID),
 				zap.String("subagent_id", exec.AgentID),
 				zap.String("task_type", "subagent_parallel"),
 				zap.Error(err),
 			)
-		} else {
-			results = append(results, output)
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-	}
-
-	// 4. 合并结果
-	if len(results) == 0 {
-		return nil, fmt.Errorf("all subagents failed")
+		},
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	combined := e.combineResults(results)
@@ -1170,172 +1127,78 @@ func (e *AsyncExecution) notifyDone(res executionResult) {
 
 // SubagentManager Subagent 管理器
 type SubagentManager struct {
-	executions map[string]*AsyncExecution
-	mu         sync.RWMutex
-	logger     *zap.Logger
-	closeCh    chan struct{}
+	core *registrycore.SubagentManager[Input, Output, Agent, *AsyncExecution, ExecutionStatus]
 }
 
 // NewSubagentManager 创建 Subagent 管理器
 func NewSubagentManager(logger *zap.Logger) *SubagentManager {
-	m := &SubagentManager{
-		executions: make(map[string]*AsyncExecution),
-		logger:     logger.With(zap.String("component", "subagent_manager")),
-		closeCh:    make(chan struct{}),
-	}
-	go m.autoCleanupLoop()
-	return m
-}
-
-// autoCleanupLoop 定期清理已完成的 execution，防止内存泄漏。
-func (m *SubagentManager) autoCleanupLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			cleaned := m.CleanupCompleted(10 * time.Minute)
-			if cleaned > 0 {
-				m.logger.Info("auto cleanup completed executions", zap.Int("count", cleaned))
-			}
-		case <-m.closeCh:
-			return
-		}
+	return &SubagentManager{
+		core: registrycore.NewSubagentManager(registrycore.ManagerConfig[Input, Output, Agent, *AsyncExecution, ExecutionStatus]{
+			Logger:         logger,
+			Component:      "subagent_manager",
+			NewExecutionID: generateExecutionID,
+			CloneInput:     copyInput,
+			PrepareContext: prepareSubagentContext,
+			NewExecution:   newAsyncExecution,
+			Callbacks:      asyncExecutionCallbacks(),
+			GetStatus: func(exec *AsyncExecution) ExecutionStatus {
+				return exec.GetStatus()
+			},
+			GetEndTime: func(exec *AsyncExecution) time.Time {
+				return exec.GetEndTime()
+			},
+			GetID: func(exec *AsyncExecution) string {
+				return exec.ID
+			},
+			CompletedStatuses: []ExecutionStatus{
+				ExecutionStatusCompleted,
+				ExecutionStatusFailed,
+			},
+		}),
 	}
 }
 
 // Close 停止自动清理 goroutine。
 func (m *SubagentManager) Close() {
-	select {
-	case <-m.closeCh:
-		// already closed
-	default:
-		close(m.closeCh)
+	if m == nil || m.core == nil {
+		return
 	}
+	m.core.Close()
 }
 
 // SpawnSubagent 创建 Subagent 执行
 func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, input *Input) (*AsyncExecution, error) {
-	// 深拷贝 input 防止并发修改共享 map
-	inputCopy := copyInput(input)
-
-	execution := &AsyncExecution{
-		ID:        generateExecutionID(),
-		AgentID:   subagent.ID(),
-		Input:     inputCopy,
-		status:    ExecutionStatusRunning,
-		StartTime: time.Now(),
-		doneCh:    make(chan struct{}),
-	}
-
-	m.mu.Lock()
-	m.executions[execution.ID] = execution
-	m.mu.Unlock()
-
-	// 构建子 agent 上下文：将当前 run_id 注入为 parent_run_id，生成新的子 run_id
-	childCtx := ctx
-	if parentRunID, ok := types.RunID(ctx); ok {
-		childCtx = types.WithParentRunID(childCtx, parentRunID)
-	}
-	// Trace context isolation: share trace_id, but assign an independent span_id for child execution.
-	childCtx = types.WithSpanID(childCtx, "span_"+uuid.New().String())
-	childCtx = types.WithRunID(childCtx, execution.ID)
-
-	m.logger.Debug("spawning subagent",
-		zap.String("execution_id", execution.ID),
-		zap.String("subagent_id", subagent.ID()),
-	)
-
-	// 异步执行
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicErr := fmt.Errorf("subagent execution panicked: %v", r)
-				m.logger.Error("subagent execution panicked",
-					zap.String("execution_id", execution.ID),
-					zap.String("subagent_id", subagent.ID()),
-					zap.Any("recover", r),
-					zap.Stack("stack"),
-				)
-				execution.setFailed(panicErr)
-				execution.notifyDone(executionResult{Err: panicErr})
-			}
-		}()
-
-		output, err := subagent.Execute(childCtx, inputCopy)
-		if err != nil {
-			execution.setFailed(err)
-			m.logger.Warn("subagent execution failed",
-				zap.String("execution_id", execution.ID),
-				zap.String("subagent_id", subagent.ID()),
-				zap.Error(err),
-			)
-		} else {
-			execution.setCompleted(output)
-			m.logger.Debug("subagent execution completed",
-				zap.String("execution_id", execution.ID),
-			)
-		}
-		execution.notifyDone(executionResult{Output: output, Err: err})
-	}()
-
-	return execution, nil
+	return m.core.SpawnSubagent(ctx, subagent, input)
 }
 
 // GetExecution 获取执行状态
 func (m *SubagentManager) GetExecution(executionID string) (*AsyncExecution, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	execution, ok := m.executions[executionID]
-	if !ok {
+	if m == nil || m.core == nil {
 		return nil, fmt.Errorf("execution not found: %s", executionID)
 	}
-
-	return execution, nil
+	return m.core.GetExecution(executionID)
 }
 
 // ListExecutions 列出所有执行
 func (m *SubagentManager) ListExecutions() []*AsyncExecution {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	executions := make([]*AsyncExecution, 0, len(m.executions))
-	for _, exec := range m.executions {
-		executions = append(executions, exec)
+	if m == nil || m.core == nil {
+		return nil
 	}
-
-	return executions
+	return m.core.ListExecutions()
 }
 
 // CleanupCompleted 清理已完成的执行
 func (m *SubagentManager) CleanupCompleted(olderThan time.Duration) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	cutoff := time.Now().Add(-olderThan)
-	cleaned := 0
-
-	for id, exec := range m.executions {
-		status := exec.GetStatus()
-		endTime := exec.GetEndTime()
-		if status == ExecutionStatusCompleted || status == ExecutionStatusFailed {
-			if olderThan <= 0 || endTime.Before(cutoff) || endTime.Equal(cutoff) {
-				delete(m.executions, id)
-				cleaned++
-			}
-		}
+	if m == nil || m.core == nil {
+		return 0
 	}
-
-	m.logger.Debug("cleaned up completed executions", zap.Int("count", cleaned))
-
-	return cleaned
+	return m.core.CleanupCompleted(olderThan)
 }
 
 // generateExecutionID 生成执行 ID
 // Uses UUID for distributed uniqueness.
 func generateExecutionID() string {
-	return "exec_" + uuid.New().String()
+	return registrycore.GenerateExecutionID()
 }
 
 // copyInput 深拷贝 Input，防止并发 subagent 共享 map 导致 data race。
@@ -1405,64 +1268,41 @@ func (c *RealtimeCoordinator) CoordinateSubagents(ctx context.Context, subagents
 		zap.Int("count", len(subagents)),
 	)
 
-	// 1. 启动所有 Subagents
-	executions := make([]*AsyncExecution, len(subagents))
-	for i, subagent := range subagents {
-		exec, err := c.manager.SpawnSubagent(ctx, subagent, input)
-		if err != nil {
-			c.logger.Warn("failed to spawn subagent", zap.Error(err))
-			continue
-		}
-		executions[i] = exec
-	}
-
-	// 2. 监控执行进度
-	results := make([]*Output, 0, len(executions))
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	for _, exec := range executions {
-		if exec == nil {
-			continue
-		}
-
-		wg.Add(1)
-		go func(e *AsyncExecution) {
-			defer wg.Done()
-
-			output, err := e.Wait(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				c.logger.Warn("subagent failed",
-					zap.String("execution_id", e.ID),
-					zap.Error(err),
-				)
+	results, err := registrycore.CollectParallelResults(registrycore.ParallelExecutionConfig[Input, Output, Agent, *AsyncExecution]{
+		Context:   ctx,
+		Input:     input,
+		Subagents: subagents,
+		Spawn:     c.manager.SpawnSubagent,
+		Wait: func(exec *AsyncExecution, waitCtx context.Context) (*Output, error) {
+			return exec.Wait(waitCtx)
+		},
+		OnSpawnError: func(subagent Agent, err error) {
+			c.logger.Warn("failed to spawn subagent",
+				zap.String("subagent_id", subagent.ID()),
+				zap.Error(err),
+			)
+		},
+		OnWaitError: func(exec *AsyncExecution, err error) {
+			c.logger.Warn("subagent failed",
+				zap.String("execution_id", exec.ID),
+				zap.Error(err),
+			)
+		},
+		OnSuccess: func(exec *AsyncExecution, output *Output) {
+			if c.eventBus == nil {
 				return
 			}
-
-			mu.Lock()
-			results = append(results, output)
-			mu.Unlock()
-
-			// 发布完成事件
-			if c.eventBus != nil {
-				c.eventBus.Publish(&SubagentCompletedEvent{
-					ExecutionID: e.ID,
-					AgentID:     e.AgentID,
-					Output:      output,
-					Timestamp_:  time.Now(),
-				})
-			}
-		}(exec)
-	}
-
-	// 3. 等待所有完成
-	wg.Wait()
-
-	if len(results) == 0 {
-		return nil, fmt.Errorf("all subagents failed")
+			c.eventBus.Publish(&SubagentCompletedEvent{
+				ExecutionID: exec.ID,
+				AgentID:     exec.AgentID,
+				Output:      output,
+				Timestamp_:  time.Now(),
+			})
+		},
+		IgnoreContextCancellation: true,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// 4. 合并结果
@@ -1493,6 +1333,41 @@ func (c *RealtimeCoordinator) CoordinateSubagents(ctx context.Context, subagents
 	)
 
 	return combined, nil
+}
+
+func asyncExecutionCallbacks() registrycore.ExecutionCallbacks[*AsyncExecution, Output] {
+	return registrycore.ExecutionCallbacks[*AsyncExecution, Output]{
+		SetCompleted: func(exec *AsyncExecution, output *Output) {
+			exec.setCompleted(output)
+		},
+		SetFailed: func(exec *AsyncExecution, err error) {
+			exec.setFailed(err)
+		},
+		NotifyDone: func(exec *AsyncExecution, result executionResult) {
+			exec.notifyDone(result)
+		},
+	}
+}
+
+func newAsyncExecution(executionID, agentID string, input *Input) *AsyncExecution {
+	return &AsyncExecution{
+		ID:        executionID,
+		AgentID:   agentID,
+		Input:     input,
+		status:    ExecutionStatusRunning,
+		StartTime: time.Now(),
+		doneCh:    make(chan struct{}),
+	}
+}
+
+func prepareSubagentContext(ctx context.Context, executionID string) context.Context {
+	childCtx := ctx
+	if parentRunID, ok := types.RunID(ctx); ok {
+		childCtx = types.WithParentRunID(childCtx, parentRunID)
+	}
+	childCtx = types.WithSpanID(childCtx, "span_"+uuid.New().String())
+	childCtx = types.WithRunID(childCtx, executionID)
+	return childCtx
 }
 
 // SubagentCompletedEvent Subagent 完成事件

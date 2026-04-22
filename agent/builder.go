@@ -11,6 +11,7 @@ import (
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
+	agentcore "github.com/BaSui01/agentflow/agent/internalcore"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -968,31 +969,11 @@ func shallowCopyInput(in *Input) *Input {
 }
 
 func normalizeInstructionList(instructions []string) []string {
-	if len(instructions) == 0 {
-		return nil
-	}
-	unique := make(map[string]struct{}, len(instructions))
-	cleaned := make([]string, 0, len(instructions))
-	for _, instruction := range instructions {
-		instruction = strings.TrimSpace(instruction)
-		if instruction == "" {
-			continue
-		}
-		if _, exists := unique[instruction]; exists {
-			continue
-		}
-		unique[instruction] = struct{}{}
-		cleaned = append(cleaned, instruction)
-	}
-	if len(cleaned) == 0 {
-		return nil
-	}
-	return cleaned
+	return agentcore.NormalizeInstructionList(instructions)
 }
 
 func explainabilityTimelineRecorder(obs ObservabilityRunner) ExplainabilityTimelineRecorder {
-	recorder, _ := obs.(ExplainabilityTimelineRecorder)
-	return recorder
+	return agentcore.ExplainabilityTimelineRecorderFrom(obs)
 }
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
@@ -1868,325 +1849,175 @@ func (b *BaseAgent) memorySaveMiddleware() ExecutionMiddleware {
 
 // Merged from loop_control_policy.go.
 
-const (
-	defaultLoopIterationBudget       = 3
-	defaultReflectionIterationBudget = 3
-	defaultQualityThreshold          = 0.7
-	internalBudgetScope              = "strategy_internal"
-)
+type LoopControlPolicy = agentcore.LoopControlPolicy
 
-type LoopControlPolicy struct {
-	LoopIterationBudget       int
-	ReflectionIterationBudget int
-	RetryBudget               int
-	QualityThreshold          float64
-	CriticPrompt              string
-}
+const internalBudgetScope = "strategy_internal"
 
 func (b *BaseAgent) loopControlPolicy() LoopControlPolicy {
 	b.configMu.RLock()
 	defer b.configMu.RUnlock()
-
-	policy := LoopControlPolicy{
-		LoopIterationBudget:       defaultLoopIterationBudget,
-		ReflectionIterationBudget: defaultReflectionIterationBudget,
-		QualityThreshold:          defaultQualityThreshold,
-	}
-
-	control := b.config.ExecutionOptions().Control
-	if reflectionCfg := control.Reflection; reflectionCfg != nil {
-		if reflectionCfg.MaxIterations > 0 {
-			policy.ReflectionIterationBudget = reflectionCfg.MaxIterations
-		}
-		if reflectionCfg.MinQuality > 0 {
-			policy.QualityThreshold = reflectionCfg.MinQuality
-		}
-		if strings.TrimSpace(reflectionCfg.CriticPrompt) != "" {
-			policy.CriticPrompt = reflectionCfg.CriticPrompt
-		}
-	}
-	if policy.ReflectionIterationBudget <= 0 {
-		policy.ReflectionIterationBudget = defaultReflectionIterationBudget
-	}
-	if control.MaxLoopIterations > 0 {
-		policy.LoopIterationBudget = control.MaxLoopIterations
-	}
-	if guardrailsCfg := b.runtimeGuardrailsCfg; guardrailsCfg != nil {
-		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
-	} else if guardrailsCfg := control.Guardrails; guardrailsCfg != nil {
-		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
-	}
-
-	return policy
+	return agentcore.LoopControlPolicyFromConfig(b.config, b.runtimeGuardrailsCfg)
 }
 
 func reflectionExecutorConfigFromPolicy(policy LoopControlPolicy) ReflectionExecutorConfig {
+	coreConfig := agentcore.ReflectionPolicyConfigFromPolicy(policy)
 	config := DefaultReflectionExecutorConfig()
-	if policy.ReflectionIterationBudget > 0 {
-		config.MaxIterations = policy.ReflectionIterationBudget
+	if coreConfig.MaxIterations > 0 {
+		config.MaxIterations = coreConfig.MaxIterations
 	}
-	if policy.QualityThreshold > 0 {
-		config.MinQuality = policy.QualityThreshold
+	if coreConfig.MinQuality > 0 {
+		config.MinQuality = coreConfig.MinQuality
 	}
-	if strings.TrimSpace(policy.CriticPrompt) != "" {
-		config.CriticPrompt = policy.CriticPrompt
+	if strings.TrimSpace(coreConfig.CriticPrompt) != "" {
+		config.CriticPrompt = coreConfig.CriticPrompt
 	}
 	return config
 }
 
 func runtimeGuardrailsFromPolicy(policy LoopControlPolicy, cfg *guardrails.GuardrailsConfig) *guardrails.GuardrailsConfig {
-	if cfg == nil {
-		return nil
-	}
-	cloned := *cfg
-	cloned.MaxRetries = policy.RetryBudget
-	return &cloned
+	return agentcore.RuntimeGuardrailsFromPolicy(policy, cfg)
 }
 
 func normalizeTopLevelStopReason(stopReason string, internalCause string) string {
-	switch strings.TrimSpace(stopReason) {
-	case "", "stop", "completed":
-		if strings.TrimSpace(internalCause) != "" {
-			return string(StopReasonSolved)
-		}
-		return string(StopReasonSolved)
-	case string(StopReasonSolved),
-		string(StopReasonTimeout),
-		string(StopReasonBlocked),
-		string(StopReasonNeedHuman),
-		string(StopReasonValidationFailed),
-		string(StopReasonToolFailureUnrecoverable):
-		return strings.TrimSpace(stopReason)
-	case string(StopReasonMaxIterations):
-		if isInternalBudgetCause(internalCause) {
-			return string(StopReasonBlocked)
-		}
-		return string(StopReasonMaxIterations)
-	default:
-		if isInternalBudgetCause(stopReason) || isInternalBudgetCause(internalCause) {
-			return string(StopReasonBlocked)
-		}
-		return strings.TrimSpace(stopReason)
-	}
+	return agentcore.NormalizeTopLevelStopReason(stopReason, internalCause, agentcore.StopReasons{
+		Solved:                   string(StopReasonSolved),
+		Timeout:                  string(StopReasonTimeout),
+		Blocked:                  string(StopReasonBlocked),
+		NeedHuman:                string(StopReasonNeedHuman),
+		ValidationFailed:         string(StopReasonValidationFailed),
+		ToolFailureUnrecoverable: string(StopReasonToolFailureUnrecoverable),
+		MaxIterations:            string(StopReasonMaxIterations),
+	})
 }
 
 func isInternalBudgetCause(cause string) bool {
-	normalized := strings.TrimSpace(strings.ToLower(cause))
-	switch normalized {
-	case "react_iteration_budget_exhausted",
-		"reflection_iteration_budget_exhausted",
-		"reflexion_trial_budget_exhausted",
-		"plan_execute_replan_budget_exhausted",
-		"dynamic_planner_backtrack_budget_exhausted",
-		"dynamic_planner_plan_depth_budget_exhausted",
-		"dynamic_planner_confidence_budget_exhausted":
-		return true
-	default:
-		return false
-	}
+	return agentcore.IsInternalBudgetCause(cause)
 }
 
-// Merged from extension_registry.go.
-
-// ExtensionRegistry encapsulates the 9 optional extension fields extracted from BaseAgent.
 type ExtensionRegistry struct {
-	reflectionExecutor  ReflectionRunner
-	toolSelector        DynamicToolSelectorRunner
-	promptEnhancer      PromptEnhancerRunner
-	skillManager        SkillDiscoverer
-	mcpServer           MCPServerRunner
-	lspClient           LSPClientRunner
-	lspLifecycle        LSPLifecycleOwner
-	enhancedMemory      EnhancedMemoryRunner
-	observabilitySystem ObservabilityRunner
-	logger              *zap.Logger
+	inner        *agentcore.ExtensionRegistry[Input, Output]
+	lspClient    LSPClientRunner
+	lspLifecycle LSPLifecycleOwner
 }
 
-// NewExtensionRegistry creates a new ExtensionRegistry.
 func NewExtensionRegistry(logger *zap.Logger) *ExtensionRegistry {
-	return &ExtensionRegistry{logger: logger}
+	return &ExtensionRegistry{inner: agentcore.NewExtensionRegistry[Input, Output](logger)}
 }
 
-// EnableReflection enables the reflection mechanism.
 func (r *ExtensionRegistry) EnableReflection(executor ReflectionRunner) {
-	r.reflectionExecutor = executor
-	r.logger.Info("reflection enabled")
+	r.inner.EnableReflection(executor)
 }
 
-// EnableToolSelection enables dynamic tool selection.
 func (r *ExtensionRegistry) EnableToolSelection(selector DynamicToolSelectorRunner) {
-	r.toolSelector = selector
-	r.logger.Info("tool selection enabled")
+	r.inner.EnableToolSelection(selector)
 }
 
-// EnablePromptEnhancer enables prompt enhancement.
 func (r *ExtensionRegistry) EnablePromptEnhancer(enhancer PromptEnhancerRunner) {
-	r.promptEnhancer = enhancer
-	r.logger.Info("prompt enhancer enabled")
+	r.inner.EnablePromptEnhancer(enhancer)
 }
 
-// EnableSkills enables the skills system.
 func (r *ExtensionRegistry) EnableSkills(manager SkillDiscoverer) {
-	r.skillManager = manager
-	r.logger.Info("skills system enabled")
+	r.inner.EnableSkills(manager)
 }
 
-// EnableMCP enables MCP integration.
 func (r *ExtensionRegistry) EnableMCP(server MCPServerRunner) {
-	r.mcpServer = server
-	r.logger.Info("MCP integration enabled")
+	r.inner.EnableMCP(server)
 }
 
-// EnableLSP enables LSP integration.
 func (r *ExtensionRegistry) EnableLSP(client LSPClientRunner) {
 	r.lspClient = client
-	r.logger.Info("LSP integration enabled")
+	r.inner.EnableLSP(client)
 }
 
-// EnableLSPWithLifecycle enables LSP with an optional lifecycle owner.
 func (r *ExtensionRegistry) EnableLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) {
 	r.lspClient = client
 	r.lspLifecycle = lifecycle
-	r.logger.Info("LSP integration enabled with lifecycle")
+	r.inner.EnableLSPWithLifecycle(client, lifecycle)
 }
 
-// EnableEnhancedMemory enables the enhanced memory system.
 func (r *ExtensionRegistry) EnableEnhancedMemory(memorySystem EnhancedMemoryRunner) {
-	r.enhancedMemory = memorySystem
-	r.logger.Info("enhanced memory enabled")
+	r.inner.EnableEnhancedMemory(memorySystem)
 }
 
-// EnableObservability enables the observability system.
 func (r *ExtensionRegistry) EnableObservability(obsSystem ObservabilityRunner) {
-	r.observabilitySystem = obsSystem
-	r.logger.Info("observability enabled")
+	r.inner.EnableObservability(obsSystem)
 }
 
-// ReflectionExecutor returns the reflection runner.
-func (r *ExtensionRegistry) ReflectionExecutor() ReflectionRunner { return r.reflectionExecutor }
+func (r *ExtensionRegistry) ReflectionExecutor() ReflectionRunner {
+	return r.inner.ReflectionExecutor()
+}
 
-// ToolSelector returns the tool selector runner.
-func (r *ExtensionRegistry) ToolSelector() DynamicToolSelectorRunner { return r.toolSelector }
+func (r *ExtensionRegistry) ToolSelector() DynamicToolSelectorRunner { return r.inner.ToolSelector() }
 
-// PromptEnhancerExt returns the prompt enhancer runner.
-func (r *ExtensionRegistry) PromptEnhancerExt() PromptEnhancerRunner { return r.promptEnhancer }
+func (r *ExtensionRegistry) PromptEnhancerExt() PromptEnhancerRunner {
+	return r.inner.PromptEnhancerExt()
+}
 
-// SkillManagerExt returns the skill discoverer.
-func (r *ExtensionRegistry) SkillManagerExt() SkillDiscoverer { return r.skillManager }
+func (r *ExtensionRegistry) SkillManagerExt() SkillDiscoverer { return r.inner.SkillManagerExt() }
 
-// MCPServerExt returns the MCP server runner.
-func (r *ExtensionRegistry) MCPServerExt() MCPServerRunner { return r.mcpServer }
+func (r *ExtensionRegistry) MCPServerExt() MCPServerRunner { return r.inner.MCPServerExt() }
 
-// LSPClientExt returns the LSP client runner.
-func (r *ExtensionRegistry) LSPClientExt() LSPClientRunner { return r.lspClient }
+func (r *ExtensionRegistry) LSPClientExt() LSPClientRunner {
+	r.syncLegacyLSP()
+	return r.inner.LSPClientExt()
+}
 
-// LSPLifecycleExt returns the LSP lifecycle owner.
-func (r *ExtensionRegistry) LSPLifecycleExt() LSPLifecycleOwner { return r.lspLifecycle }
+func (r *ExtensionRegistry) LSPLifecycleExt() LSPLifecycleOwner {
+	r.syncLegacyLSP()
+	return r.inner.LSPLifecycleExt()
+}
 
-// EnhancedMemoryExt returns the enhanced memory runner.
-func (r *ExtensionRegistry) EnhancedMemoryExt() EnhancedMemoryRunner { return r.enhancedMemory }
+func (r *ExtensionRegistry) EnhancedMemoryExt() EnhancedMemoryRunner {
+	return r.inner.EnhancedMemoryExt()
+}
 
-// ObservabilitySystemExt returns the observability runner.
 func (r *ExtensionRegistry) ObservabilitySystemExt() ObservabilityRunner {
-	return r.observabilitySystem
+	return r.inner.ObservabilitySystemExt()
 }
 
-// GetFeatureStatus returns a map of feature name to enabled status.
 func (r *ExtensionRegistry) GetFeatureStatus() map[string]bool {
-	return map[string]bool{
-		"reflection":      r.reflectionExecutor != nil,
-		"tool_selection":  r.toolSelector != nil,
-		"prompt_enhancer": r.promptEnhancer != nil,
-		"skills":          r.skillManager != nil,
-		"mcp":             r.mcpServer != nil,
-		"lsp":             r.lspClient != nil,
-		"enhanced_memory": r.enhancedMemory != nil,
-		"observability":   r.observabilitySystem != nil,
-	}
+	r.syncLegacyLSP()
+	return r.inner.GetFeatureStatus()
 }
 
-// TeardownExtensions cleans up extension resources.
 func (r *ExtensionRegistry) TeardownExtensions(ctx context.Context) error {
-	if r.lspLifecycle != nil {
-		if err := r.lspLifecycle.Close(); err != nil {
-			r.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
-		}
-		return nil
-	}
-	if r.lspClient != nil {
-		if err := r.lspClient.Shutdown(ctx); err != nil {
-			r.logger.Warn("failed to shutdown lsp client", zap.Error(err))
-		}
-	}
-	return nil
+	r.syncLegacyLSP()
+	return r.inner.TeardownExtensions(ctx)
 }
 
-// SaveToEnhancedMemory saves output to enhanced memory and records an episode.
 func (r *ExtensionRegistry) SaveToEnhancedMemory(ctx context.Context, agentID string, input *Input, output *Output, useReflection bool) {
-	if r.enhancedMemory == nil {
-		return
-	}
-	metadata := map[string]any{
-		"trace_id": input.TraceID,
-		"tokens":   output.TokensUsed,
-		"cost":     output.Cost,
-	}
-	if err := r.enhancedMemory.SaveShortTerm(ctx, agentID, output.Content, metadata); err != nil {
-		r.logger.Warn("failed to save short-term memory", zap.Error(err))
-	}
-	event := &types.EpisodicEvent{
-		ID:        fmt.Sprintf("%s-%d", agentID, time.Now().UnixNano()),
-		AgentID:   agentID,
-		Type:      "task_execution",
-		Content:   output.Content,
-		Timestamp: time.Now(),
-		Duration:  output.Duration,
-		Context: map[string]any{
-			"trace_id":   input.TraceID,
-			"tokens":     output.TokensUsed,
-			"cost":       output.Cost,
-			"reflection": useReflection,
-		},
-	}
-	if err := r.enhancedMemory.RecordEpisode(ctx, event); err != nil {
-		r.logger.Warn("failed to record episode", zap.Error(err))
-	}
+	r.inner.SaveToEnhancedMemory(ctx, agentID, agentcore.EnhancedMemoryRecord{
+		TraceID:       input.TraceID,
+		Content:       output.Content,
+		TokensUsed:    output.TokensUsed,
+		Cost:          output.Cost,
+		Duration:      output.Duration,
+		UseReflection: useReflection,
+		RecordedAt:    time.Now(),
+	})
 }
 
-// ValidateConfiguration validates that enabled features have their executors set.
 func (r *ExtensionRegistry) ValidateConfiguration(cfg types.AgentConfig) []string {
-	var errors []string
-	if cfg.IsReflectionEnabled() && r.reflectionExecutor == nil {
-		errors = append(errors, "reflection enabled but executor not set")
-	}
-	if cfg.IsToolSelectionEnabled() && r.toolSelector == nil {
-		errors = append(errors, "tool selection enabled but selector not set")
-	}
-	if cfg.IsPromptEnhancerEnabled() && r.promptEnhancer == nil {
-		errors = append(errors, "prompt enhancer enabled but enhancer not set")
-	}
-	if cfg.IsSkillsEnabled() && r.skillManager == nil {
-		errors = append(errors, "skills enabled but manager not set")
-	}
-	if cfg.IsMCPEnabled() && r.mcpServer == nil {
-		errors = append(errors, "MCP enabled but server not set")
-	}
-	if cfg.IsLSPEnabled() && r.lspClient == nil {
-		errors = append(errors, "LSP enabled but client not set")
-	}
-	if cfg.IsMemoryEnabled() && r.enhancedMemory == nil {
-		errors = append(errors, "enhanced memory enabled but system not set")
-	}
-	if cfg.IsObservabilityEnabled() && r.observabilitySystem == nil {
-		errors = append(errors, "observability enabled but system not set")
-	}
-	return errors
+	r.syncLegacyLSP()
+	return r.inner.ValidateConfiguration(cfg)
 }
 
-// ExecuteWithReflection delegates to the reflection executor.
 func (r *ExtensionRegistry) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
-	if r.reflectionExecutor == nil {
+	if r.inner.ReflectionExecutor() == nil {
 		return nil, NewError(types.ErrAgentNotReady, "reflection executor not set")
 	}
-	return r.reflectionExecutor.ExecuteWithReflection(ctx, input)
+	return r.inner.ExecuteWithReflection(ctx, input)
+}
+
+func (r *ExtensionRegistry) syncLegacyLSP() {
+	if r == nil || r.inner == nil {
+		return
+	}
+	if r.lspLifecycle != nil && r.inner.LSPLifecycleExt() == nil {
+		r.inner.EnableLSPWithLifecycle(r.lspClient, r.lspLifecycle)
+		return
+	}
+	if r.lspClient != nil && r.inner.LSPClientExt() == nil {
+		r.inner.EnableLSP(r.lspClient)
+	}
 }

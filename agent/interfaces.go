@@ -1174,14 +1174,21 @@ func outputReflectionCritiques(output *Output) []Critique {
 	}
 	critiques := make([]Critique, 0, 2)
 	if rawCritiques, ok := output.Metadata["reflection_critiques"]; ok {
-		storedCritiques, ok := rawCritiques.([]Critique)
-		if ok {
-			critiques = append(critiques, storedCritiques...)
+		switch stored := rawCritiques.(type) {
+		case []Critique:
+			critiques = append(critiques, stored...)
+		case []any:
+			for _, item := range stored {
+				if critique, ok := coerceCritique(item); ok {
+					critiques = append(critiques, critique)
+				}
+			}
 		}
 	}
 	if critique := outputReflectionCritique(output); critique != nil {
 		critiques = append(critiques, *critique)
 	}
+	critiques = dedupeCritiques(critiques)
 	if len(critiques) == 0 {
 		return nil
 	}
@@ -1196,7 +1203,7 @@ func outputReflectionCritique(output *Output) *Critique {
 	if !ok {
 		return nil
 	}
-	critique, ok := rawCritique.(Critique)
+	critique, ok := coerceCritique(rawCritique)
 	if !ok {
 		return nil
 	}
@@ -1279,12 +1286,87 @@ func reflectionCritiquesFromObservations(observations []LoopObservation) []Criti
 		if !ok {
 			continue
 		}
-		critique, ok := raw.(Critique)
+		critique, ok := coerceCritique(raw)
 		if ok {
 			critiques = append(critiques, critique)
+			continue
+		}
+		synthesized := Critique{}
+		seen := false
+		if score, ok := observation.Metadata["reflection_score"].(float64); ok {
+			synthesized.Score = score
+			seen = true
+		}
+		if isGood, ok := observation.Metadata["reflection_is_good"].(bool); ok {
+			synthesized.IsGood = isGood
+			seen = true
+		}
+		if seen {
+			critiques = append(critiques, synthesized)
 		}
 	}
-	return critiques
+	return dedupeCritiques(critiques)
+}
+
+func coerceCritique(raw any) (Critique, bool) {
+	switch critique := raw.(type) {
+	case Critique:
+		return critique, true
+	case *Critique:
+		if critique == nil {
+			return Critique{}, false
+		}
+		return *critique, true
+	case map[string]any:
+		out := Critique{}
+		if score, ok := critique["score"].(float64); ok {
+			out.Score = score
+		}
+		if isGood, ok := critique["is_good"].(bool); ok {
+			out.IsGood = isGood
+		}
+		if rawIssues, ok := critique["issues"].([]any); ok {
+			for _, item := range rawIssues {
+				if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+					out.Issues = append(out.Issues, text)
+				}
+			}
+		} else if rawIssues, ok := critique["issues"].([]string); ok {
+			out.Issues = append(out.Issues, rawIssues...)
+		}
+		if rawSuggestions, ok := critique["suggestions"].([]any); ok {
+			for _, item := range rawSuggestions {
+				if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+					out.Suggestions = append(out.Suggestions, text)
+				}
+			}
+		} else if rawSuggestions, ok := critique["suggestions"].([]string); ok {
+			out.Suggestions = append(out.Suggestions, rawSuggestions...)
+		}
+		if feedback, ok := critique["raw_feedback"].(string); ok {
+			out.RawFeedback = feedback
+		}
+		return out, true
+	default:
+		return Critique{}, false
+	}
+}
+
+func dedupeCritiques(critiques []Critique) []Critique {
+	if len(critiques) == 0 {
+		return nil
+	}
+	out := make([]Critique, 0, len(critiques))
+	seen := make(map[string]struct{}, len(critiques))
+	for _, critique := range critiques {
+		key := critique.RawFeedback + "|" + fmt.Sprintf("%.4f|%t|%s|%s", critique.Score, critique.IsGood, strings.Join(critique.Issues, "\x00"), strings.Join(critique.Suggestions, "\x00"))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, critique)
+	}
+	return out
 }
 
 // Merged from tool_selector.go.

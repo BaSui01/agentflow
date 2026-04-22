@@ -8,6 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	executionloop "github.com/BaSui01/agentflow/agent/execution/loop"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -415,235 +416,11 @@ type DefaultCompletionJudge struct{}
 func NewDefaultCompletionJudge() *DefaultCompletionJudge { return &DefaultCompletionJudge{} }
 
 func (j *DefaultCompletionJudge) Judge(ctx context.Context, state *LoopState, output *Output, err error) (*CompletionDecision, error) {
-	if ctx != nil && ctx.Err() != nil {
-		return &CompletionDecision{Decision: LoopDecisionDone, StopReason: StopReasonTimeout, Reason: ctx.Err().Error()}, nil
+	decision, judgeErr := executionloop.JudgeDefault(ctx, loopExecutionStateFromRoot(state), loopExecutionOutputFromRoot(output), err)
+	if judgeErr != nil {
+		return nil, judgeErr
 	}
-	if state != nil && state.NeedHuman {
-		return &CompletionDecision{
-			NeedHuman:  true,
-			Decision:   LoopDecisionEscalate,
-			StopReason: StopReasonNeedHuman,
-			Confidence: normalizedConfidence(output, state),
-			Reason:     "loop state requires human intervention",
-		}, nil
-	}
-	if err != nil {
-		return &CompletionDecision{Decision: LoopDecisionDone, StopReason: classifyStopReason(err.Error()), Reason: err.Error()}, nil
-	}
-	if output == nil {
-		if reachedMaxIterations(state) {
-			return &CompletionDecision{
-				Decision:   LoopDecisionDone,
-				StopReason: StopReasonMaxIterations,
-				Confidence: normalizedConfidence(output, state),
-				Reason:     "loop iteration budget exhausted",
-			}, nil
-		}
-		return &CompletionDecision{Decision: LoopDecisionReplan, NeedReplan: true, StopReason: StopReasonBlocked, Reason: "output is nil"}, nil
-	}
-	validation := completionValidationState(state, output)
-	if strings.TrimSpace(output.Content) != "" && validation.Status == LoopValidationStatusPassed {
-		return &CompletionDecision{
-			Solved:     true,
-			Decision:   LoopDecisionDone,
-			StopReason: StopReasonSolved,
-			Confidence: normalizedConfidence(output, state),
-			Reason:     "validated output produced",
-		}, nil
-	}
-	if strings.TrimSpace(output.Content) != "" && validation.Status == LoopValidationStatusPending {
-		if reachedMaxIterations(state) {
-			return &CompletionDecision{
-				Decision:   LoopDecisionDone,
-				StopReason: StopReasonMaxIterations,
-				Confidence: normalizedConfidence(output, state),
-				Reason:     validation.Reason,
-			}, nil
-		}
-		return &CompletionDecision{
-			Decision:   LoopDecisionContinue,
-			StopReason: "",
-			Confidence: normalizedConfidence(output, state),
-			Reason:     validation.Reason,
-		}, nil
-	}
-	if strings.TrimSpace(output.Content) != "" && validation.Status == LoopValidationStatusFailed {
-		if reachedMaxIterations(state) {
-			return &CompletionDecision{
-				Decision:   LoopDecisionDone,
-				StopReason: StopReasonValidationFailed,
-				Confidence: normalizedConfidence(output, state),
-				Reason:     validation.Reason,
-			}, nil
-		}
-		return &CompletionDecision{
-			Decision:   LoopDecisionReplan,
-			NeedReplan: true,
-			StopReason: StopReasonValidationFailed,
-			Confidence: normalizedConfidence(output, state),
-			Reason:     validation.Reason,
-		}, nil
-	}
-	if reachedMaxIterations(state) {
-		return &CompletionDecision{
-			Decision:   LoopDecisionDone,
-			StopReason: StopReasonMaxIterations,
-			Confidence: normalizedConfidence(output, state),
-			Reason:     "loop iteration budget exhausted",
-		}, nil
-	}
-	return &CompletionDecision{
-		Decision:   LoopDecisionReplan,
-		NeedReplan: true,
-		StopReason: StopReasonBlocked,
-		Confidence: normalizedConfidence(output, state),
-		Reason:     "output content is empty",
-	}, nil
-}
-
-func reachedMaxIterations(state *LoopState) bool {
-	return state != nil && state.MaxIterations > 0 && state.Iteration >= state.MaxIterations
-}
-
-func classifyStopReason(msg string) StopReason {
-	normalized := strings.ToLower(strings.TrimSpace(msg))
-	switch {
-	case strings.Contains(normalized, "timeout"),
-		strings.Contains(normalized, "deadline exceeded"),
-		strings.Contains(normalized, "context deadline exceeded"),
-		strings.Contains(normalized, "context canceled"),
-		strings.Contains(normalized, "context cancelled"):
-		return StopReasonTimeout
-	case strings.Contains(normalized, "validation"):
-		return StopReasonValidationFailed
-	case strings.Contains(normalized, "tool"):
-		return StopReasonToolFailureUnrecoverable
-	default:
-		return StopReasonBlocked
-	}
-}
-
-func normalizedConfidence(output *Output, state *LoopState) float64 {
-	if output != nil && output.Metadata != nil {
-		raw, ok := output.Metadata["confidence"]
-		if ok {
-			value, ok := raw.(float64)
-			if ok {
-				return clampConfidence(value)
-			}
-		}
-	}
-	if state != nil && state.Confidence > 0 {
-		return clampConfidence(state.Confidence)
-	}
-	return 1
-}
-
-func clampConfidence(value float64) float64 {
-	if value < 0 {
-		return 0
-	}
-	if value > 1 {
-		return 1
-	}
-	return value
-}
-
-func goalRequiresValidation(state *LoopState) bool {
-	if state == nil {
-		return false
-	}
-	goal := strings.ToLower(strings.TrimSpace(state.Goal))
-	if goal == "" {
-		return false
-	}
-	return strings.Contains(goal, "validate") ||
-		strings.Contains(goal, "validation") ||
-		strings.Contains(goal, "verify") ||
-		strings.Contains(goal, "verified") ||
-		strings.Contains(goal, "acceptance")
-}
-
-type completionValidationStateView struct {
-	Status          LoopValidationStatus
-	Reason          string
-	UnresolvedItems []string
-	RemainingRisks  []string
-}
-
-func completionValidationState(state *LoopState, output *Output) completionValidationStateView {
-	status := LoopValidationStatusPassed
-	unresolvedItems := cloneStringSlice(nil)
-	remainingRisks := cloneStringSlice(nil)
-	reason := ""
-	if state != nil {
-		status = state.ValidationStatus
-		unresolvedItems = normalizeStringSlice(cloneStringSlice(state.UnresolvedItems))
-		remainingRisks = normalizeStringSlice(cloneStringSlice(state.RemainingRisks))
-		reason = strings.TrimSpace(state.ValidationSummary)
-	}
-	if output != nil {
-		if metaStatus := LoopValidationStatus(metadataString(output.Metadata, "validation_status")); metaStatus != "" {
-			status = worseValidationStatus(status, metaStatus)
-		}
-		validationPending := false
-		if pending, ok := metadataBool(output.Metadata, "validation_pending"); ok && pending {
-			validationPending = true
-			status = worseValidationStatus(status, LoopValidationStatusPending)
-			reason = fallbackString(reason, fallbackMetadataReason(output.Metadata, "validation pending"))
-			unresolvedItems = appendUniqueString(unresolvedItems, "complete validation")
-		}
-		if passed, ok := metadataBool(output.Metadata, "validation_passed"); ok && !passed && !validationPending {
-			status = worseValidationStatus(status, LoopValidationStatusFailed)
-			reason = fallbackString(reason, fallbackMetadataReason(output.Metadata, "validation failed"))
-		}
-		if acceptanceMet, ok := metadataBool(output.Metadata, "acceptance_criteria_met", "acceptance_passed"); ok && !acceptanceMet {
-			status = worseValidationStatus(status, LoopValidationStatusPending)
-			reason = fallbackString(reason, "acceptance criteria not met")
-			unresolvedItems = appendUniqueString(unresolvedItems, "validate acceptance criteria")
-		}
-		if pending, ok := metadataBool(output.Metadata, "tool_verification_pending", "verification_pending"); ok && pending {
-			status = worseValidationStatus(status, LoopValidationStatusPending)
-			reason = fallbackString(reason, "tool verification pending")
-			unresolvedItems = appendUniqueString(unresolvedItems, "tool verification pending")
-		}
-		if passed, ok := metadataBool(output.Metadata, "tool_verification_passed", "verification_passed", "verified"); ok && !passed {
-			status = worseValidationStatus(status, LoopValidationStatusPending)
-			reason = fallbackString(reason, "tool verification pending")
-			unresolvedItems = appendUniqueString(unresolvedItems, "tool verification pending")
-		}
-		if values, ok := loopContextStrings(output.Metadata, "unresolved_items", "remaining_work"); ok {
-			unresolvedItems = normalizeStringSlice(append(unresolvedItems, values...))
-		}
-		if values, ok := loopContextStrings(output.Metadata, "remaining_risks"); ok {
-			remainingRisks = normalizeStringSlice(append(remainingRisks, values...))
-		}
-		reason = fallbackString(reason, metadataString(output.Metadata, "validation_summary", "validation_reason", "validation_message"))
-	}
-	if len(unresolvedItems) > 0 || len(remainingRisks) > 0 {
-		if status == "" || status == LoopValidationStatusPassed {
-			status = LoopValidationStatusPending
-		}
-	}
-	if status == "" {
-		switch {
-		case len(state.AcceptanceCriteria) > 0:
-			status = LoopValidationStatusPending
-		case goalRequiresValidation(state):
-			status = LoopValidationStatusPending
-		default:
-			status = LoopValidationStatusPassed
-		}
-	}
-	if reason == "" {
-		reason = summarizeValidationState(status, unresolvedItems, remainingRisks)
-	}
-	return completionValidationStateView{
-		Status:          status,
-		Reason:          reason,
-		UnresolvedItems: unresolvedItems,
-		RemainingRisks:  remainingRisks,
-	}
+	return rootCompletionDecisionFromLoop(decision), nil
 }
 
 type DefaultLoopValidator struct {
@@ -670,124 +447,13 @@ func (v *DefaultLoopValidator) Validate(ctx context.Context, input *Input, state
 type GenericLoopValidator struct{}
 
 func (GenericLoopValidator) Validate(_ context.Context, input *Input, state *LoopState, output *Output, err error) (*LoopValidationResult, error) {
-	result := newLoopValidationResult(LoopValidationStatusPassed, "validation passed")
-	result.AcceptanceCriteria = acceptanceCriteriaForValidation(input, state)
-	result.UnresolvedItems = unresolvedItemsForValidation(state, output)
-	result.RemainingRisks = remainingRisksForValidation(state, output)
-	if err != nil {
-		result.Status = LoopValidationStatusFailed
-		result.Reason = "validation skipped due to execution error"
-		result.Issues = append(result.Issues, newValidationIssue("generic", "execution_error", "validation", result.Status, result.Reason))
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	if output == nil {
-		result.Status = LoopValidationStatusPending
-		result.Reason = "output missing for validation"
-		result.UnresolvedItems = append(result.UnresolvedItems, "produce validated output")
-		result.Issues = append(result.Issues, newValidationIssue("generic", "missing_output", "validation", result.Status, result.Reason))
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-
-	acceptanceRequired := len(result.AcceptanceCriteria) > 0
-	result.Metadata["acceptance_criteria_required"] = acceptanceRequired
-	if acceptanceRequired {
-		if value, ok := metadataBool(output.Metadata, "acceptance_criteria_met", "acceptance_passed"); ok {
-			result.Metadata["acceptance_criteria_met"] = value
-			if !value {
-				result.Status = worseValidationStatus(result.Status, LoopValidationStatusPending)
-				result.Reason = "acceptance criteria not met"
-				result.UnresolvedItems = append(result.UnresolvedItems, "validate acceptance criteria")
-				result.Issues = append(result.Issues, newValidationIssue("generic", "acceptance_not_met", "acceptance", result.Status, result.Reason))
-			}
-		} else {
-			result.Status = LoopValidationStatusPending
-			result.Reason = "acceptance criteria not yet validated"
-			result.UnresolvedItems = append(result.UnresolvedItems, "validate acceptance criteria")
-			result.Issues = append(result.Issues, newValidationIssue("generic", "acceptance_pending", "acceptance", result.Status, result.Reason))
-			result.Metadata["acceptance_criteria_met"] = false
-		}
-	}
-
-	explicitValidationPassed, hasExplicitValidationPassed := metadataBool(output.Metadata, "validation_passed")
-	explicitValidationPending, _ := metadataBool(output.Metadata, "validation_pending")
-	if hasExplicitValidationPassed && !explicitValidationPassed {
-		result.Status = LoopValidationStatusFailed
-		result.Reason = fallbackMetadataReason(output.Metadata, "validation failed")
-		result.Issues = append(result.Issues, newValidationIssue("generic", "validation_failed", "validation", result.Status, result.Reason))
-	}
-	if explicitValidationPending {
-		result.Status = worseValidationStatus(result.Status, LoopValidationStatusPending)
-		result.Reason = fallbackMetadataReason(output.Metadata, "validation pending")
-		result.UnresolvedItems = append(result.UnresolvedItems, "complete validation")
-		result.Issues = append(result.Issues, newValidationIssue("generic", "validation_pending", "validation", LoopValidationStatusPending, result.Reason))
-	}
-	if goalRequiresValidation(state) && !hasExplicitValidationPassed && !explicitValidationPending && !acceptanceRequired {
-		result.Status = worseValidationStatus(result.Status, LoopValidationStatusPending)
-		result.Reason = "validation required before completion"
-		result.UnresolvedItems = append(result.UnresolvedItems, "add validation evidence")
-		result.Issues = append(result.Issues, newValidationIssue("generic", "validation_required", "validation", LoopValidationStatusPending, result.Reason))
-	}
-	if len(result.UnresolvedItems) > 0 && result.Status == LoopValidationStatusPassed {
-		result.Status = LoopValidationStatusPending
-		if strings.TrimSpace(result.Reason) == "" {
-			result.Reason = "unresolved items remain"
-		}
-	}
-	if len(result.RemainingRisks) > 0 && result.Status == LoopValidationStatusPassed {
-		result.Status = LoopValidationStatusPending
-		if strings.TrimSpace(result.Reason) == "" {
-			result.Reason = "remaining risks require validation"
-		}
-	}
-	finalizeLoopValidationResult(result)
-	return result, nil
+	return rootLoopValidationResultFromLoop(executionloop.ValidateGeneric(loopExecutionInputFromRoot(input), loopExecutionStateFromRoot(state), loopExecutionOutputFromRoot(output), err)), nil
 }
 
 type ToolVerificationLoopValidator struct{}
 
 func (ToolVerificationLoopValidator) Validate(_ context.Context, input *Input, state *LoopState, output *Output, err error) (*LoopValidationResult, error) {
-	result := newLoopValidationResult(LoopValidationStatusPassed, "tool verification passed")
-	if err != nil || output == nil {
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	required := toolVerificationRequired(input, state, output)
-	result.Metadata["tool_verification_required"] = required
-	if !required {
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	if pending, ok := metadataBool(output.Metadata, "tool_verification_pending", "verification_pending"); ok && pending {
-		result.Status = LoopValidationStatusPending
-		result.Reason = "tool verification pending"
-		result.UnresolvedItems = append(result.UnresolvedItems, "verify tool-backed output")
-		result.Issues = append(result.Issues, newValidationIssue("tool", "tool_verification_pending", "tool", result.Status, result.Reason))
-		result.Metadata["tool_verification_pending"] = true
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	if passed, ok := metadataBool(output.Metadata, "tool_verification_passed", "verification_passed", "verified"); ok {
-		result.Metadata["tool_verification_passed"] = passed
-		if !passed {
-			result.Status = LoopValidationStatusFailed
-			result.Reason = "tool verification failed"
-			result.Issues = append(result.Issues, newValidationIssue("tool", "tool_verification_failed", "tool", result.Status, result.Reason))
-			finalizeLoopValidationResult(result)
-			return result, nil
-		}
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	result.Status = LoopValidationStatusPending
-	result.Reason = "tool verification pending"
-	result.UnresolvedItems = append(result.UnresolvedItems, "verify tool-backed output")
-	result.Issues = append(result.Issues, newValidationIssue("tool", "tool_verification_missing", "tool", result.Status, result.Reason))
-	result.Metadata["tool_verification_passed"] = false
-	result.Metadata["tool_verification_pending"] = true
-	finalizeLoopValidationResult(result)
-	return result, nil
+	return rootLoopValidationResultFromLoop(executionloop.ValidateToolVerification(loopExecutionInputFromRoot(input), loopExecutionStateFromRoot(state), loopExecutionOutputFromRoot(output), err)), nil
 }
 
 type CodeTaskLoopValidator struct {
@@ -799,199 +465,45 @@ func NewCodeTaskLoopValidator() CodeTaskLoopValidator {
 }
 
 func (v CodeTaskLoopValidator) Validate(_ context.Context, input *Input, state *LoopState, output *Output, err error) (*LoopValidationResult, error) {
-	result := newLoopValidationResult(LoopValidationStatusPassed, "code verification passed")
-	if err != nil || output == nil {
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	required := codeTaskRequired(input, state, output)
-	result.Metadata["code_verification_required"] = required
-	if !required {
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	if pending, ok := metadataBool(output.Metadata, "code_verification_pending", "tests_pending"); ok && pending {
-		result.Status = LoopValidationStatusPending
-		result.Reason = "code verification pending"
-		result.UnresolvedItems = append(result.UnresolvedItems, "run tests or verification for code changes")
-		result.Issues = append(result.Issues, newValidationIssue("code", "code_verification_pending", "code", result.Status, result.Reason))
-		finalizeLoopValidationResult(result)
-		return result, nil
-	}
-	if passed, ok := metadataBool(output.Metadata, "code_verification_passed", "tests_passed", "tests_green"); ok {
-		result.Metadata["code_verification_passed"] = passed
-		if !passed {
-			result.Status = LoopValidationStatusFailed
-			result.Reason = "code verification failed"
-			result.Issues = append(result.Issues, newValidationIssue("code", "code_verification_failed", "code", result.Status, result.Reason))
-			finalizeLoopValidationResult(result)
-			return result, nil
-		}
-	} else {
-		result.Status = LoopValidationStatusPending
-		result.Reason = "code task requires tests or verification evidence"
-		result.UnresolvedItems = append(result.UnresolvedItems, "run tests or verification for code changes")
-		result.Issues = append(result.Issues, newValidationIssue("code", "code_verification_missing", "code", result.Status, result.Reason))
-	}
-	if lang, code, ok := codeSnippetForValidation(output); ok && v.codeValidator != nil {
-		warnings := v.codeValidator.Validate(lang, code)
-		if len(warnings) > 0 {
-			result.Status = worseValidationStatus(result.Status, LoopValidationStatusPending)
-			result.RemainingRisks = append(result.RemainingRisks, warnings...)
-			result.Issues = append(result.Issues, newValidationIssue("code", "code_risk_detected", "code", LoopValidationStatusPending, strings.Join(warnings, "; ")))
-		}
-	}
-	finalizeLoopValidationResult(result)
-	return result, nil
-}
-
-func hasAcceptanceCriteria(input *Input) bool {
-	if input == nil || len(input.Context) == 0 {
-		return false
-	}
-	raw, ok := input.Context["acceptance_criteria"]
-	if !ok || raw == nil {
-		return false
-	}
-	switch typed := raw.(type) {
-	case string:
-		return strings.TrimSpace(typed) != ""
-	case []string:
-		return len(typed) > 0
-	case []any:
-		return len(typed) > 0
-	default:
-		return true
-	}
+	return rootLoopValidationResultFromLoop(executionloop.ValidateCodeTask(loopCodeWarningProviderAdapter{validator: v.codeValidator}, loopExecutionInputFromRoot(input), loopExecutionStateFromRoot(state), loopExecutionOutputFromRoot(output), err)), nil
 }
 
 func newLoopValidationResult(status LoopValidationStatus, reason string) *LoopValidationResult {
-	result := &LoopValidationResult{
-		Status:   status,
-		Reason:   strings.TrimSpace(reason),
-		Metadata: map[string]any{},
-	}
-	finalizeLoopValidationResult(result)
-	return result
+	return rootLoopValidationResultFromLoop(executionloop.NewValidationResult(loopValidationStatusToSubpkg(status), reason))
 }
 
 func mergeLoopValidationResult(target *LoopValidationResult, incoming *LoopValidationResult) {
 	if target == nil || incoming == nil {
 		return
 	}
-	finalizeLoopValidationResult(incoming)
-	target.Status = worseValidationStatus(target.Status, incoming.Status)
-	target.AcceptanceCriteria = normalizeStringSlice(append(target.AcceptanceCriteria, incoming.AcceptanceCriteria...))
-	target.UnresolvedItems = normalizeStringSlice(append(target.UnresolvedItems, incoming.UnresolvedItems...))
-	target.RemainingRisks = normalizeStringSlice(append(target.RemainingRisks, incoming.RemainingRisks...))
-	target.Issues = append(target.Issues, incoming.Issues...)
-	if strings.TrimSpace(target.Reason) == "" || incoming.Status == LoopValidationStatusFailed || (incoming.Status == LoopValidationStatusPending && target.Status != LoopValidationStatusFailed) {
-		target.Reason = incoming.Reason
-	}
-	if target.Metadata == nil {
-		target.Metadata = map[string]any{}
-	}
-	for key, value := range incoming.Metadata {
-		target.Metadata[key] = value
-	}
+	merged := rootLoopValidationResultToSubpkg(target)
+	executionloop.MergeValidationResult(merged, rootLoopValidationResultToSubpkg(incoming))
+	*target = *rootLoopValidationResultFromLoop(merged)
 }
 
 func finalizeLoopValidationResult(result *LoopValidationResult) {
 	if result == nil {
 		return
 	}
-	result.AcceptanceCriteria = normalizeStringSlice(result.AcceptanceCriteria)
-	result.UnresolvedItems = normalizeStringSlice(result.UnresolvedItems)
-	result.RemainingRisks = normalizeStringSlice(result.RemainingRisks)
-	switch result.Status {
-	case LoopValidationStatusFailed, LoopValidationStatusPending, LoopValidationStatusPassed:
-	default:
-		result.Status = LoopValidationStatusPassed
-	}
-	result.Passed = result.Status == LoopValidationStatusPassed
-	result.Pending = result.Status == LoopValidationStatusPending
-	if result.Summary == "" {
-		result.Summary = summarizeValidationState(result.Status, result.UnresolvedItems, result.RemainingRisks)
-	}
-	if strings.TrimSpace(result.Reason) == "" {
-		result.Reason = result.Summary
-	}
-	if result.Metadata == nil {
-		result.Metadata = map[string]any{}
-	}
-	result.Metadata["validation_status"] = string(result.Status)
-	result.Metadata["validation_passed"] = result.Passed
-	result.Metadata["validation_pending"] = result.Pending
-	result.Metadata["validation_reason"] = result.Reason
-	result.Metadata["validation_summary"] = result.Summary
-	result.Metadata["acceptance_criteria"] = cloneStringSlice(result.AcceptanceCriteria)
-	result.Metadata["unresolved_items"] = cloneStringSlice(result.UnresolvedItems)
-	result.Metadata["remaining_risks"] = cloneStringSlice(result.RemainingRisks)
-	if len(result.Issues) > 0 {
-		result.Metadata["validation_issues"] = append([]LoopValidationIssue(nil), result.Issues...)
-	}
-}
-
-func worseValidationStatus(left, right LoopValidationStatus) LoopValidationStatus {
-	if validationStatusRank(right) > validationStatusRank(left) {
-		return right
-	}
-	if left == "" {
-		return LoopValidationStatusPassed
-	}
-	return left
-}
-
-func validationStatusRank(status LoopValidationStatus) int {
-	switch status {
-	case LoopValidationStatusFailed:
-		return 3
-	case LoopValidationStatusPending:
-		return 2
-	case LoopValidationStatusPassed:
-		return 1
-	default:
-		return 0
-	}
+	normalized := rootLoopValidationResultToSubpkg(result)
+	executionloop.FinalizeValidationResult(normalized)
+	*result = *rootLoopValidationResultFromLoop(normalized)
 }
 
 func acceptanceCriteriaForValidation(input *Input, state *LoopState) []string {
-	if state != nil && len(state.AcceptanceCriteria) > 0 {
-		return cloneStringSlice(state.AcceptanceCriteria)
-	}
-	if input == nil || len(input.Context) == 0 {
-		return nil
-	}
-	if values, ok := loopContextStrings(input.Context, "acceptance_criteria"); ok {
-		return values
-	}
-	return nil
+	return executionloop.AcceptanceCriteriaForValidation(loopExecutionInputFromRoot(input), loopExecutionStateFromRoot(state))
 }
 
-func unresolvedItemsForValidation(state *LoopState, output *Output) []string {
-	var items []string
-	if state != nil {
-		items = append(items, state.UnresolvedItems...)
-	}
-	if output != nil {
-		if values, ok := loopContextStrings(output.Metadata, "unresolved_items", "remaining_work"); ok {
-			items = append(items, values...)
-		}
-	}
-	return normalizeStringSlice(items)
+func toolVerificationRequired(input *Input, state *LoopState, output *Output) bool {
+	return executionloop.ToolVerificationRequired(loopExecutionInputFromRoot(input), loopExecutionStateFromRoot(state), loopExecutionOutputFromRoot(output))
 }
 
-func remainingRisksForValidation(state *LoopState, output *Output) []string {
-	var risks []string
-	if state != nil {
-		risks = append(risks, state.RemainingRisks...)
-	}
-	if output != nil {
-		if values, ok := loopContextStrings(output.Metadata, "remaining_risks"); ok {
-			risks = append(risks, values...)
-		}
-	}
-	return normalizeStringSlice(risks)
+func codeTaskRequired(input *Input, state *LoopState, output *Output) bool {
+	return executionloop.CodeTaskRequired(loopExecutionInputFromRoot(input), loopExecutionStateFromRoot(state), loopExecutionOutputFromRoot(output))
+}
+
+func classifyStopReason(msg string) StopReason {
+	return StopReason(executionloop.ClassifyStopReason(msg))
 }
 
 func appendUniqueString(values []string, value string) []string {
@@ -1016,145 +528,187 @@ func fallbackString(values ...string) string {
 	return ""
 }
 
-func newValidationIssue(validator string, code string, category string, status LoopValidationStatus, message string) LoopValidationIssue {
-	return LoopValidationIssue{
-		Validator: strings.TrimSpace(validator),
-		Code:      strings.TrimSpace(code),
-		Category:  strings.TrimSpace(category),
-		Status:    status,
-		Message:   strings.TrimSpace(message),
+type loopCodeWarningProviderAdapter struct {
+	validator *CodeValidator
+}
+
+func (a loopCodeWarningProviderAdapter) Validate(lang executionloop.CodeValidationLanguage, code string) []string {
+	if a.validator == nil {
+		return nil
+	}
+	return a.validator.Validate(CodeValidationLanguage(lang), code)
+}
+
+func loopExecutionInputFromRoot(input *Input) *executionloop.Input {
+	if input == nil {
+		return nil
+	}
+	var contextMap map[string]any
+	if input.Context != nil {
+		contextMap = mapsClone(input.Context)
+	}
+	return &executionloop.Input{
+		Content: input.Content,
+		Context: contextMap,
 	}
 }
 
-func fallbackMetadataReason(metadata map[string]any, fallback string) string {
-	reason := metadataString(metadata, "validation_reason", "validation_message")
-	if reason == "" {
-		return fallback
-	}
-	return reason
-}
-
-func toolVerificationRequired(input *Input, state *LoopState, output *Output) bool {
-	if contextBool(input, "tool_verification_required") {
-		return true
-	}
+func loopExecutionOutputFromRoot(output *Output) *executionloop.Output {
 	if output == nil {
-		return false
+		return nil
 	}
-	if metadataBoolTrue(output.Metadata, "tool_verification_required") {
-		return true
-	}
-	if metadataHasAny(output.Metadata, "tool_used", "tool_name", "tool_calls", "tool_results", "search_results", "tool_verification_passed", "tool_verification_pending", "verification_pending", "verification_passed", "verified") {
-		return true
-	}
-	return state != nil && state.SelectedReasoningMode == ReasoningModeReWOO
-}
-
-func codeTaskRequired(input *Input, state *LoopState, output *Output) bool {
-	if contextBool(input, "code_task") || contextBool(input, "requires_code") {
-		return true
-	}
-	if taskType := strings.ToLower(strings.TrimSpace(contextString(input, "task_type"))); taskType != "" {
-		switch taskType {
-		case "code", "coding", "implementation", "fix", "bugfix", "refactor":
-			return true
-		}
-	}
-	if output != nil && metadataHasAny(output.Metadata, "generated_code", "code_language", "code_verification_passed", "tests_passed", "tests_pending") {
-		return true
-	}
-	goal := ""
-	if state != nil {
-		goal = state.Goal
-	}
-	if strings.TrimSpace(goal) == "" && input != nil {
-		goal = input.Content
-	}
-	normalized := strings.ToLower(goal)
-	return strings.Contains(normalized, "fix") ||
-		strings.Contains(normalized, "bug") ||
-		strings.Contains(normalized, "code") ||
-		strings.Contains(normalized, "implement") ||
-		strings.Contains(normalized, "refactor") ||
-		strings.Contains(normalized, "test")
-}
-
-func codeSnippetForValidation(output *Output) (CodeValidationLanguage, string, bool) {
-	if output == nil || len(output.Metadata) == 0 {
-		return "", "", false
-	}
-	rawCode := metadataString(output.Metadata, "generated_code", "code")
-	rawLang := strings.ToLower(metadataString(output.Metadata, "code_language", "language"))
-	if rawCode == "" || rawLang == "" {
-		return "", "", false
-	}
-	switch rawLang {
-	case "python":
-		return CodeLangPython, rawCode, true
-	case "javascript", "js":
-		return CodeLangJavaScript, rawCode, true
-	case "typescript", "ts":
-		return CodeLangTypeScript, rawCode, true
-	case "go", "golang":
-		return CodeLangGo, rawCode, true
-	case "rust":
-		return CodeLangRust, rawCode, true
-	case "bash", "shell", "sh":
-		return CodeLangBash, rawCode, true
-	default:
-		return "", "", false
+	return &executionloop.Output{
+		Content:  output.Content,
+		Metadata: cloneMetadata(output.Metadata),
 	}
 }
 
-func metadataBool(values map[string]any, keys ...string) (bool, bool) {
-	if len(values) == 0 {
-		return false, false
+func loopExecutionStateFromRoot(state *LoopState) *executionloop.State {
+	if state == nil {
+		return nil
 	}
-	for _, key := range keys {
-		raw, ok := values[key]
-		if !ok {
-			continue
-		}
-		flag, ok := raw.(bool)
-		if ok {
-			return flag, true
-		}
+	return &executionloop.State{
+		Goal:               state.Goal,
+		Iteration:          state.Iteration,
+		MaxIterations:      state.MaxIterations,
+		NeedHuman:          state.NeedHuman,
+		Confidence:         state.Confidence,
+		ValidationStatus:   loopValidationStatusToSubpkg(state.ValidationStatus),
+		ValidationSummary:  state.ValidationSummary,
+		AcceptanceCriteria: cloneStringSlice(state.AcceptanceCriteria),
+		UnresolvedItems:    cloneStringSlice(state.UnresolvedItems),
+		RemainingRisks:     cloneStringSlice(state.RemainingRisks),
+		SelectedMode:       state.SelectedReasoningMode,
 	}
-	return false, false
 }
 
-func metadataHasAny(values map[string]any, keys ...string) bool {
-	if len(values) == 0 {
-		return false
-	}
-	for _, key := range keys {
-		if _, ok := values[key]; ok {
-			return true
-		}
-	}
-	return false
+func loopValidationStatusToSubpkg(status LoopValidationStatus) executionloop.ValidationStatus {
+	return executionloop.ValidationStatus(status)
 }
 
-func metadataBoolTrue(values map[string]any, keys ...string) bool {
-	flag, ok := metadataBool(values, keys...)
-	return ok && flag
+func rootLoopValidationStatusFromSubpkg(status executionloop.ValidationStatus) LoopValidationStatus {
+	return LoopValidationStatus(status)
 }
 
-func metadataString(values map[string]any, keys ...string) string {
-	if len(values) == 0 {
-		return ""
+func rootCompletionDecisionFromLoop(decision *executionloop.CompletionDecision) *CompletionDecision {
+	if decision == nil {
+		return nil
 	}
-	for _, key := range keys {
-		raw, ok := values[key]
-		if !ok {
-			continue
-		}
-		text, ok := raw.(string)
-		if ok && strings.TrimSpace(text) != "" {
-			return strings.TrimSpace(text)
+	return &CompletionDecision{
+		Solved:         decision.Solved,
+		NeedReplan:     decision.NeedReplan,
+		NeedReflection: decision.NeedReflection,
+		NeedHuman:      decision.NeedHuman,
+		Decision:       LoopDecision(decision.Decision),
+		StopReason:     StopReason(decision.StopReason),
+		Confidence:     decision.Confidence,
+		Reason:         decision.Reason,
+	}
+}
+
+func rootLoopValidationResultFromLoop(result *executionloop.ValidationResult) *LoopValidationResult {
+	if result == nil {
+		return nil
+	}
+	issues := make([]LoopValidationIssue, 0, len(result.Issues))
+	for _, issue := range result.Issues {
+		issues = append(issues, LoopValidationIssue{
+			Validator: issue.Validator,
+			Code:      issue.Code,
+			Category:  issue.Category,
+			Status:    rootLoopValidationStatusFromSubpkg(issue.Status),
+			Message:   issue.Message,
+		})
+	}
+	metadata := map[string]any{}
+	for key, value := range result.Metadata {
+		switch typed := value.(type) {
+		case []executionloop.ValidationIssue:
+			mapped := make([]LoopValidationIssue, 0, len(typed))
+			for _, issue := range typed {
+				mapped = append(mapped, LoopValidationIssue{
+					Validator: issue.Validator,
+					Code:      issue.Code,
+					Category:  issue.Category,
+					Status:    rootLoopValidationStatusFromSubpkg(issue.Status),
+					Message:   issue.Message,
+				})
+			}
+			metadata[key] = mapped
+		default:
+			metadata[key] = value
 		}
 	}
-	return ""
+	return &LoopValidationResult{
+		Status:             rootLoopValidationStatusFromSubpkg(result.Status),
+		Passed:             result.Passed,
+		Pending:            result.Pending,
+		Reason:             result.Reason,
+		Summary:            result.Summary,
+		Issues:             issues,
+		AcceptanceCriteria: cloneStringSlice(result.AcceptanceCriteria),
+		UnresolvedItems:    cloneStringSlice(result.UnresolvedItems),
+		RemainingRisks:     cloneStringSlice(result.RemainingRisks),
+		Metadata:           metadata,
+	}
+}
+
+func rootLoopValidationResultToSubpkg(result *LoopValidationResult) *executionloop.ValidationResult {
+	if result == nil {
+		return nil
+	}
+	issues := make([]executionloop.ValidationIssue, 0, len(result.Issues))
+	for _, issue := range result.Issues {
+		issues = append(issues, executionloop.ValidationIssue{
+			Validator: issue.Validator,
+			Code:      issue.Code,
+			Category:  issue.Category,
+			Status:    loopValidationStatusToSubpkg(issue.Status),
+			Message:   issue.Message,
+		})
+	}
+	metadata := map[string]any{}
+	for key, value := range result.Metadata {
+		switch typed := value.(type) {
+		case []LoopValidationIssue:
+			mapped := make([]executionloop.ValidationIssue, 0, len(typed))
+			for _, issue := range typed {
+				mapped = append(mapped, executionloop.ValidationIssue{
+					Validator: issue.Validator,
+					Code:      issue.Code,
+					Category:  issue.Category,
+					Status:    loopValidationStatusToSubpkg(issue.Status),
+					Message:   issue.Message,
+				})
+			}
+			metadata[key] = mapped
+		default:
+			metadata[key] = value
+		}
+	}
+	return &executionloop.ValidationResult{
+		Status:             loopValidationStatusToSubpkg(result.Status),
+		Passed:             result.Passed,
+		Pending:            result.Pending,
+		Reason:             result.Reason,
+		Summary:            result.Summary,
+		Issues:             issues,
+		AcceptanceCriteria: cloneStringSlice(result.AcceptanceCriteria),
+		UnresolvedItems:    cloneStringSlice(result.UnresolvedItems),
+		RemainingRisks:     cloneStringSlice(result.RemainingRisks),
+		Metadata:           metadata,
+	}
+}
+
+func mapsClone(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 type LoopValidationFuncAdapter LoopValidationFunc
@@ -3878,6 +3432,7 @@ func (e *LoopExecutor) reflect(ctx context.Context, input *Input, output *Output
 		if result == nil {
 			return input, nil
 		}
+		recordReflectionCritique(state, result)
 		if result.Observation != nil {
 			observation := *result.Observation
 			if observation.Stage == "" {
@@ -3903,6 +3458,7 @@ func (e *LoopExecutor) reflect(ctx context.Context, input *Input, output *Output
 	if result == nil {
 		return input, nil
 	}
+	recordReflectionCritique(state, result)
 	if result.Observation != nil {
 		observation := *result.Observation
 		if observation.Stage == "" {
@@ -3990,13 +3546,57 @@ func (e *LoopExecutor) finalize(state *LoopState, output *Output, execErr error)
 		finalOutput.Metadata["acceptance_criteria"] = cloneStringSlice(state.AcceptanceCriteria)
 		finalOutput.Metadata["unresolved_items"] = cloneStringSlice(state.UnresolvedItems)
 		finalOutput.Metadata["remaining_risks"] = cloneStringSlice(state.RemainingRisks)
-		if critiques := reflectionCritiquesFromObservations(state.Observations); len(critiques) > 0 {
+		critiques := mergeReflectionCritiques(
+			append([]Critique(nil), state.reflectionCritiques...),
+			reflectionCritiquesFromObservations(state.Observations),
+			outputReflectionCritiques(finalOutput),
+		)
+		if len(critiques) > 0 {
 			finalOutput.Metadata["reflection_iterations"] = len(critiques)
 			finalOutput.Metadata["reflection_critiques"] = critiques
+			finalOutput.Metadata["reflection_critique"] = critiques[len(critiques)-1]
 		}
 	}
 	if execErr != nil {
 		return finalOutput, execErr
 	}
 	return finalOutput, nil
+}
+
+func recordReflectionCritique(state *LoopState, result *LoopReflectionResult) {
+	if state == nil || result == nil {
+		return
+	}
+	switch {
+	case result.Critique != nil:
+		state.reflectionCritiques = append(state.reflectionCritiques, *result.Critique)
+	case result.Observation != nil && result.Observation.Metadata != nil:
+		if raw, ok := result.Observation.Metadata["reflection_critique"]; ok {
+			if critique, ok := coerceCritique(raw); ok {
+				state.reflectionCritiques = append(state.reflectionCritiques, critique)
+			}
+		}
+	}
+}
+
+func mergeReflectionCritiques(groups ...[]Critique) []Critique {
+	if len(groups) == 0 {
+		return nil
+	}
+	merged := make([]Critique, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	for _, group := range groups {
+		for _, critique := range group {
+			key := critique.RawFeedback + "|" + fmt.Sprintf("%.4f|%t|%s|%s", critique.Score, critique.IsGood, strings.Join(critique.Issues, "\x00"), strings.Join(critique.Suggestions, "\x00"))
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged = append(merged, critique)
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
 }
