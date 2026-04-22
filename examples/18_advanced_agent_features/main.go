@@ -12,22 +12,21 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/agent/capabilities/planning"
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	reasoning "github.com/BaSui01/agentflow/agent/capabilities/reasoning"
+	"github.com/BaSui01/agentflow/agent/capabilities/streaming"
+	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/collaboration/federation"
-	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
-	"github.com/BaSui01/agentflow/agent/execution/orchestration"
-	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
-	"github.com/BaSui01/agentflow/agent/reasoning"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/agent/capabilities/streaming"
-	"github.com/BaSui01/agentflow/agent/adapters/structured"
+	orchestration "github.com/BaSui01/agentflow/agent/execution/runtime/orchestration"
 	"github.com/BaSui01/agentflow/agent/integration/voice"
+	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/BaSui01/agentflow/llm"
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
@@ -413,11 +412,11 @@ func demoFederation(logger *zap.Logger) {
 	orch.UnregisterNode("node-3")
 
 	// Wire discovery adapter + bridge to cover federation/discovery integration path.
-	discoveryCfg := discovery.DefaultServiceConfig()
+	discoveryCfg := skills.DefaultServiceConfig()
 	discoveryCfg.EnableAutoRegistration = false
 	discoveryCfg.Protocol.EnableHTTP = false
 	discoveryCfg.Protocol.EnableMulticast = false
-	service := discovery.NewDiscoveryService(discoveryCfg, logger)
+	service := skills.NewDiscoveryService(discoveryCfg, logger)
 	_ = service.Start(ctx)
 	defer service.Stop(ctx)
 
@@ -440,8 +439,8 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Println("2. Agent Deliberation Mode")
 	fmt.Println("--------------------------")
 
-	config := deliberation.DefaultDeliberationConfig()
-	engine := deliberation.NewEngine(config, &MockReasoner{}, logger)
+	config := planning.DefaultDeliberationConfig()
+	engine := planning.NewEngine(config, &MockReasoner{}, logger)
 
 	fmt.Printf("   Mode: %s\n", engine.GetMode())
 	fmt.Printf("   Max thinking time: %v\n", config.MaxThinkingTime)
@@ -449,13 +448,13 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   Self-critique enabled: %v\n", config.EnableSelfCritique)
 
 	// Switch modes
-	engine.SetMode(deliberation.ModeImmediate)
+	engine.SetMode(planning.ModeImmediate)
 	fmt.Printf("   Switched to: %s\n", engine.GetMode())
 
-	engine.SetMode(deliberation.ModeDeliberate)
+	engine.SetMode(planning.ModeDeliberate)
 	fmt.Printf("   Switched to: %s\n", engine.GetMode())
 
-	task := deliberation.Task{
+	task := planning.Task{
 		ID:             "task-001",
 		Description:    "Analyze incident report and decide remediation plan",
 		Goal:           "Provide a confident action plan with clear owner and ETA",
@@ -472,7 +471,7 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   Deliberation iterations: %d\n", result.Iterations)
 	fmt.Printf("   Final confidence: %.2f\n", result.FinalConfidence)
 
-	llmReasoner := deliberation.NewLLMReasoner(llmgateway.New(llmgateway.Config{ChatProvider: &reasonerProvider{}, Logger: logger}), "demo-reasoner", logger)
+	llmReasoner := planning.NewLLMReasoner(llmgateway.New(llmgateway.Config{ChatProvider: &reasonerProvider{}, Logger: logger}), "demo-reasoner", logger)
 	_, llmConfidence, llmErr := llmReasoner.Think(context.Background(), "Need confidence scored reasoning")
 	if llmErr != nil {
 		fmt.Printf("   LLM reasoner error: %v\n\n", llmErr)
@@ -481,7 +480,7 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   LLM reasoner confidence: %.2f\n\n", llmConfidence)
 }
 
-// MockReasoner implements deliberation.Reasoner for demo.
+// MockReasoner implements planning.Reasoner for demo.
 type MockReasoner struct{}
 
 func (r *MockReasoner) Think(ctx context.Context, prompt string) (string, float64, error) {
@@ -496,24 +495,24 @@ func demoLongRunning(logger *zap.Logger) {
 	tmpDir, _ := os.MkdirTemp("", "longrunning-demo-*")
 	defer os.RemoveAll(tmpDir)
 
-	config := longrunning.DefaultExecutorConfig()
+	config := agentruntime.DefaultExecutorConfig()
 	config.CheckpointDir = tmpDir
 	config.CheckpointInterval = 20 * time.Millisecond
 	config.HeartbeatInterval = 20 * time.Millisecond
 	config.MaxRetries = 0
 
 	taskStore := persistence.NewMemoryTaskStore(persistence.StoreConfig{Type: "memory"})
-	bridge := longrunning.NewTaskStoreBridge(taskStore)
-	persistentStore := longrunning.NewPersistentCheckpointStore(bridge, logger)
-	executor := longrunning.NewExecutor(config, logger, longrunning.WithCheckpointStore(persistentStore))
-	executor.OnEvent = func(evt longrunning.ExecutionEvent) {}
+	bridge := agentruntime.NewTaskStoreBridge(taskStore)
+	persistentStore := agentruntime.NewPersistentCheckpointStore(bridge, logger)
+	executor := agentruntime.NewExecutor(config, logger, agentruntime.WithCheckpointStore(persistentStore))
+	executor.OnEvent = func(evt agentruntime.ExecutionEvent) {}
 
 	registry := executor.Registry()
 	registry.Register("bootstrap", func(ctx context.Context, state any) (any, error) { return state, nil })
 	_, _ = registry.Get("bootstrap")
 
 	// Create steps
-	steps := []longrunning.StepFunc{
+	steps := []agentruntime.StepFunc{
 		func(ctx context.Context, state any) (any, error) {
 			time.Sleep(30 * time.Millisecond)
 			return map[string]any{"step": 1, "data": "initialized"}, nil
@@ -527,7 +526,7 @@ func demoLongRunning(logger *zap.Logger) {
 		},
 	}
 
-	exec := executor.CreateNamedExecution("data-pipeline", []longrunning.NamedStep{
+	exec := executor.CreateNamedExecution("data-pipeline", []agentruntime.NamedStep{
 		{Name: "step-1", Func: steps[0]},
 		{Name: "step-2", Func: steps[1]},
 		{Name: "step-3", Func: steps[2]},
@@ -552,9 +551,9 @@ func demoLongRunning(logger *zap.Logger) {
 	}
 	_, _ = executor.AutoResumeAll(ctx)
 
-	record := &longrunning.TaskRecord{
+	record := &agentruntime.TaskRecord{
 		ID:       "lr-task-1",
-		Status:   string(longrunning.StateRunning),
+		Status:   string(agentruntime.StateRunning),
 		Progress: 0.4,
 		Data:     []byte(`{"checkpoint":1}`),
 		Metadata: map[string]string{"source": "demo"},
@@ -563,7 +562,7 @@ func demoLongRunning(logger *zap.Logger) {
 	_, _ = bridge.GetTask(ctx, record.ID)
 	_, _ = bridge.ListTasks(ctx)
 	_ = bridge.UpdateProgress(ctx, record.ID, 0.8)
-	_ = bridge.UpdateStatus(ctx, record.ID, string(longrunning.StateCompleted))
+	_ = bridge.UpdateStatus(ctx, record.ID, string(agentruntime.StateCompleted))
 	_ = bridge.DeleteTask(ctx, record.ID)
 
 	fmt.Printf("   Execution ID: %s\n", exec.ID)
@@ -844,7 +843,7 @@ func demoRunConfigHelpers() {
 
 	baseCfg := types.AgentConfig{}
 	options := agent.NewDefaultExecutionOptionsResolver().Resolve(ctx, baseCfg, nil)
-	req, err := agent.NewDefaultChatRequestAdapter().Build(options, []types.Message{
+	req, err := agentadapters.NewDefaultChatRequestAdapter().Build(options, []types.Message{
 		{Role: llm.RoleUser, Content: "demo request"},
 	})
 	if err != nil {

@@ -23,4 +23,4 @@ go run main.go
 
 ## 代码说明
 
-该示例故意展示 legacy surface：层次化架构通过 `hierarchical.NewHierarchicalAgent` 创建，协作系统通过 `collaboration.NewMultiAgentSystem` 配置不同模式；新的多 Agent 接入默认应优先使用 `agent/team`。可观测性部分通过 `observability.NewMetricsCollector` 和 `observability.NewTracer` 记录真实指标与追踪数据。
+该示例故意展示 legacy surface：层次化架构通过 `hierarchical.NewHierarchicalAgent` 创建，协作系统通过 `collaboration.NewMultiAgentSystem` 配置不同模式；新的多 Agent 接入默认应优先使用 `agent/collaboration/team`。可观测性部分通过 `observability.NewMetricsCollector` 和 `observability.NewTracer` 记录真实指标与追踪数据。
