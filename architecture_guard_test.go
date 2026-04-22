@@ -566,17 +566,17 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 				"newAgentBuilder(config).",
 			},
 			forbiddenSnippets: []string{
-				"return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil",
+				"return BuildBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil",
 			},
 		},
 		{
-			path: "agent/multiagent/default_modes.go",
+			path: "agent/collaboration/multiagent/default_modes.go",
 			requiredSnippets: []string{
 				"newHierarchicalModeBaseAgent(",
 				"agentruntime.NewBuilder(gateway, logger).Build(",
 			},
 			forbiddenSnippets: []string{
-				"agent.NewBaseAgent(types.AgentConfig{",
+				"agent.BuildBaseAgent(types.AgentConfig{",
 			},
 		},
 	}
@@ -646,45 +646,45 @@ func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
 		{
 			path: "README.md",
 			requiredSnippets: []string{
-				"`agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
-				"`agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景",
+				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`agent.NewAgentBuilder`、`agent.BuildBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
-				"`agent/runtime.Builder` is only the runtime entry for the `agent` submodule",
-				"`agent.NewAgentBuilder`, `agent.NewBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths",
+				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"`agent.NewAgentBuilder`, `agent.BuildBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths",
 			},
 		},
 		{
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
-				"推荐入口是 `agent/runtime.Builder`",
+				"推荐入口是 `agent/execution/runtime.Builder`",
 			},
 		},
 		{
 			path: "docs/cn/tutorials/01.快速开始.md",
 			requiredSnippets: []string{
-				"`agent/runtime.Builder` 是 `agent` 子模块 runtime 入口",
+				"`agent/execution/runtime.Builder` 是 `agent` 子模块 runtime 入口",
 			},
 		},
 		{
 			path: "docs/en/tutorials/01.QuickStart.md",
 			requiredSnippets: []string{
-				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
+				"`agent/execution/runtime.Builder` is the runtime entry for the `agent` submodule",
 			},
 		},
 		{
 			path: "docs/cn/tutorials/03.Agent开发教程.md",
 			requiredSnippets: []string{
-				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder`",
+				"`agent` 子模块正式 runtime 入口：`agent/execution/runtime.Builder`",
 			},
 		},
 		{
 			path: "docs/en/tutorials/03.AgentDevelopment.md",
 			requiredSnippets: []string{
-				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder`",
+				"Official runtime entry for the `agent` submodule: `agent/execution/runtime.Builder`",
 			},
 		},
 	}
@@ -716,11 +716,11 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "README.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
-				"`agent.NewBaseAgent`",
+				"`agent.BuildBaseAgent`",
 				"`agent.CreateAgent`",
 				"高级扩展",
 			},
@@ -733,11 +733,11 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "README_EN.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
-				"`agent.NewBaseAgent`",
+				"`agent.BuildBaseAgent`",
 				"`agent.CreateAgent`",
 				"advanced extension",
 			},
@@ -750,7 +750,7 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/runtime.Builder`",
+				"`agent/execution/runtime.Builder`",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
@@ -761,12 +761,12 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "docs/cn/tutorials/01.快速开始.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/runtime.Builder` 是 `agent` 子模块 runtime 入口",
+				"`agent/execution/runtime.Builder` 是 `agent` 子模块 runtime 入口",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
 				"`agent.CreateAgent`",
-				"`agent.NewBaseAgent`",
+				"`agent.BuildBaseAgent`",
 				"高级扩展",
 			},
 		},
@@ -774,12 +774,12 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "docs/en/tutorials/01.QuickStart.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
+				"`agent/execution/runtime.Builder` is the runtime entry for the `agent` submodule",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
 				"`agent.CreateAgent`",
-				"`agent.NewBaseAgent`",
+				"`agent.BuildBaseAgent`",
 				"advanced extension",
 			},
 		},
@@ -787,12 +787,12 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "docs/cn/tutorials/03.Agent开发教程.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder`",
+				"`agent` 子模块正式 runtime 入口：`agent/execution/runtime.Builder`",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
 				"`agent.CreateAgent`",
-				"`agent.NewBaseAgent`",
+				"`agent.BuildBaseAgent`",
 				"高级扩展",
 			},
 		},
@@ -800,12 +800,12 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "docs/en/tutorials/03.AgentDevelopment.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder`",
+				"Official runtime entry for the `agent` submodule: `agent/execution/runtime.Builder`",
 			},
 			requiredAdvancedLegacy: []string{
 				"`agent.NewAgentBuilder`",
 				"`agent.CreateAgent`",
-				"`agent.NewBaseAgent`",
+				"`agent.BuildBaseAgent`",
 				"advanced extension",
 			},
 		},
@@ -846,14 +846,14 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "README.md",
 			requiredSnippets: []string{
-				"**官方多 Agent 门面** - `agent/team`",
+				"**官方多 Agent 门面** - `agent/collaboration/team`",
 				"**官方默认** - `ReAct` 作为唯一默认推理/执行主链",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
-				"**Official Multi-Agent Facade** - `agent/team`",
+				"**Official Multi-Agent Facade** - `agent/collaboration/team`",
 				"**Official default** - `ReAct` is the only default reasoning/execution chain",
 			},
 		},
@@ -884,6 +884,10 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				"## Team（官方多 Agent facade）",
 				"## Legacy：多 Agent 协作",
 			},
+			forbiddenSnippets: []string{
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
+			},
 		},
 		{
 			path: "docs/en/tutorials/03.AgentDevelopment.md",
@@ -892,36 +896,48 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				"## Team (Official Multi-Agent Facade)",
 				"## Legacy Multi-Agent Collaboration",
 			},
+			forbiddenSnippets: []string{
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
+				"github.com/BaSui01/agentflow/agent/memory",
+				"github.com/BaSui01/agentflow/agent/guardrails",
+			},
 		},
 		{
 			path: "docs/cn/tutorials/08.多Agent协作.md",
 			requiredSnippets: []string{
-				"`agent/team` 是 AgentFlow 的官方多 Agent facade",
+				"`agent/collaboration/team` 是 AgentFlow 的官方多 Agent facade",
 				"## Legacy：多 Agent 系统",
+			},
+			forbiddenSnippets: []string{
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
 		{
 			path: "docs/en/tutorials/08.MultiAgentCollaboration.md",
 			requiredSnippets: []string{
-				"`agent/team` is the official multi-agent facade in AgentFlow",
+				"`agent/collaboration/team` is the official multi-agent facade in AgentFlow",
 				"## Legacy Multi-Agent System",
 			},
 			forbiddenSnippets: []string{
 				"AgentFlow supports multiple collaboration patterns including hierarchical agents, debate, consensus, pipeline, broadcast, and network modes.",
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
 		{
 			path: "examples/08_low_priority_features/README.md",
 			requiredSnippets: []string{
 				"legacy 多 Agent surface",
-				"新的多 Agent 接入默认应优先使用 `agent/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/collaboration/team`",
 			},
 		},
 		{
 			path: "examples/09_full_integration/README.md",
 			requiredSnippets: []string{
 				"legacy 层次化多 Agent",
-				"新的多 Agent 接入默认应优先使用 `agent/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/collaboration/team`",
 			},
 		},
 	}
@@ -947,18 +963,24 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 
 func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
-		data, err := os.ReadFile("agent/loop_executor.go")
+		data, err := os.ReadFile("agent/integration.go")
 		if err != nil {
-			t.Fatalf("read agent/loop_executor.go: %v", err)
+			t.Fatalf("read agent/integration.go: %v", err)
 		}
 		src := string(data)
+		start := strings.Index(src, "// Merged from loop_executor.go.")
+		end := strings.Index(src, "// Merged from loop_executor_runtime.go.")
+		if start == -1 || end == -1 || end <= start {
+			t.Fatal("agent/integration.go must keep explicit merged loop executor section markers")
+		}
+		src = src[start:end]
 		for _, needle := range []string{
 			"ResolveRunConfig(",
 			"DisablePlannerEnabled(",
 			"topLevelLoopBudget(",
 		} {
 			if strings.Contains(src, needle) {
-				t.Fatalf("agent/loop_executor.go must not depend on legacy control fallback %q", needle)
+				t.Fatalf("agent/integration.go must not depend on legacy control fallback %q", needle)
 			}
 		}
 	})
@@ -972,16 +994,22 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 			t.Fatal("agent/request.go must not construct ChatRequest directly; use ChatRequestAdapter")
 		}
 
-		adapterData, err := os.ReadFile("agent/chat_request_adapter.go")
+		adapterData, err := os.ReadFile("agent/adapters/chat.go")
 		if err != nil {
-			t.Fatalf("read agent/chat_request_adapter.go: %v", err)
+			t.Fatalf("read agent/adapters/chat.go: %v", err)
 		}
 		adapterSrc := string(adapterData)
 		if !strings.Contains(adapterSrc, "ChatRequest{") {
-			t.Fatal("agent/chat_request_adapter.go must remain the primary ChatRequest construction surface")
+			t.Fatal("agent/adapters/chat.go must remain the primary ChatRequest construction surface")
 		}
 		if !strings.Contains(adapterSrc, "func toolChoiceToRequestValue(choice *types.ToolChoice) any") {
-			t.Fatal("agent/chat_request_adapter.go must remain the adapter boundary that lowers ToolChoice into provider request payloads")
+			t.Fatal("agent/adapters/chat.go must remain the adapter boundary that lowers ToolChoice into provider request payloads")
+		}
+
+		if _, err := os.Stat("agent/chat_request_adapter.go"); err == nil {
+			t.Fatal("agent/chat_request_adapter.go must be removed once ChatRequestAdapter moves under agent/adapters")
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat agent/chat_request_adapter.go: %v", err)
 		}
 	})
 
