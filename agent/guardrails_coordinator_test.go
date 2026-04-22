@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

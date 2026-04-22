@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 )
 
 // ModeRegistryExecutor bridges orchestration patterns to unified multiagent mode registry.

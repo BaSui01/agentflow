@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"

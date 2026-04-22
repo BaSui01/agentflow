@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"go.uber.org/zap"
 )

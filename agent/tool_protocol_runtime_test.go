@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"

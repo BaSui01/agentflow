@@ -1,8 +1,8 @@
 package core
 
 import (
-	"github.com/BaSui01/agentflow/agent/guardcore"
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	guardcore "github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"go.uber.org/zap"
 )
 

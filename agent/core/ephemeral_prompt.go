@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 )
 
 // EphemeralPromptLayerBuilder builds request-scoped prompt layers that should

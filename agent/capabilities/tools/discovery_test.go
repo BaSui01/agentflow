@@ -1,11 +1,11 @@
-package discovery
+package tools
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 	"go.uber.org/zap"
 )
 

@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration"
-	"github.com/BaSui01/agentflow/agent/crews"
-	"github.com/BaSui01/agentflow/agent/hierarchical"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/collaboration/team"
+	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -97,34 +96,34 @@ func (m *collaborationModeStrategy) Execute(ctx context.Context, agents []agent.
 		return nil, fmt.Errorf("collaboration mode requires at least two agents")
 	}
 	pattern := collaborationPatternFromInput(input)
-	cfg := collaboration.MultiAgentConfig{
+	cfg := MultiAgentConfig{
 		Pattern:   pattern,
 		MaxRounds: 3,
 		Timeout:   5 * time.Minute,
 	}
 	if input != nil && input.Context != nil {
-		if ss, ok := input.Context["shared_state"].(collaboration.SharedState); ok {
+		if ss, ok := input.Context["shared_state"].(SharedState); ok {
 			cfg.SharedState = ss
 		}
 	}
-	system := collaboration.NewMultiAgentSystem(agents, cfg, m.logger)
+	system := NewMultiAgentSystem(agents, cfg, m.logger)
 	return system.Execute(ctx, input)
 }
 
-func collaborationPatternFromInput(input *agent.Input) collaboration.CollaborationPattern {
+func collaborationPatternFromInput(input *agent.Input) CollaborationPattern {
 	if input == nil || input.Context == nil {
-		return collaboration.PatternDebate
+		return PatternDebate
 	}
 	mode, _ := input.Context["coordination_type"].(string)
 	switch strings.TrimSpace(strings.ToLower(mode)) {
 	case "consensus":
-		return collaboration.PatternConsensus
+		return PatternConsensus
 	case "pipeline":
-		return collaboration.PatternPipeline
+		return PatternPipeline
 	case "broadcast":
-		return collaboration.PatternBroadcast
+		return PatternBroadcast
 	default:
-		return collaboration.PatternDebate
+		return PatternDebate
 	}
 }
 
@@ -226,18 +225,18 @@ func (m *crewModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 		return nil, fmt.Errorf("crew mode requires at least one agent")
 	}
 
-	crew := crews.NewCrew(crews.CrewConfig{
+	crew := team.NewCrew(team.CrewConfig{
 		Name:    "multiagent-crew-mode",
-		Process: crews.ProcessSequential,
+		Process: team.ProcessSequential,
 	}, m.logger)
 	for _, ag := range agents {
-		crew.AddMember(&crewAgentAdapter{agent: ag}, crews.Role{
+		crew.AddMember(&crewAgentAdapter{agent: ag}, team.Role{
 			Name:        ag.Name(),
 			Description: "registered from mode registry",
 			Skills:      []string{"general"},
 		})
 	}
-	crew.AddTask(crews.CrewTask{
+	crew.AddTask(team.CrewTask{
 		ID:          "multiagent-crew-task",
 		Description: input.Content,
 		Expected:    "task result",
@@ -274,20 +273,20 @@ type crewAgentAdapter struct {
 
 func (c *crewAgentAdapter) ID() string { return c.agent.ID() }
 
-func (c *crewAgentAdapter) Execute(ctx context.Context, task crews.CrewTask) (*crews.TaskResult, error) {
+func (c *crewAgentAdapter) Execute(ctx context.Context, task team.CrewTask) (*team.TaskResult, error) {
 	output, err := c.agent.Execute(ctx, &agent.Input{Content: task.Description})
 	if err != nil {
 		return nil, err
 	}
-	return &crews.TaskResult{
+	return &team.TaskResult{
 		TaskID:   task.ID,
 		Output:   output.Content,
 		Duration: output.Duration.Milliseconds(),
 	}, nil
 }
 
-func (c *crewAgentAdapter) Negotiate(_ context.Context, _ crews.Proposal) (*crews.NegotiationResult, error) {
-	return &crews.NegotiationResult{Accepted: true, Counter: nil}, nil
+func (c *crewAgentAdapter) Negotiate(_ context.Context, _ team.Proposal) (*team.NegotiationResult, error) {
+	return &team.NegotiationResult{Accepted: true, Counter: nil}, nil
 }
 
 // safeStubProvider provides safe defaults for wrappers that don't directly call provider methods.

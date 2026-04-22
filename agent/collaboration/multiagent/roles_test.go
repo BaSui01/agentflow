@@ -1,4 +1,4 @@
-package collaboration
+package multiagent
 
 import (
 	"context"

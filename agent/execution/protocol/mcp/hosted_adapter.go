@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
 )
 
 type mcpClientHostedAdapter struct {

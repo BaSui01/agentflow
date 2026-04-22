@@ -1,4 +1,4 @@
-package discovery
+package tools
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

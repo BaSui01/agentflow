@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"go.uber.org/zap"
 )
 

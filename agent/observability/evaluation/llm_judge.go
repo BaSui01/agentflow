@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/structured"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"

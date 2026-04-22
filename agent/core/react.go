@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/llm/observability"
 
 	"go.uber.org/zap"

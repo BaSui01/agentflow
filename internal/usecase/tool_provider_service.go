@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/types"
 )
 

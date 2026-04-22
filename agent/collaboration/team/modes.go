@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/planner"
+	planner "github.com/BaSui01/agentflow/agent/capabilities/planning"
 
 	"go.uber.org/zap"
 )

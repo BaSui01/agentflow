@@ -7,7 +7,7 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/agent/structured"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
 )
 
 // Agent Config Provider 定义访问代理配置的接口.

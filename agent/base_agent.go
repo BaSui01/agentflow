@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/agent/reasoning"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"

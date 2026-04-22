@@ -1,4 +1,4 @@
-package skills
+package tools
 
 import (
 	"context"
@@ -11,13 +11,13 @@ import (
 // Exposes LoadSkill, ExecuteSkill, and ListSkills for skill loading, execution, and discovery.
 type SkillsExtensionAdapter struct {
 	manager  SkillManager
-	registry *Registry
+	registry *SkillRegistry
 }
 
 // NewSkillsExtensionAdapter creates a new adapter.
 // manager is used for skill loading/discovery, registry is used for skill execution.
 // If registry is nil, ExecuteSkill will return an error.
-func NewSkillsExtensionAdapter(manager SkillManager, registry *Registry) *SkillsExtensionAdapter {
+func NewSkillsExtensionAdapter(manager SkillManager, registry *SkillRegistry) *SkillsExtensionAdapter {
 	return &SkillsExtensionAdapter{
 		manager:  manager,
 		registry: registry,

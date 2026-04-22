@@ -1,4 +1,4 @@
-package crews
+package team
 
 import (
 	"context"

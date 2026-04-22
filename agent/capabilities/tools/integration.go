@@ -1,4 +1,4 @@
-package discovery
+package tools
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	a2ashared "github.com/BaSui01/agentflow/agent/execution/protocol/a2a/shared"
 	"go.uber.org/zap"
 )
 
@@ -19,10 +19,10 @@ type AgentCapabilityProvider interface {
 	Name() string
 
 	// Get Capabilitys 返回代理的能力.
-	GetCapabilities() []a2a.Capability
+	GetCapabilities() []a2ashared.Capability
 
 	// Get AgentCard返回代理的A2A卡.
-	GetAgentCard() *a2a.AgentCard
+	GetAgentCard() *a2ashared.AgentCard
 }
 
 // Agent Discovery Introduction提供物剂与发现系统之间的融合.
@@ -262,7 +262,7 @@ func (i *AgentDiscoveryIntegration) createAgentInfo(agent AgentCapabilityProvide
 	card := agent.GetAgentCard()
 	if card == nil {
 		// 创建基本牌
-		card = a2a.NewAgentCard(
+		card = a2ashared.NewAgentCard(
 			agent.ID(),
 			agent.Name(),
 			i.config.DefaultEndpoint,

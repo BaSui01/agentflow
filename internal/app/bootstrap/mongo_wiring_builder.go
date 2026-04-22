@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/evaluation"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	"github.com/BaSui01/agentflow/agent/memory"
 	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"

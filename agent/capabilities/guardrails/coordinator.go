@@ -1,23 +1,22 @@
-package guardcore
+package guardrails
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
 	"go.uber.org/zap"
 )
 
 type Coordinator struct {
-	inputValidatorChain *guardrails.ValidatorChain
-	outputValidator     *guardrails.OutputValidator
-	config              *guardrails.GuardrailsConfig
+	inputValidatorChain *ValidatorChain
+	outputValidator     *OutputValidator
+	config              *GuardrailsConfig
 	enabled             bool
 	logger              *zap.Logger
 }
 
-func NewCoordinator(config *guardrails.GuardrailsConfig, logger *zap.Logger) *Coordinator {
+func NewCoordinator(config *GuardrailsConfig, logger *zap.Logger) *Coordinator {
 	gc := &Coordinator{
 		config: config,
 		logger: logger.With(zap.String("component", "guardrails_coordinator")),
@@ -28,39 +27,39 @@ func NewCoordinator(config *guardrails.GuardrailsConfig, logger *zap.Logger) *Co
 	return gc
 }
 
-func (gc *Coordinator) initialize(cfg *guardrails.GuardrailsConfig) {
+func (gc *Coordinator) initialize(cfg *GuardrailsConfig) {
 	gc.enabled = true
-	gc.inputValidatorChain = guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{
-		Mode: guardrails.ChainModeCollectAll,
+	gc.inputValidatorChain = NewValidatorChain(&ValidatorChainConfig{
+		Mode: ChainModeCollectAll,
 	})
 	for _, v := range cfg.InputValidators {
 		gc.inputValidatorChain.Add(v)
 	}
 	if cfg.MaxInputLength > 0 {
-		gc.inputValidatorChain.Add(guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
+		gc.inputValidatorChain.Add(NewLengthValidator(&LengthValidatorConfig{
 			MaxLength: cfg.MaxInputLength,
-			Action:    guardrails.LengthActionReject,
+			Action:    LengthActionReject,
 		}))
 	}
 	if len(cfg.BlockedKeywords) > 0 {
-		gc.inputValidatorChain.Add(guardrails.NewKeywordValidator(&guardrails.KeywordValidatorConfig{
+		gc.inputValidatorChain.Add(NewKeywordValidator(&KeywordValidatorConfig{
 			BlockedKeywords: cfg.BlockedKeywords,
 			CaseSensitive:   false,
 		}))
 	}
 	if cfg.InjectionDetection {
-		gc.inputValidatorChain.Add(guardrails.NewInjectionDetector(nil))
+		gc.inputValidatorChain.Add(NewInjectionDetector(nil))
 	}
 	if cfg.PIIDetectionEnabled {
-		gc.inputValidatorChain.Add(guardrails.NewPIIDetector(nil))
+		gc.inputValidatorChain.Add(NewPIIDetector(nil))
 	}
 
-	outputConfig := &guardrails.OutputValidatorConfig{
+	outputConfig := &OutputValidatorConfig{
 		Validators:     cfg.OutputValidators,
 		Filters:        cfg.OutputFilters,
 		EnableAuditLog: true,
 	}
-	gc.outputValidator = guardrails.NewOutputValidator(outputConfig)
+	gc.outputValidator = NewOutputValidator(outputConfig)
 
 	gc.logger.Info("guardrails initialized",
 		zap.Int("input_validators", gc.inputValidatorChain.Len()),
@@ -69,49 +68,49 @@ func (gc *Coordinator) initialize(cfg *guardrails.GuardrailsConfig) {
 	)
 }
 
-func (gc *Coordinator) ValidateInput(ctx context.Context, input string) (*guardrails.ValidationResult, error) {
+func (gc *Coordinator) ValidateInput(ctx context.Context, input string) (*ValidationResult, error) {
 	if !gc.enabled || gc.inputValidatorChain == nil {
-		return &guardrails.ValidationResult{Valid: true}, nil
+		return &ValidationResult{Valid: true}, nil
 	}
 	return gc.inputValidatorChain.Validate(ctx, input)
 }
 
-func (gc *Coordinator) ValidateOutput(ctx context.Context, output string) (string, *guardrails.ValidationResult, error) {
+func (gc *Coordinator) ValidateOutput(ctx context.Context, output string) (string, *ValidationResult, error) {
 	if !gc.enabled || gc.outputValidator == nil {
-		return output, &guardrails.ValidationResult{Valid: true}, nil
+		return output, &ValidationResult{Valid: true}, nil
 	}
 	return gc.outputValidator.ValidateAndFilter(ctx, output)
 }
 
 func (gc *Coordinator) Enabled() bool                           { return gc.enabled }
 func (gc *Coordinator) SetEnabled(enabled bool)                 { gc.enabled = enabled }
-func (gc *Coordinator) GetConfig() *guardrails.GuardrailsConfig { return gc.config }
+func (gc *Coordinator) GetConfig() *GuardrailsConfig { return gc.config }
 
-func (gc *Coordinator) AddInputValidator(v guardrails.Validator) {
+func (gc *Coordinator) AddInputValidator(v Validator) {
 	if gc.inputValidatorChain == nil {
-		gc.inputValidatorChain = guardrails.NewValidatorChain(nil)
+		gc.inputValidatorChain = NewValidatorChain(nil)
 		gc.enabled = true
 	}
 	gc.inputValidatorChain.Add(v)
 }
 
-func (gc *Coordinator) AddOutputValidator(v guardrails.Validator) {
+func (gc *Coordinator) AddOutputValidator(v Validator) {
 	if gc.outputValidator == nil {
-		gc.outputValidator = guardrails.NewOutputValidator(nil)
+		gc.outputValidator = NewOutputValidator(nil)
 		gc.enabled = true
 	}
 	gc.outputValidator.AddValidator(v)
 }
 
-func (gc *Coordinator) AddOutputFilter(f guardrails.Filter) {
+func (gc *Coordinator) AddOutputFilter(f Filter) {
 	if gc.outputValidator == nil {
-		gc.outputValidator = guardrails.NewOutputValidator(nil)
+		gc.outputValidator = NewOutputValidator(nil)
 		gc.enabled = true
 	}
 	gc.outputValidator.AddFilter(f)
 }
 
-func (gc *Coordinator) BuildValidationFeedbackMessage(result *guardrails.ValidationResult) string {
+func (gc *Coordinator) BuildValidationFeedbackMessage(result *ValidationResult) string {
 	var sb strings.Builder
 	sb.WriteString("Your previous response failed validation. Please regenerate your response addressing the following issues:\n")
 	for _, err := range result.Errors {
@@ -121,10 +120,10 @@ func (gc *Coordinator) BuildValidationFeedbackMessage(result *guardrails.Validat
 	return sb.String()
 }
 
-func (gc *Coordinator) GetInputValidatorChain() *guardrails.ValidatorChain {
+func (gc *Coordinator) GetInputValidatorChain() *ValidatorChain {
 	return gc.inputValidatorChain
 }
-func (gc *Coordinator) GetOutputValidator() *guardrails.OutputValidator { return gc.outputValidator }
+func (gc *Coordinator) GetOutputValidator() *OutputValidator { return gc.outputValidator }
 
 func (gc *Coordinator) InputValidatorCount() int {
 	if gc.inputValidatorChain == nil {

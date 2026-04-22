@@ -3,7 +3,7 @@ package sdk
 import (
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"

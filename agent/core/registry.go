@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/BaSui01/agentflow/agent/skills"
+	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"

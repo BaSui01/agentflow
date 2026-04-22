@@ -1,11 +1,11 @@
-package deliberation
+package planning
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 )
 
 // InterruptRequester is a local interface for HITL integration.

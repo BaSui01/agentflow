@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/types"
 )
 

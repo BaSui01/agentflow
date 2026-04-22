@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	"go.uber.org/zap"
 )
 

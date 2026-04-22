@@ -1,4 +1,4 @@
-package memorycore
+package memory
 
 import (
 	"context"

@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 )
 
 const (

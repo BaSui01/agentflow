@@ -5,8 +5,7 @@ import (
 	"strings"
 	"time"
 
-	agentcore "github.com/BaSui01/agentflow/agent/core"
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -17,10 +16,7 @@ type ErrInvalidTransition struct {
 }
 
 func (e ErrInvalidTransition) Error() string {
-	return (agentcore.ErrInvalidTransition{
-		From: e.From,
-		To:   e.To,
-	}).Error()
+	return fmt.Sprintf("invalid agent state transition: %s -> %s", e.From, e.To)
 }
 
 // ToAgentError 将 ErrInvalidTransition 转换为 Agent.Error。

@@ -1,4 +1,4 @@
-package longrunning
+package runtime
 
 import (
 	"context"

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 )
 
 // DiscoveryRegistryAdapter adapts discovery.DiscoveryService to the

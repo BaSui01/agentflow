@@ -7,24 +7,29 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/crews"
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	teamcore "github.com/BaSui01/agentflow/agent/collaboration/team"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
-func crewProcess(s string) crews.ProcessType {
+func crewProcess(s string) teamcore.ProcessType {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "hierarchical":
-		return crews.ProcessHierarchical
+		return teamcore.ProcessHierarchical
 	case "consensus":
-		return crews.ProcessConsensus
+		return teamcore.ProcessConsensus
 	default:
-		return crews.ProcessSequential
+		return teamcore.ProcessSequential
 	}
 }
 
-// collaborationTeam executes via multiagent.ModeRegistry (collaboration mode)
-// instead of directly importing agent/collaboration.
+// collaborationTeam executes via multiagent.ModeRegistry.
 type collaborationTeam struct {
 	id       string
 	agents   []agent.Agent
@@ -93,8 +98,7 @@ func NewCollaborationTeam(id string, agents []agent.Agent, pattern string, logge
 	}
 }
 
-// hierarchicalTeam executes via multiagent.ModeRegistry (hierarchical mode)
-// instead of directly importing agent/hierarchical.
+// hierarchicalTeam executes via multiagent.ModeRegistry.
 type hierarchicalTeam struct {
 	id         string
 	supervisor agent.Agent
@@ -120,7 +124,6 @@ func (t *hierarchicalTeam) Execute(ctx context.Context, task string, opts ...age
 		fn(o)
 	}
 
-	// Agents slice: supervisor first, then workers (convention for hierarchical mode)
 	agents := make([]agent.Agent, 0, 1+len(t.workers))
 	agents = append(agents, t.supervisor)
 	agents = append(agents, t.workers...)
@@ -164,20 +167,20 @@ type crewAgentAdapter struct {
 
 func (c *crewAgentAdapter) ID() string { return c.agent.ID() }
 
-func (c *crewAgentAdapter) Execute(ctx context.Context, task crews.CrewTask) (*crews.TaskResult, error) {
+func (c *crewAgentAdapter) Execute(ctx context.Context, task teamcore.CrewTask) (*teamcore.TaskResult, error) {
 	out, err := c.agent.Execute(ctx, &agent.Input{Content: task.Description})
 	if err != nil {
 		return nil, err
 	}
-	return &crews.TaskResult{
+	return &teamcore.TaskResult{
 		TaskID:   task.ID,
 		Output:   out.Content,
 		Duration: out.Duration.Milliseconds(),
 	}, nil
 }
 
-func (c *crewAgentAdapter) Negotiate(_ context.Context, _ crews.Proposal) (*crews.NegotiationResult, error) {
-	return &crews.NegotiationResult{Accepted: true, Counter: nil}, nil
+func (c *crewAgentAdapter) Negotiate(_ context.Context, _ teamcore.Proposal) (*teamcore.NegotiationResult, error) {
+	return &teamcore.NegotiationResult{Accepted: true, Counter: nil}, nil
 }
 
 type crewTeam struct {
@@ -202,18 +205,18 @@ func (t *crewTeam) Execute(ctx context.Context, task string, opts ...agent.TeamO
 	for _, fn := range opts {
 		fn(o)
 	}
-	crew := crews.NewCrew(crews.CrewConfig{
+	crew := teamcore.NewCrew(teamcore.CrewConfig{
 		Name:    t.id,
 		Process: crewProcess(t.process),
 	}, t.logger)
 	for _, a := range t.agents {
-		crew.AddMember(&crewAgentAdapter{agent: a}, crews.Role{
+		crew.AddMember(&crewAgentAdapter{agent: a}, teamcore.Role{
 			Name:        a.Name(),
 			Description: "team member",
 			Skills:      []string{"general"},
 		})
 	}
-	crew.AddTask(crews.CrewTask{
+	crew.AddTask(teamcore.CrewTask{
 		ID:          "team-task",
 		Description: task,
 		Expected:    "task result",
@@ -244,9 +247,108 @@ func (t *crewTeam) Execute(ctx context.Context, task string, opts ...agent.TeamO
 	}, nil
 }
 
+// NewCrewTeam creates a Team backed by the legacy crew abstraction.
 func NewCrewTeam(id string, agents []agent.Agent, process string, logger *zap.Logger) agent.Team {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &crewTeam{id: id, agents: agents, process: process, logger: logger}
 }
+
+func newHierarchicalModeBaseAgent(supervisor agent.Agent, gateway llmcore.Gateway, logger *zap.Logger) (*agent.BaseAgent, error) {
+	model := "hierarchical-mode"
+	if base, ok := supervisor.(*agent.BaseAgent); ok {
+		if configured := strings.TrimSpace(base.Config().LLM.Model); configured != "" {
+			model = configured
+		}
+	}
+	if model == "hierarchical-mode" && gateway != nil {
+		if provider := extractGatewayProvider(gateway); provider != nil {
+			if name := strings.TrimSpace(provider.Name()); name != "" {
+				model = name
+			}
+		}
+	}
+
+	return agentruntime.NewBuilder(gateway, logger).Build(context.Background(), types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "multiagent-hierarchical-mode",
+			Name: "multiagent-hierarchical-mode",
+			Type: string(agent.TypeGeneric),
+		},
+		LLM: types.LLMConfig{
+			Model: model,
+		},
+	})
+}
+
+func extractGatewayProvider(gateway llmcore.Gateway) llm.Provider {
+	type providerBackedGateway interface {
+		ChatProvider() llm.Provider
+	}
+	backed, ok := gateway.(providerBackedGateway)
+	if !ok {
+		return nil
+	}
+	return backed.ChatProvider()
+}
+
+// Kept for adapter-local parity with the historical hierarchical wrapper.
+func BuildHierarchicalAgent(supervisor agent.Agent, workers []agent.Agent, logger *zap.Logger) (*hierarchical.HierarchicalAgent, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	var gateway llmcore.Gateway = llmgateway.New(llmgateway.Config{ChatProvider: safeStubProvider{}, Logger: logger})
+	if base, ok := supervisor.(*agent.BaseAgent); ok {
+		if gw := base.MainGateway(); gw != nil {
+			gateway = gw
+		}
+	}
+	root, err := newHierarchicalModeBaseAgent(supervisor, gateway, logger)
+	if err != nil {
+		return nil, err
+	}
+	return hierarchical.NewHierarchicalAgent(root, supervisor, workers, hierarchical.DefaultHierarchicalConfig(), logger), nil
+}
+
+// safeStubProvider provides safe defaults for wrappers that don't directly call provider methods.
+type safeStubProvider struct{}
+
+func (safeStubProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return &llm.ChatResponse{
+		Model: req.Model,
+		Choices: []llm.ChatChoice{{
+			Index: 0,
+			Message: types.Message{
+				Role:    llm.RoleAssistant,
+				Content: "[stub provider response]",
+			},
+		}},
+	}, nil
+}
+
+func (safeStubProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk, 1)
+	ch <- llm.StreamChunk{
+		Model: req.Model,
+		Delta: types.Message{
+			Role:    llm.RoleAssistant,
+			Content: "[stub provider response]",
+		},
+		FinishReason: "stop",
+	}
+	close(ch)
+	return ch, nil
+}
+
+func (safeStubProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+
+func (safeStubProvider) Name() string { return "safe-stub" }
+
+func (safeStubProvider) SupportsNativeFunctionCalling() bool { return false }
+
+func (safeStubProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+
+func (safeStubProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }

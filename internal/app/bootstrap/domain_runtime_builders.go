@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	"github.com/BaSui01/agentflow/agent/protocol/mcp"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/rag/core"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"

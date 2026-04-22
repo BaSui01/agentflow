@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	"github.com/BaSui01/agentflow/agent/structured"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	agentlsp "github.com/BaSui01/agentflow/agent/lsp"
+	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
 	"go.uber.org/zap"
 )
 

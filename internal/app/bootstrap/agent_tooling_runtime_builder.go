@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/agent/hosted"
-	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"

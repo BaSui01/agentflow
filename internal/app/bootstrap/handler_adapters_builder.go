@@ -2,7 +2,7 @@ package bootstrap
 
 import (
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"go.uber.org/zap"
 )

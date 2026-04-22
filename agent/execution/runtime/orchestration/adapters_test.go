@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/handoff"
+	"github.com/BaSui01/agentflow/agent/adapters/handoff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

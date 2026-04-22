@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/types"
 )
 

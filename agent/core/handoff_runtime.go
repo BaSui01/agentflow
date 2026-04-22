@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	agenthandoff "github.com/BaSui01/agentflow/agent/handoff"
+	agenthandoff "github.com/BaSui01/agentflow/agent/adapters/handoff"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/types"
 )

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/collaboration/team"
 
 	"go.uber.org/zap"
 )

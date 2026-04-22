@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/reasoning"
+	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )

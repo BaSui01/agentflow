@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/rag"

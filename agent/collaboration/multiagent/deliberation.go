@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +32,7 @@ func (m *deliberationModeStrategy) Execute(ctx context.Context, agents []agent.A
 	for _, a := range agents {
 		agentMap[a.ID()] = a
 	}
-	orderedIDs := collaboration.SortedAgentIDs(agentMap)
+	orderedIDs := SortedAgentIDs(agentMap)
 
 	maxRounds := defaultDeliberationMaxRounds
 	if input != nil && input.Context != nil {
@@ -42,9 +41,9 @@ func (m *deliberationModeStrategy) Execute(ctx context.Context, agents []agent.A
 		}
 	}
 
-	var sharedState collaboration.SharedState
+	var sharedState SharedState
 	if input != nil && input.Context != nil {
-		if ss, ok := input.Context["shared_state"].(collaboration.SharedState); ok {
+		if ss, ok := input.Context["shared_state"].(SharedState); ok {
 			sharedState = ss
 		}
 	}
@@ -203,10 +202,10 @@ func (m *deliberationModeStrategy) Execute(ctx context.Context, agents []agent.A
 		_ = sharedState.Set(ctx, "result:deliberation", finalOutput)
 	}
 
-	totalTokens, totalCost := collaboration.AggregateUsage(outputs)
+	totalTokens, totalCost := AggregateUsage(outputs)
 	finalOutput.TokensUsed += totalTokens
 	finalOutput.Cost += totalCost
-	finalOutput.Metadata = collaboration.MergeMetadata(finalOutput.Metadata, map[string]any{
+	finalOutput.Metadata = MergeMetadata(finalOutput.Metadata, map[string]any{
 		"mode":              ModeDeliberation,
 		"participating_ids": orderedIDs,
 		"synthesizer_id":    synthesizerID,

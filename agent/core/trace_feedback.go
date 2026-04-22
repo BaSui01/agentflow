@@ -3,7 +3,7 @@ package core
 import (
 	"strings"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"github.com/BaSui01/agentflow/types"
 )
 

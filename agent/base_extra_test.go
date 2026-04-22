@@ -6,7 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

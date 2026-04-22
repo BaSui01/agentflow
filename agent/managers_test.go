@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"go.uber.org/zap"
 )
 

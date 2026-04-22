@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"gorm.io/gorm"
 )
 

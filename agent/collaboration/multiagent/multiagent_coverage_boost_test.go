@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/crews"
+	"github.com/BaSui01/agentflow/agent/collaboration/team"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +80,7 @@ func TestCrewAgentAdapter_ID(t *testing.T) {
 func TestCrewAgentAdapter_Negotiate(t *testing.T) {
 	ag := &mockAgent{id: "test-id", name: "test"}
 	adapter := &crewAgentAdapter{agent: ag}
-	result, err := adapter.Negotiate(context.Background(), crews.Proposal{Message: "test"})
+	result, err := adapter.Negotiate(context.Background(), team.Proposal{Message: "test"})
 	require.NoError(t, err)
 	assert.True(t, result.Accepted)
 	assert.Nil(t, result.Counter)

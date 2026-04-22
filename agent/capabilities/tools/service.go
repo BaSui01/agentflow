@@ -1,4 +1,4 @@
-package discovery
+package tools
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	a2ashared "github.com/BaSui01/agentflow/agent/execution/protocol/a2a/shared"
 	"go.uber.org/zap"
 )
 
@@ -356,7 +356,7 @@ func (s *DiscoveryService) Protocol() Protocol {
 }
 
 // Agent InfoFromCard从A2A AgentCard中创建了AgentInfo.
-func AgentInfoFromCard(card *a2a.AgentCard, isLocal bool) *AgentInfo {
+func AgentInfoFromCard(card *a2ashared.AgentCard, isLocal bool) *AgentInfo {
 	if card == nil {
 		return nil
 	}
@@ -382,8 +382,8 @@ func AgentInfoFromCard(card *a2a.AgentCard, isLocal bool) *AgentInfo {
 }
 
 // CreateAgentCard通过代理配置创建了A2A AgentCard.
-func CreateAgentCard(name, description, url, version string, capabilities []a2a.Capability) *a2a.AgentCard {
-	card := a2a.NewAgentCard(name, description, url, version)
+func CreateAgentCard(name, description, url, version string, capabilities []a2ashared.Capability) *a2ashared.AgentCard {
+	card := a2ashared.NewAgentCard(name, description, url, version)
 	for _, cap := range capabilities {
 		card.AddCapability(cap.Name, cap.Description, cap.Type)
 	}

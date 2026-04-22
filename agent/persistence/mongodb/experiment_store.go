@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/BaSui01/agentflow/agent/evaluation"
+	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	"github.com/BaSui01/agentflow/agent/persistence"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 )

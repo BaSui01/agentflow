@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
-	"github.com/BaSui01/agentflow/agent/memorycore"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -333,4 +333,3 @@ func NewMemoryCoordinator(agentID string, memory MemoryManager, logger *zap.Logg
 }
 
 // State 和 CanTransition 已在 state.go 中定义
-

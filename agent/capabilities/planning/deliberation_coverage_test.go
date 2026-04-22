@@ -1,4 +1,4 @@
-package deliberation
+package planning
 
 import (
 	"context"

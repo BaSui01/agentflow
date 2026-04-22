@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/execution"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -465,11 +464,11 @@ func (ToolVerificationLoopValidator) Validate(_ context.Context, input *Input, s
 }
 
 type CodeTaskLoopValidator struct {
-	codeValidator *execution.CodeValidator
+	codeValidator *CodeValidator
 }
 
 func NewCodeTaskLoopValidator() CodeTaskLoopValidator {
-	return CodeTaskLoopValidator{codeValidator: execution.NewCodeValidator()}
+	return CodeTaskLoopValidator{codeValidator: NewCodeValidator()}
 }
 
 func (v CodeTaskLoopValidator) Validate(_ context.Context, input *Input, state *LoopState, output *Output, err error) (*LoopValidationResult, error) {
@@ -753,7 +752,7 @@ func codeTaskRequired(input *Input, state *LoopState, output *Output) bool {
 		strings.Contains(normalized, "test")
 }
 
-func codeSnippetForValidation(output *Output) (execution.Language, string, bool) {
+func codeSnippetForValidation(output *Output) (CodeValidationLanguage, string, bool) {
 	if output == nil || len(output.Metadata) == 0 {
 		return "", "", false
 	}
@@ -764,17 +763,17 @@ func codeSnippetForValidation(output *Output) (execution.Language, string, bool)
 	}
 	switch rawLang {
 	case "python":
-		return execution.LangPython, rawCode, true
+		return CodeLangPython, rawCode, true
 	case "javascript", "js":
-		return execution.LangJavaScript, rawCode, true
+		return CodeLangJavaScript, rawCode, true
 	case "typescript", "ts":
-		return execution.LangTypeScript, rawCode, true
+		return CodeLangTypeScript, rawCode, true
 	case "go", "golang":
-		return execution.LangGo, rawCode, true
+		return CodeLangGo, rawCode, true
 	case "rust":
-		return execution.LangRust, rawCode, true
+		return CodeLangRust, rawCode, true
 	case "bash", "shell", "sh":
-		return execution.LangBash, rawCode, true
+		return CodeLangBash, rawCode, true
 	default:
 		return "", "", false
 	}

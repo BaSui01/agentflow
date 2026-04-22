@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 )
 
 func TestEphemeralPromptLayerBuilder_Build(t *testing.T) {

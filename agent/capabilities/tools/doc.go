@@ -23,4 +23,4 @@
 //
 // Registry 与 SkillManager 可独立使用，也可通过 DiscoveryBridge 桥接：
 // SkillManager 负责发现与加载，Registry 负责注册与执行。
-package skills
+package tools

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/teamadapter"
+	teamadapter "github.com/BaSui01/agentflow/agent/adapters/teamadapter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

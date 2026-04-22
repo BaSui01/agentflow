@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/BaSui01/agentflow/agent/guardcore"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"go.uber.org/zap"
 )

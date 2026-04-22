@@ -1,11 +1,11 @@
-package discovery
+package tools
 
 import (
 	"context"
 	"encoding/json"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	a2ashared "github.com/BaSui01/agentflow/agent/execution/protocol/a2a/shared"
 )
 
 // 能力 地位代表一种能力的地位。
@@ -39,7 +39,7 @@ const (
 // 能力 信息包含关于某一能力的详细信息。
 type CapabilityInfo struct {
 	// 能力是A2A协议中的基础能力定义.
-	Capability a2a.Capability `json:"capability"`
+	Capability a2ashared.Capability `json:"capability"`
 
 	// AgentID是提供这种能力的代理的身份.
 	AgentID string `json:"agent_id"`
@@ -84,7 +84,7 @@ type CapabilityInfo struct {
 // AgentInfo包含了注册代理的详细信息.
 type AgentInfo struct {
 	// 卡为A2A代理卡.
-	Card *a2a.AgentCard `json:"card"`
+	Card *a2ashared.AgentCard `json:"card"`
 
 	// 状态是代理人的现状.
 	Status AgentStatus `json:"status"`

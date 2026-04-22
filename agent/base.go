@@ -5,9 +5,8 @@ import (
 	"strings"
 	"time"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
-	agentcore "github.com/BaSui01/agentflow/agent/core"
-	"github.com/BaSui01/agentflow/agent/memorycore"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
+	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -313,18 +312,36 @@ func NewMemoryCoordinator(agentID string, memory MemoryManager, logger *zap.Logg
 }
 
 // State 定义 Agent 生命周期状态。
-type State = agentcore.State
+type State string
 
 const (
-	StateInit      State = agentcore.StateInit
-	StateReady     State = agentcore.StateReady
-	StateRunning   State = agentcore.StateRunning
-	StatePaused    State = agentcore.StatePaused
-	StateCompleted State = agentcore.StateCompleted
-	StateFailed    State = agentcore.StateFailed
+	StateInit      State = "init"
+	StateReady     State = "ready"
+	StateRunning   State = "running"
+	StatePaused    State = "paused"
+	StateCompleted State = "completed"
+	StateFailed    State = "failed"
 )
 
 // CanTransition 检查状态转换是否合法。
 func CanTransition(from, to State) bool {
-	return agentcore.CanTransition(from, to)
+	allowed, ok := validTransitions[from]
+	if !ok {
+		return false
+	}
+	for _, next := range allowed {
+		if next == to {
+			return true
+		}
+	}
+	return false
+}
+
+var validTransitions = map[State][]State{
+	StateInit:      {StateReady, StateFailed},
+	StateReady:     {StateRunning, StateFailed},
+	StateRunning:   {StateReady, StatePaused, StateCompleted, StateFailed},
+	StatePaused:    {StateRunning, StateCompleted, StateFailed},
+	StateCompleted: {StateReady, StateInit},
+	StateFailed:    {StateReady, StateInit},
 }
