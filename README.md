@@ -15,7 +15,7 @@
 ### 🤖 Agent 框架
 
 - **官方单 Agent 主链** - `react + native tool calling + checkpoint/session/guardrails`
-- **官方多 Agent 门面** - `agent/team`，统一 `supervisor / selector / round_robin / swarm`
+- **官方多 Agent 门面** - `agent/collaboration/team`，统一 `supervisor / selector / round_robin / swarm`
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
 - **双模型架构 (toolProvider)** - 便宜模型优先承担工具调用链路（原生 tool calling，非原生 provider 自动降级 XML tool-calling），贵模型做内容生成，大幅降低成本
@@ -59,7 +59,7 @@
 
 ### 🧱 启动装配链路
 
-- **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
 - **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
 - **领域入口并列** - `api/handlers` 可直接进入 `agent usecase`、`rag usecase`、`workflow usecase`；不是所有请求都必须先进入 `workflow`
 - **编排关系固定** - `workflow` 是 Layer 3 编排层，不是 `agent` 的一种；有编排需求时由 `workflow` 调用 `agent/rag/llm`，无编排需求时可直接走 `agent` 或 `rag`
@@ -128,8 +128,8 @@ go get github.com/BaSui01/agentflow
 正式入口约定：
 
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
-- `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景；其中 builder/registry 已切换到 gateway 注入语义，不再推荐 provider 直入
+- `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
+- `agent.NewAgentBuilder`、`agent.BuildBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景；其中 builder/registry 已切换到 gateway 注入语义，不再推荐 provider 直入
 - Agent 运行时主面采用三层模型：`Model / Control / Tools`
   - `Model` 负责模型与 provider 相关参数
   - `Control` 负责 loop/budget/reasoning/override 等执行控制
@@ -367,7 +367,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-上下文运行时默认会随 `sdk` -> `agent/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
+上下文运行时默认会随 `sdk` -> `agent/execution/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -517,42 +517,23 @@ agentflow/
 │   └── tools/                # 工具执行
 │
 ├── agent/                    # Layer 2: Agent 核心
-│   ├── base.go               # BaseAgent
-│   ├── completion.go         # ChatCompletion/StreamCompletion（双模型架构）
-│   ├── react.go              # Plan/Execute/Observe ReAct 循环
-│   ├── steering.go           # 实时引导 Steering（guide/stop_and_send）
-│   ├── session_manager.go    # 会话管理器（自动过期清理）
-│   ├── state.go              # 状态机
-│   ├── event.go              # 事件总线
-│   ├── registry.go           # Agent 注册表
-│   ├── planner/              # TaskPlanner 任务规划引擎
-│   │   ├── planner.go        # 核心引擎（Kahn 环检测）
-│   │   ├── plan.go           # Plan/PlanTask 数据结构
-│   │   ├── executor.go       # 拓扑排序 + 并行执行
-│   │   ├── dispatcher.go     # 3 种分派策略（by_role/by_capability/round_robin）
-│   │   └── tools.go          # 内置工具 Schema（create/update/get_plan）
-│   ├── team/                 # 官方多 Agent facade
-│   │   ├── team.go           # AgentTeam 实现
-│   │   ├── modes.go          # 4 种模式（Supervisor/RoundRobin/Selector/Swarm）
-│   │   └── builder.go        # 流式构建器
-│   ├── declarative/          # 声明式 Agent 加载器（YAML/JSON）
-│   ├── plugins/              # 插件系统（注册表、生命周期）
-│   ├── collaboration/        # legacy 多 Agent 协作 surface
-│   ├── crews/                # legacy Crew 编排
-│   ├── federation/           # Agent 联邦/服务发现
-│   ├── hitl/                 # Human-in-the-Loop 审批
-│   ├── artifacts/            # Artifact 管理
-│   ├── voice/                # 语音交互
-│   ├── lsp/                  # LSP 协议支持
-│   ├── streaming/            # 双向通信增强
-│   ├── guardrails/           # 护栏系统
-│   ├── protocol/             # A2A/MCP 协议
-│   │   ├── a2a/
-│   │   └── mcp/
-│   ├── reasoning/            # 推理模式
-│   ├── memory/               # 记忆系统
-│   ├── execution/            # 执行引擎
-│   └── context/              # 上下文管理
+│   ├── base.go               # 核心类型与公共状态/错误/EventBus
+│   ├── builder.go            # BaseAgent + AgentBuilder 收口面
+│   ├── checkpoint_binding.go # Checkpoint 公共类型与管理入口
+│   ├── defensive_prompt.go   # Defensive prompt / OutputSchema
+│   ├── integration.go        # Execute/Plan/Observe + 闭环执行主链
+│   ├── interfaces.go         # 扩展接口、Reflection/ToolSelector 等公开面
+│   ├── prompt_bundle.go      # PromptBundle / PromptEnhancer
+│   ├── registry.go           # AgentRegistry 与公开运行时注册能力
+│   ├── request.go            # RunConfig / request/runtime protocol 入口
+│   ├── adapters/             # 适配层（chat/declarative/structured/handoff/teamadapter）
+│   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
+│   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）
+│   ├── core/                 # 目标核心层命名空间（当前保留最小骨架）
+│   ├── execution/            # 执行层（runtime/context/protocol/orchestration）
+│   ├── integration/          # 集成层（deployment/hosted/k8s/lsp/voice）
+│   ├── observability/        # 可观测层（monitoring/evaluation/hitl）
+│   └── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
 │
 ├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）
 │   ├── loader/               # DocumentLoader（Text/Markdown/CSV/JSON）

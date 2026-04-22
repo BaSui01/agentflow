@@ -452,9 +452,9 @@ docs-api-drift: ## 检查文档中是否残留已废弃的 API 引用
 		echo "❌ Found stale 'agent.Config{' references (should be types.AgentConfig)"; \
 		FAIL=1; \
 	fi; \
-	if grep -rn 'NewBaseAgent(' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/' | grep -q .; then \
-		grep -rn 'NewBaseAgent(' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/'; \
-		echo "❌ Found stale 'NewBaseAgent(' references (should be NewAgentBuilder)"; \
+	if grep -rn 'BuildBaseAgent(' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/' | grep -q .; then \
+		grep -rn 'BuildBaseAgent(' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/'; \
+		echo "❌ Found stale 'BuildBaseAgent(' references (should be NewAgentBuilder)"; \
 		FAIL=1; \
 	fi; \
 	if [ $$FAIL -eq 1 ]; then \

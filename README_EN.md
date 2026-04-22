@@ -15,7 +15,7 @@ English | [中文](README.md)
 ### 🤖 Agent Framework
 
 - **Official Single-Agent Path** - `react + native tool calling + checkpoint/session/guardrails`
-- **Official Multi-Agent Facade** - `agent/team` with `supervisor / selector / round_robin / swarm`
+- **Official Multi-Agent Facade** - `agent/collaboration/team` with `supervisor / selector / round_robin / swarm`
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
 - **Dual-Model Architecture (toolProvider)** - Cheap model handles tool-call-heavy turns first (native tool calling, with XML tool-calling fallback for non-native providers), while the expensive model focuses on final content generation
@@ -58,7 +58,7 @@ English | [中文](README.md)
 
 ### 🧱 Startup Composition
 
-- **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
 - **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
 
 ### 🔍 RAG System (Retrieval-Augmented Generation)
@@ -117,8 +117,8 @@ go get github.com/BaSui01/agentflow
 Entrypoint policy:
 
 - Repository-level official entry: `sdk.New(opts).Build(ctx)`
-- `agent/runtime.Builder` is only the runtime entry for the `agent` submodule
-- `agent.NewAgentBuilder`, `agent.NewBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths, not peer official entrypoints
+- `agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule
+- `agent.NewAgentBuilder`, `agent.BuildBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths, not peer official entrypoints
 - The Agent runtime main surface follows a three-layer model: `Model / Control / Tools`
   - `Model` carries model/provider parameters
   - `Control` carries loop budgets, reasoning mode, overrides, and execution policy
@@ -356,7 +356,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-The context runtime is wired by default through the `sdk` -> `agent/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
+The context runtime is wired by default through the `sdk` -> `agent/execution/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -511,42 +511,23 @@ agentflow/
 │   └── tools/                # Tool execution
 │
 ├── agent/                    # Layer 2: Agent core
-│   ├── base.go               # BaseAgent
-│   ├── completion.go         # ChatCompletion/StreamCompletion (dual-model architecture)
-│   ├── react.go              # Plan/Execute/Observe ReAct loop
-│   ├── steering.go           # Real-time steering (guide/stop_and_send)
-│   ├── session_manager.go    # Session manager (auto-expiry cleanup)
-│   ├── state.go              # State machine
-│   ├── event.go              # Event bus
-│   ├── registry.go           # Agent registry
-│   ├── planner/              # TaskPlanner planning engine
-│   │   ├── planner.go        # Core engine (Kahn cycle detection)
-│   │   ├── plan.go           # Plan/PlanTask data structures
-│   │   ├── executor.go       # Topological sort + parallel execution
-│   │   ├── dispatcher.go     # 3 dispatch strategies (by_role/by_capability/round_robin)
-│   │   └── tools.go          # Built-in tool schemas (create/update/get_plan)
-│   ├── team/                 # Official multi-agent facade
-│   │   ├── team.go           # AgentTeam implementation
-│   │   ├── modes.go          # 4 modes (Supervisor/RoundRobin/Selector/Swarm)
-│   │   └── builder.go        # Fluent builder
-│   ├── declarative/          # Declarative Agent loader (YAML/JSON)
-│   ├── plugins/              # Plugin system & lifecycle
-│   ├── collaboration/        # Legacy multi-agent collaboration surface
-│   ├── crews/                # Legacy crew orchestration
-│   ├── federation/           # Agent federation & service discovery
-│   ├── hitl/                 # Human-in-the-Loop
-│   ├── artifacts/            # Artifact management
-│   ├── voice/                # Voice capabilities
-│   ├── lsp/                  # LSP server integration
-│   ├── streaming/            # Bidirectional communication
-│   ├── guardrails/           # Safety guardrails
-│   ├── protocol/             # A2A/MCP protocols
-│   │   ├── a2a/
-│   │   └── mcp/
-│   ├── reasoning/            # Reasoning patterns
-│   ├── memory/               # Memory system
-│   ├── execution/            # Execution engine
-│   └── context/              # Context management
+│   ├── base.go               # Core types, public state/errors, EventBus
+│   ├── builder.go            # BaseAgent + AgentBuilder consolidation surface
+│   ├── checkpoint_binding.go # Public checkpoint types and manager entry
+│   ├── defensive_prompt.go   # Defensive prompt / OutputSchema
+│   ├── integration.go        # Execute/Plan/Observe and closed-loop runtime chain
+│   ├── interfaces.go         # Extension interfaces and public reflection/tool-selector surface
+│   ├── prompt_bundle.go      # PromptBundle / PromptEnhancer
+│   ├── registry.go           # AgentRegistry and public runtime registration surface
+│   ├── request.go            # RunConfig / request-runtime protocol entry
+│   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff/teamadapter)
+│   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
+│   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)
+│   ├── core/                 # Target core-layer namespace (kept as minimal skeleton during refactor)
+│   ├── execution/            # Execution layer (runtime/context/protocol/orchestration)
+│   ├── integration/          # Integration layer (deployment/hosted/k8s/lsp/voice)
+│   ├── observability/        # Observability layer (monitoring/evaluation/hitl)
+│   └── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
 │
 ├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)
 │   ├── chunking.go           # Document chunking
