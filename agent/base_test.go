@@ -22,7 +22,7 @@ func TestNewBaseAgent(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	assert.NotNil(t, agent)
 	assert.Equal(t, "test-agent", agent.ID())
@@ -45,7 +45,7 @@ func TestBaseAgent_Init(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 	err := agent.Init(ctx)
@@ -64,7 +64,7 @@ func TestBaseAgent_StateTransition(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 
@@ -131,7 +131,7 @@ func TestBaseAgent_Execute(t *testing.T) {
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	// 初始化代理
 	ctx := context.Background()
@@ -163,7 +163,7 @@ func TestBaseAgent_ExecuteNotReady(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 	input := &Input{
@@ -198,7 +198,7 @@ func TestBaseAgent_SaveMemory(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 
@@ -234,7 +234,7 @@ func TestBaseAgent_RecallMemory(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 
@@ -264,7 +264,7 @@ func TestBaseAgent_Observe(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 
@@ -336,7 +336,7 @@ func TestBaseAgent_Plan(t *testing.T) {
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 	config.Runtime.SystemPrompt = "You are a planning expert"
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 
@@ -386,7 +386,7 @@ func TestBaseAgent_Plan_RequiresNativeToolCallWhenProviderSupportsIt(t *testing.
 	bus := &testEventBus{}
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	_, err := agent.Plan(context.Background(), &Input{
 		TraceID: "test-trace",
@@ -439,7 +439,7 @@ func BenchmarkBaseAgent_Execute(b *testing.B) {
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
-	agent := NewBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
+	agent := BuildBaseAgent(config, testGatewayFromProvider(provider), memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)
@@ -472,7 +472,7 @@ func TestSaveMemory_WriteThroughCache(t *testing.T) {
 		},
 	}
 
-	agent := NewBaseAgent(testAgentConfig("mem-test", "mem-test", ""), testGatewayFromProvider(&testProvider{name: "mock"}), mem, nil, nil, logger, nil)
+	agent := BuildBaseAgent(testAgentConfig("mem-test", "mem-test", ""), testGatewayFromProvider(&testProvider{name: "mock"}), mem, nil, nil, logger, nil)
 	ctx := context.Background()
 	_ = agent.Init(ctx)
 
@@ -507,7 +507,7 @@ func TestSaveMemory_CacheEviction(t *testing.T) {
 		saveFn: func(_ context.Context, _ MemoryRecord) error { return nil },
 	}
 
-	agent := NewBaseAgent(testAgentConfig("evict-test", "evict-test", ""), testGatewayFromProvider(&testProvider{name: "mock"}), mem, nil, nil, logger, nil)
+	agent := BuildBaseAgent(testAgentConfig("evict-test", "evict-test", ""), testGatewayFromProvider(&testProvider{name: "mock"}), mem, nil, nil, logger, nil)
 	ctx := context.Background()
 	_ = agent.Init(ctx)
 
