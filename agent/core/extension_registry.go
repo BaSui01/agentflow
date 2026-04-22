@@ -1,4 +1,4 @@
-package internalcore
+package core
 
 import (
 	"context"

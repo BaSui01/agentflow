@@ -1,4 +1,4 @@
-package internalcore
+package loop
 
 import (
 	"strings"
@@ -13,6 +13,9 @@ const (
 	defaultQualityThreshold          = 0.7
 )
 
+// LoopControlPolicy consolidates budgets and thresholds that govern a closed-loop
+// execution run. The values are derived from runtime configuration plus an
+// optional guardrails override.
 type LoopControlPolicy struct {
 	LoopIterationBudget       int
 	ReflectionIterationBudget int
@@ -21,12 +24,15 @@ type LoopControlPolicy struct {
 	CriticPrompt              string
 }
 
+// ReflectionPolicyConfig is the subset of the policy that the reflection path
+// consumes when executing the critic loop.
 type ReflectionPolicyConfig struct {
 	MaxIterations int
 	MinQuality    float64
 	CriticPrompt  string
 }
 
+// StopReasons enumerates the canonical stop reason strings the runtime emits.
 type StopReasons struct {
 	Solved                   string
 	Timeout                  string
@@ -37,6 +43,8 @@ type StopReasons struct {
 	MaxIterations            string
 }
 
+// LoopControlPolicyFromConfig derives a LoopControlPolicy from the agent
+// configuration, applying runtime guardrails overrides when present.
 func LoopControlPolicyFromConfig(cfg types.AgentConfig, runtimeGuardrailsCfg *guardrails.GuardrailsConfig) LoopControlPolicy {
 	policy := LoopControlPolicy{
 		LoopIterationBudget:       defaultLoopIterationBudget,
@@ -73,6 +81,8 @@ func LoopControlPolicyFromConfig(cfg types.AgentConfig, runtimeGuardrailsCfg *gu
 	return policy
 }
 
+// ReflectionPolicyConfigFromPolicy projects the reflection-relevant fields from
+// the overall control policy.
 func ReflectionPolicyConfigFromPolicy(policy LoopControlPolicy) ReflectionPolicyConfig {
 	return ReflectionPolicyConfig{
 		MaxIterations: policy.ReflectionIterationBudget,
@@ -81,6 +91,8 @@ func ReflectionPolicyConfigFromPolicy(policy LoopControlPolicy) ReflectionPolicy
 	}
 }
 
+// RuntimeGuardrailsFromPolicy applies the policy's retry budget onto a clone of
+// the provided guardrails config, returning nil when cfg is nil.
 func RuntimeGuardrailsFromPolicy(policy LoopControlPolicy, cfg *guardrails.GuardrailsConfig) *guardrails.GuardrailsConfig {
 	if cfg == nil {
 		return nil
@@ -90,6 +102,8 @@ func RuntimeGuardrailsFromPolicy(policy LoopControlPolicy, cfg *guardrails.Guard
 	return &cloned
 }
 
+// NormalizeTopLevelStopReason maps an incoming stop reason (possibly internal)
+// to one of the canonical top-level stop reasons exposed by the runtime.
 func NormalizeTopLevelStopReason(stopReason string, internalCause string, reasons StopReasons) string {
 	switch strings.TrimSpace(stopReason) {
 	case "", "stop", "completed":
@@ -114,6 +128,8 @@ func NormalizeTopLevelStopReason(stopReason string, internalCause string, reason
 	}
 }
 
+// IsInternalBudgetCause reports whether cause matches one of the reserved
+// budget-exhaustion cause strings used internally by reasoning runtimes.
 func IsInternalBudgetCause(cause string) bool {
 	switch strings.TrimSpace(strings.ToLower(cause)) {
 	case "react_iteration_budget_exhausted",

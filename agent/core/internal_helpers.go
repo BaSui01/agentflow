@@ -1,4 +1,4 @@
-package internalcore
+package core
 
 import (
 	"strings"
@@ -71,21 +71,3 @@ func FallbackString(values ...string) string {
 	return ""
 }
 
-// ClassifyStopReason categorizes free-form errors into runtime stop reasons.
-func ClassifyStopReason(msg string, reasons StopReasons) string {
-	normalized := strings.ToLower(strings.TrimSpace(msg))
-	switch {
-	case strings.Contains(normalized, "timeout"),
-		strings.Contains(normalized, "deadline exceeded"),
-		strings.Contains(normalized, "context deadline exceeded"),
-		strings.Contains(normalized, "context canceled"),
-		strings.Contains(normalized, "context cancelled"):
-		return reasons.Timeout
-	case strings.Contains(normalized, "validation"):
-		return reasons.ValidationFailed
-	case strings.Contains(normalized, "tool"):
-		return reasons.ToolFailureUnrecoverable
-	default:
-		return reasons.Blocked
-	}
-}

@@ -1,4 +1,4 @@
-package agent
+package prompt
 
 import (
 	"encoding/json"
@@ -8,55 +8,46 @@ import (
 
 // DefensivePromptConfig 防御性提示配置（基于 2025 年生产最佳实践）
 type DefensivePromptConfig struct {
-	// 失败处理模式
 	FailureModes []FailureMode `json:"failure_modes"`
 
-	// 输出 Schema 强制
 	OutputSchema *OutputSchema `json:"output_schema,omitempty"`
 
-	// 护栏规则
 	GuardRails []GuardRail `json:"guard_rails"`
 
-	// 提示注入防护
 	InjectionDefense *InjectionDefenseConfig `json:"injection_defense,omitempty"`
 }
 
-// FailureMode 失败模式定义
 type FailureMode struct {
-	Condition string `json:"condition"` // "missing_data", "ambiguous_input", "conflicting_requirements", "tool_unavailable"
-	Action    string `json:"action"`    // "return_error", "request_clarification", "use_default", "escalate_to_human"
-	Template  string `json:"template"`  // 错误消息模板
+	Condition string `json:"condition"`
+	Action    string `json:"action"`
+	Template  string `json:"template"`
 	Example   string `json:"example,omitempty"`
 }
 
-// OutputSchema 输出格式 Schema
 type OutputSchema struct {
-	Type       string         `json:"type"`             // "json", "markdown", "structured_text"
-	Schema     map[string]any `json:"schema,omitempty"` // JSON Schema
+	Type       string         `json:"type"`
+	Schema     map[string]any `json:"schema,omitempty"`
 	Required   []string       `json:"required,omitempty"`
 	Example    string         `json:"example,omitempty"`
-	Validation string         `json:"validation,omitempty"` // 验证规则描述
+	Validation string         `json:"validation,omitempty"`
 }
 
-// GuardRail 护栏规则（负面指令）
 type GuardRail struct {
-	Type        string   `json:"type"`     // "never", "always", "boundary", "constraint"
-	Category    string   `json:"category"` // "data_safety", "action_limit", "disclosure", "ethical"
+	Type        string   `json:"type"`
+	Category    string   `json:"category"`
 	Description string   `json:"description"`
 	Examples    []string `json:"examples,omitempty"`
-	Severity    string   `json:"severity"` // "critical", "high", "medium", "low"
+	Severity    string   `json:"severity"`
 }
 
-// InjectionDefenseConfig 提示注入防护配置
 type InjectionDefenseConfig struct {
 	Enabled           bool     `json:"enabled"`
 	DetectionPatterns []string `json:"detection_patterns"`
 	UseDelimiters     bool     `json:"use_delimiters"`
 	SanitizeInput     bool     `json:"sanitize_input"`
-	RoleIsolation     bool     `json:"role_isolation"` // 分离用户输入和系统指令
+	RoleIsolation     bool     `json:"role_isolation"`
 }
 
-// DefaultDefensivePromptConfig 返回默认防御性提示配置
 func DefaultDefensivePromptConfig() DefensivePromptConfig {
 	return DefensivePromptConfig{
 		FailureModes: []FailureMode{
@@ -122,31 +113,23 @@ func DefaultDefensivePromptConfig() DefensivePromptConfig {
 	}
 }
 
-// DefensivePromptEnhancer 防御性提示增强器
 type DefensivePromptEnhancer struct {
 	config DefensivePromptConfig
 }
 
-// NewDefensivePromptEnhancer 创建防御性提示增强器
 func NewDefensivePromptEnhancer(config DefensivePromptConfig) *DefensivePromptEnhancer {
 	return &DefensivePromptEnhancer{config: config}
 }
 
-// EnhancePromptBundle 增强提示词包（添加防御性规则）
 func (e *DefensivePromptEnhancer) EnhancePromptBundle(bundle PromptBundle) PromptBundle {
 	enhanced := bundle
 
-	// 1. 添加失败处理规则
 	if len(e.config.FailureModes) > 0 {
 		enhanced = e.addFailureHandling(enhanced)
 	}
-
-	// 2. 添加输出格式强制
 	if e.config.OutputSchema != nil {
 		enhanced = e.addOutputSchemaEnforcement(enhanced)
 	}
-
-	// 3. 添加护栏规则
 	if len(e.config.GuardRails) > 0 {
 		enhanced = e.addGuardRails(enhanced)
 	}
@@ -154,7 +137,6 @@ func (e *DefensivePromptEnhancer) EnhancePromptBundle(bundle PromptBundle) Promp
 	return enhanced
 }
 
-// addFailureHandling 添加失败处理规则
 func (e *DefensivePromptEnhancer) addFailureHandling(bundle PromptBundle) PromptBundle {
 	failureSection := "\n\n## 失败处理规则\n\n当遇到以下情况时，必须按照指定方式处理：\n\n"
 
@@ -172,7 +154,6 @@ func (e *DefensivePromptEnhancer) addFailureHandling(bundle PromptBundle) Prompt
 	return bundle
 }
 
-// addOutputSchemaEnforcement 添加输出格式强制
 func (e *DefensivePromptEnhancer) addOutputSchemaEnforcement(bundle PromptBundle) PromptBundle {
 	schema := e.config.OutputSchema
 
@@ -188,11 +169,9 @@ func (e *DefensivePromptEnhancer) addOutputSchemaEnforcement(bundle PromptBundle
 	if len(schema.Required) > 0 {
 		schemaSection += fmt.Sprintf("必需字段：%s\n\n", strings.Join(schema.Required, ", "))
 	}
-
 	if schema.Example != "" {
 		schemaSection += fmt.Sprintf("示例输出：\n```json\n%s\n```\n\n", schema.Example)
 	}
-
 	if schema.Validation != "" {
 		schemaSection += fmt.Sprintf("验证规则：%s\n", schema.Validation)
 	}
@@ -201,9 +180,7 @@ func (e *DefensivePromptEnhancer) addOutputSchemaEnforcement(bundle PromptBundle
 	return bundle
 }
 
-// addGuardRails 添加护栏规则
 func (e *DefensivePromptEnhancer) addGuardRails(bundle PromptBundle) PromptBundle {
-	// 按严重性分组
 	criticalRails := []GuardRail{}
 	highRails := []GuardRail{}
 	otherRails := []GuardRail{}
@@ -219,7 +196,6 @@ func (e *DefensivePromptEnhancer) addGuardRails(bundle PromptBundle) PromptBundl
 		}
 	}
 
-	// 添加到 Prohibits（关键和高优先级）
 	for _, rail := range criticalRails {
 		prohibit := fmt.Sprintf("[严重] %s", rail.Description)
 		if len(rail.Examples) > 0 {
@@ -236,7 +212,6 @@ func (e *DefensivePromptEnhancer) addGuardRails(bundle PromptBundle) PromptBundl
 		bundle.System.Prohibits = append(bundle.System.Prohibits, prohibit)
 	}
 
-	// 其他规则添加到 Policies
 	for _, rail := range otherRails {
 		policy := fmt.Sprintf("%s：%s", rail.Category, rail.Description)
 		bundle.System.Policies = append(bundle.System.Policies, policy)
@@ -245,31 +220,24 @@ func (e *DefensivePromptEnhancer) addGuardRails(bundle PromptBundle) PromptBundl
 	return bundle
 }
 
-// SanitizeUserInput 清理用户输入（防止提示注入）
 func (e *DefensivePromptEnhancer) SanitizeUserInput(input string) (string, bool) {
 	if e.config.InjectionDefense == nil || !e.config.InjectionDefense.Enabled {
 		return input, true
 	}
 
 	defense := e.config.InjectionDefense
-
-	// 1. 检测注入模式
 	if defense.SanitizeInput {
 		lowerInput := strings.ToLower(input)
 		for _, pattern := range defense.DetectionPatterns {
 			if strings.Contains(lowerInput, strings.ToLower(pattern)) {
-				// 检测到潜在注入
 				return "", false
 			}
 		}
 	}
 
-	// 2. 使用分隔符隔离
 	if defense.UseDelimiters {
 		input = fmt.Sprintf("### 用户输入开始 ###\n%s\n### 用户输入结束 ###", input)
 	}
-
-	// 3. 角色隔离（移除可能的角色标记）
 	if defense.RoleIsolation {
 		input = strings.ReplaceAll(input, "system:", "[system]")
 		input = strings.ReplaceAll(input, "assistant:", "[assistant]")
@@ -279,22 +247,18 @@ func (e *DefensivePromptEnhancer) SanitizeUserInput(input string) (string, bool)
 	return input, true
 }
 
-// ValidateOutput 验证输出是否符合 Schema
 func (e *DefensivePromptEnhancer) ValidateOutput(output string) error {
 	if e.config.OutputSchema == nil {
 		return nil
 	}
 
 	schema := e.config.OutputSchema
-
-	// 如果要求 JSON 格式，验证是否为有效 JSON
 	if schema.Type == "json" {
 		var result map[string]any
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			return fmt.Errorf("输出不是有效的 JSON: %w", err)
 		}
 
-		// 验证必需字段
 		for _, required := range schema.Required {
 			if _, ok := result[required]; !ok {
 				return fmt.Errorf("缺少必需字段: %s", required)
