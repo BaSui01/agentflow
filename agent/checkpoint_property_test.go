@@ -6,7 +6,6 @@ import (
 	"time"
 
 	. "github.com/BaSui01/agentflow/agent"
-	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
@@ -25,7 +24,7 @@ func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 		func(threadID string, agentID string, state State, messageCount int) bool {
 			ctx := context.Background()
 			logger, _ := zap.NewDevelopment()
-			store, _ := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
+			store, _ := newFileCheckpointStoreAdapter(t.TempDir(), logger)
 
 			// 使用生成的数据创建检查点
 			messages := make([]CheckpointMessage, messageCount)
@@ -110,7 +109,7 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 		func(threadID string, agentID string) bool {
 			ctx := context.Background()
 			logger, _ := zap.NewDevelopment()
-			store, _ := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
+			store, _ := newFileCheckpointStoreAdapter(t.TempDir(), logger)
 
 			beforeSave := time.Now()
 
@@ -182,7 +181,7 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 		func(threadID string, agentID string, count int) bool {
 			ctx := context.Background()
 			logger, _ := zap.NewDevelopment()
-			store, _ := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
+			store, _ := newFileCheckpointStoreAdapter(t.TempDir(), logger)
 
 			// 节省多处检查站,稍有延误
 			for i := 0; i < count; i++ {
@@ -246,7 +245,7 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 		func(threadID string, agentID string, count int) bool {
 			ctx := context.Background()
 			logger, _ := zap.NewDevelopment()
-			store, _ := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
+			store, _ := newFileCheckpointStoreAdapter(t.TempDir(), logger)
 
 			// 保存多个检查站
 			for i := 0; i < count; i++ {

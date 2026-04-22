@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	agentpkg "github.com/BaSui01/agentflow/agent"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +43,7 @@ func NewPostgreSQLCheckpointStore(db PostgreSQLClient, logger *zap.Logger) *Post
 }
 
 // Save persists a checkpoint.
-func (s *PostgreSQLCheckpointStore) Save(ctx context.Context, checkpoint *agentpkg.Checkpoint) error {
+func (s *PostgreSQLCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) error {
 	if checkpoint.Version == 0 {
 		versions, err := s.ListVersions(ctx, checkpoint.ThreadID)
 		if err == nil && len(versions) > 0 {
@@ -98,7 +97,7 @@ func (s *PostgreSQLCheckpointStore) Save(ctx context.Context, checkpoint *agentp
 }
 
 // Load retrieves a checkpoint by ID.
-func (s *PostgreSQLCheckpointStore) Load(ctx context.Context, checkpointID string) (*agentpkg.Checkpoint, error) {
+func (s *PostgreSQLCheckpointStore) Load(ctx context.Context, checkpointID string) (*Checkpoint, error) {
 	query := `SELECT data FROM agent_checkpoints WHERE id = $1`
 
 	var data []byte
@@ -107,7 +106,7 @@ func (s *PostgreSQLCheckpointStore) Load(ctx context.Context, checkpointID strin
 		return nil, fmt.Errorf("checkpoint not found: %w", err)
 	}
 
-	var checkpoint agentpkg.Checkpoint
+	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
@@ -116,7 +115,7 @@ func (s *PostgreSQLCheckpointStore) Load(ctx context.Context, checkpointID strin
 }
 
 // LoadLatest retrieves the latest checkpoint for a thread.
-func (s *PostgreSQLCheckpointStore) LoadLatest(ctx context.Context, threadID string) (*agentpkg.Checkpoint, error) {
+func (s *PostgreSQLCheckpointStore) LoadLatest(ctx context.Context, threadID string) (*Checkpoint, error) {
 	query := `
 		SELECT data FROM agent_checkpoints
 		WHERE thread_id = $1
@@ -130,7 +129,7 @@ func (s *PostgreSQLCheckpointStore) LoadLatest(ctx context.Context, threadID str
 		return nil, fmt.Errorf("no checkpoints found: %w", err)
 	}
 
-	var checkpoint agentpkg.Checkpoint
+	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
@@ -139,7 +138,7 @@ func (s *PostgreSQLCheckpointStore) LoadLatest(ctx context.Context, threadID str
 }
 
 // List enumerates checkpoints for a thread.
-func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, limit int) ([]*agentpkg.Checkpoint, error) {
+func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error) {
 	query := `
 		SELECT data FROM agent_checkpoints
 		WHERE thread_id = $1
@@ -153,7 +152,7 @@ func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, l
 	}
 	defer rows.Close()
 
-	checkpoints := make([]*agentpkg.Checkpoint, 0)
+	checkpoints := make([]*Checkpoint, 0)
 	for rows.Next() {
 		var data []byte
 		if err := rows.Scan(&data); err != nil {
@@ -161,7 +160,7 @@ func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, l
 			continue
 		}
 
-		var checkpoint agentpkg.Checkpoint
+		var checkpoint Checkpoint
 		if err := json.Unmarshal(data, &checkpoint); err != nil {
 			s.logger.Warn("failed to unmarshal checkpoint", zap.Error(err))
 			continue
@@ -186,7 +185,7 @@ func (s *PostgreSQLCheckpointStore) DeleteThread(ctx context.Context, threadID s
 }
 
 // LoadVersion retrieves a checkpoint by thread/version.
-func (s *PostgreSQLCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*agentpkg.Checkpoint, error) {
+func (s *PostgreSQLCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error) {
 	query := `
 		SELECT data FROM agent_checkpoints
 		WHERE thread_id = $1 AND version = $2
@@ -199,7 +198,7 @@ func (s *PostgreSQLCheckpointStore) LoadVersion(ctx context.Context, threadID st
 		return nil, fmt.Errorf("version %d not found: %w", version, err)
 	}
 
-	var checkpoint agentpkg.Checkpoint
+	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
@@ -208,7 +207,7 @@ func (s *PostgreSQLCheckpointStore) LoadVersion(ctx context.Context, threadID st
 }
 
 // ListVersions lists all checkpoint versions for a thread.
-func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]agentpkg.CheckpointVersion, error) {
+func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
 	query := `
 		SELECT id, version, created_at, state FROM agent_checkpoints
 		WHERE thread_id = $1
@@ -221,15 +220,15 @@ func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID s
 	}
 	defer rows.Close()
 
-	versions := make([]agentpkg.CheckpointVersion, 0)
+	versions := make([]CheckpointVersion, 0)
 	for rows.Next() {
-		var v agentpkg.CheckpointVersion
+		var v CheckpointVersion
 		var state string
 		if err := rows.Scan(&v.ID, &v.Version, &v.CreatedAt, &state); err != nil {
 			s.logger.Warn("failed to scan version row", zap.Error(err))
 			continue
 		}
-		v.State = agentpkg.State(state)
+		v.State = state
 		v.Summary = fmt.Sprintf("Checkpoint at %s", v.CreatedAt.Format(time.RFC3339))
 		versions = append(versions, v)
 	}

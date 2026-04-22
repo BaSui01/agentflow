@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	. "github.com/BaSui01/agentflow/agent"
-	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -18,7 +17,7 @@ import (
 // re-Locks), creating a window where concurrent writes could corrupt state.
 func TestFileCheckpointStore_Rollback_NoRaceWindow(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := newFileCheckpointStoreAdapter(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -83,7 +82,7 @@ func TestFileCheckpointStore_Rollback_NoRaceWindow(t *testing.T) {
 // the new checkpoint should carry the state of the target version.
 func TestFileCheckpointStore_Rollback_Basic(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	store, err := agentcheckpoint.NewFileCheckpointStore(t.TempDir(), logger)
+	store, err := newFileCheckpointStoreAdapter(t.TempDir(), logger)
 	require.NoError(t, err)
 
 	ctx := context.Background()

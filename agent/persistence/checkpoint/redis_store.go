@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	agentpkg "github.com/BaSui01/agentflow/agent"
 	"go.uber.org/zap"
 )
 
@@ -40,7 +39,7 @@ func NewRedisCheckpointStore(client RedisClient, prefix string, ttl time.Duratio
 }
 
 // Save persists a checkpoint.
-func (s *RedisCheckpointStore) Save(ctx context.Context, checkpoint *agentpkg.Checkpoint) error {
+func (s *RedisCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) error {
 	if checkpoint.Version == 0 {
 		versions, err := s.ListVersions(ctx, checkpoint.ThreadID)
 		if err == nil && len(versions) > 0 {
@@ -82,14 +81,14 @@ func (s *RedisCheckpointStore) Save(ctx context.Context, checkpoint *agentpkg.Ch
 }
 
 // Load retrieves a checkpoint by ID.
-func (s *RedisCheckpointStore) Load(ctx context.Context, checkpointID string) (*agentpkg.Checkpoint, error) {
+func (s *RedisCheckpointStore) Load(ctx context.Context, checkpointID string) (*Checkpoint, error) {
 	key := s.checkpointKey(checkpointID)
 	data, err := s.client.Get(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("get checkpoint from redis: %w", err)
 	}
 
-	var checkpoint agentpkg.Checkpoint
+	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
@@ -98,7 +97,7 @@ func (s *RedisCheckpointStore) Load(ctx context.Context, checkpointID string) (*
 }
 
 // LoadLatest retrieves the latest checkpoint for a thread.
-func (s *RedisCheckpointStore) LoadLatest(ctx context.Context, threadID string) (*agentpkg.Checkpoint, error) {
+func (s *RedisCheckpointStore) LoadLatest(ctx context.Context, threadID string) (*Checkpoint, error) {
 	threadKey := s.threadKey(threadID)
 
 	ids, err := s.client.ZRevRange(ctx, threadKey, 0, 0)
@@ -114,7 +113,7 @@ func (s *RedisCheckpointStore) LoadLatest(ctx context.Context, threadID string) 
 }
 
 // List enumerates checkpoints for a thread.
-func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit int) ([]*agentpkg.Checkpoint, error) {
+func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error) {
 	threadKey := s.threadKey(threadID)
 
 	ids, err := s.client.ZRevRange(ctx, threadKey, 0, int64(limit-1))
@@ -122,7 +121,7 @@ func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit 
 		return nil, fmt.Errorf("list checkpoint IDs: %w", err)
 	}
 
-	checkpoints := make([]*agentpkg.Checkpoint, 0, len(ids))
+	checkpoints := make([]*Checkpoint, 0, len(ids))
 	for _, id := range ids {
 		checkpoint, err := s.Load(ctx, id)
 		if err != nil {
@@ -177,7 +176,7 @@ func (s *RedisCheckpointStore) threadKey(threadID string) string {
 }
 
 // LoadVersion retrieves a checkpoint by thread/version.
-func (s *RedisCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*agentpkg.Checkpoint, error) {
+func (s *RedisCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error) {
 	versions, err := s.ListVersions(ctx, threadID)
 	if err != nil {
 		return nil, fmt.Errorf("list versions for load: %w", err)
@@ -193,15 +192,15 @@ func (s *RedisCheckpointStore) LoadVersion(ctx context.Context, threadID string,
 }
 
 // ListVersions lists all checkpoint versions for a thread.
-func (s *RedisCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]agentpkg.CheckpointVersion, error) {
+func (s *RedisCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
 	checkpoints, err := s.List(ctx, threadID, 1000)
 	if err != nil {
 		return nil, fmt.Errorf("list checkpoints for versions: %w", err)
 	}
 
-	versions := make([]agentpkg.CheckpointVersion, 0, len(checkpoints))
+	versions := make([]CheckpointVersion, 0, len(checkpoints))
 	for _, cp := range checkpoints {
-		versions = append(versions, agentpkg.CheckpointVersion{
+		versions = append(versions, CheckpointVersion{
 			Version:   cp.Version,
 			ID:        cp.ID,
 			CreatedAt: cp.CreatedAt,
