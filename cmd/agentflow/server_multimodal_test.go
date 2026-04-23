@@ -85,5 +85,5 @@ func TestInitHandlers_WithoutLLMRuntimeLeavesChatDisabled(t *testing.T) {
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.initHandlers())
-	assert.Nil(t, s.chatHandler)
+	assert.Nil(t, s.handlers.chatHandler)
 }

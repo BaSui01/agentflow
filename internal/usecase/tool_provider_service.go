@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
@@ -15,14 +16,7 @@ type ToolProviderService interface {
 	Reload() *types.Error
 }
 
-type ToolProviderStore interface {
-	List() ([]hosted.ToolProviderConfig, error)
-	GetByProvider(provider string) (hosted.ToolProviderConfig, error)
-	Create(row *hosted.ToolProviderConfig) error
-	Update(row *hosted.ToolProviderConfig, updates map[string]any) error
-	Reload(row *hosted.ToolProviderConfig) error
-	DeleteByProvider(provider string) (int64, error)
-}
+type ToolProviderStore = hosted.ToolProviderStore
 
 type DefaultToolProviderService struct {
 	store   ToolProviderStore
@@ -59,6 +53,9 @@ func (s *DefaultToolProviderService) Upsert(provider string, req UpsertToolProvi
 
 	row, err := s.store.GetByProvider(p)
 	if err != nil {
+		if !errors.Is(err, hosted.ErrNotFound) {
+			return nil, types.NewInternalError("failed to load tool provider").WithCause(err)
+		}
 		// create path
 		newRow := &hosted.ToolProviderConfig{
 			Provider:       p,

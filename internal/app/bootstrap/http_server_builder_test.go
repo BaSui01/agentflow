@@ -59,7 +59,7 @@ func newToolProviderHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *h
 		return nil
 	}
 	return handlers.NewToolProviderHandler(
-		usecase.NewDefaultToolProviderService(handlers.NewGormToolProviderStore(db), runtime),
+		usecase.NewDefaultToolProviderService(hosted.NewGormToolProviderStore(db), runtime),
 		zap.NewNop(),
 	)
 }

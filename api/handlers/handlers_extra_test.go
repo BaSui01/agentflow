@@ -16,6 +16,7 @@ import (
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	llm "github.com/BaSui01/agentflow/llm/core"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -995,7 +996,7 @@ func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 
 func TestHandleListAPIKeys_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/abc/api-keys", nil)
@@ -1012,7 +1013,7 @@ func TestHandleListAPIKeys_InvalidProviderID(t *testing.T) {
 
 func TestHandleCreateAPIKey_MissingContentType(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	body, _ := json.Marshal(createAPIKeyRequest{APIKey: "sk-test", Label: "test"})
@@ -1031,7 +1032,7 @@ func TestHandleCreateAPIKey_MissingContentType(t *testing.T) {
 
 func TestHandleUpdateAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
@@ -1052,7 +1053,7 @@ func TestHandleUpdateAPIKey_InvalidProviderID(t *testing.T) {
 
 func TestHandleUpdateAPIKey_InvalidKeyID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
@@ -1073,7 +1074,7 @@ func TestHandleUpdateAPIKey_InvalidKeyID(t *testing.T) {
 
 func TestHandleDeleteAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/abc/api-keys/1", nil)
@@ -1091,7 +1092,7 @@ func TestHandleDeleteAPIKey_InvalidProviderID(t *testing.T) {
 
 func TestHandleAPIKeyStats_WithKeys(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{

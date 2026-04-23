@@ -93,25 +93,25 @@ func (m *mockChatService) Complete(_ context.Context, req *usecase.ChatRequest) 
 	}, nil
 }
 
-func (m *mockChatService) Stream(_ context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
-	ch := make(chan llmcore.UnifiedChunk, 4)
+func (m *mockChatService) Stream(_ context.Context, req *usecase.ChatRequest) (<-chan usecase.ChatStreamEvent, *types.Error) {
+	ch := make(chan usecase.ChatStreamEvent, 4)
 	go func() {
 		defer close(ch)
 		// Send two content chunks then a finish chunk.
 		for _, text := range []string{"Hello", " world"} {
-			ch <- llmcore.UnifiedChunk{
-				Output: &llmcore.StreamChunk{
+			ch <- usecase.ChatStreamEvent{
+				Chunk: &usecase.ChatStreamChunk{
 					ID:    "chatcmpl-stream-001",
 					Model: req.Model,
-					Delta: types.Message{Role: types.RoleAssistant, Content: text},
+					Delta: usecase.Message{Role: string(types.RoleAssistant), Content: text},
 				},
 			}
 		}
-		ch <- llmcore.UnifiedChunk{
-			Output: &llmcore.StreamChunk{
+		ch <- usecase.ChatStreamEvent{
+			Chunk: &usecase.ChatStreamChunk{
 				ID:           "chatcmpl-stream-001",
 				Model:        req.Model,
-				Delta:        types.Message{Role: types.RoleAssistant},
+				Delta:        usecase.Message{Role: string(types.RoleAssistant)},
 				FinishReason: "stop",
 			},
 		}

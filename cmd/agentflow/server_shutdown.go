@@ -9,8 +9,8 @@ import (
 
 func (s *Server) WaitForShutdown() {
 	// 使用 httpManager 的 WaitForShutdown（它会监听信号）
-	if s.httpManager != nil {
-		s.httpManager.WaitForShutdown()
+	if s.ops.httpManager != nil {
+		s.ops.httpManager.WaitForShutdown()
 	}
 
 	// 执行清理
@@ -29,11 +29,11 @@ func (s *Server) Shutdown() {
 	defer cancel()
 
 	// 0. 停止 rate limiter 清理 goroutine
-	if s.rateLimiterCancel != nil {
-		s.rateLimiterCancel()
+	if s.ops.rateLimiterCancel != nil {
+		s.ops.rateLimiterCancel()
 	}
-	if s.tenantRateLimiterCancel != nil {
-		s.tenantRateLimiterCancel()
+	if s.ops.tenantRateLimiterCancel != nil {
+		s.ops.tenantRateLimiterCancel()
 	}
 
 	// 1-3. 通过统一生命周期注册表关闭 hot reload / HTTP / metrics 服务。
@@ -41,20 +41,20 @@ func (s *Server) Shutdown() {
 
 	// 4. Flush and shutdown telemetry exporters
 	// 必须在 HTTP/Metrics server 关闭之后执行，确保 in-flight 请求的 span/metric 不丢失
-	if s.telemetry != nil {
-		if err := s.telemetry.Shutdown(ctx); err != nil {
+	if s.infra.telemetry != nil {
+		if err := s.infra.telemetry.Shutdown(ctx); err != nil {
 			s.logger.Error("Telemetry shutdown error", zap.Error(err))
 		}
 	}
 
 	// 5. Teardown cached agent instances
-	if s.resolver != nil {
-		s.resolver.TeardownAll(ctx)
+	if s.workflow.resolver != nil {
+		s.workflow.resolver.TeardownAll(ctx)
 	}
 
 	// 6. 关闭数据库连接
-	if s.db != nil {
-		if sqlDB, err := s.db.DB(); err == nil {
+	if s.infra.db != nil {
+		if sqlDB, err := s.infra.db.DB(); err == nil {
 			if err := sqlDB.Close(); err != nil {
 				s.logger.Error("Database close error", zap.Error(err))
 			} else {
@@ -64,8 +64,8 @@ func (s *Server) Shutdown() {
 	}
 
 	// 7. 关闭 MongoDB 连接
-	if s.mongoClient != nil {
-		if err := s.mongoClient.Close(ctx); err != nil {
+	if s.infra.mongoClient != nil {
+		if err := s.infra.mongoClient.Close(ctx); err != nil {
 			s.logger.Error("MongoDB close error", zap.Error(err))
 		} else {
 			s.logger.Info("MongoDB connection closed")
@@ -73,21 +73,21 @@ func (s *Server) Shutdown() {
 	}
 
 	// 7.1 关闭多模态 Redis 连接（如果启用）
-	if s.multimodalRedis != nil {
-		if err := s.multimodalRedis.Close(); err != nil {
+	if s.infra.multimodalRedis != nil {
+		if err := s.infra.multimodalRedis.Close(); err != nil {
 			s.logger.Error("Multimodal Redis close error", zap.Error(err))
 		}
 	}
 
-	if s.toolApprovalRedis != nil {
-		if err := s.toolApprovalRedis.Close(); err != nil {
+	if s.infra.toolApprovalRedis != nil {
+		if err := s.infra.toolApprovalRedis.Close(); err != nil {
 			s.logger.Error("Tool approval Redis close error", zap.Error(err))
 		}
 	}
 
 	// 7.5 关闭 AuditLogger
-	if s.auditLogger != nil {
-		if err := s.auditLogger.Close(); err != nil {
+	if s.infra.auditLogger != nil {
+		if err := s.infra.auditLogger.Close(); err != nil {
 			s.logger.Error("AuditLogger close error", zap.Error(err))
 		}
 	}

@@ -131,8 +131,8 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	require.NotNil(t, s.chatHandler)
-	handler := s.chatHandler
+	require.NotNil(t, s.handlers.chatHandler)
+	handler := s.handlers.chatHandler
 	require.NoError(t, s.initHotReloadManager())
 
 	assertHotReloadChatContent(t, handler, "from-a")
@@ -140,9 +140,9 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 	newCfg := config.DefaultConfig()
 	newCfg.LLM.MainProviderMode = modeB
 	newCfg.Budget.Enabled = false
-	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
+	require.NoError(t, s.ops.hotReloadManager.ApplyConfig(newCfg, "test"))
 
-	require.Same(t, handler, s.chatHandler)
+	require.Same(t, handler, s.handlers.chatHandler)
 	require.Equal(t, modeB, s.cfg.LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "from-b")
 }
@@ -171,19 +171,19 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	require.NotNil(t, s.chatHandler)
-	handler := s.chatHandler
+	require.NotNil(t, s.handlers.chatHandler)
+	handler := s.handlers.chatHandler
 	require.NoError(t, s.initHotReloadManager())
 
 	badCfg := config.DefaultConfig()
 	badCfg.LLM.MainProviderMode = modeBroken
 	badCfg.Budget.Enabled = false
-	err := s.hotReloadManager.ApplyConfig(badCfg, "test")
+	err := s.ops.hotReloadManager.ApplyConfig(badCfg, "test")
 	require.Error(t, err)
 
-	require.Same(t, handler, s.chatHandler)
+	require.Same(t, handler, s.handlers.chatHandler)
 	require.Equal(t, modeA, s.cfg.LLM.MainProviderMode)
-	require.Equal(t, modeA, s.hotReloadManager.GetConfig().LLM.MainProviderMode)
+	require.Equal(t, modeA, s.ops.hotReloadManager.GetConfig().LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "stable")
 }
 
@@ -203,17 +203,17 @@ func TestServerHotReload_RequiresRestartToActivateMissingChatAndCostRoutes(t *te
 	cfg.Budget.Enabled = false
 
 	s := &Server{
-		cfg:         cfg,
-		logger:      zap.NewNop(),
-		httpManager: &pkgserver.Manager{},
+		cfg:    cfg,
+		logger: zap.NewNop(),
+		ops:    serverOpsBundle{httpManager: &pkgserver.Manager{}},
 	}
-	require.Nil(t, s.chatHandler)
-	require.Nil(t, s.costHandler)
+	require.Nil(t, s.handlers.chatHandler)
+	require.Nil(t, s.handlers.costHandler)
 	require.NoError(t, s.reloadLLMRuntime(cfg))
 
-	require.NotNil(t, s.provider)
-	require.Nil(t, s.chatHandler)
-	require.Nil(t, s.costHandler)
+	require.NotNil(t, s.text.provider)
+	require.Nil(t, s.handlers.chatHandler)
+	require.Nil(t, s.handlers.costHandler)
 }
 
 func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
@@ -243,7 +243,7 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	require.NotNil(t, s.provider)
+	require.NotNil(t, s.text.provider)
 
 	var teardowns atomic.Int32
 	oldRegistry := agent.NewAgentRegistry(zap.NewNop())
@@ -259,23 +259,23 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 	})
 
 	oldResolver := agent.NewCachingResolver(oldRegistry, llmgateway.New(llmgateway.Config{
-		ChatProvider: s.provider,
+		ChatProvider: s.text.provider,
 		Logger:       zap.NewNop(),
 	}), zap.NewNop())
 	_, err := oldResolver.Resolve(context.Background(), "agent-before-reload")
 	require.NoError(t, err)
 
-	s.resolver = oldResolver
-	s.agentRegistry = agent.NewAgentRegistry(zap.NewNop())
+	s.workflow.resolver = oldResolver
+	s.tooling.agentRegistry = agent.NewAgentRegistry(zap.NewNop())
 	require.NoError(t, s.initHotReloadManager())
 
 	newCfg := config.DefaultConfig()
 	newCfg.LLM.MainProviderMode = modeB
 	newCfg.Budget.Enabled = false
-	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
+	require.NoError(t, s.ops.hotReloadManager.ApplyConfig(newCfg, "test"))
 
-	require.NotNil(t, s.resolver)
-	require.NotSame(t, oldResolver, s.resolver)
+	require.NotNil(t, s.workflow.resolver)
+	require.NotSame(t, oldResolver, s.workflow.resolver)
 	require.EqualValues(t, 1, teardowns.Load())
 }
 
@@ -306,12 +306,20 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, nil, nil)
-	s.workflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), s.logger)
-	require.NotNil(t, s.workflowHandler)
+	workflowRuntime := bootstrap.BuildReloadedWorkflowRuntime(bootstrap.ReloadedWorkflowRuntimeBuildInput{
+		DefaultModel:            cfg.Agent.Model,
+		RetrievalStore:          s.workflow.ragStore,
+		EmbeddingProvider:       s.workflow.ragEmbedding,
+		CheckpointStore:         s.workflow.checkpointStore,
+		WorkflowCheckpointStore: s.workflow.workflowCheckpointStore,
+		HITLManager:             s.currentWorkflowHITLManager(),
+		Logger:                  s.logger,
+	})
+	s.handlers.workflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), s.logger)
+	require.NotNil(t, s.handlers.workflowHandler)
 	require.NotNil(t, s.currentWorkflowHITLManager())
 
-	workflowHandler := s.workflowHandler
+	workflowHandler := s.handlers.workflowHandler
 	manager := extractWorkflowHITLManager(t, workflowHandler)
 	require.Same(t, manager, s.currentWorkflowHITLManager())
 	require.NoError(t, s.initHotReloadManager())
@@ -319,11 +327,11 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 	newCfg := config.DefaultConfig()
 	newCfg.LLM.MainProviderMode = modeB
 	newCfg.Budget.Enabled = false
-	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
+	require.NoError(t, s.ops.hotReloadManager.ApplyConfig(newCfg, "test"))
 
-	require.Same(t, workflowHandler, s.workflowHandler)
+	require.Same(t, workflowHandler, s.handlers.workflowHandler)
 	require.Same(t, manager, s.currentWorkflowHITLManager())
-	require.Same(t, manager, extractWorkflowHITLManager(t, s.workflowHandler))
+	require.Same(t, manager, extractWorkflowHITLManager(t, s.handlers.workflowHandler))
 }
 
 func assertHotReloadChatContent(t *testing.T, handler *handlers.ChatHandler, expected string) {

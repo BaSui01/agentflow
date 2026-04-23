@@ -33,7 +33,7 @@ func (s *Server) buildChatService(
 		}
 	}
 
-	if existing, ok := s.chatService.(*usecase.DefaultChatService); ok {
+	if existing, ok := s.text.chatService.(*usecase.DefaultChatService); ok {
 		existing.UpdateRuntime(runtime)
 		return existing
 	}
