@@ -4,8 +4,8 @@ import (
 	"context"
 
 	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/agent/execution/runtime"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"

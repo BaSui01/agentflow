@@ -5,7 +5,7 @@ import (
 	"time"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 )
 

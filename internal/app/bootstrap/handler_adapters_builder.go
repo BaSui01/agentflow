@@ -4,12 +4,12 @@ import (
 	"context"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -296,7 +296,7 @@ func BuildToolingHandlerBundle(in ToolingHandlerBundleInput) (*ToolingHandlerBun
 		bundle.CapabilityCatalog = BuildCapabilityCatalog(
 			toolingRuntime.Registry,
 			in.AgentRegistry,
-			multiagent.GlobalModeRegistry(),
+			team.GlobalModeRegistry(),
 		)
 		if bundle.CapabilityCatalog != nil {
 			logger.Info("Runtime capability catalog initialized",
