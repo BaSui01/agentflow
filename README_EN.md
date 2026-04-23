@@ -1,4 +1,4 @@
-# AgentFlow
+﻿# AgentFlow
 
 > 🚀 Production-grade Go LLM Agent Framework for 2026
 
@@ -15,7 +15,7 @@ English | [中文](README.md)
 ### 🤖 Agent Framework
 
 - **Official Single-Agent Path** - `react + native tool calling + checkpoint/session/guardrails`
-- **Official Multi-Agent Facade** - `agent/collaboration/team` with `supervisor / selector / round_robin / swarm`
+- **Official Multi-Agent Facade** - `agent/team` with `supervisor / selector / round_robin / swarm`
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
 - **Dual-Model Architecture (toolProvider)** - Cheap model handles tool-call-heavy turns first (native tool calling, with XML tool-calling fallback for non-native providers), while the expensive model focuses on final content generation
@@ -59,7 +59,7 @@ English | [中文](README.md)
 ### 🧱 Startup Composition
 
 - **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
-- **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
+- **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/启动装配链路与组合根说明.md`)
 - **Bundle-based Server State** - `cmd/agentflow/server_runtime_bundles.go` groups long-lived server state into `handlers / text / tooling / workflow / infra / ops` bundles instead of one flat cross-domain field list
 - **Single Hot-Reload Seam** - `server_hotreload.go` only triggers rebuilds and state replacement; the actual `chat/cost` rebinding, resolver rebuild, and workflow runtime rebuild now live in `internal/app/bootstrap`
 - **Usecase-owned Handler Contracts** - `internal/usecase` now exposes handler-facing `chat/workflow` contracts such as `ChatStreamEvent`, `WorkflowPlan`, and `WorkflowNodeEvent`, so handlers no longer depend directly on `llmcore.UnifiedChunk` or `workflow.DAGWorkflow`
@@ -120,8 +120,9 @@ go get github.com/BaSui01/agentflow
 Entrypoint policy:
 
 - Repository-level official entry: `sdk.New(opts).Build(ctx)`
-- `agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule
-- the root package `github.com/BaSui01/agentflow/agent` has been removed; import `agent/execution/runtime` directly when you need runtime DTOs or builders
+- `agent/runtime.Builder` is the runtime entry for the `agent` submodule
+- Multi-agent official entry is `agent/team`; explicit orchestration official entry is `workflow/runtime`
+- the root package `github.com/BaSui01/agentflow/agent` has been removed; import `agent/runtime` directly when you need runtime DTOs or builders
 - the root packages `github.com/BaSui01/agentflow/rag`, `github.com/BaSui01/agentflow/workflow`, and `github.com/BaSui01/agentflow/llm` are also removed; import `rag/runtime`, `workflow/core|runtime`, and `llm/core|gateway|runtime/compose` instead
 - The Agent runtime main surface follows a three-layer model: `Model / Control / Tools`
   - `Model` carries model/provider parameters
@@ -142,7 +143,7 @@ import (
     "fmt"
     "os"
 
-    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+    agent "github.com/BaSui01/agentflow/agent/runtime"
     "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
@@ -306,8 +307,8 @@ If your routing semantics are not `provider + api_key pool`, but a custom busine
 - The repository now exposes the built-in startup switch `llm.main_provider_mode`; external projects can register a `channel_routed` builder through `llm/runtime/compose.RegisterMainProviderBuilder(...)` and stay on the same server startup chain. For a reusable adapter, use `channelstore.NewMainProviderBuilder(...)`
 - `llm/runtime/router/extensions/runtimepolicy` provides reusable reference implementations for `UsageRecorder`, `CooldownController`, and `QuotaPolicy`, which helps phase in usage recording, cooldown, daily limits, and concurrency limits without hardcoding storage into core
 - Phase 1 intentionally keeps `image/video` out of `ChannelRoutedProvider` because image/video already live on the capability surface `gateway + capabilities + vendor.Profile`; forcing them into `llm.Provider` would prematurely couple text routing with multimodal capability routing
-- See `docs/architecture/channel-routing-adapter-template.md` for the adapter-only integration template and recommended config-switch pattern
-- See `docs/architecture/channel-routing-extension.md` for architecture and migration guidance
+- See `docs/architecture/Channel路由外部接入模板-英文版.md` for the adapter-only integration template and recommended config-switch pattern
+- See `docs/architecture/Channel路由扩展架构说明.md` for architecture and migration guidance
 
 ### Reflection Self-Improvement
 
@@ -360,7 +361,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-The context runtime is wired by default through the `sdk` -> `agent/execution/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
+The context runtime is wired by default through the `sdk` -> `agent/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -507,7 +508,7 @@ agentflow/
 │   └── tools/                # Tool execution
 │
 ├── agent/                    # Layer 2: Agent core (directory-only container; no root Go files)
-│   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff/teamadapter)
+│   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff)
 │   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
 │   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)
 │   ├── core/                 # Core layer (registry/helpers/extension contracts)
@@ -626,3 +627,7 @@ agentflow/
 ## 📄 License
 
 MIT License - See [LICENSE](LICENSE)
+
+
+
+

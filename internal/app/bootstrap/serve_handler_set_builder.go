@@ -6,9 +6,9 @@ import (
 	"time"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"

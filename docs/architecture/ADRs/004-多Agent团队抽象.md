@@ -8,9 +8,9 @@ Accepted
 
 AgentFlow provides three independent multi-agent orchestration mechanisms:
 
-1. **Collaboration** (`agent/collaboration/`): Debate, Consensus, Pipeline, Broadcast, Network patterns
-2. **Hierarchical** (`agent/hierarchical/`): Supervisor decomposes tasks, workers execute in parallel
-3. **Crew** (`agent/crews/`): Role-based task assignment with Sequential/Hierarchical/Consensus processes
+1. **Collaboration** (`agent/collaboration/multiagent/`): Debate, Consensus, Pipeline, Broadcast, Network patterns
+2. **Hierarchical** (`agent/collaboration/hierarchical/`): Supervisor decomposes tasks, workers execute in parallel
+3. **Crew** (`agent/collaboration/team/crew.go`): Role-based task assignment with Sequential/Hierarchical/Consensus processes
 
 Each mechanism has its own entry point, configuration, and execution model. This makes it difficult to:
 
@@ -24,7 +24,7 @@ Additionally, the `ModeDeliberation` and `ModeFederation` entries in the mode re
 
 ### 1. Unified Team Interface
 
-Introduce a `Team` interface in `agent/team.go`:
+Introduce a `Team` interface in `agent/execution/runtime/interfaces_runtime.go`:
 
 ```go
 type Team interface {
@@ -34,7 +34,7 @@ type Team interface {
 }
 ```
 
-Adapters in `agent/teamadapter/` wrap each existing mechanism to satisfy this interface.
+Adapters in `agent/adapters/teamadapter/` wrap each existing mechanism to satisfy this interface.
 
 ### 2. Deliberation Mode
 
@@ -47,7 +47,7 @@ Replace the `primaryModeStrategy` placeholder for `ModeDeliberation` with a real
 
 ### 3. SharedState
 
-Provide a `SharedState` interface in `agent/collaboration/shared_state.go` for agents to share intermediate results via a key-value store with `Watch` capability.
+Provide a `SharedState` interface in `agent/collaboration/multiagent/shared_state.go` for agents to share intermediate results via a key-value store with `Watch` capability.
 
 ### 4. Workflow Bridge
 
@@ -59,4 +59,4 @@ Provide a `SharedState` interface in `agent/collaboration/shared_state.go` for a
 - Workflow DAG can orchestrate multi-agent collaboration as a first-class node type
 - Deliberation mode is now functional with convergence detection
 - SharedState enables richer inter-agent communication beyond MessageHub
-- The `agent/teamadapter` sub-package avoids circular imports between `agent` and `agent/collaboration`
+- The `agent/adapters/teamadapter` sub-package avoids circular imports between runtime-facing `Team` contracts and collaboration implementations

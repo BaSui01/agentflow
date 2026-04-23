@@ -450,16 +450,16 @@ func TestCmdHotReloadBootstrapEntryPoints(t *testing.T) {
 }
 
 func TestHotReloadDocsImplementationConsistency(t *testing.T) {
-	docData, err := os.ReadFile("docs/architecture/startup-composition.md")
+	docData, err := os.ReadFile("docs/architecture/启动装配链路与组合根说明.md")
 	if err != nil {
-		t.Fatalf("read docs/architecture/startup-composition.md: %v", err)
+		t.Fatalf("read docs/architecture/启动装配链路与组合根说明.md: %v", err)
 	}
 	doc := string(docData)
 	if !strings.Contains(doc, "ApplyReloadedTextRuntimeBindings") {
-		t.Fatal("docs/architecture/startup-composition.md must document ApplyReloadedTextRuntimeBindings")
+		t.Fatal("docs/architecture/启动装配链路与组合根说明.md must document ApplyReloadedTextRuntimeBindings")
 	}
 	if !strings.Contains(doc, "BuildToolingHandlerBundle") {
-		t.Fatal("docs/architecture/startup-composition.md must document BuildToolingHandlerBundle")
+		t.Fatal("docs/architecture/启动装配链路与组合根说明.md must document BuildToolingHandlerBundle")
 	}
 
 	srcData, err := os.ReadFile("internal/app/bootstrap/handler_adapters_builder.go")
@@ -497,10 +497,10 @@ func TestHotReloadDocsImplementationConsistency(t *testing.T) {
 	}
 
 	if !strings.Contains(doc, "BuildReloadedResolver") {
-		t.Fatal("docs/architecture/startup-composition.md must document BuildReloadedResolver")
+		t.Fatal("docs/architecture/启动装配链路与组合根说明.md must document BuildReloadedResolver")
 	}
 	if !strings.Contains(doc, "BuildReloadedWorkflowRuntime") {
-		t.Fatal("docs/architecture/startup-composition.md must document BuildReloadedWorkflowRuntime")
+		t.Fatal("docs/architecture/启动装配链路与组合根说明.md must document BuildReloadedWorkflowRuntime")
 	}
 }
 
@@ -849,46 +849,46 @@ func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
 		{
 			path: "README.md",
 			requiredSnippets: []string{
-				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`agent/runtime.Builder` 作为 `agent` 子模块 runtime 入口",
 				"`github.com/BaSui01/agentflow/agent` 根包已删除",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
-				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
 				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
 			},
 		},
 		{
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
-				"推荐入口是 `agent/execution/runtime.Builder`",
-				"`agent/execution/runtime`",
+				"推荐入口是 `agent/runtime.Builder`",
+				"`agent/runtime`",
 			},
 		},
 		{
 			path: "docs/cn/tutorials/01.快速开始.md",
 			requiredSnippets: []string{
-				"`agent/execution/runtime.Builder` 是 `agent` 子模块 runtime 入口",
+				"`agent/runtime.Builder` 是 `agent` 子模块 runtime 入口",
 			},
 		},
 		{
 			path: "docs/en/tutorials/01.QuickStart.md",
 			requiredSnippets: []string{
-				"`agent/execution/runtime.Builder` is the runtime entry for the `agent` submodule",
+				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
 			},
 		},
 		{
 			path: "docs/cn/tutorials/03.Agent开发教程.md",
 			requiredSnippets: []string{
-				"`agent` 子模块正式 runtime 入口：`agent/execution/runtime.Builder`",
+				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder`",
 			},
 		},
 		{
 			path: "docs/en/tutorials/03.AgentDevelopment.md",
 			requiredSnippets: []string{
-				"Official runtime entry for the `agent` submodule: `agent/execution/runtime.Builder`",
+				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder`",
 			},
 		},
 	}
@@ -920,7 +920,7 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "README.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`agent/runtime.Builder` 作为 `agent` 子模块 runtime 入口",
 				"`github.com/BaSui01/agentflow/agent` 根包已删除",
 			},
 			forbiddenSnippets: []string{
@@ -935,7 +935,7 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "README_EN.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"`agent/runtime.Builder` is the runtime entry for the `agent` submodule",
 				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
 			},
 			forbiddenSnippets: []string{
@@ -950,8 +950,8 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/execution/runtime.Builder`",
-				"`agent/execution/runtime`",
+				"`agent/runtime.Builder`",
+				"`agent/runtime`",
 			},
 		},
 	}
@@ -991,14 +991,14 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "README.md",
 			requiredSnippets: []string{
-				"**官方多 Agent 门面** - `agent/collaboration/team`",
+				"**官方多 Agent 门面** - `agent/team`",
 				"**官方默认** - `ReAct` 作为唯一默认推理/执行主链",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
-				"**Official Multi-Agent Facade** - `agent/collaboration/team`",
+				"**Official Multi-Agent Facade** - `agent/team`",
 				"**Official default** - `ReAct` is the only default reasoning/execution chain",
 			},
 		},
@@ -1030,7 +1030,6 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				"## Legacy：多 Agent 协作",
 			},
 			forbiddenSnippets: []string{
-				"github.com/BaSui01/agentflow/agent/team",
 				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
@@ -1042,7 +1041,6 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				"## Legacy Multi-Agent Collaboration",
 			},
 			forbiddenSnippets: []string{
-				"github.com/BaSui01/agentflow/agent/team",
 				"github.com/BaSui01/agentflow/agent/hierarchical",
 				"github.com/BaSui01/agentflow/agent/memory",
 				"github.com/BaSui01/agentflow/agent/guardrails",
@@ -1051,23 +1049,21 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "docs/cn/tutorials/08.多Agent协作.md",
 			requiredSnippets: []string{
-				"`agent/collaboration/team` 是 AgentFlow 的官方多 Agent facade",
+				"`agent/team` 是 AgentFlow 的官方多 Agent facade",
 				"## Legacy：多 Agent 系统",
 			},
 			forbiddenSnippets: []string{
-				"github.com/BaSui01/agentflow/agent/team",
 				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
 		{
 			path: "docs/en/tutorials/08.MultiAgentCollaboration.md",
 			requiredSnippets: []string{
-				"`agent/collaboration/team` is the official multi-agent facade in AgentFlow",
+				"`agent/team` is the official multi-agent facade in AgentFlow",
 				"## Legacy Multi-Agent System",
 			},
 			forbiddenSnippets: []string{
 				"AgentFlow supports multiple collaboration patterns including hierarchical agents, debate, consensus, pipeline, broadcast, and network modes.",
-				"github.com/BaSui01/agentflow/agent/team",
 				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
@@ -1075,14 +1071,14 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			path: "examples/08_low_priority_features/README.md",
 			requiredSnippets: []string{
 				"legacy 多 Agent surface",
-				"新的多 Agent 接入默认应优先使用 `agent/collaboration/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/team`",
 			},
 		},
 		{
 			path: "examples/09_full_integration/README.md",
 			requiredSnippets: []string{
 				"legacy 层次化多 Agent",
-				"新的多 Agent 接入默认应优先使用 `agent/collaboration/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/team`",
 			},
 		},
 	}
@@ -1103,6 +1099,153 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				t.Fatalf("%s must not contain stale public-surface snippet %q", tt.path, snippet)
 			}
 		}
+	}
+}
+
+func TestMyAgentFrameworkPublicSurface(t *testing.T) {
+	type docExpectation struct {
+		path             string
+		requiredSnippets []string
+	}
+
+	expectations := []docExpectation{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"sdk.New(opts).Build(ctx)",
+				"`agent/runtime`",
+				"`agent/team`",
+				"`workflow/runtime`",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"sdk.New(opts).Build(ctx)",
+				"`agent/runtime`",
+				"`agent/team`",
+				"`workflow/runtime`",
+			},
+		},
+		{
+			path: "AGENTS.md",
+			requiredSnippets: []string{
+				"`agent/runtime`",
+				"`agent/team`",
+				"`workflow/runtime`",
+				"`internal/usecase/authorization_service.go`",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q to define the new Agent framework public surface", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestMyAgentFrameworkNoLegacyPublicEntrypoints(t *testing.T) {
+	type docExpectation struct {
+		path              string
+		forbiddenSnippets []string
+	}
+
+	expectations := []docExpectation{
+		{
+			path: "README.md",
+			forbiddenSnippets: []string{
+				"`agent/execution/runtime`",
+				"`agent/collaboration/team`",
+				"`agent/collaboration/multiagent`",
+				"`agent/adapters/teamadapter`",
+			},
+		},
+		{
+			path: "README_EN.md",
+			forbiddenSnippets: []string{
+				"`agent/execution/runtime`",
+				"`agent/collaboration/team`",
+				"`agent/collaboration/multiagent`",
+				"`agent/adapters/teamadapter`",
+			},
+		},
+		{
+			path: "AGENTS.md",
+			forbiddenSnippets: []string{
+				"`agent/execution/runtime`",
+				"`agent/collaboration/team`",
+				"`agent/collaboration/multiagent`",
+				"`agent/adapters/teamadapter`",
+			},
+		},
+		{
+			path: "docs/cn/README.md",
+			forbiddenSnippets: []string{
+				"`agent/collaboration/team`",
+				"`agent/adapters/teamadapter`",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain legacy public entrypoint snippet %q after the hard switch", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestAuthorizationContracts(t *testing.T) {
+	data, err := os.ReadFile(filepath.FromSlash("types/authz.go"))
+	if err != nil {
+		t.Fatalf("read types/authz.go: %v", err)
+	}
+	src := string(data)
+	requiredSnippets := []string{
+		"type Principal struct",
+		"type AuthorizationRequest struct",
+		"type AuthorizationDecision struct",
+		"type PrincipalKind string",
+		"type ResourceKind string",
+		"type ActionKind string",
+		"type DecisionKind string",
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(src, snippet) {
+			t.Fatalf("types/authz.go must contain %q to expose zero-dependency authorization contracts", snippet)
+		}
+	}
+}
+
+func TestWorkflowTeamBoundary(t *testing.T) {
+	data, err := os.ReadFile(filepath.FromSlash("workflow/steps/orchestration.go"))
+	if err != nil {
+		t.Fatalf("read workflow/steps/orchestration.go: %v", err)
+	}
+	src := string(data)
+
+	if strings.Contains(src, `"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`) {
+		t.Fatal("workflow/steps/orchestration.go must not import the legacy multiagent implementation package directly")
+	}
+	if strings.Contains(src, "*multiagent.ModeRegistry") || strings.Contains(src, "multiagent.GlobalModeRegistry()") {
+		t.Fatal("workflow/steps/orchestration.go must not depend on legacy multiagent registry types directly")
+	}
+	if !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team"`) {
+		t.Fatal("workflow/steps/orchestration.go must depend on the new team contract package")
 	}
 }
 

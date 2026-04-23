@@ -16,9 +16,9 @@ type panicStep struct {
 	id string
 }
 
-func (s *panicStep) ID() string { return s.id }
+func (s *panicStep) ID() string          { return s.id }
 func (s *panicStep) Type() core.StepType { return core.StepTypeLLM }
-func (s *panicStep) Validate() error { return nil }
+func (s *panicStep) Validate() error     { return nil }
 func (s *panicStep) Execute(ctx context.Context, input core.StepInput) (core.StepOutput, error) {
 	panic("intentional panic in step " + s.id)
 }
@@ -28,9 +28,9 @@ type slowStep struct {
 	delay time.Duration
 }
 
-func (s *slowStep) ID() string { return "slow" }
+func (s *slowStep) ID() string          { return "slow" }
 func (s *slowStep) Type() core.StepType { return core.StepTypeLLM }
-func (s *slowStep) Validate() error { return nil }
+func (s *slowStep) Validate() error     { return nil }
 func (s *slowStep) Execute(ctx context.Context, input core.StepInput) (core.StepOutput, error) {
 	select {
 	case <-time.After(s.delay):
@@ -45,9 +45,9 @@ type errorStep struct {
 	msg string
 }
 
-func (s *errorStep) ID() string { return "error" }
+func (s *errorStep) ID() string          { return "error" }
 func (s *errorStep) Type() core.StepType { return core.StepTypeLLM }
-func (s *errorStep) Validate() error { return nil }
+func (s *errorStep) Validate() error     { return nil }
 func (s *errorStep) Execute(ctx context.Context, input core.StepInput) (core.StepOutput, error) {
 	return core.StepOutput{}, errors.New(s.msg)
 }

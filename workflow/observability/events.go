@@ -21,7 +21,7 @@ type NodeEvent struct {
 	Type       NodeEventType `json:"type"`
 	TraceID    string        `json:"trace_id,omitempty"`
 	RunID      string        `json:"run_id,omitempty"`
-	WorkflowID string       `json:"workflow_id,omitempty"`
+	WorkflowID string        `json:"workflow_id,omitempty"`
 	NodeID     string        `json:"node_id"`
 	NodeType   string        `json:"node_type,omitempty"`
 	LatencyMs  int64         `json:"latency_ms,omitempty"`

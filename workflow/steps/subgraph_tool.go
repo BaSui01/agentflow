@@ -76,4 +76,3 @@ func (t *SubgraphTool) ToolSchema() map[string]any {
 		"inputSchema": schema,
 	}
 }
-

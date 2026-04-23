@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/BaSui01/agentflow/agent/execution/runtime"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"

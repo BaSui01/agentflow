@@ -359,4 +359,3 @@ func (nb *NodeBuilder) WithErrorConfig(config ErrorConfig) *NodeBuilder {
 func (nb *NodeBuilder) Done() *DAGBuilder {
 	return nb.parent
 }
-

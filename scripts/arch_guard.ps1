@@ -228,7 +228,9 @@ $agentAllowedTopDirs = @(
     "execution",
     "integration",
     "observability",
-    "persistence"
+    "persistence",
+    "runtime",
+    "team"
 )
 $agentBannedTopDirs = @(
     # Phase-2~4 合并/下沉的目录
@@ -255,7 +257,6 @@ $agentBannedTopDirs = @(
     "orchestration",
     "planner",
     "reasoning",
-    "runtime",
     "skills",
     "streaming",
     "structured",
@@ -270,7 +271,7 @@ foreach ($dir in $agentTopDirs) {
         continue
     }
     if ($agentAllowedTopDirs -notcontains $dir) {
-        $errors += "[LAYOUT] agent/$dir/ 不在 8 层 allowlist (adapters/capabilities/collaboration/core/execution/integration/observability/persistence)"
+        $errors += "[LAYOUT] agent/$dir/ 不在 8 层 allowlist (adapters/capabilities/collaboration/core/execution/integration/observability/persistence/runtime/team)"
     }
 }
 foreach ($required in $agentAllowedTopDirs) {
@@ -309,3 +310,4 @@ $env:GOFLAGS = $originalGoFlags
 $env:GOMAXPROCS = $originalGoMaxProcs
 
 Write-Host "Architecture guard passed." -ForegroundColor Green
+

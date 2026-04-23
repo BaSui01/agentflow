@@ -11,7 +11,7 @@ import (
 	"time"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/pkg/middleware"

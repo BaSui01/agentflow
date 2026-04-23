@@ -1,0 +1,121 @@
+package usecase
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/BaSui01/agentflow/types"
+)
+
+type PrincipalResolver interface {
+	ResolvePrincipal(ctx context.Context) (types.Principal, error)
+}
+
+type StaticPrincipalResolver struct {
+	Principal types.Principal
+}
+
+func (r StaticPrincipalResolver) ResolvePrincipal(context.Context) (types.Principal, error) {
+	return r.Principal, nil
+}
+
+type ContextPrincipalResolver struct {
+	Fallback PrincipalResolver
+}
+
+func (r ContextPrincipalResolver) ResolvePrincipal(ctx context.Context) (types.Principal, error) {
+	if principal, ok := types.PrincipalFromContext(ctx); ok {
+		return principal, nil
+	}
+	if r.Fallback != nil {
+		return r.Fallback.ResolvePrincipal(ctx)
+	}
+	return types.Principal{}, nil
+}
+
+type PolicyEngine interface {
+	Evaluate(ctx context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error)
+}
+
+type PolicyEngineFunc func(ctx context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error)
+
+func (fn PolicyEngineFunc) Evaluate(ctx context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error) {
+	return fn(ctx, req)
+}
+
+type ApprovalBackend interface {
+	RequestApproval(ctx context.Context, req types.AuthorizationRequest, preliminary *types.AuthorizationDecision) (*types.AuthorizationDecision, error)
+	CheckApproval(ctx context.Context, approvalID string) (*types.AuthorizationDecision, error)
+	Revoke(ctx context.Context, fingerprint string) error
+}
+
+type AuditSink interface {
+	RecordAuthorization(ctx context.Context, req types.AuthorizationRequest, decision *types.AuthorizationDecision) error
+}
+
+type AuditSinkFunc func(ctx context.Context, req types.AuthorizationRequest, decision *types.AuthorizationDecision) error
+
+func (fn AuditSinkFunc) RecordAuthorization(ctx context.Context, req types.AuthorizationRequest, decision *types.AuthorizationDecision) error {
+	return fn(ctx, req, decision)
+}
+
+type AuthorizationService interface {
+	Authorize(ctx context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error)
+}
+
+type DefaultAuthorizationService struct {
+	PrincipalResolver PrincipalResolver
+	PolicyEngine      PolicyEngine
+	ApprovalBackend   ApprovalBackend
+	AuditSink         AuditSink
+}
+
+func NewDefaultAuthorizationService(policyEngine PolicyEngine, approvalBackend ApprovalBackend, auditSink AuditSink) *DefaultAuthorizationService {
+	return &DefaultAuthorizationService{
+		PrincipalResolver: ContextPrincipalResolver{},
+		PolicyEngine:      policyEngine,
+		ApprovalBackend:   approvalBackend,
+		AuditSink:         auditSink,
+	}
+}
+
+func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error) {
+	if req.Principal.ID == "" && s.PrincipalResolver != nil {
+		principal, err := s.PrincipalResolver.ResolvePrincipal(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve principal: %w", err)
+		}
+		req.Principal = principal
+	}
+
+	decision := &types.AuthorizationDecision{
+		Decision: types.DecisionAllow,
+		Reason:   "default allow",
+	}
+	if s.PolicyEngine != nil {
+		evaluated, err := s.PolicyEngine.Evaluate(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate policy: %w", err)
+		}
+		if evaluated != nil {
+			decision = evaluated
+		}
+	}
+
+	if decision.Decision == types.DecisionRequireApproval && s.ApprovalBackend != nil {
+		approved, err := s.ApprovalBackend.RequestApproval(ctx, req, decision)
+		if err != nil {
+			return nil, fmt.Errorf("request approval: %w", err)
+		}
+		if approved != nil {
+			decision = approved
+		}
+	}
+
+	if s.AuditSink != nil {
+		if err := s.AuditSink.RecordAuthorization(ctx, req, decision); err != nil {
+			return nil, fmt.Errorf("record authorization audit: %w", err)
+		}
+	}
+	return decision, nil
+}

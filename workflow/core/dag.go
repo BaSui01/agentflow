@@ -366,4 +366,3 @@ func (ec *ExecutionContext) GetVariable(key string) (any, bool) {
 	value, exists := ec.Variables[key]
 	return value, exists
 }
-

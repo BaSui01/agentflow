@@ -60,4 +60,3 @@ func HTTPStatusFromErrorCode(code types.ErrorCode) int {
 		return http.StatusInternalServerError
 	}
 }
-

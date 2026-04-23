@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/capabilities/planning"
-	"github.com/BaSui01/agentflow/agent/execution/runtime"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
+	"github.com/BaSui01/agentflow/agent/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"

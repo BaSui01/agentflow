@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/observability/hitl"
-	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
@@ -480,9 +480,9 @@ func (s *testVectorStore) Search(ctx context.Context, queryEmbedding []float64, 
 		},
 	}, nil
 }
-func (s *testVectorStore) DeleteDocuments(ctx context.Context, ids []string) error    { return nil }
+func (s *testVectorStore) DeleteDocuments(ctx context.Context, ids []string) error     { return nil }
 func (s *testVectorStore) UpdateDocument(ctx context.Context, doc core.Document) error { return nil }
-func (s *testVectorStore) Count(ctx context.Context) (int, error)                     { return 1, nil }
+func (s *testVectorStore) Count(ctx context.Context) (int, error)                      { return 1, nil }
 
 type testEmbeddingProvider struct{}
 

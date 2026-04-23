@@ -8,8 +8,8 @@ import (
 	"time"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/team"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -224,7 +224,7 @@ func (s *DefaultAgentService) executeWithResolvedAgents(ctx context.Context, req
 	}
 
 	mode := normalizedExecutionMode(req)
-	return multiagent.GlobalModeRegistry().Execute(ctx, mode, agents, input)
+	return team.GlobalModeRegistry().Execute(ctx, mode, agents, input)
 }
 
 func normalizedAgentIDs(req AgentExecuteRequest) []string {
@@ -254,23 +254,23 @@ func normalizedExecutionMode(req AgentExecuteRequest) string {
 	mode := strings.TrimSpace(req.Mode)
 	if mode == "" {
 		if len(req.AgentIDs) > 0 {
-			return multiagent.ModeParallel
+			return team.ModeParallel
 		}
-		return multiagent.ModeReasoning
+		return team.ModeReasoning
 	}
 	return strings.ToLower(mode)
 }
 
 func SupportedExecutionModes() []string {
 	return []string{
-		multiagent.ModeReasoning,
-		multiagent.ModeCollaboration,
-		multiagent.ModeHierarchical,
-		multiagent.ModeCrew,
-		multiagent.ModeDeliberation,
-		multiagent.ModeFederation,
-		multiagent.ModeParallel,
-		multiagent.ModeLoop,
+		team.ModeReasoning,
+		team.ModeCollaboration,
+		team.ModeHierarchical,
+		team.ModeCrew,
+		team.ModeDeliberation,
+		team.ModeFederation,
+		team.ModeParallel,
+		team.ModeLoop,
 	}
 }
 

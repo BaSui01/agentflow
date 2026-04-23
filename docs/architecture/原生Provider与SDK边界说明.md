@@ -85,7 +85,7 @@ That means:
 - AgentFlow still maps those payloads into `types.ToolCall`, `types.ToolResult`, `RuntimeStreamEvent`, and handoff semantics
 - migration should replace transport first, not remove AgentFlow's cross-provider semantic layer
 
-Tool payload mapping details are documented in [provider-tool-payload-mapping.md](/E:/code/agentflow/docs/architecture/provider-tool-payload-mapping.md).
+Tool payload mapping details are documented in [Provider工具负载映射说明.md](./Provider工具负载映射说明.md).
 
 ## Token Counting
 
@@ -93,4 +93,4 @@ Native chat providers should also expose SDK-backed token counting through `llm.
 
 Gateway chat budget admission depends on that native token counting path and must not fall back to tokenizer estimation.
 
-See [provider-native-token-counting.md](/E:/code/agentflow/docs/architecture/provider-native-token-counting.md).
+See [Provider原生Token计数说明.md](./Provider原生Token计数说明.md).

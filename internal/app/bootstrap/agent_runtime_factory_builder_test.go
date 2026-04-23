@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"

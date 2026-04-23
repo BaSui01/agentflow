@@ -232,4 +232,3 @@ func (c *RedisHealthCheck) Name() string {
 func (c *RedisHealthCheck) Check(ctx context.Context) error {
 	return c.ping(ctx)
 }
-

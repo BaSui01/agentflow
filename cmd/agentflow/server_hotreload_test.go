@@ -12,8 +12,8 @@ import (
 	"testing"
 	"unsafe"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"

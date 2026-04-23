@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"

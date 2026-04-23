@@ -366,4 +366,3 @@ func (s *InMemoryCheckpointStore) Delete(ctx context.Context, id string) error {
 	delete(s.checkpoints, id)
 	return nil
 }
-
