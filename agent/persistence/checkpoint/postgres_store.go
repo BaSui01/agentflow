@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	agentcore "github.com/BaSui01/agentflow/agent/core"
 	"go.uber.org/zap"
 )
 
@@ -228,7 +229,7 @@ func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID s
 			s.logger.Warn("failed to scan version row", zap.Error(err))
 			continue
 		}
-		v.State = state
+		v.State = agentcore.State(state)
 		v.Summary = fmt.Sprintf("Checkpoint at %s", v.CreatedAt.Format(time.RFC3339))
 		versions = append(versions, v)
 	}

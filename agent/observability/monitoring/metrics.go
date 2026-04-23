@@ -11,7 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agentcore "github.com/BaSui01/agentflow/agent/core"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"go.uber.org/zap"
 )
 
@@ -155,7 +156,7 @@ type Evaluator struct {
 
 // EvaluationStrategy 评估策略
 type EvaluationStrategy interface {
-	Evaluate(ctx context.Context, input *agent.Input, output *agent.Output) (*EvaluationResult, error)
+	Evaluate(ctx context.Context, input *agentcore.Input, output *agentcore.Output) (*EvaluationResult, error)
 }
 
 // EvaluationResult 评估结果
@@ -177,7 +178,7 @@ type Benchmark struct {
 // BenchmarkCase 基准测试用例
 type BenchmarkCase struct {
 	ID             string
-	Input          *agent.Input
+	Input          *agentcore.Input
 	ExpectedOutput string
 	Metadata       map[string]any
 }
@@ -279,9 +280,9 @@ func (o *ObservabilitySystem) GetLatestExplainabilitySynopsis(sessionID, agentID
 
 // GetLatestExplainabilitySynopsisSnapshot satisfies
 // agent.ExplainabilitySynopsisSnapshotReader.
-func (o *ObservabilitySystem) GetLatestExplainabilitySynopsisSnapshot(sessionID, agentID, excludeTraceID string) agent.ExplainabilitySynopsisSnapshot {
+func (o *ObservabilitySystem) GetLatestExplainabilitySynopsisSnapshot(sessionID, agentID, excludeTraceID string) agentcontext.ExplainabilitySynopsisSnapshot {
 	if o.explainability == nil {
-		return agent.ExplainabilitySynopsisSnapshot{}
+		return agentcontext.ExplainabilitySynopsisSnapshot{}
 	}
 	return o.explainability.LatestSynopsisSnapshot(sessionID, agentID, excludeTraceID)
 }
@@ -538,7 +539,7 @@ func (e *Evaluator) AddStrategy(strategy EvaluationStrategy) {
 }
 
 // Evaluate 评估输出
-func (e *Evaluator) Evaluate(ctx context.Context, input *agent.Input, output *agent.Output) (*EvaluationResult, error) {
+func (e *Evaluator) Evaluate(ctx context.Context, input *agentcore.Input, output *agentcore.Output) (*EvaluationResult, error) {
 	if len(e.strategies) == 0 {
 		return &EvaluationResult{
 			Score:     1.0,
@@ -556,7 +557,7 @@ func (e *Evaluator) RegisterBenchmark(benchmark *Benchmark) {
 }
 
 // RunBenchmark 运行基准测试
-func (e *Evaluator) RunBenchmark(ctx context.Context, benchmarkName string, agent agent.Agent) (*BenchmarkResult, error) {
+func (e *Evaluator) RunBenchmark(ctx context.Context, benchmarkName string, agent agentcore.Agent) (*BenchmarkResult, error) {
 	benchmark, ok := e.benchmarks[benchmarkName]
 	if !ok {
 		return nil, fmt.Errorf("benchmark not found: %s", benchmarkName)
@@ -681,7 +682,7 @@ func calculateAvg(values []float64) float64 {
 // SimpleEvaluationStrategy 简单评估策略
 type SimpleEvaluationStrategy struct{}
 
-func (s *SimpleEvaluationStrategy) Evaluate(ctx context.Context, input *agent.Input, output *agent.Output) (*EvaluationResult, error) {
+func (s *SimpleEvaluationStrategy) Evaluate(ctx context.Context, input *agentcore.Input, output *agentcore.Output) (*EvaluationResult, error) {
 	outputText := strings.TrimSpace(output.Content)
 	inputText := strings.TrimSpace(input.Content)
 	if outputText == "" {

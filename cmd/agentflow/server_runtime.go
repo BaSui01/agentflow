@@ -10,6 +10,7 @@ import (
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
@@ -87,7 +88,7 @@ type Server struct {
 	toolApprovalManager     *hitl.InterruptManager
 	capabilityCatalog       *bootstrap.CapabilityCatalog
 	workflowHITLManager     *hitl.InterruptManager
-	checkpointStore         agent.CheckpointStore
+	checkpointStore         agentcheckpoint.Store
 	checkpointManager       *agent.CheckpointManager
 	workflowCheckpointStore workflowpkg.CheckpointStore
 	ragStore                core.VectorStore

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	agentcore "github.com/BaSui01/agentflow/agent/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -116,7 +117,7 @@ func TestRedisCheckpointStore_SaveAndLoad(t *testing.T) {
 	loaded, err := store.Load(context.Background(), "cp-1")
 	require.NoError(t, err)
 	assert.Equal(t, "cp-1", loaded.ID)
-	assert.Equal(t, "ready", loaded.State)
+	assert.Equal(t, agentcore.State("ready"), loaded.State)
 }
 
 func TestRedisCheckpointStore_LoadLatest(t *testing.T) {
@@ -176,7 +177,7 @@ func TestRedisCheckpointStore_LoadVersionAndRollback(t *testing.T) {
 
 	loaded, err := store.LoadVersion(context.Background(), "t1", 1)
 	require.NoError(t, err)
-	assert.Equal(t, "ready", loaded.State)
+	assert.Equal(t, agentcore.State("ready"), loaded.State)
 
 	require.NoError(t, store.Rollback(context.Background(), "t1", 1))
 	versions, err := store.ListVersions(context.Background(), "t1")

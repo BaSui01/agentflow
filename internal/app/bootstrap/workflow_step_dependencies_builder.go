@@ -438,11 +438,11 @@ func buildWorkflowCheckpointManager(opts WorkflowRuntimeOptions) workflow.Checkp
 	if opts.CheckpointStore == nil {
 		return nil
 	}
-	return workflowCheckpointManagerAdapter{manager: agentcheckpoint.NewManager(opts.CheckpointStore, nil)}
+	return workflowCheckpointManagerAdapter{manager: agent.NewCheckpointManagerFromNativeStore(opts.CheckpointStore, nil)}
 }
 
 type workflowCheckpointManagerAdapter struct {
-	manager *agentcheckpoint.Manager
+	manager *agent.CheckpointManager
 }
 
 func (a workflowCheckpointManagerAdapter) SaveCheckpoint(ctx context.Context, cp *workflow.EnhancedCheckpoint) error {

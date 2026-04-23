@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/BaSui01/agentflow/agent"
 	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
 	"github.com/BaSui01/agentflow/agent/capabilities/memory"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
@@ -44,33 +43,33 @@ type BuildOptions struct {
 	EnhancedMemoryConfig *memory.EnhancedMemoryConfig
 
 	// 设定时使用可观察性系统代替默认执行.
-	ObservabilitySystem agent.ObservabilityRunner
+	ObservabilitySystem ObservabilityRunner
 
 	// Optional pass-throughs for AgentBuilder runtime controls.
 	MaxReActIterations       int
 	MaxLoopIterations        int
 	MaxConcurrency           int
-	MemoryManager            agent.MemoryManager
-	ToolManager              agent.ToolManager
-	RetrievalProvider        agent.RetrievalProvider
-	ToolStateProvider        agent.ToolStateProvider
-	EventBus                 agent.EventBus
-	LSPClient                agent.LSPClientRunner
-	ExecutionOptionsResolver agent.ExecutionOptionsResolver
+	MemoryManager            MemoryManager
+	ToolManager              ToolManager
+	RetrievalProvider        RetrievalProvider
+	ToolStateProvider        ToolStateProvider
+	EventBus                 EventBus
+	LSPClient                LSPClientRunner
+	ExecutionOptionsResolver ExecutionOptionsResolver
 	ChatRequestAdapter       agentadapters.ChatRequestAdapter
-	ToolProtocolRuntime      agent.ToolProtocolRuntime
-	ReasoningRuntime         agent.ReasoningRuntime
+	ToolProtocolRuntime      ToolProtocolRuntime
+	ReasoningRuntime         ReasoningRuntime
 
 	// Optional pass-throughs for AgentBuilder advanced wiring.
-	PromptStore       agent.PromptStoreProvider
-	ConversationStore agent.ConversationStoreProvider
-	RunStore          agent.RunStoreProvider
-	CheckpointManager *agent.CheckpointManager
-	Orchestrator      agent.OrchestratorRunner
+	PromptStore       PromptStoreProvider
+	ConversationStore ConversationStoreProvider
+	RunStore          RunStoreProvider
+	CheckpointManager *CheckpointManager
+	Orchestrator      OrchestratorRunner
 	ReasoningRegistry *reasoning.PatternRegistry
 	// ReasoningExposure controls which non-default reasoning strategies are
 	// registered into the runtime when ReasoningRegistry is not provided.
-	ReasoningExposure agent.ReasoningExposureLevel
+	ReasoningExposure ReasoningExposureLevel
 
 	// InitAgent在接线后呼叫Init(ctx).
 	InitAgent bool
@@ -92,7 +91,7 @@ func DefaultBuildOptions() BuildOptions {
 		MCPServerVersion:     "0.1.0",
 		LSPServerName:        "agentflow-lsp",
 		LSPServerVersion:     "0.1.0",
-		ReasoningExposure:    agent.ReasoningExposureOfficial,
+		ReasoningExposure:    ReasoningExposureOfficial,
 		InitAgent:            false,
 	}
 }
@@ -151,16 +150,16 @@ func (b *Builder) WithToolScope(toolNames []string) *Builder {
 }
 
 // Build 构造一个 BaseAgent 并按选项接线可选子系统。
-func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error) {
+func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*BaseAgent, error) {
 	opts := b.options
 	if b.logger == nil {
 		panic("runtime.Builder.Build: logger is required and cannot be nil")
 	}
 	if b.gateway == nil {
-		return nil, agent.ErrProviderNotSet
+		return nil, ErrProviderNotSet
 	}
 	if strings.TrimSpace(cfg.ExecutionOptions().Model.Model) == "" {
-		return nil, agent.NewError(types.ErrInputValidation, "config.Model is required")
+		return nil, NewError(types.ErrInputValidation, "config.Model is required")
 	}
 
 	cfg2 := cfg
@@ -183,7 +182,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
 
-	ag := agent.BuildBaseAgent(
+	ag := BuildBaseAgent(
 		cfg2,
 		b.gateway,
 		opts.MemoryManager,
@@ -205,7 +204,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	ag.SetPromptStore(opts.PromptStore)
 	ag.SetConversationStore(opts.ConversationStore)
 	ag.SetRunStore(opts.RunStore)
-	manager := agent.ContextManager(nil)
+	manager := ContextManager(nil)
 	cfgContext := agentcontext.ConfigFromAgentConfig(ag.Config())
 	if cfgContext.Enabled {
 		manager = agentcontext.NewAgentContextManager(cfgContext, b.logger)
@@ -216,18 +215,18 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 
 	if enabled(opts.EnableAll, opts.EnableReflection) {
 		reflectionConfig := reflectionConfigFromTypes(cfg2.ExecutionOptions().Control.Reflection)
-		reflectionExecutor := agent.NewReflectionExecutor(ag, reflectionConfig)
-		ag.EnableReflection(agent.AsReflectionRunner(reflectionExecutor))
+		reflectionExecutor := NewReflectionExecutor(ag, reflectionConfig)
+		ag.EnableReflection(AsReflectionRunner(reflectionExecutor))
 	}
 	if enabled(opts.EnableAll, opts.EnableToolSelection) {
 		toolSelectionConfig := toolSelectionConfigFromTypes(cfg2.ExecutionOptions().Control.ToolSelection)
-		toolSelector := agent.NewDynamicToolSelector(ag, toolSelectionConfig)
-		ag.EnableToolSelection(agent.AsToolSelectorRunner(toolSelector))
+		toolSelector := NewDynamicToolSelector(ag, toolSelectionConfig)
+		ag.EnableToolSelection(AsToolSelectorRunner(toolSelector))
 	}
 	if enabled(opts.EnableAll, opts.EnablePromptEnhancer) {
 		promptEnhancerConfig := promptEnhancerConfigFromTypes(cfg2.ExecutionOptions().Control.PromptEnhancer)
-		promptEnhancer := agent.NewPromptEnhancer(promptEnhancerConfig)
-		ag.EnablePromptEnhancer(agent.AsPromptEnhancerRunner(promptEnhancer))
+		promptEnhancer := NewPromptEnhancer(promptEnhancerConfig)
+		ag.EnablePromptEnhancer(AsPromptEnhancerRunner(promptEnhancer))
 	}
 	if enabled(opts.EnableAll, opts.EnableSkills) {
 		dir := strings.TrimSpace(opts.SkillsDirectory)
@@ -265,7 +264,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		if lspVersion == "" {
 			lspVersion = "0.1.0"
 		}
-		lspRuntime := agent.NewManagedLSP(agentlsp.ServerInfo{Name: lspName, Version: lspVersion}, b.logger)
+		lspRuntime := NewManagedLSP(agentlsp.ServerInfo{Name: lspName, Version: lspVersion}, b.logger)
 		ag.EnableLSPWithLifecycle(lspRuntime.Client, lspRuntime)
 	}
 	if enabled(opts.EnableAll, opts.EnableEnhancedMemory) {
@@ -286,9 +285,9 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainGateway(), cfg2.ExecutionOptions().Model.Model, cfg2.Core.ID, opts, b.logger)
 	ag.SetReasoningRegistry(reasoningRegistry)
 	if opts.ReasoningRuntime == nil {
-		ag.SetReasoningModeSelector(agent.NewDefaultReasoningModeSelector())
+		ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
 	}
-	ag.SetCompletionJudge(agent.NewDefaultCompletionJudge())
+	ag.SetCompletionJudge(NewDefaultCompletionJudge())
 	if opts.CheckpointManager != nil {
 		ag.SetCheckpointManager(opts.CheckpointManager)
 	}
@@ -306,8 +305,8 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	return ag, nil
 }
 
-func reflectionConfigFromTypes(cfg *types.ReflectionConfig) agent.ReflectionExecutorConfig {
-	out := agent.DefaultReflectionConfig()
+func reflectionConfigFromTypes(cfg *types.ReflectionConfig) ReflectionExecutorConfig {
+	out := DefaultReflectionConfig()
 	if cfg == nil {
 		return *out
 	}
@@ -323,8 +322,8 @@ func reflectionConfigFromTypes(cfg *types.ReflectionConfig) agent.ReflectionExec
 	return *out
 }
 
-func toolSelectionConfigFromTypes(cfg *types.ToolSelectionConfig) agent.ToolSelectionConfig {
-	out := agent.DefaultToolSelectionConfig()
+func toolSelectionConfigFromTypes(cfg *types.ToolSelectionConfig) ToolSelectionConfig {
+	out := DefaultToolSelectionConfig()
 	if cfg == nil {
 		return *out
 	}
@@ -337,8 +336,8 @@ func toolSelectionConfigFromTypes(cfg *types.ToolSelectionConfig) agent.ToolSele
 	return *out
 }
 
-func promptEnhancerConfigFromTypes(cfg *types.PromptEnhancerConfig) agent.PromptEnhancerConfig {
-	out := agent.DefaultPromptEnhancerConfig()
+func promptEnhancerConfigFromTypes(cfg *types.PromptEnhancerConfig) PromptEnhancerConfig {
+	out := DefaultPromptEnhancerConfig()
 	if cfg == nil {
 		return *out
 	}
@@ -355,7 +354,7 @@ func resolveRuntimeReasoningRegistry(
 	if opts.ReasoningRegistry != nil {
 		return opts.ReasoningRegistry
 	}
-	return agent.NewReasoningRegistryForExposure(
+	return NewReasoningRegistryForExposure(
 		gateway,
 		model,
 		opts.ToolManager,

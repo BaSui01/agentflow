@@ -88,8 +88,12 @@ type Output struct {
 
 type State struct {
 	Goal               string
+	CurrentStage       string
 	Iteration          int
 	MaxIterations      int
+	Decision           string
+	StopReason         string
+	PlanSteps          []string
 	NeedHuman          bool
 	Confidence         float64
 	ValidationStatus   ValidationStatus

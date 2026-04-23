@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	agentcore "github.com/BaSui01/agentflow/agent/core"
 	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
 )
 
@@ -14,8 +15,8 @@ type CheckpointDiff struct {
 	Version1     int           `json:"version1"`
 	Version2     int           `json:"version2"`
 	StateChanged bool          `json:"state_changed"`
-	OldState     string        `json:"old_state"`
-	NewState     string        `json:"new_state"`
+	OldState     agentcore.State `json:"old_state"`
+	NewState     agentcore.State `json:"new_state"`
 	MessagesDiff string        `json:"messages_diff"`
 	MetadataDiff string        `json:"metadata_diff"`
 	TimeDiff     time.Duration `json:"time_diff"`
@@ -35,13 +36,13 @@ type Checkpoint struct {
 	CurrentPlanID       string              `json:"current_plan_id,omitempty"`
 	PlanVersion         int                 `json:"plan_version,omitempty"`
 	CurrentStepID       string              `json:"current_step_id,omitempty"`
-	ValidationStatus    string              `json:"validation_status,omitempty"`
+	ValidationStatus    agentcore.LoopValidationStatus `json:"validation_status,omitempty"`
 	ValidationSummary   string              `json:"validation_summary,omitempty"`
 	ObservationsSummary string              `json:"observations_summary,omitempty"`
 	LastOutputSummary   string              `json:"last_output_summary,omitempty"`
 	LastError           string              `json:"last_error,omitempty"`
 	Version             int                 `json:"version"`
-	State               string              `json:"state"`
+	State               agentcore.State     `json:"state"`
 	Messages            []CheckpointMessage `json:"messages"`
 	Metadata            map[string]any      `json:"metadata"`
 	CreatedAt           time.Time           `json:"created_at"`
@@ -80,7 +81,7 @@ type ExecutionContext struct {
 	CurrentPlanID       string         `json:"current_plan_id,omitempty"`
 	PlanVersion         int            `json:"plan_version,omitempty"`
 	CurrentStepID       string         `json:"current_step_id,omitempty"`
-	ValidationStatus    string         `json:"validation_status,omitempty"`
+	ValidationStatus    agentcore.LoopValidationStatus `json:"validation_status,omitempty"`
 	ValidationSummary   string         `json:"validation_summary,omitempty"`
 	ObservationsSummary string         `json:"observations_summary,omitempty"`
 	LastOutputSummary   string         `json:"last_output_summary,omitempty"`
@@ -124,7 +125,7 @@ func checkpointPersistenceCore(checkpoint *Checkpoint) checkpointcore.Checkpoint
 		CurrentPlanID:       checkpoint.CurrentPlanID,
 		PlanVersion:         checkpoint.PlanVersion,
 		CurrentStepID:       checkpoint.CurrentStepID,
-		ValidationStatus:    checkpoint.ValidationStatus,
+		ValidationStatus:    string(checkpoint.ValidationStatus),
 		ValidationSummary:   checkpoint.ValidationSummary,
 		ObservationsSummary: checkpoint.ObservationsSummary,
 		LastOutputSummary:   checkpoint.LastOutputSummary,
@@ -151,7 +152,7 @@ func executionContextPersistenceCore(ctx *ExecutionContext) *checkpointcore.Exec
 		CurrentPlanID:       ctx.CurrentPlanID,
 		PlanVersion:         ctx.PlanVersion,
 		CurrentStepID:       ctx.CurrentStepID,
-		ValidationStatus:    ctx.ValidationStatus,
+		ValidationStatus:    string(ctx.ValidationStatus),
 		ValidationSummary:   ctx.ValidationSummary,
 		ObservationsSummary: ctx.ObservationsSummary,
 		LastOutputSummary:   ctx.LastOutputSummary,
@@ -170,7 +171,7 @@ func applyCheckpointPersistenceCore(checkpoint *Checkpoint, data checkpointcore.
 	checkpoint.CurrentPlanID = data.CurrentPlanID
 	checkpoint.PlanVersion = data.PlanVersion
 	checkpoint.CurrentStepID = data.CurrentStepID
-	checkpoint.ValidationStatus = data.ValidationStatus
+	checkpoint.ValidationStatus = agentcore.LoopValidationStatus(data.ValidationStatus)
 	checkpoint.ValidationSummary = data.ValidationSummary
 	checkpoint.ObservationsSummary = data.ObservationsSummary
 	checkpoint.LastOutputSummary = data.LastOutputSummary
@@ -195,7 +196,7 @@ func applyCheckpointPersistenceCore(checkpoint *Checkpoint, data checkpointcore.
 	checkpoint.ExecutionContext.CurrentPlanID = data.ExecutionContext.CurrentPlanID
 	checkpoint.ExecutionContext.PlanVersion = data.ExecutionContext.PlanVersion
 	checkpoint.ExecutionContext.CurrentStepID = data.ExecutionContext.CurrentStepID
-	checkpoint.ExecutionContext.ValidationStatus = data.ExecutionContext.ValidationStatus
+	checkpoint.ExecutionContext.ValidationStatus = agentcore.LoopValidationStatus(data.ExecutionContext.ValidationStatus)
 	checkpoint.ExecutionContext.ValidationSummary = data.ExecutionContext.ValidationSummary
 	checkpoint.ExecutionContext.ObservationsSummary = data.ExecutionContext.ObservationsSummary
 	checkpoint.ExecutionContext.LastOutputSummary = data.ExecutionContext.LastOutputSummary
@@ -206,7 +207,7 @@ type CheckpointVersion struct {
 	Version   int       `json:"version"`
 	ID        string    `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	State     string    `json:"state"`
+	State     agentcore.State `json:"state"`
 	Summary   string    `json:"summary"`
 }
 

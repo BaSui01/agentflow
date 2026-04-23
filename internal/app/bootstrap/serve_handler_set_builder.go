@@ -75,7 +75,7 @@ type ServeHandlerSet struct {
 	Resolver          *agent.CachingResolver
 
 	CheckpointStore         agentcheckpoint.Store
-	CheckpointManager       *agentcheckpoint.Manager
+	CheckpointManager       *agent.CheckpointManager
 	WorkflowCheckpointStore workflowpkg.CheckpointStore
 	RAGStore                core.VectorStore
 	RAGEmbedding            core.EmbeddingProvider
@@ -325,7 +325,7 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 	set.CheckpointStore = checkpointStore
 	if checkpointStore != nil {
-		set.CheckpointManager = agentcheckpoint.NewManager(checkpointStore, in.Logger)
+		set.CheckpointManager = agent.NewCheckpointManagerFromNativeStore(checkpointStore, in.Logger)
 	}
 
 	if llmRuntime != nil && llmRuntime.Gateway != nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	agentcore "github.com/BaSui01/agentflow/agent/core"
 	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
 	"go.uber.org/zap"
 )
@@ -82,7 +83,7 @@ func (m *Manager) CreateCheckpoint(ctx context.Context, threadID, agentID, state
 		ID:               GenerateID(),
 		ThreadID:         threadID,
 		AgentID:          agentID,
-		State:            state,
+		State:            agentcore.State(state),
 		Messages:         []CheckpointMessage{},
 		Metadata:         make(map[string]any),
 		CreatedAt:        time.Now(),
