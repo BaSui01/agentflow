@@ -39,9 +39,27 @@ func TestAgentRootPackageFileBudget(t *testing.T) {
 }
 
 func TestAgentRootPublicSurfaceBudget(t *testing.T) {
-	entries, err := os.ReadDir("agent")
+	assertModuleRootNoGoFiles(t, "agent")
+}
+
+func TestRAGRootPackageFileBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "rag")
+}
+
+func TestWorkflowRootPackageFileBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "workflow")
+}
+
+func TestLLMRootPackageFileBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "llm")
+}
+
+func assertModuleRootNoGoFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("read agent dir: %v", err)
+		t.Fatalf("read %s dir: %v", dir, err)
 	}
 
 	var matched []string
@@ -58,7 +76,7 @@ func TestAgentRootPublicSurfaceBudget(t *testing.T) {
 
 	if len(matched) > 0 {
 		slices.Sort(matched)
-		t.Fatalf("agent root package must not expose any Go files, found: %s", strings.Join(matched, ", "))
+		t.Fatalf("%s root package must not expose any Go files, found: %s", dir, strings.Join(matched, ", "))
 	}
 }
 
@@ -502,8 +520,8 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── api/                      # 适配层：HTTP/MCP/A2A handler + routes",
 				"├── internal/                 # 组合根支撑：启动期 builder / wiring / bridge",
 				"├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）",
-				"├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）",
-				"├── workflow/                 # Layer 3: 工作流编排层（位于 agent/rag 之上）",
+				"├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）",
+				"├── workflow/                 # Layer 3: 工作流编排层（目录容器；root 无 Go 文件）",
 				"| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |",
 			},
 		},
@@ -515,8 +533,8 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── api/                      # Adapter layer: HTTP/MCP/A2A handlers + routes",
 				"├── internal/                 # Composition-root support: startup builders / bridges",
 				"├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)",
-				"├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)",
-				"├── workflow/                 # Layer 3: Workflow orchestration (above agent/rag)",
+				"├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)",
+				"├── workflow/                 # Layer 3: Workflow orchestration (directory-only container; no root Go files)",
 				"| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
 			},
 		},

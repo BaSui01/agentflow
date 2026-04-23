@@ -12,12 +12,11 @@ import (
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
-	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/engine"
 	"go.uber.org/zap"
 )
@@ -123,7 +122,7 @@ func (g *workflowGatewayAdapter) Invoke(ctx context.Context, req *core.LLMReques
 		model = g.defaultModel
 	}
 
-	completionReq := &llm.ChatRequest{
+	completionReq := &llmcore.ChatRequest{
 		Model: model,
 		Messages: []types.Message{
 			{
@@ -145,7 +144,7 @@ func (g *workflowGatewayAdapter) Invoke(ctx context.Context, req *core.LLMReques
 	if err != nil {
 		return nil, err
 	}
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || chatResp == nil {
 		return nil, fmt.Errorf("workflow gateway returned invalid chat output type %T", resp.Output)
 	}
@@ -175,7 +174,7 @@ func (g *workflowGatewayAdapter) Stream(ctx context.Context, req *core.LLMReques
 		model = g.defaultModel
 	}
 
-	streamReq := &llm.ChatRequest{
+	streamReq := &llmcore.ChatRequest{
 		Model: model,
 		Messages: []types.Message{
 			{
@@ -186,7 +185,7 @@ func (g *workflowGatewayAdapter) Stream(ctx context.Context, req *core.LLMReques
 		MaxTokens:   req.MaxTokens,
 		Temperature: float32(req.Temperature),
 		Metadata:    req.Metadata,
-		StreamOptions: &llm.StreamOptions{
+		StreamOptions: &llmcore.StreamOptions{
 			IncludeUsage:      true,
 			ChunkIncludeUsage: true,
 		},
@@ -229,7 +228,7 @@ func (g *workflowGatewayAdapter) Stream(ctx context.Context, req *core.LLMReques
 				Done:  chunk.Done,
 			}
 
-			if typed, ok := chunk.Output.(*llm.StreamChunk); ok && typed != nil {
+			if typed, ok := chunk.Output.(*llmcore.StreamChunk); ok && typed != nil {
 				streamChunk.Delta = typed.Delta.Content
 				streamChunk.ReasoningContent = typed.Delta.ReasoningContent
 				if typed.Model != "" {

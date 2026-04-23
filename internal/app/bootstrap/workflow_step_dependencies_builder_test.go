@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/core"
@@ -38,9 +37,9 @@ type workflowDepsTestGateway struct {
 
 func (g workflowDepsTestGateway) Invoke(context.Context, *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
 	return &llmcore.UnifiedResponse{
-		Output: &llm.ChatResponse{
+		Output: &llmcore.ChatResponse{
 			Model: "test-model",
-			Choices: []llm.ChatChoice{{
+			Choices: []llmcore.ChatChoice{{
 				Message: types.Message{Content: "ok"},
 			}},
 			Usage: types.ChatUsage{PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2},
@@ -94,7 +93,7 @@ func TestWorkflowGatewayAdapter_StreamMapsGatewayChunks(t *testing.T) {
 	adapter := newWorkflowGatewayAdapter(workflowDepsTestGateway{
 		streamChunks: []llmcore.UnifiedChunk{
 			{
-				Output: &llm.StreamChunk{
+				Output: &llmcore.StreamChunk{
 					Model: "test-model",
 					Delta: types.Message{
 						Content:          "hi",

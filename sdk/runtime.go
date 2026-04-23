@@ -7,18 +7,17 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/execution/runtime"
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/dsl"
 	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
@@ -30,9 +29,9 @@ type Runtime struct {
 	logger *zap.Logger
 
 	// Provider is the primary chat provider (may be nil if not configured).
-	Provider llm.Provider
+	Provider llmcore.Provider
 	// ToolProvider is an optional dedicated provider for tool calls.
-	ToolProvider llm.Provider
+	ToolProvider llmcore.Provider
 	Gateway      llmcore.Gateway
 	ToolGateway  llmcore.Gateway
 
@@ -269,7 +268,7 @@ type gatewayBackedProvider interface {
 	Gateway() llmcore.Gateway
 }
 
-func gatewayFromProvider(provider llm.Provider, ledger llmobs.Ledger, logger *zap.Logger) llmcore.Gateway {
+func gatewayFromProvider(provider llmcore.Provider, ledger llmobs.Ledger, logger *zap.Logger) llmcore.Gateway {
 	if provider == nil {
 		return nil
 	}
@@ -285,7 +284,7 @@ func gatewayFromProvider(provider llm.Provider, ledger llmobs.Ledger, logger *za
 	})
 }
 
-func buildSDKProviders(ctx context.Context, opts Options, logger *zap.Logger) (llm.Provider, llm.Provider, llmobs.Ledger, error) {
+func buildSDKProviders(ctx context.Context, opts Options, logger *zap.Logger) (llmcore.Provider, llmcore.Provider, llmobs.Ledger, error) {
 	if opts.LLM == nil {
 		return nil, nil, nil, fmt.Errorf("sdk runtime requires Options.LLM")
 	}
@@ -337,7 +336,7 @@ func buildSDKProviders(ctx context.Context, opts Options, logger *zap.Logger) (l
 		return nil, nil, nil, fmt.Errorf("build channel routed provider: %w", err)
 	}
 
-	main := llm.Provider(provider)
+	main := llmcore.Provider(provider)
 	tool := opts.LLM.ToolProvider
 
 	if opts.LLM.Compose != nil {

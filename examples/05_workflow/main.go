@@ -6,11 +6,11 @@ import (
 	"log"
 	"os"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/types"
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"
 )

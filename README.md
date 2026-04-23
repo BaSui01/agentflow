@@ -130,6 +130,7 @@ go get github.com/BaSui01/agentflow
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
 - `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
 - `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/execution/runtime`
+- `github.com/BaSui01/agentflow/rag`、`github.com/BaSui01/agentflow/workflow`、`github.com/BaSui01/agentflow/llm` 根包已删除；分别改为导入 `rag/runtime`、`workflow/core|runtime`、`llm/core|gateway|runtime/compose`
 - Agent 运行时主面采用三层模型：`Model / Control / Tools`
   - `Model` 负责模型与 provider 相关参数
   - `Control` 负责 loop/budget/reasoning/override 等执行控制
@@ -219,7 +220,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    llm "github.com/BaSui01/agentflow/llm/core"
     llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
     "github.com/glebarez/sqlite"
     "go.uber.org/zap"
@@ -495,11 +496,7 @@ agentflow/
 │   ├── schema.go             # JSONSchema
 │   └── tool.go               # ToolSchema, ToolResult
 │
-├── llm/                      # Layer 1: LLM 抽象层
-│   ├── provider.go           # Provider 接口
-│   ├── resilience.go         # 重试/熔断/幂等
-│   ├── cache.go              # 多级缓存
-│   ├── middleware.go         # 中间件链
+├── llm/                      # Layer 1: LLM 抽象层（目录容器；root 无 Go 文件）
 │   ├── providers/            # Provider 实现
 │   │   ├── openai/           # OpenAI
 │   │   ├── anthropic/        # Claude
@@ -512,7 +509,7 @@ agentflow/
 │   ├── gateway/              # 统一能力入口
 │   ├── batch/                # 批量请求处理
 │   ├── capabilities/         # Image / Video / Audio / Rerank ...
-│   ├── core/                 # UnifiedRequest / Gateway contracts
+│   ├── core/                 # Provider / request-response / gateway contracts
 │   ├── tokenizer/            # 统一 Token 计数器
 │   └── tools/                # 工具执行
 │
@@ -526,36 +523,20 @@ agentflow/
 │   ├── observability/        # 可观测层（monitoring/evaluation/hitl）
 │   └── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
 │
-├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）
+├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）
+│   ├── core/                 # 检索契约 / document / vector store 抽象
+│   ├── runtime/              # RAG 运行时构建入口与主能力面
+│   ├── retrieval/            # hybrid / contextual / multi-hop / graph / query routing
 │   ├── loader/               # DocumentLoader（Text/Markdown/CSV/JSON）
 │   ├── sources/              # 数据源适配器（arXiv, GitHub）
-│   ├── runtime/              # RAG 运行时构建入口（Builder + config bridge）
-│   ├── graph_rag.go          # Graph RAG 知识图谱检索
-│   ├── query_router.go       # 查询路由/变换
-│   ├── chunking.go           # 文档分块
-│   ├── contextual_retrieval.go # BM25 上下文检索
-│   ├── hybrid_retrieval.go   # 混合检索
-│   ├── multi_hop.go          # 多跳推理
-│   ├── semantic_cache.go     # 语义缓存
-│   ├── reranker.go           # 重排序
-│   ├── vector_store.go       # 向量存储接口
-│   ├── pinecone_store.go     # Pinecone 实现
-│   ├── qdrant_store.go       # Qdrant 实现
-│   ├── milvus_store.go       # Milvus 实现
-│   ├── weaviate_store.go     # Weaviate 实现
-│   └── web_retrieval.go      # Web 增强检索
+│   └── adapter/              # runtime / loader / tokenizer 适配桥
 │
-├── workflow/                 # Layer 3: 工作流编排层（位于 agent/rag 之上）
-│   ├── workflow.go
-│   ├── dag.go                # DAG 定义
-│   ├── dag_builder.go        # DAG 构建器
-│   ├── dag_executor.go       # DAG 执行器
-│   ├── dag_serialization.go  # DAG 序列化
-│   ├── steps.go              # 步骤定义
-│   ├── builder_visual.go     # 可视化构建器
-│   ├── circuit_breaker.go    # DAG 熔断器（三态机 + 注册表）
-│   ├── checkpoint_enhanced.go # 增强检查点
-│   ├── execution_history.go  # 执行历史
+├── workflow/                 # Layer 3: 工作流编排层（目录容器；root 无 Go 文件）
+│   ├── core/                 # DAG / Workflow / Step / checkpoint 契约
+│   ├── runtime/              # Builder / Facade 统一装配入口
+│   ├── engine/               # 执行引擎与 step dependency integration
+│   ├── steps/                # 节点级 step 实现
+│   ├── observability/        # 执行历史与工作流可观测
 │   └── dsl/                  # YAML DSL 编排
 │       ├── schema.go         # DSL 类型定义
 │       ├── parser.go         # YAML 解析 + 变量插值

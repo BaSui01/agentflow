@@ -77,6 +77,16 @@ if ($agentRootFiles.Count -ne $maxAgentRootFiles) {
     $errors += "[SIZE] agent root package must have $maxAgentRootFiles production files; found $($agentRootFiles.Count)"
 }
 
+# Rule 1.1: rag/workflow/llm roots also must stay zero-file after destructive migration.
+$zeroRootModules = @("rag", "workflow", "llm")
+foreach ($module in $zeroRootModules) {
+    $moduleRootFiles = @(Get-ChildItem $module -File -Filter "*.go" |
+        Where-Object { $_.Name -notmatch "_test\.go$" })
+    if ($moduleRootFiles.Count -ne 0) {
+        $errors += "[SIZE] $module root package must have 0 production files; found $($moduleRootFiles.Count)"
+    }
+}
+
 # Rule 2: single-file pkg directory allowlist (aligned with architecture_guard_test.go)
 $allowOneFilePkg = @(
     "cache",
@@ -271,7 +281,7 @@ foreach ($required in $agentAllowedTopDirs) {
 
 # Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
 Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
-& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentUnifiedBuilderEntryPoints|PublicUnifiedEntrypointDocs|AgentOfficialRuntimeEntrypointDocs|OfficialEntrypointDocsConsistency|PublicProductSurfaceDocsExamplesConsistency|AgentExecutionOptionsArchitectureGuards|AgentRootPackageFileBudget|AgentRootPublicSurfaceBudget|RootLayoutBudget|PkgOneFileDirectoryAllowlist)$" .
+& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentUnifiedBuilderEntryPoints|PublicUnifiedEntrypointDocs|AgentOfficialRuntimeEntrypointDocs|OfficialEntrypointDocsConsistency|PublicProductSurfaceDocsExamplesConsistency|AgentExecutionOptionsArchitectureGuards|AgentRootPackageFileBudget|AgentRootPublicSurfaceBudget|RAGRootPackageFileBudget|WorkflowRootPackageFileBudget|LLMRootPackageFileBudget|RootLayoutBudget|PkgOneFileDirectoryAllowlist)$" .
 if ($LASTEXITCODE -ne 0) {
     $errors += "[TEST] focused architecture guard tests failed"
 }

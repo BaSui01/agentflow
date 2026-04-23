@@ -119,6 +119,7 @@ Entrypoint policy:
 - Repository-level official entry: `sdk.New(opts).Build(ctx)`
 - `agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule
 - the root package `github.com/BaSui01/agentflow/agent` has been removed; import `agent/execution/runtime` directly when you need runtime DTOs or builders
+- the root packages `github.com/BaSui01/agentflow/rag`, `github.com/BaSui01/agentflow/workflow`, and `github.com/BaSui01/agentflow/llm` are also removed; import `rag/runtime`, `workflow/core|runtime`, and `llm/core|gateway|runtime/compose` instead
 - The Agent runtime main surface follows a three-layer model: `Model / Control / Tools`
   - `Model` carries model/provider parameters
   - `Control` carries loop budgets, reasoning mode, overrides, and execution policy
@@ -208,7 +209,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    llm "github.com/BaSui01/agentflow/llm/core"
     llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
     "github.com/glebarez/sqlite"
     "go.uber.org/zap"
@@ -482,16 +483,8 @@ agentflow/
 │   ├── schema.go             # JSONSchema
 │   └── tool.go               # ToolSchema, ToolResult
 │
-├── llm/                      # Layer 1: LLM abstraction layer
-│   ├── provider.go           # Provider interface
-│   ├── resilience.go         # Retry/circuit breaker/idempotency
-│   ├── cache.go              # Multi-level cache
-│   ├── middleware.go         # Middleware chain
-│   ├── factory/              # Provider factory functions
-│   ├── budget/               # Token budget & cost control
+├── llm/                      # Layer 1: LLM abstraction layer (directory-only container; no root Go files)
 │   ├── batch/                # Batch request processing
-│   ├── embedding/            # Embedding providers
-│   ├── rerank/               # Reranking providers
 │   ├── providers/            # Provider implementations
 │   │   ├── openai/
 │   │   ├── anthropic/
@@ -503,7 +496,7 @@ agentflow/
 │   ├── runtime/              # Router / policy / compose
 │   ├── gateway/              # Unified capability entry
 │   ├── capabilities/         # Image / Video / Audio / Rerank ...
-│   ├── core/                 # UnifiedRequest / Gateway contracts
+│   ├── core/                 # Provider / request-response / gateway contracts
 │   ├── tokenizer/            # Unified token counter
 │   │   ├── tokenizer.go      # Tokenizer interface + global registry
 │   │   ├── tiktoken.go       # tiktoken adapter (OpenAI models)
@@ -520,44 +513,21 @@ agentflow/
 │   ├── observability/        # Observability layer (monitoring/evaluation/hitl)
 │   └── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
 │
-├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)
-│   ├── chunking.go           # Document chunking
-│   ├── hybrid_retrieval.go   # Hybrid retrieval
-│   ├── contextual_retrieval.go # BM25 contextual retrieval
-│   ├── multi_hop.go          # Multi-hop reasoning
-│   ├── web_retrieval.go      # Web-enhanced retrieval
-│   ├── semantic_cache.go     # Semantic cache
-│   ├── reranker.go           # Reranking
-│   ├── vector_store.go       # Vector store interface
-│   ├── qdrant_store.go       # Qdrant implementation
-│   ├── pinecone_store.go     # Pinecone implementation
-│   ├── milvus_store.go       # Milvus implementation
-│   ├── weaviate_store.go     # Weaviate implementation
-│   ├── runtime/              # RAG runtime entry (builder + config bridge)
-│   ├── graph_rag.go          # Graph RAG
-│   ├── query_router.go       # Query routing & transformation
+├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)
+│   ├── core/                 # Retrieval contracts / document / vector store abstractions
+│   ├── runtime/              # RAG runtime entry and main capability surface
+│   ├── retrieval/            # hybrid / contextual / multi-hop / graph / query routing
 │   ├── loader/               # Document loaders
-│   │   ├── loader.go         # Unified loader interface
-│   │   ├── text.go           # Text loader
-│   │   ├── markdown.go       # Markdown loader
-│   │   ├── csv.go            # CSV loader
-│   │   └── json.go           # JSON loader
-│   └── sources/              # Data sources
-│       ├── arxiv.go          # arXiv paper retrieval
-│       └── github_source.go  # GitHub repository search
+│   ├── sources/              # Data sources
+│   └── adapter/              # runtime / loader / tokenizer bridges
 │
-├── workflow/                 # Layer 3: Workflow orchestration (above agent/rag)
-│   ├── workflow.go
-│   ├── dag.go                # DAG workflow
-│   ├── dag_executor.go       # DAG executor
-│   ├── dag_builder.go        # DAG builder
-│   ├── steps.go              # Step definitions
-│   ├── circuit_breaker.go    # Circuit breaker (three-state machine + registry)
-│   ├── builder_visual.go     # Visual workflow builder
+├── workflow/                 # Layer 3: Workflow orchestration (directory-only container; no root Go files)
+│   ├── core/                 # DAG / Workflow / Step / checkpoint contracts
+│   ├── runtime/              # Builder / Facade unified entry
+│   ├── engine/               # Execution engine and step dependency integration
+│   ├── steps/                # Step implementations
+│   ├── observability/        # Workflow execution history and observability
 │   └── dsl/                  # YAML DSL orchestration
-│       ├── schema.go         # DSL type definitions
-│       ├── parser.go         # YAML parser + variable interpolation + DAG builder
-│       └── validator.go      # DSL validator
 │
 ├── api/                      # Adapter layer: HTTP/MCP/A2A handlers + routes
 │   ├── handlers/             # Request parsing, response writing, service/usecase entry
