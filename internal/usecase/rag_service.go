@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )

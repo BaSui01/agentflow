@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -77,9 +77,9 @@ func (a *OtelMetricsAdapter) RecordRequest(model string, duration time.Duration,
 		errCode = "unknown"
 	}
 	a.Metrics.EndRequest(ctx, span, reqAttrs, observability.ResponseAttrs{
-		Status:   status,
+		Status:    status,
 		ErrorCode: errCode,
-		Duration: duration,
+		Duration:  duration,
 	})
 }
 
@@ -117,4 +117,3 @@ func (a *PromptCacheAdapter) Set(key string, resp *llmpkg.ChatResponse) {
 	}
 	_ = a.Cache.Set(context.Background(), key, entry)
 }
-

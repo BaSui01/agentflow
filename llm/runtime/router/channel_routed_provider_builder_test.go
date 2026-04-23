@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	llmroot "github.com/BaSui01/agentflow/llm"
+	llmroot "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 

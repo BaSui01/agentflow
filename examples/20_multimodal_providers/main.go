@@ -15,7 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"github.com/BaSui01/agentflow/llm/providers"
 	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"go.uber.org/zap"
 )

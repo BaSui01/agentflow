@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/genai"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 )
 

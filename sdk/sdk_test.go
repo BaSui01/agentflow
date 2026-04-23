@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/agent/execution/runtime"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"

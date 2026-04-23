@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"go.uber.org/zap"
 )
 
@@ -96,4 +96,3 @@ func TestRegisterDefaultStrategies(t *testing.T) {
 		t.Fatalf("unexpected graph strategy output: %#v", out)
 	}
 }
-

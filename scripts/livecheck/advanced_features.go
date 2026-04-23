@@ -8,14 +8,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration"
-	"github.com/BaSui01/agentflow/agent/hierarchical"
-	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/skills"
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -24,8 +24,8 @@ import (
 func runSkillsAndMCP(ctx context.Context, logger *zap.Logger, provider llm.Provider, model string) error {
 	logger.Info("test D: skills+mcp start")
 
-	skillMgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), logger)
-	skill, err := skills.NewSkillBuilder("architecture_review", "Architecture Review").
+	skillMgr := tools.NewSkillManager(tools.DefaultSkillManagerConfig(), logger)
+	skill, err := tools.NewSkillBuilder("architecture_review", "Architecture Review").
 		WithDescription("Evaluate architecture with pros, cons, and risks").
 		WithCategory("architecture").
 		WithTags("architecture", "review", "risk").
@@ -204,11 +204,11 @@ func runMultiAgentCollaboration(ctx context.Context, logger *zap.Logger, provide
 		}
 	}
 
-	debateCfg := collaboration.DefaultMultiAgentConfig()
-	debateCfg.Pattern = collaboration.PatternDebate
+	debateCfg := multiagent.DefaultMultiAgentConfig()
+	debateCfg.Pattern = multiagent.PatternDebate
 	debateCfg.MaxRounds = 1
 	debateCfg.Timeout = 3 * time.Minute
-	debateSystem := collaboration.NewMultiAgentSystem(agents, debateCfg, logger)
+	debateSystem := multiagent.NewMultiAgentSystem(agents, debateCfg, logger)
 
 	debateCtx, cancelDebate := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancelDebate()
@@ -220,10 +220,10 @@ func runMultiAgentCollaboration(ctx context.Context, logger *zap.Logger, provide
 		return fmt.Errorf("debate execute: %w", err)
 	}
 
-	broadcastCfg := collaboration.DefaultMultiAgentConfig()
-	broadcastCfg.Pattern = collaboration.PatternBroadcast
+	broadcastCfg := multiagent.DefaultMultiAgentConfig()
+	broadcastCfg.Pattern = multiagent.PatternBroadcast
 	broadcastCfg.Timeout = 3 * time.Minute
-	broadcastSystem := collaboration.NewMultiAgentSystem(agents, broadcastCfg, logger)
+	broadcastSystem := multiagent.NewMultiAgentSystem(agents, broadcastCfg, logger)
 
 	broadcastCtx, cancelBroadcast := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancelBroadcast()

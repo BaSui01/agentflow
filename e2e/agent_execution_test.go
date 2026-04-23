@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
@@ -31,14 +31,14 @@ import (
 // e2eRegistry is a simple in-memory discovery registry for end-to-end tests.
 type e2eRegistry struct {
 	mu     sync.RWMutex
-	agents map[string]*discovery.AgentInfo
+	agents map[string]*tools.AgentInfo
 }
 
 func newE2ERegistry() *e2eRegistry {
-	return &e2eRegistry{agents: make(map[string]*discovery.AgentInfo)}
+	return &e2eRegistry{agents: make(map[string]*tools.AgentInfo)}
 }
 
-func (r *e2eRegistry) RegisterAgent(_ context.Context, info *discovery.AgentInfo) error {
+func (r *e2eRegistry) RegisterAgent(_ context.Context, info *tools.AgentInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.agents[info.Card.Name] = info
@@ -52,14 +52,14 @@ func (r *e2eRegistry) UnregisterAgent(_ context.Context, agentID string) error {
 	return nil
 }
 
-func (r *e2eRegistry) UpdateAgent(_ context.Context, info *discovery.AgentInfo) error {
+func (r *e2eRegistry) UpdateAgent(_ context.Context, info *tools.AgentInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.agents[info.Card.Name] = info
 	return nil
 }
 
-func (r *e2eRegistry) GetAgent(_ context.Context, agentID string) (*discovery.AgentInfo, error) {
+func (r *e2eRegistry) GetAgent(_ context.Context, agentID string) (*tools.AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.agents[agentID]
@@ -69,44 +69,44 @@ func (r *e2eRegistry) GetAgent(_ context.Context, agentID string) (*discovery.Ag
 	return info, nil
 }
 
-func (r *e2eRegistry) ListAgents(_ context.Context) ([]*discovery.AgentInfo, error) {
+func (r *e2eRegistry) ListAgents(_ context.Context) ([]*tools.AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]*discovery.AgentInfo, 0, len(r.agents))
+	out := make([]*tools.AgentInfo, 0, len(r.agents))
 	for _, info := range r.agents {
 		out = append(out, info)
 	}
 	return out, nil
 }
 
-func (r *e2eRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+func (r *e2eRegistry) RegisterCapability(_ context.Context, _ string, _ *tools.CapabilityInfo) error {
 	return nil
 }
 func (r *e2eRegistry) UnregisterCapability(_ context.Context, _, _ string) error { return nil }
-func (r *e2eRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+func (r *e2eRegistry) UpdateCapability(_ context.Context, _ string, _ *tools.CapabilityInfo) error {
 	return nil
 }
-func (r *e2eRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error) {
+func (r *e2eRegistry) GetCapability(_ context.Context, _, _ string) (*tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (r *e2eRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+func (r *e2eRegistry) ListCapabilities(_ context.Context, _ string) ([]tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (r *e2eRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+func (r *e2eRegistry) FindCapabilities(_ context.Context, _ string) ([]tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (r *e2eRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error {
+func (r *e2eRegistry) UpdateAgentStatus(_ context.Context, _ string, _ tools.AgentStatus) error {
 	return nil
 }
 func (r *e2eRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error { return nil }
 func (r *e2eRegistry) RecordExecution(_ context.Context, _ string, _ string, _ bool, _ time.Duration) error {
 	return nil
 }
-func (r *e2eRegistry) Subscribe(_ discovery.DiscoveryEventHandler) string { return "" }
-func (r *e2eRegistry) Unsubscribe(_ string)                               {}
-func (r *e2eRegistry) Close() error                                       { return nil }
+func (r *e2eRegistry) Subscribe(_ tools.DiscoveryEventHandler) string { return "" }
+func (r *e2eRegistry) Unsubscribe(_ string)                           {}
+func (r *e2eRegistry) Close() error                                   { return nil }
 
-var _ discovery.Registry = (*e2eRegistry)(nil)
+var _ tools.Registry = (*e2eRegistry)(nil)
 
 // buildE2EAgent creates a real BaseAgent using the fluent builder.
 func buildE2EAgent(t *testing.T, agentID string, maxConcurrency int) agent.Agent {
@@ -154,7 +154,7 @@ func TestE2E_AgentExecute_Success(t *testing.T) {
 	// Register agent in discovery registry
 	ctx := context.Background()
 	reg := newE2ERegistry()
-	_ = reg.RegisterAgent(ctx, &discovery.AgentInfo{
+	_ = reg.RegisterAgent(ctx, &tools.AgentInfo{
 		Card: &a2a.AgentCard{Name: agentID},
 	})
 
@@ -195,7 +195,7 @@ func TestE2E_AgentExecute_ConcurrentRequests(t *testing.T) {
 
 	ctx := context.Background()
 	reg := newE2ERegistry()
-	_ = reg.RegisterAgent(ctx, &discovery.AgentInfo{
+	_ = reg.RegisterAgent(ctx, &tools.AgentInfo{
 		Card: &a2a.AgentCard{Name: agentID},
 	})
 

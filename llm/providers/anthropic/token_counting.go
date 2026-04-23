@@ -3,7 +3,7 @@ package claude
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	anthropicsdk "github.com/anthropics/anthropic-sdk-go"
 )

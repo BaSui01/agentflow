@@ -15,7 +15,7 @@ English | [中文](README.md)
 ### 🤖 Agent Framework
 
 - **Official Single-Agent Path** - `react + native tool calling + checkpoint/session/guardrails`
-- **Official Multi-Agent Facade** - `agent/team` with `supervisor / selector / round_robin / swarm`
+- **Official Multi-Agent Facade** - `agent/collaboration/team` with `supervisor / selector / round_robin / swarm`
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
 - **Dual-Model Architecture (toolProvider)** - Cheap model handles tool-call-heavy turns first (native tool calling, with XML tool-calling fallback for non-native providers), while the expensive model focuses on final content generation
@@ -58,8 +58,11 @@ English | [中文](README.md)
 
 ### 🧱 Startup Composition
 
-- **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
 - **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
+- **Bundle-based Server State** - `cmd/agentflow/server_runtime_bundles.go` groups long-lived server state into `handlers / text / tooling / workflow / infra / ops` bundles instead of one flat cross-domain field list
+- **Single Hot-Reload Seam** - `server_hotreload.go` only triggers rebuilds and state replacement; the actual `chat/cost` rebinding, resolver rebuild, and workflow runtime rebuild now live in `internal/app/bootstrap`
+- **Usecase-owned Handler Contracts** - `internal/usecase` now exposes handler-facing `chat/workflow` contracts such as `ChatStreamEvent`, `WorkflowPlan`, and `WorkflowNodeEvent`, so handlers no longer depend directly on `llmcore.UnifiedChunk` or `workflow.DAGWorkflow`
 
 ### 🔍 RAG System (Retrieval-Augmented Generation)
 
@@ -117,8 +120,9 @@ go get github.com/BaSui01/agentflow
 Entrypoint policy:
 
 - Repository-level official entry: `sdk.New(opts).Build(ctx)`
-- `agent/runtime.Builder` is only the runtime entry for the `agent` submodule
-- `agent.NewAgentBuilder`, `agent.NewBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths, not peer official entrypoints
+- `agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule
+- the root package `github.com/BaSui01/agentflow/agent` has been removed; import `agent/execution/runtime` directly when you need runtime DTOs or builders
+- the root packages `github.com/BaSui01/agentflow/rag`, `github.com/BaSui01/agentflow/workflow`, and `github.com/BaSui01/agentflow/llm` are also removed; import `rag/runtime`, `workflow/core|runtime`, and `llm/core|gateway|runtime/compose` instead
 - The Agent runtime main surface follows a three-layer model: `Model / Control / Tools`
   - `Model` carries model/provider parameters
   - `Control` carries loop budgets, reasoning mode, overrides, and execution policy
@@ -138,7 +142,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/agent"
+    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
     "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
@@ -208,7 +212,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    llm "github.com/BaSui01/agentflow/llm/core"
     llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
     "github.com/glebarez/sqlite"
     "go.uber.org/zap"
@@ -356,7 +360,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-The context runtime is wired by default through the `sdk` -> `agent/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
+The context runtime is wired by default through the `sdk` -> `agent/execution/runtime.Builder` main chain; configure it via `types.AgentConfig.Context`:
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -482,16 +486,8 @@ agentflow/
 │   ├── schema.go             # JSONSchema
 │   └── tool.go               # ToolSchema, ToolResult
 │
-├── llm/                      # Layer 1: LLM abstraction layer
-│   ├── provider.go           # Provider interface
-│   ├── resilience.go         # Retry/circuit breaker/idempotency
-│   ├── cache.go              # Multi-level cache
-│   ├── middleware.go         # Middleware chain
-│   ├── factory/              # Provider factory functions
-│   ├── budget/               # Token budget & cost control
+├── llm/                      # Layer 1: LLM abstraction layer (directory-only container; no root Go files)
 │   ├── batch/                # Batch request processing
-│   ├── embedding/            # Embedding providers
-│   ├── rerank/               # Reranking providers
 │   ├── providers/            # Provider implementations
 │   │   ├── openai/
 │   │   ├── anthropic/
@@ -503,89 +499,38 @@ agentflow/
 │   ├── runtime/              # Router / policy / compose
 │   ├── gateway/              # Unified capability entry
 │   ├── capabilities/         # Image / Video / Audio / Rerank ...
-│   ├── core/                 # UnifiedRequest / Gateway contracts
+│   ├── core/                 # Provider / request-response / gateway contracts
 │   ├── tokenizer/            # Unified token counter
 │   │   ├── tokenizer.go      # Tokenizer interface + global registry
 │   │   ├── tiktoken.go       # tiktoken adapter (OpenAI models)
 │   │   └── estimator.go      # CJK estimator
 │   └── tools/                # Tool execution
 │
-├── agent/                    # Layer 2: Agent core
-│   ├── base.go               # BaseAgent
-│   ├── completion.go         # ChatCompletion/StreamCompletion (dual-model architecture)
-│   ├── react.go              # Plan/Execute/Observe ReAct loop
-│   ├── steering.go           # Real-time steering (guide/stop_and_send)
-│   ├── session_manager.go    # Session manager (auto-expiry cleanup)
-│   ├── state.go              # State machine
-│   ├── event.go              # Event bus
-│   ├── registry.go           # Agent registry
-│   ├── planner/              # TaskPlanner planning engine
-│   │   ├── planner.go        # Core engine (Kahn cycle detection)
-│   │   ├── plan.go           # Plan/PlanTask data structures
-│   │   ├── executor.go       # Topological sort + parallel execution
-│   │   ├── dispatcher.go     # 3 dispatch strategies (by_role/by_capability/round_robin)
-│   │   └── tools.go          # Built-in tool schemas (create/update/get_plan)
-│   ├── team/                 # Official multi-agent facade
-│   │   ├── team.go           # AgentTeam implementation
-│   │   ├── modes.go          # 4 modes (Supervisor/RoundRobin/Selector/Swarm)
-│   │   └── builder.go        # Fluent builder
-│   ├── declarative/          # Declarative Agent loader (YAML/JSON)
-│   ├── plugins/              # Plugin system & lifecycle
-│   ├── collaboration/        # Legacy multi-agent collaboration surface
-│   ├── crews/                # Legacy crew orchestration
-│   ├── federation/           # Agent federation & service discovery
-│   ├── hitl/                 # Human-in-the-Loop
-│   ├── artifacts/            # Artifact management
-│   ├── voice/                # Voice capabilities
-│   ├── lsp/                  # LSP server integration
-│   ├── streaming/            # Bidirectional communication
-│   ├── guardrails/           # Safety guardrails
-│   ├── protocol/             # A2A/MCP protocols
-│   │   ├── a2a/
-│   │   └── mcp/
-│   ├── reasoning/            # Reasoning patterns
-│   ├── memory/               # Memory system
-│   ├── execution/            # Execution engine
-│   └── context/              # Context management
+├── agent/                    # Layer 2: Agent core (directory-only container; no root Go files)
+│   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff/teamadapter)
+│   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
+│   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)
+│   ├── core/                 # Core layer (registry/helpers/extension contracts)
+│   ├── execution/            # Execution layer (runtime/context/loop/protocol/orchestration)
+│   ├── integration/          # Integration layer (deployment/hosted/k8s/lsp/voice)
+│   ├── observability/        # Observability layer (monitoring/evaluation/hitl)
+│   └── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
 │
-├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)
-│   ├── chunking.go           # Document chunking
-│   ├── hybrid_retrieval.go   # Hybrid retrieval
-│   ├── contextual_retrieval.go # BM25 contextual retrieval
-│   ├── multi_hop.go          # Multi-hop reasoning
-│   ├── web_retrieval.go      # Web-enhanced retrieval
-│   ├── semantic_cache.go     # Semantic cache
-│   ├── reranker.go           # Reranking
-│   ├── vector_store.go       # Vector store interface
-│   ├── qdrant_store.go       # Qdrant implementation
-│   ├── pinecone_store.go     # Pinecone implementation
-│   ├── milvus_store.go       # Milvus implementation
-│   ├── weaviate_store.go     # Weaviate implementation
-│   ├── runtime/              # RAG runtime entry (builder + config bridge)
-│   ├── graph_rag.go          # Graph RAG
-│   ├── query_router.go       # Query routing & transformation
+├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)
+│   ├── core/                 # Retrieval contracts / document / vector store abstractions
+│   ├── runtime/              # RAG runtime entry and main capability surface
+│   ├── retrieval/            # hybrid / contextual / multi-hop / graph / query routing
 │   ├── loader/               # Document loaders
-│   │   ├── loader.go         # Unified loader interface
-│   │   ├── text.go           # Text loader
-│   │   ├── markdown.go       # Markdown loader
-│   │   ├── csv.go            # CSV loader
-│   │   └── json.go           # JSON loader
-│   └── sources/              # Data sources
-│       ├── arxiv.go          # arXiv paper retrieval
-│       └── github_source.go  # GitHub repository search
+│   ├── sources/              # Data sources
+│   └── adapter/              # runtime / loader / tokenizer bridges
 │
-├── workflow/                 # Layer 3: Workflow orchestration (above agent/rag)
-│   ├── workflow.go
-│   ├── dag.go                # DAG workflow
-│   ├── dag_executor.go       # DAG executor
-│   ├── dag_builder.go        # DAG builder
-│   ├── steps.go              # Step definitions
-│   ├── circuit_breaker.go    # Circuit breaker (three-state machine + registry)
-│   ├── builder_visual.go     # Visual workflow builder
+├── workflow/                 # Layer 3: Workflow orchestration (directory-only container; no root Go files)
+│   ├── core/                 # DAG / Workflow / Step / checkpoint contracts
+│   ├── runtime/              # Builder / Facade unified entry
+│   ├── engine/               # Execution engine and step dependency integration
+│   ├── steps/                # Step implementations
+│   ├── observability/        # Workflow execution history and observability
 │   └── dsl/                  # YAML DSL orchestration
-│       ├── schema.go         # DSL type definitions
-│       ├── parser.go         # YAML parser + variable interpolation + DAG builder
-│       └── validator.go      # DSL validator
 │
 ├── api/                      # Adapter layer: HTTP/MCP/A2A handlers + routes
 │   ├── handlers/             # Request parsing, response writing, service/usecase entry
@@ -609,10 +554,10 @@ agentflow/
 │   ├── main.go               # CLI entry (serve/migrate/health/version)
 │   ├── migrate.go            # Migration subcommands
 │   ├── server_runtime.go     # Server struct and startup orchestration
+│   ├── server_runtime_bundles.go # Server runtime bundle grouping (handlers/text/tooling/workflow/infra/ops)
 │   ├── server_services.go    # Lifecycle bus based on pkg/service.Registry
 │   ├── server_http.go        # Route registration and HTTP/Metrics manager wiring
 │   ├── server_handlers_runtime.go # Call BuildServeHandlerSet and assign Server fields
-│   ├── server_chat_service_runtime.go # Chat usecase service runtime build helper
 │   ├── server_startup_summary.go # Startup summary and capability/dependency status report
 │   ├── server_stores.go      # Mongo/RAG/Memory/Audit wiring
 │   ├── server_hotreload.go   # Hot-reload manager initialization

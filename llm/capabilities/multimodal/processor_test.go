@@ -1,11 +1,11 @@
 package multimodal
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func (m *mockLLMProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 	return ch, nil
 }
 
-func (m *mockLLMProvider) Name() string                                          { return m.name }
+func (m *mockLLMProvider) Name() string { return m.name }
 func (m *mockLLMProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
@@ -178,5 +178,3 @@ func TestMultimodalProvider_SupportedModalities(t *testing.T) {
 		})
 	}
 }
-
-

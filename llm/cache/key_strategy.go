@@ -1,7 +1,7 @@
 package cache
 
 import (
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 )
 
 // KeyStrategy 缓存键生成策略接口
@@ -12,4 +12,3 @@ type KeyStrategy interface {
 	// Name 返回策略名称（用于日志和调试）
 	Name() string
 }
-

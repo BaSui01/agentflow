@@ -10,6 +10,14 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 ---
 
+## Quick Navigation
+
+| Task | Section | Section ID |
+|------|---------|------------|
+| Refactor plan governance | Refactor Plan Governance Integration Guide | `skill-cn-refactor-plan-governance` |
+
+---
+
 ## Guidelines Index
 
 | Guide | Description | Status |

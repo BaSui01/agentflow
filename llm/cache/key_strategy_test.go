@@ -3,7 +3,7 @@ package cache
 import (
 	"testing"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -187,4 +187,3 @@ func BenchmarkHierarchicalKeyStrategy_GenerateKey(b *testing.B) {
 		strategy.GenerateKey(req)
 	}
 }
-

@@ -13,7 +13,6 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -25,7 +24,7 @@ import (
 
 type mockChatService struct {
 	completeFunc func(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error)
-	streamFunc   func(ctx context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error)
+	streamFunc   func(ctx context.Context, req *usecase.ChatRequest) (<-chan usecase.ChatStreamEvent, *types.Error)
 }
 
 func (m *mockChatService) Complete(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
@@ -47,20 +46,20 @@ func (m *mockChatService) Complete(ctx context.Context, req *usecase.ChatRequest
 			Usage:     usecase.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 			CreatedAt: time.Now(),
 		},
-		Raw: &llm.ChatResponse{
+		Raw: &llmcore.ChatResponse{
 			ID:    "chatcmpl-test-123",
 			Model: req.Model,
-			Usage: llm.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: llmcore.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		},
 		Duration: 50 * time.Millisecond,
 	}, nil
 }
 
-func (m *mockChatService) Stream(ctx context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (m *mockChatService) Stream(ctx context.Context, req *usecase.ChatRequest) (<-chan usecase.ChatStreamEvent, *types.Error) {
 	if m.streamFunc != nil {
 		return m.streamFunc(ctx, req)
 	}
-	ch := make(chan llmcore.UnifiedChunk, 1)
+	ch := make(chan usecase.ChatStreamEvent, 1)
 	close(ch)
 	return ch, nil
 }

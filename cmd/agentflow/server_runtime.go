@@ -1,32 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/evaluation"
-	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/internal/app/bootstrap"
-	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/cache"
-	"github.com/BaSui01/agentflow/llm/capabilities/tools"
-	"github.com/BaSui01/agentflow/llm/observability"
-	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/metrics"
-	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
-	"github.com/BaSui01/agentflow/pkg/server"
-	pkgservice "github.com/BaSui01/agentflow/pkg/service"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
-	"github.com/BaSui01/agentflow/rag/core"
-	workflowpkg "github.com/BaSui01/agentflow/workflow"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -37,66 +17,12 @@ type Server struct {
 	configPath string
 	logger     *zap.Logger
 
-	telemetry *telemetry.Providers
-	db        *gorm.DB
-
-	mongoClient *mongoclient.Client
-
-	httpManager     *server.Manager
-	metricsManager  *server.Manager
-	serviceRegistry *pkgservice.Registry
-
-	healthHandler       *handlers.HealthHandler
-	chatHandler         *handlers.ChatHandler
-	chatService         usecase.ChatService
-	agentHandler        *handlers.AgentHandler
-	apiKeyHandler       *handlers.APIKeyHandler
-	toolRegistryHandler *handlers.ToolRegistryHandler
-	toolProviderHandler *handlers.ToolProviderHandler
-	toolApprovalHandler *handlers.ToolApprovalHandler
-	ragHandler          *handlers.RAGHandler
-	workflowHandler     *handlers.WorkflowHandler
-	protocolHandler     *handlers.ProtocolHandler
-	multimodalHandler   *handlers.MultimodalHandler
-	multimodalRedis     *redis.Client
-	toolApprovalRedis   *redis.Client
-
-	metricsCollector *metrics.Collector
-
-	hotReloadManager *config.HotReloadManager
-	configAPIHandler *config.ConfigAPIHandler
-	costHandler      *handlers.CostHandler
-
-	rateLimiterCancel       context.CancelFunc
-	tenantRateLimiterCancel context.CancelFunc
-
-	provider llm.Provider
-	// toolProvider is dedicated for tool-calling phase; when nil, runtime falls back to provider.
-	toolProvider llm.Provider
-
-	budgetManager *llmpolicy.TokenBudgetManager
-	costTracker   *observability.CostTracker
-	llmCache      *cache.MultiLevelCache
-	llmMetrics    *observability.Metrics
-
-	resolver *agent.CachingResolver
-
-	discoveryRegistry       *discovery.CapabilityRegistry
-	agentRegistry           *agent.AgentRegistry
-	toolingRuntime          *bootstrap.AgentToolingRuntime
-	toolApprovalManager     *hitl.InterruptManager
-	capabilityCatalog       *bootstrap.CapabilityCatalog
-	workflowHITLManager     *hitl.InterruptManager
-	checkpointStore         agent.CheckpointStore
-	checkpointManager       *agent.CheckpointManager
-	workflowCheckpointStore workflowpkg.CheckpointStore
-	ragStore                core.VectorStore
-	ragEmbedding            core.EmbeddingProvider
-
-	auditLogger *tools.DefaultAuditLogger
-	abTester    *evaluation.ABTester
-
-	enhancedMemory *memory.EnhancedMemorySystem
+	infra    serverInfraBundle
+	ops      serverOpsBundle
+	handlers serverHandlerBundle
+	text     serverTextRuntimeBundle
+	tooling  serverToolingBundle
+	workflow serverWorkflowBundle
 
 	wg sync.WaitGroup
 }
@@ -106,14 +32,16 @@ func NewServer(cfg *config.Config, configPath string, logger *zap.Logger, tp *te
 		cfg:        cfg,
 		configPath: configPath,
 		logger:     logger,
-		telemetry:  tp,
-		db:         db,
+		infra: serverInfraBundle{
+			telemetry: tp,
+			db:        db,
+		},
 	}
 }
 
 // Start 启动所有服务
 func (s *Server) Start() error {
-	s.metricsCollector = metrics.NewCollector("agentflow", s.logger)
+	s.ops.metricsCollector = metrics.NewCollector("agentflow", s.logger)
 
 	if err := s.initMongoDB(); err != nil {
 		return fmt.Errorf("failed to init MongoDB: %w", err)

@@ -12,7 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"

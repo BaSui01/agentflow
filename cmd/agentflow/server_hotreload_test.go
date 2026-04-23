@@ -12,14 +12,13 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/hitl"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	pkgserver "github.com/BaSui01/agentflow/pkg/server"
@@ -34,11 +33,11 @@ type hotReloadProvider struct {
 	name    string
 }
 
-func (p *hotReloadProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *hotReloadProvider) Completion(_ context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		Provider: p.name,
 		Model:    req.Model,
-		Choices: []llm.ChatChoice{{
+		Choices: []llmcore.ChatChoice{{
 			Index: 0,
 			Message: types.Message{
 				Role:    types.RoleAssistant,
@@ -48,9 +47,9 @@ func (p *hotReloadProvider) Completion(_ context.Context, req *llm.ChatRequest) 
 	}, nil
 }
 
-func (p *hotReloadProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	out := make(chan llm.StreamChunk, 1)
-	out <- llm.StreamChunk{
+func (p *hotReloadProvider) Stream(_ context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	out := make(chan llmcore.StreamChunk, 1)
+	out <- llmcore.StreamChunk{
 		Provider: p.name,
 		Model:    req.Model,
 		Delta: types.Message{
@@ -62,20 +61,20 @@ func (p *hotReloadProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-c
 	return out, nil
 }
 
-func (*hotReloadProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (*hotReloadProvider) HealthCheck(context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *hotReloadProvider) Name() string { return p.name }
 
 func (*hotReloadProvider) SupportsNativeFunctionCalling() bool { return true }
 
-func (*hotReloadProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+func (*hotReloadProvider) ListModels(context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (*hotReloadProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (*hotReloadProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }
 
-func (p *hotReloadProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
-	return &llm.TokenCountResponse{
+func (p *hotReloadProvider) CountTokens(context.Context, *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
+	return &llmcore.TokenCountResponse{
 		Model:       p.name,
 		InputTokens: 4,
 		TotalTokens: 4,
@@ -116,11 +115,11 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 	bootstrap.UnregisterMainProviderBuilder(modeA)
 	bootstrap.UnregisterMainProviderBuilder(modeB)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-a", content: "from-a"}, nil
 		}))
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeB,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-b", content: "from-b"}, nil
 		}))
 	defer bootstrap.UnregisterMainProviderBuilder(modeA)
@@ -132,8 +131,8 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	require.NotNil(t, s.chatHandler)
-	handler := s.chatHandler
+	require.NotNil(t, s.handlers.chatHandler)
+	handler := s.handlers.chatHandler
 	require.NoError(t, s.initHotReloadManager())
 
 	assertHotReloadChatContent(t, handler, "from-a")
@@ -141,9 +140,9 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 	newCfg := config.DefaultConfig()
 	newCfg.LLM.MainProviderMode = modeB
 	newCfg.Budget.Enabled = false
-	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
+	require.NoError(t, s.ops.hotReloadManager.ApplyConfig(newCfg, "test"))
 
-	require.Same(t, handler, s.chatHandler)
+	require.Same(t, handler, s.handlers.chatHandler)
 	require.Equal(t, modeB, s.cfg.LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "from-b")
 }
@@ -156,11 +155,11 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 	bootstrap.UnregisterMainProviderBuilder(modeA)
 	bootstrap.UnregisterMainProviderBuilder(modeBroken)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-good", content: "stable"}, nil
 		}))
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeBroken,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return nil, fmt.Errorf("broken builder")
 		}))
 	defer bootstrap.UnregisterMainProviderBuilder(modeA)
@@ -172,19 +171,19 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	require.NotNil(t, s.chatHandler)
-	handler := s.chatHandler
+	require.NotNil(t, s.handlers.chatHandler)
+	handler := s.handlers.chatHandler
 	require.NoError(t, s.initHotReloadManager())
 
 	badCfg := config.DefaultConfig()
 	badCfg.LLM.MainProviderMode = modeBroken
 	badCfg.Budget.Enabled = false
-	err := s.hotReloadManager.ApplyConfig(badCfg, "test")
+	err := s.ops.hotReloadManager.ApplyConfig(badCfg, "test")
 	require.Error(t, err)
 
-	require.Same(t, handler, s.chatHandler)
+	require.Same(t, handler, s.handlers.chatHandler)
 	require.Equal(t, modeA, s.cfg.LLM.MainProviderMode)
-	require.Equal(t, modeA, s.hotReloadManager.GetConfig().LLM.MainProviderMode)
+	require.Equal(t, modeA, s.ops.hotReloadManager.GetConfig().LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "stable")
 }
 
@@ -194,7 +193,7 @@ func TestServerHotReload_RequiresRestartToActivateMissingChatAndCostRoutes(t *te
 	modeGood := "reload-startup-good"
 	bootstrap.UnregisterMainProviderBuilder(modeGood)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeGood,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-good", content: "live"}, nil
 		}))
 	defer bootstrap.UnregisterMainProviderBuilder(modeGood)
@@ -204,17 +203,17 @@ func TestServerHotReload_RequiresRestartToActivateMissingChatAndCostRoutes(t *te
 	cfg.Budget.Enabled = false
 
 	s := &Server{
-		cfg:         cfg,
-		logger:      zap.NewNop(),
-		httpManager: &pkgserver.Manager{},
+		cfg:    cfg,
+		logger: zap.NewNop(),
+		ops:    serverOpsBundle{httpManager: &pkgserver.Manager{}},
 	}
-	require.Nil(t, s.chatHandler)
-	require.Nil(t, s.costHandler)
+	require.Nil(t, s.handlers.chatHandler)
+	require.Nil(t, s.handlers.costHandler)
 	require.NoError(t, s.reloadLLMRuntime(cfg))
 
-	require.NotNil(t, s.provider)
-	require.Nil(t, s.chatHandler)
-	require.Nil(t, s.costHandler)
+	require.NotNil(t, s.text.provider)
+	require.Nil(t, s.handlers.chatHandler)
+	require.Nil(t, s.handlers.costHandler)
 }
 
 func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
@@ -225,11 +224,11 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 	bootstrap.UnregisterMainProviderBuilder(modeA)
 	bootstrap.UnregisterMainProviderBuilder(modeB)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-resolver-a", content: "resolver-a"}, nil
 		}))
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeB,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-resolver-b", content: "resolver-b"}, nil
 		}))
 	defer bootstrap.UnregisterMainProviderBuilder(modeA)
@@ -244,7 +243,7 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	require.NotNil(t, s.provider)
+	require.NotNil(t, s.text.provider)
 
 	var teardowns atomic.Int32
 	oldRegistry := agent.NewAgentRegistry(zap.NewNop())
@@ -260,23 +259,23 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 	})
 
 	oldResolver := agent.NewCachingResolver(oldRegistry, llmgateway.New(llmgateway.Config{
-		ChatProvider: s.provider,
+		ChatProvider: s.text.provider,
 		Logger:       zap.NewNop(),
 	}), zap.NewNop())
 	_, err := oldResolver.Resolve(context.Background(), "agent-before-reload")
 	require.NoError(t, err)
 
-	s.resolver = oldResolver
-	s.agentRegistry = agent.NewAgentRegistry(zap.NewNop())
+	s.workflow.resolver = oldResolver
+	s.tooling.agentRegistry = agent.NewAgentRegistry(zap.NewNop())
 	require.NoError(t, s.initHotReloadManager())
 
 	newCfg := config.DefaultConfig()
 	newCfg.LLM.MainProviderMode = modeB
 	newCfg.Budget.Enabled = false
-	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
+	require.NoError(t, s.ops.hotReloadManager.ApplyConfig(newCfg, "test"))
 
-	require.NotNil(t, s.resolver)
-	require.NotSame(t, oldResolver, s.resolver)
+	require.NotNil(t, s.workflow.resolver)
+	require.NotSame(t, oldResolver, s.workflow.resolver)
 	require.EqualValues(t, 1, teardowns.Load())
 }
 
@@ -288,11 +287,11 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 	bootstrap.UnregisterMainProviderBuilder(modeA)
 	bootstrap.UnregisterMainProviderBuilder(modeB)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-workflow-a", content: "a"}, nil
 		}))
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeB,
-		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
 			return &hotReloadProvider{name: "provider-workflow-b", content: "b"}, nil
 		}))
 	defer bootstrap.UnregisterMainProviderBuilder(modeA)
@@ -307,12 +306,20 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	require.NoError(t, s.reloadLLMRuntime(cfg))
-	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, nil, nil)
-	s.workflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), s.logger)
-	require.NotNil(t, s.workflowHandler)
+	workflowRuntime := bootstrap.BuildReloadedWorkflowRuntime(bootstrap.ReloadedWorkflowRuntimeBuildInput{
+		DefaultModel:            cfg.Agent.Model,
+		RetrievalStore:          s.workflow.ragStore,
+		EmbeddingProvider:       s.workflow.ragEmbedding,
+		CheckpointStore:         s.workflow.checkpointStore,
+		WorkflowCheckpointStore: s.workflow.workflowCheckpointStore,
+		HITLManager:             s.currentWorkflowHITLManager(),
+		Logger:                  s.logger,
+	})
+	s.handlers.workflowHandler = handlers.NewWorkflowHandler(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser), s.logger)
+	require.NotNil(t, s.handlers.workflowHandler)
 	require.NotNil(t, s.currentWorkflowHITLManager())
 
-	workflowHandler := s.workflowHandler
+	workflowHandler := s.handlers.workflowHandler
 	manager := extractWorkflowHITLManager(t, workflowHandler)
 	require.Same(t, manager, s.currentWorkflowHITLManager())
 	require.NoError(t, s.initHotReloadManager())
@@ -320,11 +327,11 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 	newCfg := config.DefaultConfig()
 	newCfg.LLM.MainProviderMode = modeB
 	newCfg.Budget.Enabled = false
-	require.NoError(t, s.hotReloadManager.ApplyConfig(newCfg, "test"))
+	require.NoError(t, s.ops.hotReloadManager.ApplyConfig(newCfg, "test"))
 
-	require.Same(t, workflowHandler, s.workflowHandler)
+	require.Same(t, workflowHandler, s.handlers.workflowHandler)
 	require.Same(t, manager, s.currentWorkflowHITLManager())
-	require.Same(t, manager, extractWorkflowHITLManager(t, s.workflowHandler))
+	require.Same(t, manager, extractWorkflowHITLManager(t, s.handlers.workflowHandler))
 }
 
 func assertHotReloadChatContent(t *testing.T, handler *handlers.ChatHandler, expected string) {

@@ -43,6 +43,7 @@ internal/app/bootstrap/ = 启动期 builder/bridge，服务于组合根，不承
 4. **Workflow 定位**：`workflow -> agent/rag/llm/types`；默认主链不反向建立 `agent -> workflow` 依赖
 5. **RAG 定位**：`rag` 是独立能力，不是 `agent` 私有子模块；单 agent 可直接使用 rag
 6. **适配/装配职责**：`api` 只做协议转换，`cmd` 只做装配，`internal/app/bootstrap` 只做启动期构建
+7. **组合根状态**：`cmd` 可以持有进程级 runtime state bundle（如 handler/text/tooling/workflow/infra/ops），但这些 bundle 只用于生命周期与装配，不应重新承载业务决策
 
 ## 后果
 

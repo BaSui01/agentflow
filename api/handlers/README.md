@@ -8,6 +8,8 @@
 - Handler：HTTP 入参校验、JSON 解码、SSE 写出、统一响应格式。
 - Service：执行领域用例（Agent/RAG/Workflow/APIKey/Multimodal）。
 - Bootstrap：构建 Provider/Store/Facade/Registry，并注入 Handler。
+- `api/handlers` 不再承载 `*_store.go` 这类持久化实现；`LLMProvider/APIKey` 的 DB-backed store 归口到 `llm/runtime/router/`，hosted tool provider config 的 DB-backed store 归口到 `agent/integration/hosted/`。
+- `ChatHandler` / `WorkflowHandler` 的 handler-facing 契约现在优先依赖 `internal/usecase` 自有 DTO：chat stream 走 `usecase.ChatStreamEvent`，workflow build/execute 走 `usecase.WorkflowPlan` / `usecase.WorkflowStreamEvent` / `usecase.WorkflowNodeEvent`，不再直接把 `llmcore.UnifiedChunk`、`workflow.DAGWorkflow`、`workflowobs.NodeEventEmitter` 暴露给 handler。
 - Chat budget 预检：统一下沉到 `llm/gateway`；当前仅允许依赖 provider 原生 `llm.TokenCountProvider`，不再回退到本地 tokenizer 估算。
 
 ## 路由前缀（真实链路）

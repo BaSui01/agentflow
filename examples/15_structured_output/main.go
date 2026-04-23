@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/BaSui01/agentflow/agent/structured"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
 )
 
 // TaskResult represents a task execution result.

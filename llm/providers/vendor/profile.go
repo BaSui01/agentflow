@@ -3,11 +3,11 @@ package vendor
 import (
 	"strings"
 
-	"github.com/BaSui01/agentflow/llm"
 	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
+	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
 // Profile 按供应商聚合能力，避免按功能分散配置造成重复。

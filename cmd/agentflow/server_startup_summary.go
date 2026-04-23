@@ -30,7 +30,7 @@ func (s *Server) startupSummary() startupSummary {
 		return summary
 	}
 
-	summary.HotReloadEnabled = s.configPath != "" && s.hotReloadManager != nil
+	summary.HotReloadEnabled = s.configPath != "" && s.ops.hotReloadManager != nil
 	summary.MetricsBindAddress = s.cfg.Server.MetricsBindAddress
 	summary.PProfEnabled = s.cfg.Server.EnablePProf
 	summary.ToolApprovalBackend = s.cfg.HostedTools.Approval.Backend
@@ -60,50 +60,50 @@ func (s *Server) startupSummary() startupSummary {
 		summary.DisabledCapabilities = append(summary.DisabledCapabilities, name)
 	}
 
-	appendCapabilityState("chat", s.chatHandler != nil)
-	appendCapabilityState("agent", s.agentHandler != nil)
-	appendCapabilityState("health", s.healthHandler != nil)
-	appendCapabilityState("protocol", s.protocolHandler != nil)
-	appendCapabilityState("rag", s.ragHandler != nil)
-	appendCapabilityState("workflow", s.workflowHandler != nil)
-	appendCapabilityState("multimodal", s.multimodalHandler != nil)
-	appendCapabilityState("cost", s.costHandler != nil)
-	appendCapabilityState("api_key_management", s.apiKeyHandler != nil)
-	appendCapabilityState("tool_registry", s.toolRegistryHandler != nil)
-	appendCapabilityState("tool_provider_config", s.toolProviderHandler != nil)
-	appendCapabilityState("tool_approval", s.toolApprovalHandler != nil)
-	appendCapabilityState("mongo_runtime", s.mongoClient != nil)
-	appendCapabilityState("audit", s.auditLogger != nil)
-	appendCapabilityState("enhanced_memory", s.enhancedMemory != nil)
-	appendCapabilityState("ab_testing", s.abTester != nil)
+	appendCapabilityState("chat", s.handlers.chatHandler != nil)
+	appendCapabilityState("agent", s.handlers.agentHandler != nil)
+	appendCapabilityState("health", s.handlers.healthHandler != nil)
+	appendCapabilityState("protocol", s.handlers.protocolHandler != nil)
+	appendCapabilityState("rag", s.handlers.ragHandler != nil)
+	appendCapabilityState("workflow", s.handlers.workflowHandler != nil)
+	appendCapabilityState("multimodal", s.handlers.multimodalHandler != nil)
+	appendCapabilityState("cost", s.handlers.costHandler != nil)
+	appendCapabilityState("api_key_management", s.handlers.apiKeyHandler != nil)
+	appendCapabilityState("tool_registry", s.handlers.toolRegistryHandler != nil)
+	appendCapabilityState("tool_provider_config", s.handlers.toolProviderHandler != nil)
+	appendCapabilityState("tool_approval", s.handlers.toolApprovalHandler != nil)
+	appendCapabilityState("mongo_runtime", s.infra.mongoClient != nil)
+	appendCapabilityState("audit", s.infra.auditLogger != nil)
+	appendCapabilityState("enhanced_memory", s.infra.enhancedMemory != nil)
+	appendCapabilityState("ab_testing", s.infra.abTester != nil)
 
-	summary.DependencyStatus["database"] = requiredDependencyStatus(s.db != nil)
-	summary.DependencyStatus["mongodb"] = requiredDependencyStatus(s.mongoClient != nil)
-	summary.DependencyStatus["llm_runtime"] = requiredDependencyStatus(s.provider != nil)
+	summary.DependencyStatus["database"] = requiredDependencyStatus(s.infra.db != nil)
+	summary.DependencyStatus["mongodb"] = requiredDependencyStatus(s.infra.mongoClient != nil)
+	summary.DependencyStatus["llm_runtime"] = requiredDependencyStatus(s.text.provider != nil)
 
 	if s.cfg.Multimodal.Enabled {
-		summary.DependencyStatus["multimodal_redis"] = requiredDependencyStatus(s.multimodalRedis != nil)
+		summary.DependencyStatus["multimodal_redis"] = requiredDependencyStatus(s.infra.multimodalRedis != nil)
 	} else {
 		summary.DependencyStatus["multimodal_redis"] = "disabled"
 	}
 
 	switch s.cfg.HostedTools.Approval.Backend {
 	case "redis":
-		summary.DependencyStatus["tool_approval_store"] = requiredDependencyStatus(s.toolApprovalRedis != nil)
+		summary.DependencyStatus["tool_approval_store"] = requiredDependencyStatus(s.infra.toolApprovalRedis != nil)
 	default:
 		summary.DependencyStatus["tool_approval_store"] = "backend:" + s.cfg.HostedTools.Approval.Backend
 	}
 
-	if s.chatHandler == nil {
+	if s.handlers.chatHandler == nil {
 		summary.RestartRequiredRoutes = append(summary.RestartRequiredRoutes, "chat")
 	}
-	if s.costHandler == nil {
+	if s.handlers.costHandler == nil {
 		summary.RestartRequiredRoutes = append(summary.RestartRequiredRoutes, "cost")
 	}
-	if s.ragHandler == nil {
+	if s.handlers.ragHandler == nil {
 		summary.RestartRequiredRoutes = append(summary.RestartRequiredRoutes, "rag")
 	}
-	if s.multimodalHandler == nil {
+	if s.handlers.multimodalHandler == nil {
 		summary.RestartRequiredRoutes = append(summary.RestartRequiredRoutes, "multimodal")
 	}
 

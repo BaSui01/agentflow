@@ -15,7 +15,7 @@ import (
 	anthropicofficial "github.com/BaSui01/agentflow/llm/internal/anthropicofficial"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"

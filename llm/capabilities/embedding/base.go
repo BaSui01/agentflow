@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"

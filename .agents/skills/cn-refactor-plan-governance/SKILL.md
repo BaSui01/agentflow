@@ -8,15 +8,18 @@ description: 维护并执行项目中文重构计划（docs/重构计划/*.md）
 ## 快速流程
 
 1. 先运行严格格式检查：
-   - `./scripts/run_guard.ps1 -Cmd lint -Target <计划文件名> -RequireTDD -RequireVerifiableCompletion`
+   - `python scripts/refactor_plan_guard.py lint --target "<计划文件名>" --require-tdd --require-verifiable-completion`
+   - 或 `python .agents/skills/cn-refactor-plan-governance/scripts/run_guard.py lint --target "<计划文件名>"`
 2. 再看严格进度报告：
-   - `./scripts/run_guard.ps1 -Cmd report -Target <计划文件名> -RequireTDD -RequireVerifiableCompletion`
+   - `python scripts/refactor_plan_guard.py report --target "<计划文件名>" --require-tdd --require-verifiable-completion`
+   - 或 `python .agents/skills/cn-refactor-plan-governance/scripts/run_guard.py report --target "<计划文件名>"`
 3. 编写或改写测试计划时，先落 TDD 路径：
    - 先写失败测试
    - 再写最小实现让测试转绿
    - 最后重构并跑回归
 4. 每次准备“结束/收尾/归档”前必须跑门禁：
-   - `./scripts/run_guard.ps1 -Cmd gate -Target <计划文件名> -RequireTDD -RequireVerifiableCompletion`
+   - `python scripts/refactor_plan_guard.py gate --target "<计划文件名>" --require-tdd --require-verifiable-completion`
+   - 或 `python .agents/skills/cn-refactor-plan-governance/scripts/run_guard.py gate --target "<计划文件名>"`
 5. `gate` 未通过，或计划中的验证命令/通过标准未满足时，继续推进计划项，禁止以“已完成”收尾。
 
 ## 硬规则
@@ -36,6 +39,33 @@ description: 维护并执行项目中文重构计划（docs/重构计划/*.md）
    - `通过标准：...`
 5. 未全部打勾（仍有 `[ ]`）或任一通过标准未满足时，不得输出“完成/停止/归档”结论。
 6. 重构执行遵循单轨替换，不允许兼容双实现。
+7. 对“架构重构 / 包拆分 / 包合并 / 根目录治理”类任务，计划必须明确写出：
+   - 哪些职责保留
+   - 哪些职责合并
+   - 哪些目录/文件迁移
+   - 哪些旧实现删除
+   - 唯一正式入口收口到哪里
+8. 不允许只写“优化/统一/收敛”这种抽象表述；必须落到具体文件、目录、入口、守卫或文档。
+
+## 架构类重构专用要求
+
+当用户请求“统一架构”“包太乱”“很多重复功能要合并”“根目录太多东西”时，除基础章节外，计划还应补齐下面内容：
+
+1. **职责矩阵**
+   - 列出目标包/目录当前职责簇
+   - 标明每一簇是“保留 / 合并 / 下沉 / 删除”
+2. **唯一入口声明**
+   - 明确唯一正式入口（例如 `Builder` / `Factory` / `Registry` / runtime entry）
+   - 明确哪些旧入口降级为内部构件或直接删除
+3. **重复语义清单**
+   - 说明重复的是哪种语义：构造、注册、执行编排、runtime bridge、协议适配、状态持久化等
+   - 对每类重复语义给出唯一归口
+4. **目录治理**
+   - 若涉及根目录/顶层目录治理，必须写顶层目录分类、预算或 allowlist 方案
+5. **删除清单必须具体**
+   - 要列旧入口名、旧文件、旧路径或旧守卫名，不能只写“删除旧逻辑”
+6. **文档/守卫同步**
+   - 明确需要同步的 README、ADR、架构文档、`architecture_guard_test.go`、`scripts/arch_guard.ps1` 或其他守卫
 
 ## 计划维护动作
 
@@ -44,6 +74,7 @@ description: 维护并执行项目中文重构计划（docs/重构计划/*.md）
 2. 审核计划时：
    - 先标冲突（状态与代码不一致、路径错误、守卫声明错误）
    - 再查 TDD 是否落地（是否先写失败测试、是否定义转绿条件、是否有回归步骤）
+   - 再查架构重构是否写清“保留 / 合并 / 下沉 / 删除 / 唯一入口”
    - 最后给修订项（具体到文件与行）
 3. 推进计划时：
    - 只把完成项从 `[ ]` 改为 `[x]`
@@ -58,11 +89,14 @@ description: 维护并执行项目中文重构计划（docs/重构计划/*.md）
 
 ### scripts/
 
-1. `run_guard.ps1`：在项目根目录调用 `scripts/refactor_plan_guard.py`，并可打开 `-RequireTDD` / `-RequireVerifiableCompletion` 严格门禁。
+1. `run_guard.py`：技能侧包装器，转调仓库根目录的 `scripts/refactor_plan_guard.py`。
+2. `audit_plan.py`：辅助判断计划是否可归档、是否仍有直接引用、是否仍是活动基线。
 
 ### references/
 
 1. `重构计划模板.md`：规定章节和 `[ ]` 清单格式。
+2. `重构计划动作矩阵.md`：规定读哪些文档、如何审计划、如何输出建议。
+3. `架构重构计划模板.md`：用于包合并、唯一入口收口、目录治理、旧实现删除等架构类重构任务。
 
 ## 输出要求
 
@@ -74,4 +108,10 @@ description: 维护并执行项目中文重构计划（docs/重构计划/*.md）
    - 失败测试是什么
    - 转绿条件是什么
    - 回归范围是什么
-3. 只有 `gate` 通过且计划里的验证命令/通过标准全部通过时，才允许输出“可停止/可收尾”。
+3. 如涉及架构重构，输出还必须明确：
+   - 哪些职责将被合并
+   - 哪些文件/目录会被拆分或下沉
+   - 哪些旧入口/旧包/旧实现会被删除
+   - 唯一正式入口收口到哪里
+   - 需要同步哪些文档与守卫
+4. 只有 `gate` 通过且计划里的验证命令/通过标准全部通过时，才允许输出“可停止/可收尾”。

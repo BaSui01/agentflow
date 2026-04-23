@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -408,14 +408,13 @@ func (h *ChatHandler) handleOpenAICompatChatCompletionsStream(w http.ResponseWri
 			flusher.Flush()
 			return
 		}
-		llmChunk, ok := chunk.Output.(*llm.StreamChunk)
-		if !ok || llmChunk == nil {
+		if chunk.Chunk == nil {
 			continue
 		}
-		if strings.TrimSpace(llmChunk.Model) != "" {
-			model = llmChunk.Model
+		if strings.TrimSpace(chunk.Chunk.Model) != "" {
+			model = chunk.Chunk.Model
 		}
-		payload := toOpenAICompatChatChunkResponse(llmChunk, created, model)
+		payload := toOpenAICompatChatChunkResponse(chunk.Chunk, created, model)
 		if err := writeSSEJSON(w, payload); err != nil {
 			return
 		}
@@ -472,14 +471,13 @@ func (h *ChatHandler) handleOpenAICompatResponsesStream(w http.ResponseWriter, r
 			flusher.Flush()
 			return
 		}
-		llmChunk, ok := chunk.Output.(*llm.StreamChunk)
-		if !ok || llmChunk == nil {
+		if chunk.Chunk == nil {
 			continue
 		}
-		if strings.TrimSpace(llmChunk.Model) != "" {
-			model = llmChunk.Model
+		if strings.TrimSpace(chunk.Chunk.Model) != "" {
+			model = chunk.Chunk.Model
 		}
-		for _, ev := range toOpenAICompatResponsesStreamEvents(llmChunk) {
+		for _, ev := range toOpenAICompatResponsesStreamEvents(chunk.Chunk) {
 			if err := writeSSEEventJSON(w, ev.name, ev.payload); err != nil {
 				return
 			}
@@ -504,7 +502,7 @@ type openAICompatResponsesStreamEvent struct {
 	payload any
 }
 
-func toOpenAICompatResponsesStreamEvents(chunk *llm.StreamChunk) []openAICompatResponsesStreamEvent {
+func toOpenAICompatResponsesStreamEvents(chunk *usecase.ChatStreamChunk) []openAICompatResponsesStreamEvent {
 	if chunk == nil {
 		return nil
 	}
@@ -716,7 +714,7 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 	return apiReq, nil
 }
 
-func applyWebSearchOptionsToChatRequest(req *api.ChatRequest, opts *llm.WebSearchOptions) {
+func applyWebSearchOptionsToChatRequest(req *api.ChatRequest, opts *llmcore.WebSearchOptions) {
 	if req == nil || opts == nil {
 		return
 	}
@@ -783,11 +781,11 @@ func convertOpenAICompatResponseFormat(raw any) (*api.ResponseFormat, *types.Err
 	return &out, nil
 }
 
-func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *llm.WebSearchOptions {
+func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *llmcore.WebSearchOptions {
 	if in == nil {
 		return nil
 	}
-	out := &llm.WebSearchOptions{
+	out := &llmcore.WebSearchOptions{
 		SearchContextSize: strings.TrimSpace(in.SearchContextSize),
 		UserLocation:      parseOpenAICompatWebSearchLocation(in.UserLocation),
 		AllowedDomains:    normalizeAllowedDomains(in.AllowedDomains),
@@ -801,7 +799,7 @@ func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *llm.
 	return out
 }
 
-func parseOpenAICompatWebSearchLocation(raw json.RawMessage) *llm.WebSearchLocation {
+func parseOpenAICompatWebSearchLocation(raw json.RawMessage) *llmcore.WebSearchLocation {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
@@ -822,7 +820,7 @@ func parseOpenAICompatWebSearchLocation(raw json.RawMessage) *llm.WebSearchLocat
 		return nil
 	}
 
-	out := &llm.WebSearchLocation{
+	out := &llmcore.WebSearchLocation{
 		Type:     strings.TrimSpace(payload.Type),
 		Country:  strings.TrimSpace(payload.Country),
 		Region:   strings.TrimSpace(payload.Region),
@@ -876,22 +874,22 @@ func normalizeAllowedDomains(domains []string) []string {
 	return out
 }
 
-func mergeOpenAICompatWebSearchOptions(topLevel *openAICompatWebSearchOptions, fromTools *llm.WebSearchOptions) *llm.WebSearchOptions {
+func mergeOpenAICompatWebSearchOptions(topLevel *openAICompatWebSearchOptions, fromTools *llmcore.WebSearchOptions) *llmcore.WebSearchOptions {
 	return mergeLLMWebSearchOptions(fromTools, convertOpenAICompatWebSearchOptions(topLevel))
 }
 
-func mergeLLMWebSearchOptions(base *llm.WebSearchOptions, override *llm.WebSearchOptions) *llm.WebSearchOptions {
+func mergeLLMWebSearchOptions(base *llmcore.WebSearchOptions, override *llmcore.WebSearchOptions) *llmcore.WebSearchOptions {
 	if base == nil && override == nil {
 		return nil
 	}
-	out := &llm.WebSearchOptions{}
+	out := &llmcore.WebSearchOptions{}
 	if base != nil {
 		out.SearchContextSize = strings.TrimSpace(base.SearchContextSize)
 		out.AllowedDomains = normalizeAllowedDomains(base.AllowedDomains)
 		out.BlockedDomains = normalizeAllowedDomains(base.BlockedDomains)
 		out.MaxUses = base.MaxUses
 		if base.UserLocation != nil {
-			out.UserLocation = &llm.WebSearchLocation{
+			out.UserLocation = &llmcore.WebSearchLocation{
 				Type:     strings.TrimSpace(base.UserLocation.Type),
 				Country:  strings.TrimSpace(base.UserLocation.Country),
 				Region:   strings.TrimSpace(base.UserLocation.Region),
@@ -915,7 +913,7 @@ func mergeLLMWebSearchOptions(base *llm.WebSearchOptions, override *llm.WebSearc
 		}
 		if override.UserLocation != nil {
 			if out.UserLocation == nil {
-				out.UserLocation = &llm.WebSearchLocation{}
+				out.UserLocation = &llmcore.WebSearchLocation{}
 			}
 			if v := strings.TrimSpace(override.UserLocation.Type); v != "" {
 				out.UserLocation.Type = v
@@ -941,7 +939,7 @@ func mergeLLMWebSearchOptions(base *llm.WebSearchOptions, override *llm.WebSearc
 	return out
 }
 
-func toAPIWebSearchOptions(in *llm.WebSearchOptions) *api.WebSearchOptions {
+func toAPIWebSearchOptions(in *llmcore.WebSearchOptions) *api.WebSearchOptions {
 	if in == nil {
 		return nil
 	}
@@ -1171,12 +1169,12 @@ func convertOpenAICompatReasoningText(raw any) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSchema, *llm.WebSearchOptions, *types.Error) {
+func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSchema, *llmcore.WebSearchOptions, *types.Error) {
 	if len(in) == 0 {
 		return nil, nil, nil
 	}
 	tools := make([]api.ToolSchema, 0, len(in))
-	var wsOpts *llm.WebSearchOptions
+	var wsOpts *llmcore.WebSearchOptions
 
 	for _, tool := range in {
 		toolType := strings.ToLower(strings.TrimSpace(tool.Type))
@@ -1186,7 +1184,7 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 				Name:       "web_search",
 				Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
 			})
-			candidate := &llm.WebSearchOptions{
+			candidate := &llmcore.WebSearchOptions{
 				SearchContextSize: strings.TrimSpace(tool.SearchContextSize),
 				UserLocation:      parseOpenAICompatWebSearchLocation(tool.UserLocation),
 			}
@@ -1321,7 +1319,7 @@ func toOpenAICompatChatResponse(resp *api.ChatResponse) openAICompatChatResponse
 	return out
 }
 
-func toOpenAICompatChatChunkResponse(chunk *llm.StreamChunk, created int64, model string) openAICompatChatChunkResponse {
+func toOpenAICompatChatChunkResponse(chunk *usecase.ChatStreamChunk, created int64, model string) openAICompatChatChunkResponse {
 	out := openAICompatChatChunkResponse{
 		ID:      firstNonEmptyString(chunk.ID, fmt.Sprintf("chatcmpl_%d", time.Now().UnixNano())),
 		Object:  "chat.completion.chunk",
@@ -1331,7 +1329,7 @@ func toOpenAICompatChatChunkResponse(chunk *llm.StreamChunk, created int64, mode
 			{
 				Index: chunk.Index,
 				Delta: openAICompatOutboundMsg{
-					Role:             string(chunk.Delta.Role),
+					Role:             chunk.Delta.Role,
 					Content:          chunk.Delta.Content,
 					ReasoningContent: chunk.Delta.ReasoningContent,
 					Refusal:          chunk.Delta.Refusal,
@@ -1644,15 +1642,4 @@ func asString(v any) string {
 		return s
 	}
 	return ""
-}
-
-func extractStreamChunk(chunk llmcore.UnifiedChunk) (*llm.StreamChunk, *types.Error) {
-	if chunk.Err != nil {
-		return nil, chunk.Err
-	}
-	llmChunk, ok := chunk.Output.(*llm.StreamChunk)
-	if !ok || llmChunk == nil {
-		return nil, types.NewInternalError("invalid stream chunk payload")
-	}
-	return llmChunk, nil
 }

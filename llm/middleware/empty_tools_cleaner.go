@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 )
 
 // EmptyToolsCleaner 空工具列表清理器
@@ -34,4 +34,3 @@ func (r *EmptyToolsCleaner) Rewrite(ctx context.Context, req *llmpkg.ChatRequest
 func NewEmptyToolsCleaner() *EmptyToolsCleaner {
 	return &EmptyToolsCleaner{}
 }
-

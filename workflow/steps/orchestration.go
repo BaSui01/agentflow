@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"go.uber.org/zap"
 )
@@ -21,9 +21,9 @@ type OrchestrationStep struct {
 	AgentIDs  []string
 	MaxRounds int
 	Timeout   time.Duration
-	resolver AgentResolver
-	registry *multiagent.ModeRegistry
-	logger   *zap.Logger
+	resolver  AgentResolver
+	registry  *multiagent.ModeRegistry
+	logger    *zap.Logger
 }
 
 func NewOrchestrationStep(id string, resolver AgentResolver, registry *multiagent.ModeRegistry, logger *zap.Logger) *OrchestrationStep {

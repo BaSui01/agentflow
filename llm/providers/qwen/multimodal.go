@@ -14,7 +14,7 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
 // GenerateImage 使用 Qwen Wanx 生成图像.

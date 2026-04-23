@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/core"
 	workflowsteps "github.com/BaSui01/agentflow/workflow/steps"

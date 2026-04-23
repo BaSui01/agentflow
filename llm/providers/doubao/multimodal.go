@@ -5,7 +5,7 @@ import (
 
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
 // GenerateImage 使用 Doubao 生成图像.

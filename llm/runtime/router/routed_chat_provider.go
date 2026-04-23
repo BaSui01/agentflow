@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	llmroot "github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -60,7 +59,7 @@ func (p *RoutedChatProvider) Completion(ctx context.Context, req *ChatRequest) (
 	}
 
 	resolvedModel := firstNonEmpty(selection.RemoteModel, req.Model)
-	llmroot.RecordResolvedProviderCall(ctx, llmroot.ResolvedProviderCall{
+	llmcore.RecordResolvedProviderCall(ctx, llmcore.ResolvedProviderCall{
 		Provider: selection.ProviderCode,
 		Model:    resolvedModel,
 		BaseURL:  selection.BaseURL,
@@ -97,7 +96,7 @@ func (p *RoutedChatProvider) Stream(ctx context.Context, req *ChatRequest) (<-ch
 	}
 
 	resolvedModel := firstNonEmpty(selection.RemoteModel, req.Model)
-	llmroot.RecordResolvedProviderCall(ctx, llmroot.ResolvedProviderCall{
+	llmcore.RecordResolvedProviderCall(ctx, llmcore.ResolvedProviderCall{
 		Provider: selection.ProviderCode,
 		Model:    resolvedModel,
 		BaseURL:  selection.BaseURL,
@@ -168,7 +167,7 @@ func (p *RoutedChatProvider) Endpoints() ProviderEndpoints {
 	return ProviderEndpoints{}
 }
 
-func (p *RoutedChatProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmroot.TokenCountResponse, error) {
+func (p *RoutedChatProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmcore.TokenCountResponse, error) {
 	if req == nil {
 		return nil, types.NewInvalidRequestError("chat request is required")
 	}
@@ -176,7 +175,7 @@ func (p *RoutedChatProvider) CountTokens(ctx context.Context, req *ChatRequest) 
 	selection, err := p.selectProvider(ctx, req)
 	if err != nil {
 		if p.canFallback(req) {
-			counter, ok := p.fallback.(llmroot.TokenCountProvider)
+			counter, ok := p.fallback.(llmcore.TokenCountProvider)
 			if !ok {
 				return nil, types.NewServiceUnavailableError("fallback provider does not implement native token counting")
 			}
@@ -185,7 +184,7 @@ func (p *RoutedChatProvider) CountTokens(ctx context.Context, req *ChatRequest) 
 		return nil, err
 	}
 
-	counter, ok := selection.Provider.(llmroot.TokenCountProvider)
+	counter, ok := selection.Provider.(llmcore.TokenCountProvider)
 	if !ok {
 		return nil, types.NewServiceUnavailableError("selected routed provider does not implement native token counting")
 	}

@@ -18,11 +18,11 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"

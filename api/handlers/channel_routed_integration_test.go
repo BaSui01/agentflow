@@ -15,7 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"

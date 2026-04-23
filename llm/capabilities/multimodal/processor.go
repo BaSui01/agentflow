@@ -1,12 +1,12 @@
 package multimodal
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
 // Processor 处理不同提供者的多模态内容转换.
@@ -341,5 +341,3 @@ func (m *MultimodalProvider) SupportedModalities() []ContentType {
 		return []ContentType{ContentTypeText}
 	}
 }
-
-

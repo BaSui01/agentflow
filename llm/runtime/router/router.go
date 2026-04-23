@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/config"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 
 	"go.uber.org/zap"
 )
@@ -541,4 +541,3 @@ func (h *HealthChecker) checkAll(ctx context.Context) {
 		}
 	}
 }
-

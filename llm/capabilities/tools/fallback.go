@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 
 	"go.uber.org/zap"
 )
@@ -465,4 +465,3 @@ func resolvePath(root any, path string) (any, bool) {
 	}
 	return cur, true
 }
-

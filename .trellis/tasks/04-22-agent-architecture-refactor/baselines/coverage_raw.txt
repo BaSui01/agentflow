@@ -1,0 +1,63 @@
+ok  	github.com/BaSui01/agentflow/agent	19.267s	coverage: 81.8% of statements
+ok  	github.com/BaSui01/agentflow/agent/artifacts	1.645s	coverage: 88.6% of statements
+ok  	github.com/BaSui01/agentflow/agent/collaboration	0.597s	coverage: 84.2% of statements
+ok  	github.com/BaSui01/agentflow/agent/context	1.151s	coverage: 69.6% of statements
+ok  	github.com/BaSui01/agentflow/agent/conversation	1.177s	coverage: 88.3% of statements
+	github.com/BaSui01/agentflow/agent/core		coverage: 0.0% of statements
+ok  	github.com/BaSui01/agentflow/agent/crews	1.202s	coverage: 88.1% of statements
+ok  	github.com/BaSui01/agentflow/agent/declarative	1.235s	coverage: 100.0% of statements
+ok  	github.com/BaSui01/agentflow/agent/deliberation	1.164s	coverage: 84.5% of statements
+ok  	github.com/BaSui01/agentflow/agent/deployment	2.798s	coverage: 86.4% of statements
+ok  	github.com/BaSui01/agentflow/agent/discovery	0.551s	coverage: 79.3% of statements
+ok  	github.com/BaSui01/agentflow/agent/evaluation	12.796s	coverage: 88.7% of statements
+ok  	github.com/BaSui01/agentflow/agent/execution	6.921s	coverage: 89.8% of statements
+ok  	github.com/BaSui01/agentflow/agent/federation	0.920s	coverage: 82.6% of statements
+	github.com/BaSui01/agentflow/agent/guardcore		coverage: 0.0% of statements
+ok  	github.com/BaSui01/agentflow/agent/guardrails	2.381s	coverage: 86.2% of statements
+ok  	github.com/BaSui01/agentflow/agent/handoff	1.371s	coverage: 87.4% of statements
+ok  	github.com/BaSui01/agentflow/agent/hierarchical	6.479s	coverage: 97.7% of statements
+ok  	github.com/BaSui01/agentflow/agent/hitl	1.239s	coverage: 86.2% of statements
+ok  	github.com/BaSui01/agentflow/agent/hosted	1.245s	coverage: 61.4% of statements
+ok  	github.com/BaSui01/agentflow/agent/k8s	2.189s	coverage: 87.5% of statements
+ok  	github.com/BaSui01/agentflow/agent/longrunning	5.264s	coverage: 85.4% of statements
+ok  	github.com/BaSui01/agentflow/agent/lsp	1.049s	coverage: 82.2% of statements
+ok  	github.com/BaSui01/agentflow/agent/memory	1.351s	coverage: 78.9% of statements
+ok  	github.com/BaSui01/agentflow/agent/memorycore	1.084s	coverage: 94.2% of statements
+ok  	github.com/BaSui01/agentflow/agent/multiagent	0.272s	coverage: 79.2% of statements
+ok  	github.com/BaSui01/agentflow/agent/observability	0.367s	coverage: 72.0% of statements
+ok  	github.com/BaSui01/agentflow/agent/orchestration	0.338s	coverage: 77.4% of statements
+ok  	github.com/BaSui01/agentflow/agent/persistence	1.075s	coverage: 80.4% of statements
+	github.com/BaSui01/agentflow/agent/persistence/mongodb		coverage: 0.0% of statements
+ok  	github.com/BaSui01/agentflow/agent/planner	1.280s	coverage: 89.8% of statements
+ok  	github.com/BaSui01/agentflow/agent/protocol/a2a	9.629s	coverage: 84.5% of statements
+ok  	github.com/BaSui01/agentflow/agent/protocol/mcp	0.390s	coverage: 71.0% of statements
+ok  	github.com/BaSui01/agentflow/agent/reasoning	0.301s	coverage: 84.9% of statements
+ok  	github.com/BaSui01/agentflow/agent/runtime	0.293s	coverage: 77.3% of statements
+ok  	github.com/BaSui01/agentflow/agent/skills	1.327s	coverage: 84.2% of statements
+--- FAIL: TestBidirectionalStream_Send_BufferFull (0.00s)
+    bidirectional_test.go:216: 
+        	Error Trace:	D:/code/agentflow/agent/streaming/bidirectional_test.go:216
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestBidirectionalStream_Send_BufferFull
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal 0xc0000005 code=0x0 addr=0x18 pc=0x7ff7082fafb8]
+
+goroutine 13 [running]:
+testing.tRunner.func1.2({0x7ff7083b47e0, 0x7ff70878e370})
+	C:/Program Files/Go/src/testing/testing.go:1974 +0x239
+testing.tRunner.func1()
+	C:/Program Files/Go/src/testing/testing.go:1977 +0x349
+panic({0x7ff7083b47e0?, 0x7ff70878e370?})
+	C:/Program Files/Go/src/runtime/panic.go:860 +0x13a
+github.com/BaSui01/agentflow/agent/streaming.TestBidirectionalStream_Send_BufferFull(0x354f168fb200)
+	D:/code/agentflow/agent/streaming/bidirectional_test.go:217 +0x3f8
+testing.tRunner(0x354f168fb200, 0x7ff708456058)
+	C:/Program Files/Go/src/testing/testing.go:2036 +0xc3
+created by testing.(*T).Run in goroutine 1
+	C:/Program Files/Go/src/testing/testing.go:2101 +0x4a9
+FAIL	github.com/BaSui01/agentflow/agent/streaming	2.074s
+ok  	github.com/BaSui01/agentflow/agent/structured	0.306s	coverage: 81.3% of statements
+ok  	github.com/BaSui01/agentflow/agent/team	0.234s	coverage: 85.4% of statements
+ok  	github.com/BaSui01/agentflow/agent/teamadapter	0.218s	coverage: 58.1% of statements
+ok  	github.com/BaSui01/agentflow/agent/voice	1.060s	coverage: 91.0% of statements
+FAIL

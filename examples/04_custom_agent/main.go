@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/BaSui01/agentflow/agent"
-	runtime "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/llm"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"

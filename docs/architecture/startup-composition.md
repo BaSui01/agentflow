@@ -9,11 +9,12 @@ This document defines the runtime startup chain and composition boundaries.
 ## Composition Boundaries
 
 - `cmd/agentflow` is the composition root and lifecycle host.
+- `cmd/agentflow/server_runtime_bundles.go` groups long-lived server state into handler/text/tooling/workflow/infra/ops bundles so the composition root no longer keeps one flat cross-domain field list.
 - `internal/app/bootstrap` centralizes startup builders used by `cmd`.
 - `api/handlers` stays focused on protocol conversion and delegates domain behavior.
 - `workflow` is the Layer 3 orchestrator; it is not an `agent` subtype and should only coordinate lower-level capabilities.
 - `agent` and `rag` are peer Layer 2 domain capabilities; either may be called directly from handler/usecase entrypoints.
-- Agent instantiation now converges on one Layer-2 runtime entry: `agent/runtime.Builder`. `agent.AgentRegistry` built-in typed factories and the synthetic base agent used by multi-agent hierarchical mode both delegate to the same runtime-backed construction path.
+- Agent instantiation now converges on one Layer-2 runtime entry: `agent/execution/runtime.Builder`. `agent.AgentRegistry` built-in typed factories and the synthetic base agent used by multi-agent hierarchical mode both delegate to the same runtime-backed construction path.
 
 ## Serve Boundary（已落地）
 
@@ -39,6 +40,7 @@ cmd/agentflow
 - `internal/usecase`
   - application execution boundary behind handlers
   - owns business execution, application DTOs/contracts, and runtime-holder based indirection needed by hot reload
+  - handler-facing chat/workflow stream/build/event contracts now terminate here instead of exposing `llmcore.UnifiedChunk` / `workflow.DAGWorkflow` directly to `api/handlers`
   - translates handler inputs into domain calls without depending on `api/` transport DTOs as the long-term boundary
 - `internal/app/bootstrap`
   - startup-only composition support
@@ -107,7 +109,7 @@ Notes:
   - LLM runtime setup (reusable main-provider assembly + default legacy multi-provider router path)
   - `BuildLLMHandlerRuntimeFromProvider(...)` now delegates to the public `llm/runtime/compose.Build(...)` seam so bootstrap and external projects reuse the same handler runtime wiring around any already-constructed main provider
   - `llm/runtime/compose.Runtime` now exposes a shared `Gateway`, so handler/runtime consumers reuse one unified chat entry instead of rebuilding provider-side adapters per domain
-  - `agent/runtime.Builder` unwraps gateway-backed provider adapters and injects the shared native gateway into `BaseAgent`, so agent execution does not bounce through `provider -> gateway -> provider adapter` inside the domain layer
+  - `agent/execution/runtime.Builder` unwraps gateway-backed provider adapters and injects the shared native gateway into `BaseAgent`, so agent execution does not bounce through `provider -> gateway -> provider adapter` inside the domain layer
   - `agent.NewAgentBuilder(...)` and `agent.AgentRegistry` now also accept direct gateway injection for advanced extension paths, while keeping provider-based APIs as compatibility entrypoints
   - chat middleware chain setup
   - policy/cache/metrics/budget runtime wiring
@@ -115,6 +117,7 @@ Notes:
   - protocol server runtime setup (MCP/A2A)
   - RAG runtime setup (embedding provider + vector store)
   - workflow runtime setup (DAG executor + DSL parser)
+  - hot-reload workflow rebuild helper (`BuildReloadedWorkflowRuntime`) so workflow parser/facade rebinding stays inside bootstrap
 - `internal/app/bootstrap/multimodal_runtime_builder.go`
   - multimodal handler runtime setup (provider config + policy + store binding)
 - `internal/app/bootstrap/multimodal_reference_store_builder.go`
@@ -135,6 +138,7 @@ Notes:
   - chat handler builder from shared LLM runtime (`BuildChatHandler`)
   - hosted-tool runtime + handler bundle assembly (`BuildToolingHandlerBundle`)
   - hot-reload text binding adapter (`ApplyReloadedTextRuntimeBindings`) used to keep chat/cost handler rewiring out of `cmd`
+  - hot-reload resolver rebuild helper (`BuildReloadedResolver`) used to keep resolver/tool-manager/Mongo rewiring out of `cmd`
 - `internal/app/bootstrap/agent_runtime_factory_builder.go`
   - default runtime-backed agent factory registration
 - `internal/app/bootstrap/agent_tool_approval_builder.go`
@@ -173,6 +177,8 @@ Hot reload is intentionally limited to runtime pieces that were already present 
 - Hot reload only mutates handlers that were bound to `ServeMux` during startup. If a route was absent at boot because the corresponding runtime was not created, a later config reload does not create that route; exposing it still requires a full process restart.
 - Multimodal and other startup-time capability gaps should be treated as restart-only changes unless the corresponding runtime was already mounted and the code path explicitly supports in-place swap.
 - `cmd/agentflow/server_hotreload.go` now delegates chat/cost handler rebinding to `internal/app/bootstrap.ApplyReloadedTextRuntimeBindings(...)` instead of reconstructing handler wiring inline.
+- `cmd/agentflow/server_hotreload.go` now delegates resolver rebuild to `internal/app/bootstrap.BuildReloadedResolver(...)` instead of reassembling tool-manager/Mongo wiring inline.
+- `cmd/agentflow/server_hotreload.go` now delegates workflow runtime rebuild to `internal/app/bootstrap.BuildReloadedWorkflowRuntime(...)` instead of rebuilding workflow parser/facade wiring inline.
 - `cmd/agentflow/server_handlers_runtime.go` now delegates hosted-tool runtime, tool approval storage, registry/provider handlers, and capability catalog assembly to `internal/app/bootstrap.BuildToolingHandlerBundle(...)`, shrinking composition-root branching.
 
 Operational rule:

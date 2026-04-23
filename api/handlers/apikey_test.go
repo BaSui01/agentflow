@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +46,7 @@ func TestHandleListProviders_Empty(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&llm.LLMProvider{}, &llm.LLMProviderAPIKey{}))
 
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
@@ -60,7 +61,7 @@ func TestHandleListProviders_Empty(t *testing.T) {
 
 func TestHandleCreateAPIKey_InvalidJSON(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/1/api-keys", bytes.NewReader([]byte(`{invalid`)))
@@ -74,7 +75,7 @@ func TestHandleCreateAPIKey_InvalidJSON(t *testing.T) {
 
 func TestHandleCreateAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	body, _ := json.Marshal(createAPIKeyRequest{
@@ -92,7 +93,7 @@ func TestHandleCreateAPIKey_InvalidProviderID(t *testing.T) {
 
 func TestHandleListAPIKeys_Empty(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/1/api-keys", nil)
@@ -108,7 +109,7 @@ func TestHandleListAPIKeys_Empty(t *testing.T) {
 
 func TestHandleUpdateAPIKey_InvalidJSON(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{
@@ -127,7 +128,7 @@ func TestHandleUpdateAPIKey_InvalidJSON(t *testing.T) {
 
 func TestHandleUpdateAPIKey_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
@@ -144,7 +145,7 @@ func TestHandleUpdateAPIKey_NotFound(t *testing.T) {
 
 func TestHandleListProviders(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
@@ -160,7 +161,7 @@ func TestHandleListProviders(t *testing.T) {
 
 func TestHandleCreateAndListAPIKeys(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	// Create
@@ -201,7 +202,7 @@ func TestHandleCreateAndListAPIKeys(t *testing.T) {
 
 func TestHandleUpdateAPIKey(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	// 先创建
@@ -231,7 +232,7 @@ func TestHandleUpdateAPIKey(t *testing.T) {
 
 func TestHandleDeleteAPIKey_InvalidKeyID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/1/api-keys/abc", nil)
@@ -245,7 +246,7 @@ func TestHandleDeleteAPIKey_InvalidKeyID(t *testing.T) {
 
 func TestHandleAPIKeyStats_NoKeys(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/1/api-keys/stats", nil)
@@ -261,7 +262,7 @@ func TestHandleAPIKeyStats_NoKeys(t *testing.T) {
 
 func TestHandleAPIKeyStats_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/abc/api-keys/stats", nil)
@@ -274,7 +275,7 @@ func TestHandleAPIKeyStats_InvalidProviderID(t *testing.T) {
 
 func TestHandleDeleteAPIKey(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{
@@ -297,7 +298,7 @@ func TestHandleDeleteAPIKey(t *testing.T) {
 
 func TestHandleDeleteAPIKey_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/1/api-keys/999", nil)
@@ -311,7 +312,7 @@ func TestHandleDeleteAPIKey_NotFound(t *testing.T) {
 
 func TestHandleAPIKeyStats(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{
@@ -334,7 +335,7 @@ func TestHandleAPIKeyStats(t *testing.T) {
 
 func TestHandleCreateAPIKey_Validation(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	// 空 api_key 应该返回 400

@@ -7,10 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
@@ -21,7 +20,7 @@ import (
 
 func newChatServiceUnderTest(
 	gateway llmcore.Gateway,
-	chatProvider llm.Provider,
+	chatProvider llmcore.Provider,
 	toolManager agent.ToolManager,
 ) usecase.ChatService {
 	return usecase.NewDefaultChatService(
@@ -43,11 +42,11 @@ type chatGatewayStub struct {
 type chatProviderStub struct {
 	completionCalls int
 	streamCalls     int
-	completionFunc  func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
-	streamFunc      func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error)
+	completionFunc  func(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error)
+	streamFunc      func(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error)
 }
 
-func (s *chatProviderStub) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (s *chatProviderStub) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	s.completionCalls++
 	if s.completionFunc == nil {
 		return nil, errors.New("completion not configured")
@@ -55,7 +54,7 @@ func (s *chatProviderStub) Completion(ctx context.Context, req *llm.ChatRequest)
 	return s.completionFunc(ctx, req)
 }
 
-func (s *chatProviderStub) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (s *chatProviderStub) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
 	s.streamCalls++
 	if s.streamFunc == nil {
 		return nil, errors.New("stream not configured")
@@ -63,20 +62,20 @@ func (s *chatProviderStub) Stream(ctx context.Context, req *llm.ChatRequest) (<-
 	return s.streamFunc(ctx, req)
 }
 
-func (s *chatProviderStub) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (s *chatProviderStub) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (s *chatProviderStub) Name() string { return "chat-provider-stub" }
 
 func (s *chatProviderStub) SupportsNativeFunctionCalling() bool { return true }
 
-func (s *chatProviderStub) ListModels(_ context.Context) ([]llm.Model, error) {
+func (s *chatProviderStub) ListModels(_ context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
 
-func (s *chatProviderStub) Endpoints() llm.ProviderEndpoints {
-	return llm.ProviderEndpoints{}
+func (s *chatProviderStub) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
 }
 
 type chatToolManagerStub struct {
@@ -110,11 +109,11 @@ func (s *chatToolManagerStub) ExecuteForAgent(ctx context.Context, agentID strin
 func (s *chatGatewayStub) Invoke(_ context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
 	s.invokeReq = req
 	return &llmcore.UnifiedResponse{
-		Output: &llm.ChatResponse{
+		Output: &llmcore.ChatResponse{
 			ID:       "chat-1",
 			Provider: "openai",
 			Model:    "gpt-4o",
-			Choices: []llm.ChatChoice{
+			Choices: []llmcore.ChatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
@@ -124,7 +123,7 @@ func (s *chatGatewayStub) Invoke(_ context.Context, req *llmcore.UnifiedRequest)
 					},
 				},
 			},
-			Usage: llm.ChatUsage{
+			Usage: llmcore.ChatUsage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -138,7 +137,7 @@ func (s *chatGatewayStub) Stream(_ context.Context, req *llmcore.UnifiedRequest)
 	s.streamReq = req
 	ch := make(chan llmcore.UnifiedChunk, 1)
 	ch <- llmcore.UnifiedChunk{
-		Output: &llm.StreamChunk{
+		Output: &llmcore.StreamChunk{
 			ID:       "stream-1",
 			Provider: "openai",
 			Model:    "gpt-4o",
@@ -237,15 +236,15 @@ func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 	gw := &chatGatewayStub{}
 
 	provider := &chatProviderStub{}
-	provider.completionFunc = func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	provider.completionFunc = func(_ context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 		if provider.completionCalls == 1 {
 			require.Len(t, req.Tools, 1)
 			assert.Equal(t, "retrieval", req.Tools[0].Name)
-			return &llm.ChatResponse{
+			return &llmcore.ChatResponse{
 				ID:       "step-1",
 				Provider: "gateway",
 				Model:    req.Model,
-				Choices: []llm.ChatChoice{
+				Choices: []llmcore.ChatChoice{
 					{
 						Index:        0,
 						FinishReason: "tool_calls",
@@ -266,11 +265,11 @@ func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 
 		require.GreaterOrEqual(t, len(req.Messages), 3)
 		assert.Equal(t, types.RoleTool, req.Messages[len(req.Messages)-1].Role)
-		return &llm.ChatResponse{
+		return &llmcore.ChatResponse{
 			ID:       "step-2",
 			Provider: "gateway",
 			Model:    req.Model,
-			Choices: []llm.ChatChoice{
+			Choices: []llmcore.ChatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
@@ -325,7 +324,7 @@ func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 func TestChatService_Complete_FallbackGatewayWhenNoToolManager(t *testing.T) {
 	gw := &chatGatewayStub{}
 	provider := &chatProviderStub{
-		completionFunc: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+		completionFunc: func(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 			return nil, errors.New("should not call provider completion")
 		},
 	}
@@ -350,11 +349,11 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 	gw := &chatGatewayStub{}
 
 	provider := &chatProviderStub{}
-	provider.streamFunc = func(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-		ch := make(chan llm.StreamChunk, 2)
+	provider.streamFunc = func(_ context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+		ch := make(chan llmcore.StreamChunk, 2)
 		if provider.streamCalls == 1 {
 			require.Len(t, req.Tools, 1)
-			ch <- llm.StreamChunk{
+			ch <- llmcore.StreamChunk{
 				ID:       "step-1",
 				Provider: "gateway",
 				Model:    req.Model,
@@ -371,7 +370,7 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 				FinishReason: "tool_calls",
 			}
 		} else {
-			ch <- llm.StreamChunk{
+			ch <- llmcore.StreamChunk{
 				ID:       "step-2",
 				Provider: "gateway",
 				Model:    req.Model,
@@ -406,12 +405,11 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 	require.NotNil(t, stream)
 	assert.Nil(t, gw.streamReq)
 
-	var chunks []*llm.StreamChunk
+	var chunks []*usecase.ChatStreamChunk
 	for c := range stream {
 		require.Nil(t, c.Err)
-		chunk, ok := c.Output.(*llm.StreamChunk)
-		require.True(t, ok)
-		chunks = append(chunks, chunk)
+		require.NotNil(t, c.Chunk)
+		chunks = append(chunks, c.Chunk)
 	}
 
 	require.NotEmpty(t, chunks)

@@ -8,7 +8,7 @@ $strictMode = $true
 if ($env:ARCH_GUARD_STRICT -eq "0") {
     $strictMode = $false
 }
-$maxAgentRootFiles = 42
+$maxAgentRootFiles = 0
 if ($env:ARCH_GUARD_MAX_FILES) {
     $maxAgentRootFiles = [int]$env:ARCH_GUARD_MAX_FILES
 }
@@ -71,10 +71,20 @@ if ($null -eq $goArchLint) {
 }
 
 # Rule 1: root agent package file budget (aligned with architecture_guard_test.go)
-$agentRootFiles = Get-ChildItem agent -File -Filter "*.go" |
-    Where-Object { $_.Name -notmatch "_test\.go$" }
-if ($agentRootFiles.Count -gt $maxAgentRootFiles) {
-    $warnings += "[SIZE] agent root package has $($agentRootFiles.Count) production files (threshold=$maxAgentRootFiles)"
+$agentRootFiles = @(Get-ChildItem agent -File -Filter "*.go" |
+    Where-Object { $_.Name -notmatch "_test\.go$" })
+if ($agentRootFiles.Count -ne $maxAgentRootFiles) {
+    $errors += "[SIZE] agent root package must have $maxAgentRootFiles production files; found $($agentRootFiles.Count)"
+}
+
+# Rule 1.1: rag/workflow/llm roots also must stay zero-file after destructive migration.
+$zeroRootModules = @("rag", "workflow", "llm")
+foreach ($module in $zeroRootModules) {
+    $moduleRootFiles = @(Get-ChildItem $module -File -Filter "*.go" |
+        Where-Object { $_.Name -notmatch "_test\.go$" })
+    if ($moduleRootFiles.Count -ne 0) {
+        $errors += "[SIZE] $module root package must have 0 production files; found $($moduleRootFiles.Count)"
+    }
 }
 
 # Rule 2: single-file pkg directory allowlist (aligned with architecture_guard_test.go)
@@ -174,7 +184,7 @@ $legacyUnifiedEntryDocs = @(
 )
 $legacyUnifiedEntryPatterns = @(
     "agent\.NewAgentBuilder\(",
-    "agent\.NewBaseAgent\(",
+    "agent\.BuildBaseAgent\(",
     "agent\.CreateAgent\(",
     "DAGWorkflow\.Execute\("
 )
@@ -209,9 +219,69 @@ foreach ($dir in $protectedGatewayDirs) {
     }
 }
 
+# Rule 5.5: agent/ 顶层目录必须严格等于 8 层 allowlist；Phase-5 清零的目录不得回潮。
+$agentAllowedTopDirs = @(
+    "adapters",
+    "capabilities",
+    "collaboration",
+    "core",
+    "execution",
+    "integration",
+    "observability",
+    "persistence"
+)
+$agentBannedTopDirs = @(
+    # Phase-2~4 合并/下沉的目录
+    "memorycore",
+    "guardcore",
+    "deliberation",
+    "teamadapter",
+    "crews",
+    "discovery",
+    "longrunning",
+    # Phase-5 清零的 20 个空目录
+    "artifacts",
+    "context",
+    "conversation",
+    "declarative",
+    "deployment",
+    "evaluation",
+    "handoff",
+    "hitl",
+    "hosted",
+    "k8s",
+    "lsp",
+    "multiagent",
+    "orchestration",
+    "planner",
+    "reasoning",
+    "runtime",
+    "skills",
+    "streaming",
+    "structured",
+    "voice",
+    # Phase-5 合并到 agent/core/
+    "internalcore"
+)
+$agentTopDirs = Get-ChildItem agent -Directory | Select-Object -ExpandProperty Name
+foreach ($dir in $agentTopDirs) {
+    if ($agentBannedTopDirs -contains $dir) {
+        $errors += "[LAYOUT] agent/$dir/ 已在 Phase-2~5 清零，禁止回潮；应保持 8 层 allowlist"
+        continue
+    }
+    if ($agentAllowedTopDirs -notcontains $dir) {
+        $errors += "[LAYOUT] agent/$dir/ 不在 8 层 allowlist (adapters/capabilities/collaboration/core/execution/integration/observability/persistence)"
+    }
+}
+foreach ($required in $agentAllowedTopDirs) {
+    if ($agentTopDirs -notcontains $required) {
+        $errors += "[LAYOUT] 目标架构层 agent/$required/ 缺失，重构未完成"
+    }
+}
+
 # Rule 5: architecture guard tests must pass, including README layer map / matrix checks.
 Write-Host "Running focused architecture guard tests..." -ForegroundColor Cyan
-& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|GatewayDirectProviderCallGuards|AgentUnifiedBuilderEntryPoints|PublicUnifiedEntrypointDocs|PublicProductSurfaceDocsExamplesConsistency|AgentExecutionOptionsArchitectureGuards|AgentRootPackageFileBudget|PkgOneFileDirectoryAllowlist)$" .
+& go test -run "Test(ReadmeCmdAgentflowStructureConsistency|ReadmeLayerMapAndMatrixConsistency|DependencyDirectionGuards|LLMComposeImportGuards|APIHandlerStoreLeakGuards|APIHandlerInfraImportGuards|CmdEntrypointImportAllowlist|CmdHotReloadBootstrapEntryPoints|HotReloadDocsImplementationConsistency|UsecaseContractBoundaryGuards|GatewayDirectProviderCallGuards|AgentUnifiedBuilderEntryPoints|PublicUnifiedEntrypointDocs|AgentOfficialRuntimeEntrypointDocs|OfficialEntrypointDocsConsistency|PublicProductSurfaceDocsExamplesConsistency|AgentExecutionOptionsArchitectureGuards|AgentRootPackageFileBudget|AgentRootPublicSurfaceBudget|RAGRootPackageFileBudget|WorkflowRootPackageFileBudget|LLMRootPackageFileBudget|RootLayoutBudget|PkgOneFileDirectoryAllowlist)$" .
 if ($LASTEXITCODE -ne 0) {
     $errors += "[TEST] focused architecture guard tests failed"
 }

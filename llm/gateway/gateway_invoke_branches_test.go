@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -30,11 +29,11 @@ func TestService_Invoke_Chat(t *testing.T) {
 	svc := New(Config{ChatProvider: mockProv, Logger: zap.NewNop()})
 	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
+		Payload:    &llmcore.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	require.True(t, ok)
 	require.Equal(t, "mock reply", chatResp.Choices[0].Message.Content)
 }
@@ -43,7 +42,7 @@ func TestService_Invoke_Chat_NilProvider(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()}) // no ChatProvider
 	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test"},
+		Payload:    &llmcore.ChatRequest{Model: "test"},
 	})
 	require.Error(t, err)
 }
@@ -107,7 +106,7 @@ func TestService_Stream_NilChatProvider(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
 	_, err := svc.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test"},
+		Payload:    &llmcore.ChatRequest{Model: "test"},
 	})
 	require.Error(t, err)
 }
@@ -126,7 +125,7 @@ func TestService_Stream_Success(t *testing.T) {
 	svc := New(Config{ChatProvider: mockProv, Logger: zap.NewNop()})
 	ch, err := svc.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
+		Payload:    &llmcore.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, ch)
@@ -140,24 +139,28 @@ func TestService_Stream_Success(t *testing.T) {
 type gatewayMockChatProvider struct{}
 
 func (p *gatewayMockChatProvider) Name() string { return "mock-chat" }
-func (p *gatewayMockChatProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *gatewayMockChatProvider) Completion(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		ID: "resp1", Model: "test",
-		Choices: []llm.ChatChoice{{Message: types.Message{Content: "mock reply"}}},
+		Choices: []llmcore.ChatChoice{{Message: types.Message{Content: "mock reply"}}},
 	}, nil
 }
-func (p *gatewayMockChatProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 2)
-	ch <- llm.StreamChunk{Delta: types.Message{Content: "hi"}}
+func (p *gatewayMockChatProvider) Stream(_ context.Context, _ *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk, 2)
+	ch <- llmcore.StreamChunk{Delta: types.Message{Content: "hi"}}
 	close(ch)
 	return ch, nil
 }
-func (p *gatewayMockChatProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *gatewayMockChatProvider) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 func (p *gatewayMockChatProvider) SupportsNativeFunctionCalling() bool { return true }
-func (p *gatewayMockChatProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
-func (p *gatewayMockChatProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *gatewayMockChatProvider) ListModels(_ context.Context) ([]llmcore.Model, error) {
+	return nil, nil
+}
+func (p *gatewayMockChatProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type gatewayMockImageProvider struct{}
 
@@ -170,7 +173,7 @@ func (p *gatewayMockImageProvider) Edit(_ context.Context, _ *image.EditRequest)
 func (p *gatewayMockImageProvider) CreateVariation(_ context.Context, _ *image.VariationRequest) (*image.GenerateResponse, error) {
 	return &image.GenerateResponse{}, nil
 }
-func (p *gatewayMockImageProvider) Name() string          { return "mock-image" }
+func (p *gatewayMockImageProvider) Name() string             { return "mock-image" }
 func (p *gatewayMockImageProvider) SupportedSizes() []string { return []string{"1024x1024"} }
 
 type gatewayMockVideoProvider struct{}
@@ -181,9 +184,9 @@ func (p *gatewayMockVideoProvider) Analyze(_ context.Context, _ *video.AnalyzeRe
 func (p *gatewayMockVideoProvider) Generate(_ context.Context, _ *video.GenerateRequest) (*video.GenerateResponse, error) {
 	return &video.GenerateResponse{Provider: "mock-video"}, nil
 }
-func (p *gatewayMockVideoProvider) Name() string                    { return "mock-video" }
+func (p *gatewayMockVideoProvider) Name() string                          { return "mock-video" }
 func (p *gatewayMockVideoProvider) SupportedFormats() []video.VideoFormat { return nil }
-func (p *gatewayMockVideoProvider) SupportsGeneration() bool        { return true }
+func (p *gatewayMockVideoProvider) SupportsGeneration() bool              { return true }
 
 // ═══ Service 构造辅助 ═══
 

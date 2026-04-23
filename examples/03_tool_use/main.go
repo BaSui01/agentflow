@@ -8,8 +8,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"go.uber.org/zap"

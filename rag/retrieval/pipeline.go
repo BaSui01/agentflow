@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // QueryTransformer transforms the incoming query before retrieval.

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/conversation"
-	"github.com/BaSui01/agentflow/agent/crews"
-	"github.com/BaSui01/agentflow/agent/declarative"
-	"github.com/BaSui01/agentflow/agent/handoff"
-	"github.com/BaSui01/agentflow/agent/hosted"
-	"github.com/BaSui01/agentflow/agent/streaming"
+	"github.com/BaSui01/agentflow/agent/persistence/conversation"
+	"github.com/BaSui01/agentflow/agent/collaboration/team"
+	"github.com/BaSui01/agentflow/agent/adapters/declarative"
+	"github.com/BaSui01/agentflow/agent/adapters/handoff"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	"github.com/BaSui01/agentflow/agent/capabilities/streaming"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -342,15 +342,15 @@ func demoCrews(logger *zap.Logger) {
 	fmt.Println("3. Role-based Crews (CrewAI-style)")
 	fmt.Println("----------------------------------")
 
-	sequentialCrew := crews.NewCrew(crews.CrewConfig{
+	sequentialCrew := team.NewCrew(team.CrewConfig{
 		Name:        "Research Team",
 		Description: "A team for research tasks",
-		Process:     crews.ProcessSequential,
+		Process:     team.ProcessSequential,
 	}, logger)
 
 	// Add members with roles
 	researcher := &MockCrewAgent{id: "researcher", voteFor: "researcher"}
-	sequentialCrew.AddMember(researcher, crews.Role{
+	sequentialCrew.AddMember(researcher, team.Role{
 		Name:        "Researcher",
 		Description: "Conducts research",
 		Goal:        "Find relevant information",
@@ -358,7 +358,7 @@ func demoCrews(logger *zap.Logger) {
 	})
 
 	writer := &MockCrewAgent{id: "writer", voteFor: "writer"}
-	sequentialCrew.AddMember(writer, crews.Role{
+	sequentialCrew.AddMember(writer, team.Role{
 		Name:        "Writer",
 		Description: "Writes content",
 		Goal:        "Create clear documentation",
@@ -366,7 +366,7 @@ func demoCrews(logger *zap.Logger) {
 	})
 
 	// Add task
-	sequentialCrew.AddTask(crews.CrewTask{
+	sequentialCrew.AddTask(team.CrewTask{
 		Description: "Research AI frameworks",
 		Expected:    "Summary report",
 		Priority:    1,
@@ -377,24 +377,24 @@ func demoCrews(logger *zap.Logger) {
 		fmt.Printf("   Sequential execute error: %v\n", seqErr)
 	}
 
-	hierarchicalCrew := crews.NewCrew(crews.CrewConfig{
+	hierarchicalCrew := team.NewCrew(team.CrewConfig{
 		Name:        "Manager Team",
 		Description: "A team for delegated execution",
-		Process:     crews.ProcessHierarchical,
+		Process:     team.ProcessHierarchical,
 	}, logger)
 	manager := &MockCrewAgent{id: "manager", voteFor: "manager"}
-	hierarchicalCrew.AddMember(manager, crews.Role{
+	hierarchicalCrew.AddMember(manager, team.Role{
 		Name:            "Manager",
 		Description:     "Delegates tasks",
 		Goal:            "Complete tasks via delegation",
 		AllowDelegation: true,
 	})
-	hierarchicalCrew.AddMember(&MockCrewAgent{id: "specialist", voteFor: "specialist"}, crews.Role{
+	hierarchicalCrew.AddMember(&MockCrewAgent{id: "specialist", voteFor: "specialist"}, team.Role{
 		Name:        "Specialist",
 		Description: "Handles specialist tasks",
 		Goal:        "Solve technical tasks",
 	})
-	hierarchicalCrew.AddTask(crews.CrewTask{
+	hierarchicalCrew.AddTask(team.CrewTask{
 		Description: "Build deployment checklist",
 		Expected:    "Checklist document",
 		Priority:    1,
@@ -404,14 +404,14 @@ func demoCrews(logger *zap.Logger) {
 		fmt.Printf("   Hierarchical execute error: %v\n", hierErr)
 	}
 
-	consensusCrew := crews.NewCrew(crews.CrewConfig{
+	consensusCrew := team.NewCrew(team.CrewConfig{
 		Name:        "Consensus Team",
 		Description: "A team for consensus voting",
-		Process:     crews.ProcessConsensus,
+		Process:     team.ProcessConsensus,
 	}, logger)
-	consensusCrew.AddMember(&MockCrewAgent{id: "judge-a", voteFor: "judge-b"}, crews.Role{Name: "Judge A", Goal: "vote"})
-	consensusCrew.AddMember(&MockCrewAgent{id: "judge-b", voteFor: "judge-b"}, crews.Role{Name: "Judge B", Goal: "vote"})
-	consensusCrew.AddTask(crews.CrewTask{
+	consensusCrew.AddMember(&MockCrewAgent{id: "judge-a", voteFor: "judge-b"}, team.Role{Name: "Judge A", Goal: "vote"})
+	consensusCrew.AddMember(&MockCrewAgent{id: "judge-b", voteFor: "judge-b"}, team.Role{Name: "Judge B", Goal: "vote"})
+	consensusCrew.AddTask(team.CrewTask{
 		Description: "Choose owner for final report",
 		Expected:    "Owner decision",
 		Priority:    1,
@@ -445,22 +445,22 @@ func (s *mockFileSearchStore) Index(ctx context.Context, fileID string, content 
 	return nil
 }
 
-// MockCrewAgent implements crews.CrewAgent for demo.
+// MockCrewAgent implements team.CrewAgent for demo.
 type MockCrewAgent struct {
 	id      string
 	voteFor string
 }
 
 func (a *MockCrewAgent) ID() string { return a.id }
-func (a *MockCrewAgent) Execute(ctx context.Context, task crews.CrewTask) (*crews.TaskResult, error) {
-	return &crews.TaskResult{TaskID: task.ID, Output: "done"}, nil
+func (a *MockCrewAgent) Execute(ctx context.Context, task team.CrewTask) (*team.TaskResult, error) {
+	return &team.TaskResult{TaskID: task.ID, Output: "done"}, nil
 }
-func (a *MockCrewAgent) Negotiate(ctx context.Context, p crews.Proposal) (*crews.NegotiationResult, error) {
+func (a *MockCrewAgent) Negotiate(ctx context.Context, p team.Proposal) (*team.NegotiationResult, error) {
 	resp := a.voteFor
 	if resp == "" {
 		resp = a.id
 	}
-	return &crews.NegotiationResult{Accepted: true, Response: resp}, nil
+	return &team.NegotiationResult{Accepted: true, Response: resp}, nil
 }
 
 func demoDeclarative(logger *zap.Logger) {

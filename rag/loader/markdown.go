@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // MarkdownLoader loads Markdown files, splitting by top-level headings.
@@ -125,4 +125,3 @@ func parseHeading(line string) (heading string, level int) {
 func (l *MarkdownLoader) SupportedTypes() []string {
 	return []string{".md"}
 }
-

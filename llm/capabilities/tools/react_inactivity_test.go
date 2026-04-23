@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -111,7 +111,7 @@ func TestReActExecutor_ExecuteStream_InactivityTimeout(t *testing.T) {
 		chunks: []llmpkg.StreamChunk{
 			{ID: "1", Provider: "test", Model: "test-model", Delta: types.Message{Content: "hello"}},
 		},
-		chunkDelay:     10 * time.Millisecond, // 快速发送第一个 chunk
+		chunkDelay:     10 * time.Millisecond,  // 快速发送第一个 chunk
 		finalDelay:     200 * time.Millisecond, // 发送完后暂停 200ms（超过空闲超时）
 		sendFinalChunk: true,
 	}

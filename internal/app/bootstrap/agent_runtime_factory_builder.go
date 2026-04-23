@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/skills"
+	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -40,7 +40,7 @@ func RegisterDefaultRuntimeAgentFactory(
 			EnableSkills:         true,
 			EnableEnhancedMemory: true,
 			EnableObservability:  true,
-			SkillsConfig:         &skills.SkillManagerConfig{MaxLoadedSkills: 50},
+			SkillsConfig:         &agenttools.SkillManagerConfig{MaxLoadedSkills: 50},
 			MemoryManager:        mem,
 			ToolManager:          tm,
 			EventBus:             bus,

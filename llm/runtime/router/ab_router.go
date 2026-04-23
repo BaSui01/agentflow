@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -127,9 +127,9 @@ type ABRouter struct {
 	metrics map[string]*ABMetrics // variantName -> metrics
 
 	// 粘接路由缓存.
-	stickyCache    map[string]string // stickyKey -> variantName
-	stickyCacheMu  sync.RWMutex
-	stickyMaxSize  int // N3 修复：stickyCache 最大容量，超过时清空
+	stickyCache   map[string]string // stickyKey -> variantName
+	stickyCacheMu sync.RWMutex
+	stickyMaxSize int // N3 修复：stickyCache 最大容量，超过时清空
 
 	// 动态重量调整.
 	dynamicWeights map[string]int // variantName -> weight
@@ -455,4 +455,3 @@ func (r *ABRouter) GetReport() map[string]map[string]any {
 	}
 	return report
 }
-

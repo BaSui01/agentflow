@@ -16,15 +16,6 @@ $fixes = @(
         )
     },
     @{
-        File = "agent/integration.go"
-        Patterns = @(
-            @{
-                Old = 'fmt.Errorf("configuration validation failed: %v", errors)'
-                New = 'fmt.Errorf("configuration validation failed: %w", errors[0])'
-            }
-        )
-    },
-    @{
         File = "agent/discovery/composer.go"
         Patterns = @(
             @{

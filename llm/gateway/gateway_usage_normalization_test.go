@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
@@ -32,7 +31,7 @@ func TestService_Invoke_NormalizesChatUsage(t *testing.T) {
 	resp, err := service.Invoke(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
 		ModelHint:  "gpt-4o-mini",
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "gpt-4o-mini",
 			Messages: []types.Message{
 				{Role: types.RoleUser, Content: "hello"},
@@ -52,7 +51,7 @@ func TestService_Stream_NormalizesChunkUsage(t *testing.T) {
 	ch, err := service.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
 		ModelHint:  "gpt-4o-mini",
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "gpt-4o-mini",
 			Messages: []types.Message{
 				{Role: types.RoleUser, Content: "hello"},
@@ -69,12 +68,12 @@ func TestService_Stream_NormalizesChunkUsage(t *testing.T) {
 
 type normalizationProvider struct{}
 
-func (p *normalizationProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *normalizationProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		ID:       "resp_1",
 		Provider: "normalization-provider",
 		Model:    req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
@@ -83,7 +82,7 @@ func (p *normalizationProvider) Completion(ctx context.Context, req *llm.ChatReq
 				},
 			},
 		},
-		Usage: llm.ChatUsage{
+		Usage: llmcore.ChatUsage{
 			PromptTokens:     7,
 			CompletionTokens: 3,
 			TotalTokens:      0,
@@ -92,9 +91,9 @@ func (p *normalizationProvider) Completion(ctx context.Context, req *llm.ChatReq
 	}, nil
 }
 
-func (p *normalizationProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	out := make(chan llm.StreamChunk, 1)
-	out <- llm.StreamChunk{
+func (p *normalizationProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	out := make(chan llmcore.StreamChunk, 1)
+	out <- llmcore.StreamChunk{
 		ID:       "chunk_1",
 		Provider: "normalization-provider",
 		Model:    req.Model,
@@ -102,7 +101,7 @@ func (p *normalizationProvider) Stream(ctx context.Context, req *llm.ChatRequest
 			Role:    types.RoleAssistant,
 			Content: "partial",
 		},
-		Usage: &llm.ChatUsage{
+		Usage: &llmcore.ChatUsage{
 			PromptTokens:     2,
 			CompletionTokens: 1,
 			TotalTokens:      0,
@@ -112,14 +111,18 @@ func (p *normalizationProvider) Stream(ctx context.Context, req *llm.ChatRequest
 	return out, nil
 }
 
-func (p *normalizationProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *normalizationProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *normalizationProvider) Name() string { return "normalization-provider" }
 
 func (p *normalizationProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *normalizationProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *normalizationProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) {
+	return nil, nil
+}
 
-func (p *normalizationProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *normalizationProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}

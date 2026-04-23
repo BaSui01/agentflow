@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

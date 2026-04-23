@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func (m *mockAgent) Plan(ctx context.Context, input *agent.Input) (*agent.PlanRe
 
 func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("test-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("test-agent", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		id:   "test-agent",
@@ -110,7 +111,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_WithResolver_ExecutionError(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("err-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("err-agent", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		executeFn: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
@@ -171,7 +172,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_NotFound(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_NoResolver_AgentExists(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
@@ -312,7 +313,7 @@ func TestAgentHandler_HandleAgentHealth_InvalidID(t *testing.T) {
 
 func TestAgentHandler_HandleListAgents_Error(t *testing.T) {
 	reg := &mockRegistry{
-		agents: make(map[string]*discovery.AgentInfo),
+		agents: make(map[string]*tools.AgentInfo),
 		err:    errors.New("registry error"),
 	}
 	handler := newTestHandler(reg)
@@ -904,7 +905,7 @@ func TestResponseWriter_WriteWithoutHeader(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		executeFn: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
@@ -939,7 +940,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("err-stream", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("err-stream", tools.AgentStatusOnline))
 
 	ma := &mockAgent{
 		executeFn: func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
@@ -976,7 +977,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T
 
 func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 	reg := &mockRegistry{
-		agents: make(map[string]*discovery.AgentInfo),
+		agents: make(map[string]*tools.AgentInfo),
 		err:    errors.New("registry error"),
 	}
 	handler := newTestHandler(reg)
@@ -995,7 +996,7 @@ func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 
 func TestHandleListAPIKeys_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/abc/api-keys", nil)
@@ -1012,7 +1013,7 @@ func TestHandleListAPIKeys_InvalidProviderID(t *testing.T) {
 
 func TestHandleCreateAPIKey_MissingContentType(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	body, _ := json.Marshal(createAPIKeyRequest{APIKey: "sk-test", Label: "test"})
@@ -1031,7 +1032,7 @@ func TestHandleCreateAPIKey_MissingContentType(t *testing.T) {
 
 func TestHandleUpdateAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
@@ -1052,7 +1053,7 @@ func TestHandleUpdateAPIKey_InvalidProviderID(t *testing.T) {
 
 func TestHandleUpdateAPIKey_InvalidKeyID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	newLabel := "updated"
@@ -1073,7 +1074,7 @@ func TestHandleUpdateAPIKey_InvalidKeyID(t *testing.T) {
 
 func TestHandleDeleteAPIKey_InvalidProviderID(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/abc/api-keys/1", nil)
@@ -1091,7 +1092,7 @@ func TestHandleDeleteAPIKey_InvalidProviderID(t *testing.T) {
 
 func TestHandleAPIKeyStats_WithKeys(t *testing.T) {
 	db := setupTestDB(t)
-	store := NewGormAPIKeyStore(db)
+	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{

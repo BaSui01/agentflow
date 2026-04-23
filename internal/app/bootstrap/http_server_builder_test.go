@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -59,7 +59,7 @@ func newToolProviderHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *h
 		return nil
 	}
 	return handlers.NewToolProviderHandler(
-		usecase.NewDefaultToolProviderService(handlers.NewGormToolProviderStore(db), runtime),
+		usecase.NewDefaultToolProviderService(hosted.NewGormToolProviderStore(db), runtime),
 		zap.NewNop(),
 	)
 }

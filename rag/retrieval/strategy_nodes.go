@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // StrategyKind identifies retrieval strategy nodes mounted into unified pipeline.

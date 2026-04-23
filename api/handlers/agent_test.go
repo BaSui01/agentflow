@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -26,22 +26,22 @@ import (
 // =============================================================================
 
 type mockRegistry struct {
-	agents map[string]*discovery.AgentInfo
+	agents map[string]*tools.AgentInfo
 	err    error
 }
 
 func newMockRegistry() *mockRegistry {
 	return &mockRegistry{
-		agents: make(map[string]*discovery.AgentInfo),
+		agents: make(map[string]*tools.AgentInfo),
 	}
 }
 
-func (m *mockRegistry) withAgent(info *discovery.AgentInfo) *mockRegistry {
+func (m *mockRegistry) withAgent(info *tools.AgentInfo) *mockRegistry {
 	m.agents[info.Card.Name] = info
 	return m
 }
 
-func (m *mockRegistry) RegisterAgent(_ context.Context, info *discovery.AgentInfo) error {
+func (m *mockRegistry) RegisterAgent(_ context.Context, info *tools.AgentInfo) error {
 	if m.err != nil {
 		return m.err
 	}
@@ -57,11 +57,11 @@ func (m *mockRegistry) UnregisterAgent(_ context.Context, agentID string) error 
 	return nil
 }
 
-func (m *mockRegistry) UpdateAgent(_ context.Context, info *discovery.AgentInfo) error {
+func (m *mockRegistry) UpdateAgent(_ context.Context, info *tools.AgentInfo) error {
 	return m.err
 }
 
-func (m *mockRegistry) GetAgent(_ context.Context, agentID string) (*discovery.AgentInfo, error) {
+func (m *mockRegistry) GetAgent(_ context.Context, agentID string) (*tools.AgentInfo, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -72,52 +72,52 @@ func (m *mockRegistry) GetAgent(_ context.Context, agentID string) (*discovery.A
 	return info, nil
 }
 
-func (m *mockRegistry) ListAgents(_ context.Context) ([]*discovery.AgentInfo, error) {
+func (m *mockRegistry) ListAgents(_ context.Context) ([]*tools.AgentInfo, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	result := make([]*discovery.AgentInfo, 0, len(m.agents))
+	result := make([]*tools.AgentInfo, 0, len(m.agents))
 	for _, info := range m.agents {
 		result = append(result, info)
 	}
 	return result, nil
 }
 
-func (m *mockRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+func (m *mockRegistry) RegisterCapability(_ context.Context, _ string, _ *tools.CapabilityInfo) error {
 	return nil
 }
 func (m *mockRegistry) UnregisterCapability(_ context.Context, _, _ string) error { return nil }
-func (m *mockRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+func (m *mockRegistry) UpdateCapability(_ context.Context, _ string, _ *tools.CapabilityInfo) error {
 	return nil
 }
-func (m *mockRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error) {
+func (m *mockRegistry) GetCapability(_ context.Context, _, _ string) (*tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (m *mockRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+func (m *mockRegistry) ListCapabilities(_ context.Context, _ string) ([]tools.CapabilityInfo, error) {
 	return nil, nil
 }
 
-func (m *mockRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+func (m *mockRegistry) FindCapabilities(_ context.Context, _ string) ([]tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (m *mockRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error {
+func (m *mockRegistry) UpdateAgentStatus(_ context.Context, _ string, _ tools.AgentStatus) error {
 	return nil
 }
 func (m *mockRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error { return nil }
 func (m *mockRegistry) RecordExecution(_ context.Context, _ string, _ string, _ bool, _ time.Duration) error {
 	return nil
 }
-func (m *mockRegistry) Subscribe(_ discovery.DiscoveryEventHandler) string { return "" }
-func (m *mockRegistry) Unsubscribe(_ string)                               {}
-func (m *mockRegistry) Close() error                                       { return nil }
+func (m *mockRegistry) Subscribe(_ tools.DiscoveryEventHandler) string { return "" }
+func (m *mockRegistry) Unsubscribe(_ string)                           {}
+func (m *mockRegistry) Close() error                                   { return nil }
 
-// Verify mockRegistry implements discovery.Registry
-var _ discovery.Registry = (*mockRegistry)(nil)
+// Verify mockRegistry implements tools.Registry
+var _ tools.Registry = (*mockRegistry)(nil)
 
 type stubAgentService struct {
 	resolveForOperationFn func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error)
-	listAgentsFn          func(ctx context.Context) ([]*discovery.AgentInfo, *types.Error)
-	getAgentFn            func(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error)
+	listAgentsFn          func(ctx context.Context) ([]*tools.AgentInfo, *types.Error)
+	getAgentFn            func(ctx context.Context, agentID string) (*tools.AgentInfo, *types.Error)
 	executeAgentFn        func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string) (*usecase.AgentExecuteResponse, time.Duration, *types.Error)
 	executeAgentStreamFn  func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error
 }
@@ -129,14 +129,14 @@ func (s *stubAgentService) ResolveForOperation(ctx context.Context, agentID stri
 	return nil, nil
 }
 
-func (s *stubAgentService) ListAgents(ctx context.Context) ([]*discovery.AgentInfo, *types.Error) {
+func (s *stubAgentService) ListAgents(ctx context.Context) ([]*tools.AgentInfo, *types.Error) {
 	if s.listAgentsFn != nil {
 		return s.listAgentsFn(ctx)
 	}
 	return nil, nil
 }
 
-func (s *stubAgentService) GetAgent(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error) {
+func (s *stubAgentService) GetAgent(ctx context.Context, agentID string) (*tools.AgentInfo, *types.Error) {
 	if s.getAgentFn != nil {
 		return s.getAgentFn(ctx, agentID)
 	}
@@ -161,8 +161,8 @@ func (s *stubAgentService) ExecuteAgentStream(ctx context.Context, req usecase.A
 // Test helpers
 // =============================================================================
 
-func newTestAgentInfo(name string, status discovery.AgentStatus) *discovery.AgentInfo {
-	return &discovery.AgentInfo{
+func newTestAgentInfo(name string, status tools.AgentStatus) *tools.AgentInfo {
+	return &tools.AgentInfo{
 		Card: &a2a.AgentCard{
 			Name:        name,
 			Description: "test agent " + name,
@@ -176,7 +176,7 @@ func newTestHandler(reg *mockRegistry) *AgentHandler {
 	return NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, nil), nil, zap.NewNop())
 }
 
-func newTestHandlerWithResolver(reg discovery.Registry, resolver usecase.AgentResolver) *AgentHandler {
+func newTestHandlerWithResolver(reg tools.Registry, resolver usecase.AgentResolver) *AgentHandler {
 	return NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, resolver), nil, zap.NewNop())
 }
 
@@ -210,8 +210,8 @@ func TestAgentHandler_HandleListAgents_Empty(t *testing.T) {
 
 func TestAgentHandler_HandleListAgents_WithAgents(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("agent-1", discovery.AgentStatusOnline)).
-		withAgent(newTestAgentInfo("agent-2", discovery.AgentStatusBusy))
+		withAgent(newTestAgentInfo("agent-1", tools.AgentStatusOnline)).
+		withAgent(newTestAgentInfo("agent-2", tools.AgentStatusBusy))
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
@@ -236,7 +236,7 @@ func TestAgentHandler_HandleListAgents_WithAgents(t *testing.T) {
 
 func TestAgentHandler_HandleGetAgent_Found(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("test-id", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("test-id", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
@@ -310,7 +310,7 @@ func TestAgentHandler_HandleExecuteAgent_AgentNotFound(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_LocalAgent(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("local-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("local-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
@@ -329,7 +329,7 @@ func TestAgentHandler_HandleExecuteAgent_LocalAgent(t *testing.T) {
 
 func TestAgentHandler_HandleAgentHealth_Online(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("healthy-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("healthy-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
@@ -347,7 +347,7 @@ func TestAgentHandler_HandleAgentHealth_Online(t *testing.T) {
 
 func TestAgentHandler_HandleAgentHealth_Unhealthy(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("sick-agent", discovery.AgentStatusUnhealthy))
+		withAgent(newTestAgentInfo("sick-agent", tools.AgentStatusUnhealthy))
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
@@ -462,7 +462,7 @@ func TestAgentHandler_HandleExecuteAgent_InvalidAgentID(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_ValidAgentID(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("valid-agent-1", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("valid-agent-1", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
@@ -528,8 +528,8 @@ func TestAgentHandler_HandleExecuteAgent_MultiAgentValidation(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_MultiAgentValid(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("agent-1", discovery.AgentStatusOnline)).
-		withAgent(newTestAgentInfo("agent-2", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("agent-1", tools.AgentStatusOnline)).
+		withAgent(newTestAgentInfo("agent-2", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
@@ -548,7 +548,7 @@ func TestAgentHandler_HandleExecuteAgent_MultiAgentValid(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_EmbedsExecutionFieldsInPayload(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 	handler.service = &stubAgentService{
 		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
@@ -598,7 +598,7 @@ func TestAgentHandler_HandleAgentStream_EmbedsExecutionFieldsInPayload(t *testin
 
 func TestAgentHandler_HandleAgentStream_EmitsStatusEventsWithStableExecutionFields(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 	handler.service = &stubAgentService{
 		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
@@ -670,7 +670,7 @@ func TestAgentHandler_HandleAgentStream_EmitsStatusEventsWithStableExecutionFiel
 
 func TestAgentHandler_HandleAgentStream_StatusEventPayload(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
 	handler := newTestHandler(reg)
 	handler.service = &stubAgentService{
 		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {

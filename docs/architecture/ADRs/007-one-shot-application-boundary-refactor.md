@@ -48,12 +48,20 @@ cmd/agentflow
 - `internal/usecase` 成为 handler 之后的唯一应用层入口，承载业务执行、用例编排、应用层 DTO 与运行时持有器。
 - usecase 负责把协议无关的输入输出转换为领域调用，不反向依赖 `api/` transport DTO。
 - 热更新优先替换 usecase/runtime 持有器，不再以 handler 内部 runtime 替换作为长期边界。
+- `chat/workflow` 的 handler-facing 契约统一收口到 usecase 自有类型：例如 `ChatStreamEvent`、`WorkflowPlan`、`WorkflowStreamEvent`、`WorkflowNodeEvent`；handler 不再直接暴露或消费 `llmcore.UnifiedChunk`、`workflow.DAGWorkflow`、`workflowobs.NodeEventEmitter`。
 
 ### 3. Bootstrap 边界
 
 - `internal/app/bootstrap` 保持启动期 builder/factory/registry 组装职责，不承载业务决策。
 - serve 启动期 handler 装配收口到唯一总装配入口：`BuildServeHandlerSet(...)`。
 - `BuildServeHandlerSet(...)` 统一返回 serve 所需 handlers、closers、runtime refs 与关联启动资源；私有 helper 可以继续存在，但只能作为该总入口的内部支撑，不再暴露并行主装配路径。
+- hot reload 相关的正式 helper 继续收口在 bootstrap：`ApplyReloadedTextRuntimeBindings(...)`、`BuildReloadedResolver(...)`、`BuildReloadedWorkflowRuntime(...)`。
+- hosted tool / approval / provider-config 的正式装配 helper 继续收口在 bootstrap：`BuildToolingHandlerBundle(...)`。
+
+### 3.5 组合根状态治理
+
+- `cmd/agentflow` 仍是组合根与生命周期宿主，但长生命周期状态已按职责收口到 bundle：`handlers / text / tooling / workflow / infra / ops`。
+- 组合根允许持有这些 bundle 作为进程级状态，但不应再回退为单个 `Server` 挂满跨域扁平字段的模式。
 
 ### 4. 单轨替换规则
 

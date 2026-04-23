@@ -10,17 +10,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/execution"
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
@@ -87,7 +86,7 @@ func (p *toolCallProvider) Endpoints() llm.ProviderEndpoints { return llm.Provid
 
 // simpleToolManager wraps a single sandbox tool for e2e tests.
 type simpleToolManager struct {
-	tool *execution.SandboxTool
+	tool *agentruntime.SandboxTool
 }
 
 func (m *simpleToolManager) GetAllowedTools(agentID string) []types.ToolSchema {
@@ -132,14 +131,14 @@ func buildSandboxE2EAgent(t *testing.T, agentID string) agent.Agent {
 	}
 
 	// Use process backend so the test can execute without Docker.
-	backend := execution.NewProcessBackendWithConfig(nil, execution.ProcessBackendConfig{
+	backend := agentruntime.NewProcessBackendWithConfig(nil, agentruntime.ProcessBackendConfig{
 		Enabled: true,
-		CustomInterpreters: map[execution.Language]string{
-			execution.LangPython: "python",
+		CustomInterpreters: map[agentruntime.Language]string{
+			agentruntime.LangPython: "python",
 		},
 	})
-	exec := execution.NewSandboxExecutor(execution.DefaultSandboxConfig(), backend, logger)
-	tool := execution.NewSandboxTool(exec, logger)
+	exec := agentruntime.NewSandboxExecutor(agentruntime.DefaultSandboxConfig(), backend, logger)
+	tool := agentruntime.NewSandboxTool(exec, logger)
 
 	toolGateway := llmgateway.New(llmgateway.Config{
 		ChatProvider: mocks.NewSuccessProvider("tool reasoning"),
@@ -162,7 +161,7 @@ func TestE2E_AgentWithSandboxTool_Execute(t *testing.T) {
 
 	ctx := context.Background()
 	reg := newE2ERegistry()
-	_ = reg.RegisterAgent(ctx, &discovery.AgentInfo{
+	_ = reg.RegisterAgent(ctx, &tools.AgentInfo{
 		Card: &a2a.AgentCard{Name: agentID},
 	})
 

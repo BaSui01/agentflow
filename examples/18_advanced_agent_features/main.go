@@ -11,24 +11,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/deliberation"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/federation"
-	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/agent/longrunning"
-	"github.com/BaSui01/agentflow/agent/multiagent"
-	"github.com/BaSui01/agentflow/agent/orchestration"
+	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
+	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	"github.com/BaSui01/agentflow/agent/capabilities/planning"
+	reasoning "github.com/BaSui01/agentflow/agent/capabilities/reasoning"
+	"github.com/BaSui01/agentflow/agent/capabilities/streaming"
+	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/collaboration/federation"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	orchestration "github.com/BaSui01/agentflow/agent/execution/runtime/orchestration"
+	"github.com/BaSui01/agentflow/agent/integration/voice"
 	"github.com/BaSui01/agentflow/agent/persistence"
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	"github.com/BaSui01/agentflow/agent/protocol/mcp"
-	"github.com/BaSui01/agentflow/agent/reasoning"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/skills"
-	"github.com/BaSui01/agentflow/agent/streaming"
-	"github.com/BaSui01/agentflow/agent/structured"
-	"github.com/BaSui01/agentflow/agent/voice"
-	"github.com/BaSui01/agentflow/llm"
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -122,12 +120,12 @@ func demoLLMCanary(logger *zap.Logger) {
 	canaryCfg := llmrouter.NewCanaryConfig(nil, logger)
 	defer canaryCfg.Stop()
 
-	deployment := &llm.CanaryDeployment{
+	deployment := &llmcore.CanaryDeployment{
 		ProviderID:     1,
 		CanaryVersion:  "gpt-4o-2026-03",
 		StableVersion:  "gpt-4o-2025-12",
 		TrafficPercent: 10,
-		Stage:          llm.CanaryStage10Pct,
+		Stage:          llmcore.CanaryStage10Pct,
 		StartTime:      time.Now(),
 		MaxErrorRate:   0.15,
 		MaxLatencyP95:  500 * time.Millisecond,
@@ -135,14 +133,14 @@ func demoLLMCanary(logger *zap.Logger) {
 	}
 	_ = canaryCfg.SetDeployment(deployment)
 	_ = canaryCfg.GetDeployment(1)
-	_ = canaryCfg.UpdateStage(1, llm.CanaryStage50Pct)
+	_ = canaryCfg.UpdateStage(1, llmcore.CanaryStage50Pct)
 	_ = canaryCfg.GetAllDeployments()
 	_ = canaryCfg.TriggerRollback(1, "demo rollback")
 	canaryCfg.RemoveDeployment(1)
 	fmt.Println("   Canary mode: in-memory")
 	fmt.Printf("   Canary deployments after cleanup: %d\n", len(canaryCfg.GetAllDeployments()))
 
-	monitor := llm.NewCanaryMonitor(nil, canaryCfg, logger)
+	monitor := llmcore.NewCanaryMonitor(nil, canaryCfg, logger)
 	startCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	done := make(chan struct{})
@@ -159,46 +157,46 @@ func demoLLMCoreExtensions(logger *zap.Logger) {
 	fmt.Println("19. LLM Core Extensions Reachability")
 	fmt.Println("------------------------------------")
 
-	cred := llm.CredentialOverride{
+	cred := llmcore.CredentialOverride{
 		APIKey:    "sk-demo-key",
 		SecretKey: "demo-secret",
 	}
 	_ = cred.String()
 	_, _ = cred.MarshalJSON()
-	ctx := llm.WithCredentialOverride(context.Background(), cred)
-	_, _ = llm.CredentialOverrideFromContext(ctx)
+	ctx := llmcore.WithCredentialOverride(context.Background(), cred)
+	_, _ = llmcore.CredentialOverrideFromContext(ctx)
 
-	security := &llm.NoOpSecurityProvider{}
+	security := &llmcore.NoOpSecurityProvider{}
 	identity, _ := security.Authenticate(ctx, cred)
 	_ = security.Authorize(ctx, identity, "provider", "invoke")
 
-	audit := &llm.NoOpAuditLogger{}
-	_ = audit.Log(ctx, llm.AuditEvent{
+	audit := &llmcore.NoOpAuditLogger{}
+	_ = audit.Log(ctx, llmcore.AuditEvent{
 		Timestamp: time.Now(),
 		EventType: "provider.request",
 		ActorID:   "demo",
 		Result:    "success",
 	})
-	_, _ = audit.Query(ctx, llm.AuditFilter{})
+	_, _ = audit.Query(ctx, llmcore.AuditFilter{})
 
-	limiter := &llm.NoOpRateLimiter{}
+	limiter := &llmcore.NoOpRateLimiter{}
 	_, _ = limiter.Allow(ctx, "tenant-demo")
 	_, _ = limiter.AllowN(ctx, "tenant-demo", 2)
 	_ = limiter.Reset(ctx, "tenant-demo")
 
-	tracer := &llm.NoOpTracer{}
+	tracer := &llmcore.NoOpTracer{}
 	_, span := tracer.StartSpan(ctx, "demo-span")
 	span.SetAttribute("key", "value")
 	span.AddEvent("event", map[string]any{"ok": true})
 	span.SetError(fmt.Errorf("demo error"))
 	span.End()
 
-	m1 := llm.ProviderMiddlewareFunc(func(next llm.Provider) llm.Provider { return next })
-	m2 := llm.ProviderMiddlewareFunc(func(next llm.Provider) llm.Provider { return next })
+	m1 := llmcore.ProviderMiddlewareFunc(func(next llmcore.Provider) llmcore.Provider { return next })
+	m2 := llmcore.ProviderMiddlewareFunc(func(next llmcore.Provider) llmcore.Provider { return next })
 	_ = m1.Wrap(&demoProvider{})
-	_ = llm.ChainProviderMiddleware(&demoProvider{}, m1, m2)
+	_ = llmcore.ChainProviderMiddleware(&demoProvider{}, m1, m2)
 
-	registry := llm.NewProviderRegistry()
+	registry := llmcore.NewProviderRegistry()
 	registry.Register("demo", &demoProvider{})
 	_, _ = registry.Get("demo")
 	_ = registry.SetDefault("demo")
@@ -217,19 +215,19 @@ func demoLLMAdvancedRuntime(logger *zap.Logger) {
 	ctx := context.Background()
 
 	// resilience.NewResilientProviderSimple
-	resilient := llm.NewResilientProviderSimple(&reasonerProvider{}, nil, logger)
-	_, _ = resilient.Completion(ctx, &llm.ChatRequest{
+	resilient := llmcore.NewResilientProviderSimple(&reasonerProvider{}, nil, logger)
+	_, _ = resilient.Completion(ctx, &llmcore.ChatRequest{
 		Model: "demo-model",
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "resilience ping"},
+			{Role: llmcore.RoleUser, Content: "resilience ping"},
 		},
 	})
 
 	// thought_signatures manager + middleware
-	tsMgr := llm.NewThoughtSignatureManager(0)
+	tsMgr := llmcore.NewThoughtSignatureManager(0)
 	_ = tsMgr.CreateChain("demo-chain")
 	_ = tsMgr.GetChain("demo-chain")
-	_ = tsMgr.AddSignature("demo-chain", llm.ThoughtSignature{
+	_ = tsMgr.AddSignature("demo-chain", llmcore.ThoughtSignature{
 		ID:        "sig-0",
 		Signature: "prev-signature",
 		Model:     "demo-model",
@@ -237,23 +235,23 @@ func demoLLMAdvancedRuntime(logger *zap.Logger) {
 	})
 	_ = tsMgr.GetLatestSignatures("demo-chain", 5)
 
-	tsMiddleware := llm.NewThoughtSignatureMiddleware(&reasonerProvider{}, tsMgr)
-	_, _ = tsMiddleware.Completion(ctx, &llm.ChatRequest{
+	tsMiddleware := llmcore.NewThoughtSignatureMiddleware(&reasonerProvider{}, tsMgr)
+	_, _ = tsMiddleware.Completion(ctx, &llmcore.ChatRequest{
 		Model: "demo-model",
 		Metadata: map[string]string{
 			"thought_chain_id": "demo-chain",
 		},
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "think with signatures"},
+			{Role: llmcore.RoleUser, Content: "think with signatures"},
 		},
 	})
-	stream, _ := tsMiddleware.Stream(ctx, &llm.ChatRequest{
+	stream, _ := tsMiddleware.Stream(ctx, &llmcore.ChatRequest{
 		Model: "demo-model",
 		Metadata: map[string]string{
 			"thought_chain_id": "demo-chain",
 		},
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "stream signatures"},
+			{Role: llmcore.RoleUser, Content: "stream signatures"},
 		},
 	})
 	for range stream {
@@ -289,10 +287,10 @@ func demoLLMAdvancedRuntime(logger *zap.Logger) {
 	_ = batchProcessor.Stats().BatchEfficiency()
 
 	// llm types table names
-	_ = llm.LLMModel{}.TableName()
-	_ = llm.LLMProvider{}.TableName()
-	_ = llm.LLMProviderModel{}.TableName()
-	_ = llm.LLMProviderAPIKey{}.TableName()
+	_ = llmcore.LLMModel{}.TableName()
+	_ = llmcore.LLMProvider{}.TableName()
+	_ = llmcore.LLMProviderModel{}.TableName()
+	_ = llmcore.LLMProviderAPIKey{}.TableName()
 
 	fmt.Println()
 }
@@ -413,11 +411,11 @@ func demoFederation(logger *zap.Logger) {
 	orch.UnregisterNode("node-3")
 
 	// Wire discovery adapter + bridge to cover federation/discovery integration path.
-	discoveryCfg := discovery.DefaultServiceConfig()
+	discoveryCfg := skills.DefaultServiceConfig()
 	discoveryCfg.EnableAutoRegistration = false
 	discoveryCfg.Protocol.EnableHTTP = false
 	discoveryCfg.Protocol.EnableMulticast = false
-	service := discovery.NewDiscoveryService(discoveryCfg, logger)
+	service := skills.NewDiscoveryService(discoveryCfg, logger)
 	_ = service.Start(ctx)
 	defer service.Stop(ctx)
 
@@ -440,8 +438,8 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Println("2. Agent Deliberation Mode")
 	fmt.Println("--------------------------")
 
-	config := deliberation.DefaultDeliberationConfig()
-	engine := deliberation.NewEngine(config, &MockReasoner{}, logger)
+	config := planning.DefaultDeliberationConfig()
+	engine := planning.NewEngine(config, &MockReasoner{}, logger)
 
 	fmt.Printf("   Mode: %s\n", engine.GetMode())
 	fmt.Printf("   Max thinking time: %v\n", config.MaxThinkingTime)
@@ -449,13 +447,13 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   Self-critique enabled: %v\n", config.EnableSelfCritique)
 
 	// Switch modes
-	engine.SetMode(deliberation.ModeImmediate)
+	engine.SetMode(planning.ModeImmediate)
 	fmt.Printf("   Switched to: %s\n", engine.GetMode())
 
-	engine.SetMode(deliberation.ModeDeliberate)
+	engine.SetMode(planning.ModeDeliberate)
 	fmt.Printf("   Switched to: %s\n", engine.GetMode())
 
-	task := deliberation.Task{
+	task := planning.Task{
 		ID:             "task-001",
 		Description:    "Analyze incident report and decide remediation plan",
 		Goal:           "Provide a confident action plan with clear owner and ETA",
@@ -472,7 +470,7 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   Deliberation iterations: %d\n", result.Iterations)
 	fmt.Printf("   Final confidence: %.2f\n", result.FinalConfidence)
 
-	llmReasoner := deliberation.NewLLMReasoner(llmgateway.New(llmgateway.Config{ChatProvider: &reasonerProvider{}, Logger: logger}), "demo-reasoner", logger)
+	llmReasoner := planning.NewLLMReasoner(llmgateway.New(llmgateway.Config{ChatProvider: &reasonerProvider{}, Logger: logger}), "demo-reasoner", logger)
 	_, llmConfidence, llmErr := llmReasoner.Think(context.Background(), "Need confidence scored reasoning")
 	if llmErr != nil {
 		fmt.Printf("   LLM reasoner error: %v\n\n", llmErr)
@@ -481,7 +479,7 @@ func demoDeliberation(logger *zap.Logger) {
 	fmt.Printf("   LLM reasoner confidence: %.2f\n\n", llmConfidence)
 }
 
-// MockReasoner implements deliberation.Reasoner for demo.
+// MockReasoner implements planning.Reasoner for demo.
 type MockReasoner struct{}
 
 func (r *MockReasoner) Think(ctx context.Context, prompt string) (string, float64, error) {
@@ -496,24 +494,24 @@ func demoLongRunning(logger *zap.Logger) {
 	tmpDir, _ := os.MkdirTemp("", "longrunning-demo-*")
 	defer os.RemoveAll(tmpDir)
 
-	config := longrunning.DefaultExecutorConfig()
+	config := agentruntime.DefaultExecutorConfig()
 	config.CheckpointDir = tmpDir
 	config.CheckpointInterval = 20 * time.Millisecond
 	config.HeartbeatInterval = 20 * time.Millisecond
 	config.MaxRetries = 0
 
 	taskStore := persistence.NewMemoryTaskStore(persistence.StoreConfig{Type: "memory"})
-	bridge := longrunning.NewTaskStoreBridge(taskStore)
-	persistentStore := longrunning.NewPersistentCheckpointStore(bridge, logger)
-	executor := longrunning.NewExecutor(config, logger, longrunning.WithCheckpointStore(persistentStore))
-	executor.OnEvent = func(evt longrunning.ExecutionEvent) {}
+	bridge := agentruntime.NewTaskStoreBridge(taskStore)
+	persistentStore := agentruntime.NewPersistentCheckpointStore(bridge, logger)
+	executor := agentruntime.NewExecutor(config, logger, agentruntime.WithCheckpointStore(persistentStore))
+	executor.OnEvent = func(evt agentruntime.ExecutionEvent) {}
 
 	registry := executor.Registry()
 	registry.Register("bootstrap", func(ctx context.Context, state any) (any, error) { return state, nil })
 	_, _ = registry.Get("bootstrap")
 
 	// Create steps
-	steps := []longrunning.StepFunc{
+	steps := []agentruntime.StepFunc{
 		func(ctx context.Context, state any) (any, error) {
 			time.Sleep(30 * time.Millisecond)
 			return map[string]any{"step": 1, "data": "initialized"}, nil
@@ -527,7 +525,7 @@ func demoLongRunning(logger *zap.Logger) {
 		},
 	}
 
-	exec := executor.CreateNamedExecution("data-pipeline", []longrunning.NamedStep{
+	exec := executor.CreateNamedExecution("data-pipeline", []agentruntime.NamedStep{
 		{Name: "step-1", Func: steps[0]},
 		{Name: "step-2", Func: steps[1]},
 		{Name: "step-3", Func: steps[2]},
@@ -552,9 +550,9 @@ func demoLongRunning(logger *zap.Logger) {
 	}
 	_, _ = executor.AutoResumeAll(ctx)
 
-	record := &longrunning.TaskRecord{
+	record := &agentruntime.TaskRecord{
 		ID:       "lr-task-1",
-		Status:   string(longrunning.StateRunning),
+		Status:   string(agentruntime.StateRunning),
 		Progress: 0.4,
 		Data:     []byte(`{"checkpoint":1}`),
 		Metadata: map[string]string{"source": "demo"},
@@ -563,7 +561,7 @@ func demoLongRunning(logger *zap.Logger) {
 	_, _ = bridge.GetTask(ctx, record.ID)
 	_, _ = bridge.ListTasks(ctx)
 	_ = bridge.UpdateProgress(ctx, record.ID, 0.8)
-	_ = bridge.UpdateStatus(ctx, record.ID, string(longrunning.StateCompleted))
+	_ = bridge.UpdateStatus(ctx, record.ID, string(agentruntime.StateCompleted))
 	_ = bridge.DeleteTask(ctx, record.ID)
 
 	fmt.Printf("   Execution ID: %s\n", exec.ID)
@@ -844,8 +842,8 @@ func demoRunConfigHelpers() {
 
 	baseCfg := types.AgentConfig{}
 	options := agent.NewDefaultExecutionOptionsResolver().Resolve(ctx, baseCfg, nil)
-	req, err := agent.NewDefaultChatRequestAdapter().Build(options, []types.Message{
-		{Role: llm.RoleUser, Content: "demo request"},
+	req, err := agentadapters.NewDefaultChatRequestAdapter().Build(options, []types.Message{
+		{Role: llmcore.RoleUser, Content: "demo request"},
 	})
 	if err != nil {
 		fmt.Printf("   Build request error: %v\n\n", err)
@@ -1018,43 +1016,43 @@ func (a *demoAgent) Observe(ctx context.Context, feedback *agent.Feedback) error
 
 type demoProvider struct{}
 
-func (p *demoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *demoProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, fmt.Errorf("demo provider completion not implemented")
 }
 
-func (p *demoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *demoProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *demoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *demoProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *demoProvider) Name() string { return "demo-provider" }
 
 func (p *demoProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *demoProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *demoProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (p *demoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *demoProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }
 
 type reasonerProvider struct{}
 
-func (p *reasonerProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *reasonerProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
-					Role:    llm.RoleAssistant,
+					Role:    llmcore.RoleAssistant,
 					Content: "Reasoning done.\nCONFIDENCE: 0.81",
 				},
 			},
 		},
-		Usage: llm.ChatUsage{TotalTokens: 10},
+		Usage: llmcore.ChatUsage{TotalTokens: 10},
 	}, nil
 }
 
@@ -1502,7 +1500,7 @@ func demoStructuredOutput(logger *zap.Logger) {
 	}
 
 	parseResult2, _ := so.GenerateWithMessagesAndParse(ctx, []types.Message{
-		{Role: llm.RoleUser, Content: "generate with messages"},
+		{Role: llmcore.RoleUser, Content: "generate with messages"},
 	})
 	if parseResult2 != nil {
 		_ = parseResult2.IsValid()
@@ -1593,23 +1591,23 @@ func (w *demoRetrievalWorker) Retrieve(ctx context.Context, query string) ([]typ
 	}, nil
 }
 
-func (p *reasonerProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *reasonerProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *reasonerProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *reasonerProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *reasonerProvider) Name() string { return "reasoner-provider" }
 
 func (p *reasonerProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *reasonerProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *reasonerProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (p *reasonerProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *reasonerProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }
 
 type demoLLMToolExecutor struct{}
 
@@ -1639,7 +1637,7 @@ func (e *demoLLMToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCal
 
 type reasoningDemoProvider struct{}
 
-func (p *reasoningDemoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *reasoningDemoProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	prompt := ""
 	if len(req.Messages) > 0 {
 		prompt = req.Messages[len(req.Messages)-1].Content
@@ -1681,38 +1679,42 @@ func (p *reasoningDemoProvider) Completion(ctx context.Context, req *llm.ChatReq
 		content = "Iterative deepening synthesis complete."
 	}
 
-	return &llm.ChatResponse{
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
-					Role:    llm.RoleAssistant,
+					Role:    llmcore.RoleAssistant,
 					Content: content,
 				},
 			},
 		},
-		Usage: llm.ChatUsage{TotalTokens: 16},
+		Usage: llmcore.ChatUsage{TotalTokens: 16},
 	}, nil
 }
 
-func (p *reasoningDemoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *reasoningDemoProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *reasoningDemoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *reasoningDemoProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *reasoningDemoProvider) Name() string { return "reasoning-demo-provider" }
 
 func (p *reasoningDemoProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *reasoningDemoProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *reasoningDemoProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) {
+	return nil, nil
+}
 
-func (p *reasoningDemoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *reasoningDemoProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type reasoningToolExecutor struct{}
 
@@ -1816,41 +1818,43 @@ type demoStructuredRecord struct {
 
 type structuredDemoProvider struct{}
 
-func (p *structuredDemoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *structuredDemoProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
-					Role:    llm.RoleAssistant,
+					Role:    llmcore.RoleAssistant,
 					Content: `{"status":"success","message":"structured demo response"}`,
 				},
 			},
 		},
-		Usage: llm.ChatUsage{TotalTokens: 12},
+		Usage: llmcore.ChatUsage{TotalTokens: 12},
 	}, nil
 }
 
-func (p *structuredDemoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *structuredDemoProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *structuredDemoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *structuredDemoProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *structuredDemoProvider) Name() string { return "structured-demo-provider" }
 
 func (p *structuredDemoProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *structuredDemoProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+func (p *structuredDemoProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
 
-func (p *structuredDemoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *structuredDemoProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type demoSTTProvider struct{}
 

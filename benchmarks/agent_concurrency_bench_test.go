@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/capabilities/tools"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -26,14 +26,14 @@ import (
 
 type benchRegistry struct {
 	mu     sync.RWMutex
-	agents map[string]*discovery.AgentInfo
+	agents map[string]*tools.AgentInfo
 }
 
 func newBenchRegistry() *benchRegistry {
-	return &benchRegistry{agents: make(map[string]*discovery.AgentInfo)}
+	return &benchRegistry{agents: make(map[string]*tools.AgentInfo)}
 }
 
-func (r *benchRegistry) RegisterAgent(_ context.Context, info *discovery.AgentInfo) error {
+func (r *benchRegistry) RegisterAgent(_ context.Context, info *tools.AgentInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.agents[info.Card.Name] = info
@@ -45,13 +45,13 @@ func (r *benchRegistry) UnregisterAgent(_ context.Context, agentID string) error
 	delete(r.agents, agentID)
 	return nil
 }
-func (r *benchRegistry) UpdateAgent(_ context.Context, info *discovery.AgentInfo) error {
+func (r *benchRegistry) UpdateAgent(_ context.Context, info *tools.AgentInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.agents[info.Card.Name] = info
 	return nil
 }
-func (r *benchRegistry) GetAgent(_ context.Context, agentID string) (*discovery.AgentInfo, error) {
+func (r *benchRegistry) GetAgent(_ context.Context, agentID string) (*tools.AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.agents[agentID]
@@ -60,43 +60,43 @@ func (r *benchRegistry) GetAgent(_ context.Context, agentID string) (*discovery.
 	}
 	return info, nil
 }
-func (r *benchRegistry) ListAgents(_ context.Context) ([]*discovery.AgentInfo, error) {
+func (r *benchRegistry) ListAgents(_ context.Context) ([]*tools.AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]*discovery.AgentInfo, 0, len(r.agents))
+	out := make([]*tools.AgentInfo, 0, len(r.agents))
 	for _, info := range r.agents {
 		out = append(out, info)
 	}
 	return out, nil
 }
-func (r *benchRegistry) RegisterCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+func (r *benchRegistry) RegisterCapability(_ context.Context, _ string, _ *tools.CapabilityInfo) error {
 	return nil
 }
 func (r *benchRegistry) UnregisterCapability(_ context.Context, _, _ string) error { return nil }
-func (r *benchRegistry) UpdateCapability(_ context.Context, _ string, _ *discovery.CapabilityInfo) error {
+func (r *benchRegistry) UpdateCapability(_ context.Context, _ string, _ *tools.CapabilityInfo) error {
 	return nil
 }
-func (r *benchRegistry) GetCapability(_ context.Context, _, _ string) (*discovery.CapabilityInfo, error) {
+func (r *benchRegistry) GetCapability(_ context.Context, _, _ string) (*tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (r *benchRegistry) ListCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+func (r *benchRegistry) ListCapabilities(_ context.Context, _ string) ([]tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (r *benchRegistry) FindCapabilities(_ context.Context, _ string) ([]discovery.CapabilityInfo, error) {
+func (r *benchRegistry) FindCapabilities(_ context.Context, _ string) ([]tools.CapabilityInfo, error) {
 	return nil, nil
 }
-func (r *benchRegistry) UpdateAgentStatus(_ context.Context, _ string, _ discovery.AgentStatus) error {
+func (r *benchRegistry) UpdateAgentStatus(_ context.Context, _ string, _ tools.AgentStatus) error {
 	return nil
 }
 func (r *benchRegistry) UpdateAgentLoad(_ context.Context, _ string, _ float64) error { return nil }
 func (r *benchRegistry) RecordExecution(_ context.Context, _ string, _ string, _ bool, _ time.Duration) error {
 	return nil
 }
-func (r *benchRegistry) Subscribe(_ discovery.DiscoveryEventHandler) string { return "" }
-func (r *benchRegistry) Unsubscribe(_ string)                               {}
-func (r *benchRegistry) Close() error                                       { return nil }
+func (r *benchRegistry) Subscribe(_ tools.DiscoveryEventHandler) string { return "" }
+func (r *benchRegistry) Unsubscribe(_ string)                           {}
+func (r *benchRegistry) Close() error                                   { return nil }
 
-var _ discovery.Registry = (*benchRegistry)(nil)
+var _ tools.Registry = (*benchRegistry)(nil)
 
 func buildBenchAgent(agentID string, maxConcurrency int) agent.Agent {
 	logger := zap.NewNop()
@@ -127,7 +127,7 @@ func setupBenchServer(resolver usecase.AgentResolver) *httptest.Server {
 func BenchmarkAgentExecute_Serial(b *testing.B) {
 	agentID := "bench-serial"
 	ag := buildBenchAgent(agentID, 1)
-	_ = newBenchRegistry().RegisterAgent(context.Background(), &discovery.AgentInfo{
+	_ = newBenchRegistry().RegisterAgent(context.Background(), &tools.AgentInfo{
 		Card: &a2a.AgentCard{Name: agentID},
 	})
 
@@ -154,7 +154,7 @@ func BenchmarkAgentExecute_Serial(b *testing.B) {
 func BenchmarkAgentExecute_Concurrent5(b *testing.B) {
 	agentID := "bench-concurrent-5"
 	ag := buildBenchAgent(agentID, 5)
-	_ = newBenchRegistry().RegisterAgent(context.Background(), &discovery.AgentInfo{
+	_ = newBenchRegistry().RegisterAgent(context.Background(), &tools.AgentInfo{
 		Card: &a2a.AgentCard{Name: agentID},
 	})
 
@@ -183,7 +183,7 @@ func BenchmarkAgentExecute_Concurrent5(b *testing.B) {
 func BenchmarkAgentExecute_Concurrent10(b *testing.B) {
 	agentID := "bench-concurrent-10"
 	ag := buildBenchAgent(agentID, 10)
-	_ = newBenchRegistry().RegisterAgent(context.Background(), &discovery.AgentInfo{
+	_ = newBenchRegistry().RegisterAgent(context.Background(), &tools.AgentInfo{
 		Card: &a2a.AgentCard{Name: agentID},
 	})
 

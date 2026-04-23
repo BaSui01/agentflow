@@ -5,22 +5,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/agent/hosted"
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
+	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
-	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/BaSui01/agentflow/rag/core"
-	workflowpkg "github.com/BaSui01/agentflow/workflow"
+	workflowpkg "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -73,7 +72,7 @@ type ServeHandlerSet struct {
 	CapabilityCatalog *CapabilityCatalog
 	Resolver          *agent.CachingResolver
 
-	CheckpointStore         agent.CheckpointStore
+	CheckpointStore         agentcheckpoint.Store
 	CheckpointManager       *agent.CheckpointManager
 	WorkflowCheckpointStore workflowpkg.CheckpointStore
 	RAGStore                core.VectorStore
@@ -132,7 +131,7 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 
 	if in.DB != nil {
 		set.APIKeyHandler = handlers.NewAPIKeyHandler(
-			usecase.NewDefaultAPIKeyService(handlers.NewGormAPIKeyStore(in.DB)),
+			usecase.NewDefaultAPIKeyService(llmrouter.NewGormAPIKeyStore(in.DB)),
 			in.Logger,
 		)
 	}
@@ -207,108 +206,39 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
 	}
 
-	toolApprovalRedis, toolApprovalStore, toolApprovalStoreErr := BuildToolApprovalGrantStore(in.Cfg, in.Logger)
-	if toolApprovalStoreErr != nil {
-		return nil, fmt.Errorf("failed to build tool approval grant store: %w", toolApprovalStoreErr)
-	}
-	set.ToolApprovalRedis = toolApprovalRedis
-	toolApprovalHistoryStore, toolApprovalHistoryErr := BuildToolApprovalHistoryStore(in.Cfg, toolApprovalRedis)
-	if toolApprovalHistoryErr != nil {
-		return nil, fmt.Errorf("failed to build tool approval history store: %w", toolApprovalHistoryErr)
-	}
-
-	toolingRuntime, toolErr := BuildAgentToolingRuntime(AgentToolingOptions{
+	toolingBundle, toolErr := BuildToolingHandlerBundle(ToolingHandlerBundleInput{
+		Cfg:                 in.Cfg,
+		DB:                  in.DB,
+		Logger:              in.Logger,
 		RetrievalStore:      set.RAGStore,
 		EmbeddingProvider:   set.RAGEmbedding,
 		MCPServer:           protocolRuntime.MCPServer,
-		EnableMCPTools:      true,
-		DB:                  in.DB,
 		ToolApprovalManager: in.ToolApprovalManager,
-		ToolApprovalConfig: ToolApprovalConfig{
-			Backend:           in.Cfg.HostedTools.Approval.Backend,
-			GrantTTL:          in.Cfg.HostedTools.Approval.GrantTTL,
-			Scope:             in.Cfg.HostedTools.Approval.Scope,
-			PersistPath:       in.Cfg.HostedTools.Approval.PersistPath,
-			RedisPrefix:       in.Cfg.HostedTools.Approval.RedisPrefix,
-			HistoryMaxEntries: in.Cfg.HostedTools.Approval.HistoryMaxEntries,
-			GrantStore:        toolApprovalStore,
-			HistoryStore:      toolApprovalHistoryStore,
+		CurrentResolver: func() *agent.CachingResolver {
+			return set.Resolver
 		},
-	}, in.Logger)
-	if toolErr != nil {
-		return nil, fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
-	}
-	set.ToolingRuntime = toolingRuntime
-
-	toolRuntimeAdapter := NewToolRegistryRuntimeAdapter(toolingRuntime, func(ctx context.Context) {
-		if set.Resolver != nil {
-			set.Resolver.ResetCache(ctx)
-			in.Logger.Info("Agent resolver cache reset after tool runtime reload")
-		}
+		AgentRegistry: set.AgentRegistry,
 	})
-	if in.DB != nil && toolRuntimeAdapter != nil {
-		set.ToolRegistryHandler = handlers.NewToolRegistryHandler(
-			usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(in.DB), toolRuntimeAdapter),
-			in.Logger,
-		)
+	if toolErr != nil {
+		return nil, fmt.Errorf("failed to build tooling handler bundle: %w", toolErr)
 	}
-	if set.ToolRegistryHandler != nil {
-		in.Logger.Info("Tool registry handler initialized")
-	} else {
-		in.Logger.Info("Tool registry handler disabled (database or tooling runtime unavailable)")
-	}
-	if in.DB != nil && toolRuntimeAdapter != nil {
-		set.ToolProviderHandler = handlers.NewToolProviderHandler(
-			usecase.NewDefaultToolProviderService(handlers.NewGormToolProviderStore(in.DB), toolRuntimeAdapter),
-			in.Logger,
-		)
-	}
-	if set.ToolProviderHandler != nil {
-		in.Logger.Info("Tool provider handler initialized")
-	} else {
-		in.Logger.Info("Tool provider handler disabled (database or tooling runtime unavailable)")
-	}
-	toolApprovalConfig := ToolApprovalConfig{
-		Backend:           in.Cfg.HostedTools.Approval.Backend,
-		GrantTTL:          in.Cfg.HostedTools.Approval.GrantTTL,
-		Scope:             in.Cfg.HostedTools.Approval.Scope,
-		PersistPath:       in.Cfg.HostedTools.Approval.PersistPath,
-		RedisPrefix:       in.Cfg.HostedTools.Approval.RedisPrefix,
-		HistoryMaxEntries: in.Cfg.HostedTools.Approval.HistoryMaxEntries,
-		GrantStore:        toolApprovalStore,
-		HistoryStore:      toolApprovalHistoryStore,
-	}
-	if in.ToolApprovalManager != nil {
-		set.ToolApprovalHandler = handlers.NewToolApprovalHandler(
-			usecase.NewDefaultToolApprovalService(&toolApprovalRuntime{
-				manager: in.ToolApprovalManager,
-				store:   defaultToolApprovalGrantStore(toolApprovalConfig, in.Logger),
-				history: defaultToolApprovalHistoryStore(toolApprovalConfig),
-				config:  toolApprovalConfig,
-			}, ToolApprovalWorkflowID()),
-			in.Logger,
-		)
-	}
-	if set.ToolApprovalHandler != nil {
-		in.Logger.Info("Tool approval handler initialized")
-	}
-
-	if toolingRuntime != nil {
-		set.CapabilityCatalog = BuildCapabilityCatalog(
-			toolingRuntime.Registry,
-			set.AgentRegistry,
-			multiagent.GlobalModeRegistry(),
-		)
-		if set.CapabilityCatalog != nil {
-			in.Logger.Info("Runtime capability catalog initialized",
-				zap.Int("agent_type_count", len(set.CapabilityCatalog.AgentTypes)),
-				zap.Int("tool_count", len(set.CapabilityCatalog.Tools)),
-				zap.Int("mode_count", len(set.CapabilityCatalog.Modes)))
-		}
+	if toolingBundle != nil {
+		set.ToolingRuntime = toolingBundle.ToolingRuntime
+		set.ToolRegistryHandler = toolingBundle.ToolRegistryHandler
+		set.ToolProviderHandler = toolingBundle.ToolProviderHandler
+		set.ToolApprovalHandler = toolingBundle.ToolApprovalHandler
+		set.ToolApprovalRedis = toolingBundle.ToolApprovalRedis
+		set.CapabilityCatalog = toolingBundle.CapabilityCatalog
 	}
 
 	if llmRuntime != nil && set.Provider != nil {
-		set.ChatService = buildServeChatService(llmRuntime.Provider, llmRuntime.PolicyManager, llmRuntime.Ledger, toolingRuntime, in.Logger)
+		set.ChatService = BuildChatService(ChatServiceBuildInput{
+			Provider:       llmRuntime.Provider,
+			PolicyManager:  llmRuntime.PolicyManager,
+			Ledger:         llmRuntime.Ledger,
+			ToolingRuntime: set.ToolingRuntime,
+			Logger:         in.Logger,
+		})
 		set.ChatHandler = handlers.NewChatHandler(
 			set.ChatService,
 			in.Logger,
@@ -324,20 +254,20 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 	set.CheckpointStore = checkpointStore
 	if checkpointStore != nil {
-		set.CheckpointManager = agent.NewCheckpointManager(checkpointStore, in.Logger)
+		set.CheckpointManager = agent.NewCheckpointManagerFromNativeStore(checkpointStore, in.Logger)
 	}
 
 	if llmRuntime != nil && llmRuntime.Gateway != nil {
 		resolver := agent.NewCachingResolver(set.AgentRegistry, llmRuntime.Gateway, in.Logger).
 			WithDefaultModel(in.Cfg.Agent.Model)
-		if toolingRuntime != nil && toolingRuntime.ToolManager != nil {
-			resolver = resolver.WithToolManager(toolingRuntime.ToolManager)
-			if len(toolingRuntime.ToolNames) > 0 {
-				resolver = resolver.WithRuntimeTools(toolingRuntime.ToolNames)
+		if set.ToolingRuntime != nil && set.ToolingRuntime.ToolManager != nil {
+			resolver = resolver.WithToolManager(set.ToolingRuntime.ToolManager)
+			if len(set.ToolingRuntime.ToolNames) > 0 {
+				resolver = resolver.WithRuntimeTools(set.ToolingRuntime.ToolNames)
 			}
 			in.Logger.Info("Agent tool manager initialized",
-				zap.Int("tool_count", len(toolingRuntime.ToolNames)),
-				zap.Strings("tools", toolingRuntime.ToolNames))
+				zap.Int("tool_count", len(set.ToolingRuntime.ToolNames)),
+				zap.Strings("tools", set.ToolingRuntime.ToolNames))
 		}
 		set.Resolver = resolver
 
@@ -397,34 +327,4 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 
 	in.Logger.Info("Handlers initialized")
 	return set, nil
-}
-
-func buildServeChatService(
-	provider llm.Provider,
-	policyManager *llmpolicy.Manager,
-	ledger observability.Ledger,
-	toolingRuntime *AgentToolingRuntime,
-	logger *zap.Logger,
-) usecase.ChatService {
-	gateway := llmgateway.New(llmgateway.Config{
-		ChatProvider:  provider,
-		PolicyManager: policyManager,
-		Ledger:        ledger,
-		Logger:        logger,
-	})
-	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
-	var toolManager agent.ToolManager
-	if toolingRuntime != nil {
-		toolManager = toolingRuntime.ToolManager
-	}
-	converter := handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(defaultServeChatServiceTimeout))
-	return usecase.NewDefaultChatService(
-		usecase.ChatRuntime{
-			Gateway:      gateway,
-			ChatProvider: chatProvider,
-			ToolManager:  toolManager,
-		},
-		converter,
-		logger,
-	)
 }

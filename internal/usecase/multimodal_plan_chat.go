@@ -6,8 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/structured"
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/agent/adapters/structured"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -85,7 +84,7 @@ func (s *DefaultMultimodalService) Chat(ctx context.Context, req MultimodalChatR
 	defer cancel()
 
 	if !req.AgentMode {
-		resp, err := invokeMultimodalChat(timeoutCtx, runtime.Gateway, &llm.ChatRequest{
+		resp, err := invokeMultimodalChat(timeoutCtx, runtime.Gateway, &llmcore.ChatRequest{
 			Model:       model,
 			Messages:    messages,
 			Temperature: req.Temperature,
@@ -97,7 +96,7 @@ func (s *DefaultMultimodalService) Chat(ctx context.Context, req MultimodalChatR
 	}
 
 	userText := latestMultimodalUserText(messages)
-	planResp, err := invokeMultimodalChat(timeoutCtx, runtime.Gateway, &llm.ChatRequest{
+	planResp, err := invokeMultimodalChat(timeoutCtx, runtime.Gateway, &llmcore.ChatRequest{
 		Model: model,
 		Messages: []types.Message{
 			{Role: types.RoleSystem, Content: "You are an orchestration planner. Return 3-6 concise action steps."},
@@ -113,7 +112,7 @@ func (s *DefaultMultimodalService) Chat(ctx context.Context, req MultimodalChatR
 	finalMessages := append([]types.Message{{Role: types.RoleSystem, Content: "You are an executor agent. Execute the provided plan and produce final answer."}}, messages...)
 	finalMessages = append(finalMessages, types.Message{Role: types.RoleUser, Content: "Planner output:\n" + planText})
 
-	finalResp, err := invokeMultimodalChat(timeoutCtx, runtime.Gateway, &llm.ChatRequest{
+	finalResp, err := invokeMultimodalChat(timeoutCtx, runtime.Gateway, &llmcore.ChatRequest{
 		Model:       model,
 		Messages:    finalMessages,
 		Temperature: req.Temperature,
@@ -130,7 +129,7 @@ func (s *DefaultMultimodalService) Chat(ctx context.Context, req MultimodalChatR
 	}, nil
 }
 
-func invokeMultimodalChat(ctx context.Context, gateway llmcore.Gateway, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func invokeMultimodalChat(ctx context.Context, gateway llmcore.Gateway, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	if gateway == nil {
 		return nil, types.NewServiceUnavailableError("llm gateway is not configured")
 	}
@@ -143,7 +142,7 @@ func invokeMultimodalChat(ctx context.Context, gateway llmcore.Gateway, req *llm
 	if err != nil {
 		return nil, err
 	}
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || chatResp == nil {
 		return nil, types.NewInternalError("invalid chat gateway response")
 	}
@@ -191,7 +190,7 @@ func latestMultimodalUserText(messages []types.Message) string {
 	return messages[len(messages)-1].Content
 }
 
-func firstMultimodalChoice(resp *llm.ChatResponse) string {
+func firstMultimodalChoice(resp *llmcore.ChatResponse) string {
 	if resp == nil || len(resp.Choices) == 0 {
 		return ""
 	}

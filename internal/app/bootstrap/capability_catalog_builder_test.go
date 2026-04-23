@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/hosted"
-	"github.com/BaSui01/agentflow/agent/multiagent"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

@@ -15,7 +15,7 @@
 ### 🤖 Agent 框架
 
 - **官方单 Agent 主链** - `react + native tool calling + checkpoint/session/guardrails`
-- **官方多 Agent 门面** - `agent/team`，统一 `supervisor / selector / round_robin / swarm`
+- **官方多 Agent 门面** - `agent/collaboration/team`，统一 `supervisor / selector / round_robin / swarm`
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
 - **双模型架构 (toolProvider)** - 便宜模型优先承担工具调用链路（原生 tool calling，非原生 provider 自动降级 XML tool-calling），贵模型做内容生成，大幅降低成本
@@ -59,8 +59,11 @@
 
 ### 🧱 启动装配链路
 
-- **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
 - **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
+- **组合根状态已分 bundle** - `cmd/agentflow/server_runtime_bundles.go` 将长生命周期状态收口到 `handlers / text / tooling / workflow / infra / ops` 六组，避免 `Server` 持有一整份扁平跨域字段表
+- **热重载单 seam** - `server_hotreload.go` 只负责触发重建与状态回写，真正的 `chat/cost` 绑定、resolver 重建、workflow runtime 重建统一下沉到 `internal/app/bootstrap`
+- **用例边界已收口** - `internal/usecase` 现在对 handler 暴露自有 `chat/workflow` 契约，例如 `ChatStreamEvent`、`WorkflowPlan`、`WorkflowNodeEvent`，handler 不再直接依赖 `llmcore.UnifiedChunk` 或 `workflow.DAGWorkflow`
 - **领域入口并列** - `api/handlers` 可直接进入 `agent usecase`、`rag usecase`、`workflow usecase`；不是所有请求都必须先进入 `workflow`
 - **编排关系固定** - `workflow` 是 Layer 3 编排层，不是 `agent` 的一种；有编排需求时由 `workflow` 调用 `agent/rag/llm`，无编排需求时可直接走 `agent` 或 `rag`
 
@@ -128,8 +131,9 @@ go get github.com/BaSui01/agentflow
 正式入口约定：
 
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
-- `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `agent.NewAgentBuilder`、`agent.NewBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景；其中 builder/registry 已切换到 gateway 注入语义，不再推荐 provider 直入
+- `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
+- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/execution/runtime`
+- `github.com/BaSui01/agentflow/rag`、`github.com/BaSui01/agentflow/workflow`、`github.com/BaSui01/agentflow/llm` 根包已删除；分别改为导入 `rag/runtime`、`workflow/core|runtime`、`llm/core|gateway|runtime/compose`
 - Agent 运行时主面采用三层模型：`Model / Control / Tools`
   - `Model` 负责模型与 provider 相关参数
   - `Control` 负责 loop/budget/reasoning/override 等执行控制
@@ -149,7 +153,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/agent"
+    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
     "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
@@ -219,7 +223,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    llm "github.com/BaSui01/agentflow/llm/core"
     llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
     "github.com/glebarez/sqlite"
     "go.uber.org/zap"
@@ -367,7 +371,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-上下文运行时默认会随 `sdk` -> `agent/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
+上下文运行时默认会随 `sdk` -> `agent/execution/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -495,11 +499,7 @@ agentflow/
 │   ├── schema.go             # JSONSchema
 │   └── tool.go               # ToolSchema, ToolResult
 │
-├── llm/                      # Layer 1: LLM 抽象层
-│   ├── provider.go           # Provider 接口
-│   ├── resilience.go         # 重试/熔断/幂等
-│   ├── cache.go              # 多级缓存
-│   ├── middleware.go         # 中间件链
+├── llm/                      # Layer 1: LLM 抽象层（目录容器；root 无 Go 文件）
 │   ├── providers/            # Provider 实现
 │   │   ├── openai/           # OpenAI
 │   │   ├── anthropic/        # Claude
@@ -512,78 +512,34 @@ agentflow/
 │   ├── gateway/              # 统一能力入口
 │   ├── batch/                # 批量请求处理
 │   ├── capabilities/         # Image / Video / Audio / Rerank ...
-│   ├── core/                 # UnifiedRequest / Gateway contracts
+│   ├── core/                 # Provider / request-response / gateway contracts
 │   ├── tokenizer/            # 统一 Token 计数器
 │   └── tools/                # 工具执行
 │
-├── agent/                    # Layer 2: Agent 核心
-│   ├── base.go               # BaseAgent
-│   ├── completion.go         # ChatCompletion/StreamCompletion（双模型架构）
-│   ├── react.go              # Plan/Execute/Observe ReAct 循环
-│   ├── steering.go           # 实时引导 Steering（guide/stop_and_send）
-│   ├── session_manager.go    # 会话管理器（自动过期清理）
-│   ├── state.go              # 状态机
-│   ├── event.go              # 事件总线
-│   ├── registry.go           # Agent 注册表
-│   ├── planner/              # TaskPlanner 任务规划引擎
-│   │   ├── planner.go        # 核心引擎（Kahn 环检测）
-│   │   ├── plan.go           # Plan/PlanTask 数据结构
-│   │   ├── executor.go       # 拓扑排序 + 并行执行
-│   │   ├── dispatcher.go     # 3 种分派策略（by_role/by_capability/round_robin）
-│   │   └── tools.go          # 内置工具 Schema（create/update/get_plan）
-│   ├── team/                 # 官方多 Agent facade
-│   │   ├── team.go           # AgentTeam 实现
-│   │   ├── modes.go          # 4 种模式（Supervisor/RoundRobin/Selector/Swarm）
-│   │   └── builder.go        # 流式构建器
-│   ├── declarative/          # 声明式 Agent 加载器（YAML/JSON）
-│   ├── plugins/              # 插件系统（注册表、生命周期）
-│   ├── collaboration/        # legacy 多 Agent 协作 surface
-│   ├── crews/                # legacy Crew 编排
-│   ├── federation/           # Agent 联邦/服务发现
-│   ├── hitl/                 # Human-in-the-Loop 审批
-│   ├── artifacts/            # Artifact 管理
-│   ├── voice/                # 语音交互
-│   ├── lsp/                  # LSP 协议支持
-│   ├── streaming/            # 双向通信增强
-│   ├── guardrails/           # 护栏系统
-│   ├── protocol/             # A2A/MCP 协议
-│   │   ├── a2a/
-│   │   └── mcp/
-│   ├── reasoning/            # 推理模式
-│   ├── memory/               # 记忆系统
-│   ├── execution/            # 执行引擎
-│   └── context/              # 上下文管理
+├── agent/                    # Layer 2: Agent 核心（目录容器；root 无 Go 文件）
+│   ├── adapters/             # 适配层（chat/declarative/structured/handoff/teamadapter）
+│   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
+│   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）
+│   ├── core/                 # 核心层（registry/helpers/extension contracts）
+│   ├── execution/            # 执行层（runtime/context/loop/protocol/orchestration）
+│   ├── integration/          # 集成层（deployment/hosted/k8s/lsp/voice）
+│   ├── observability/        # 可观测层（monitoring/evaluation/hitl）
+│   └── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
 │
-├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）
+├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）
+│   ├── core/                 # 检索契约 / document / vector store 抽象
+│   ├── runtime/              # RAG 运行时构建入口与主能力面
+│   ├── retrieval/            # hybrid / contextual / multi-hop / graph / query routing
 │   ├── loader/               # DocumentLoader（Text/Markdown/CSV/JSON）
 │   ├── sources/              # 数据源适配器（arXiv, GitHub）
-│   ├── runtime/              # RAG 运行时构建入口（Builder + config bridge）
-│   ├── graph_rag.go          # Graph RAG 知识图谱检索
-│   ├── query_router.go       # 查询路由/变换
-│   ├── chunking.go           # 文档分块
-│   ├── contextual_retrieval.go # BM25 上下文检索
-│   ├── hybrid_retrieval.go   # 混合检索
-│   ├── multi_hop.go          # 多跳推理
-│   ├── semantic_cache.go     # 语义缓存
-│   ├── reranker.go           # 重排序
-│   ├── vector_store.go       # 向量存储接口
-│   ├── pinecone_store.go     # Pinecone 实现
-│   ├── qdrant_store.go       # Qdrant 实现
-│   ├── milvus_store.go       # Milvus 实现
-│   ├── weaviate_store.go     # Weaviate 实现
-│   └── web_retrieval.go      # Web 增强检索
+│   └── adapter/              # runtime / loader / tokenizer 适配桥
 │
-├── workflow/                 # Layer 3: 工作流编排层（位于 agent/rag 之上）
-│   ├── workflow.go
-│   ├── dag.go                # DAG 定义
-│   ├── dag_builder.go        # DAG 构建器
-│   ├── dag_executor.go       # DAG 执行器
-│   ├── dag_serialization.go  # DAG 序列化
-│   ├── steps.go              # 步骤定义
-│   ├── builder_visual.go     # 可视化构建器
-│   ├── circuit_breaker.go    # DAG 熔断器（三态机 + 注册表）
-│   ├── checkpoint_enhanced.go # 增强检查点
-│   ├── execution_history.go  # 执行历史
+├── workflow/                 # Layer 3: 工作流编排层（目录容器；root 无 Go 文件）
+│   ├── core/                 # DAG / Workflow / Step / checkpoint 契约
+│   ├── runtime/              # Builder / Facade 统一装配入口
+│   ├── engine/               # 执行引擎与 step dependency integration
+│   ├── steps/                # 节点级 step 实现
+│   ├── observability/        # 执行历史与工作流可观测
 │   └── dsl/                  # YAML DSL 编排
 │       ├── schema.go         # DSL 类型定义
 │       ├── parser.go         # YAML 解析 + 变量插值
@@ -612,10 +568,10 @@ agentflow/
 │   ├── main.go               # CLI 入口（serve/migrate/health/version）
 │   ├── migrate.go            # 迁移子命令
 │   ├── server_runtime.go     # Server 结构与启动编排
+│   ├── server_runtime_bundles.go # Server 运行时 bundle 分组（handlers/text/tooling/workflow/infra/ops）
 │   ├── server_services.go    # 基于 pkg/service.Registry 的生命周期总线
 │   ├── server_http.go        # 路由注册与 HTTP/Metrics 管理器构建
 │   ├── server_handlers_runtime.go # 调用 BuildServeHandlerSet 并回填 Server 字段
-│   ├── server_chat_service_runtime.go # chat usecase service runtime 构建辅助
 │   ├── server_startup_summary.go # 启动摘要与能力/依赖状态汇总
 │   ├── server_stores.go      # Mongo/RAG/Memory/Audit 装配
 │   ├── server_hotreload.go   # 热重载管理器初始化

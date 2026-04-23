@@ -6,7 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -18,6 +18,7 @@ type ChatConverter interface {
 	ToAPIChoices(choices []llm.ChatChoice) []api.ChatChoice
 	ToAPIUsage(usage llm.ChatUsage) api.ChatUsage
 	ToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk
+	ToAPIStreamChunkFromUsecase(chunk *usecase.ChatStreamChunk) *api.StreamChunk
 	ToUsecaseRequest(req *api.ChatRequest) *usecase.ChatRequest
 	ToAPIResponseFromUsecase(resp *usecase.ChatResponse) *api.ChatResponse
 }
@@ -184,6 +185,59 @@ func (c *DefaultChatConverter) ToAPIStreamChunk(chunk *llm.StreamChunk) *api.Str
 		FinishReason: chunk.FinishReason,
 		Usage:        convertStreamUsage(chunk.Usage),
 	}
+}
+
+func (c *DefaultChatConverter) ToAPIStreamChunkFromUsecase(chunk *usecase.ChatStreamChunk) *api.StreamChunk {
+	if chunk == nil {
+		return nil
+	}
+	out := &api.StreamChunk{
+		ID:           chunk.ID,
+		Provider:     chunk.Provider,
+		Model:        chunk.Model,
+		Index:        chunk.Index,
+		Delta:        convertUsecaseMessageToAPI(chunk.Delta),
+		FinishReason: chunk.FinishReason,
+	}
+	if chunk.Usage != nil {
+		usage := convertUsecaseUsageToAPI(*chunk.Usage)
+		out.Usage = &usage
+	}
+	return out
+}
+
+// convertToLLMRequest 转换为 LLM 请求
+func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
+	return h.converter.ToLLMRequest(req)
+}
+
+// convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage
+// without relying on unsafe pointer casts between distinct types.
+func convertStreamUsage(u *llm.ChatUsage) *api.ChatUsage {
+	if u == nil {
+		return nil
+	}
+	out := &api.ChatUsage{
+		PromptTokens:     u.PromptTokens,
+		CompletionTokens: u.CompletionTokens,
+		TotalTokens:      u.TotalTokens,
+	}
+	if u.PromptTokensDetails != nil {
+		out.PromptTokensDetails = &api.PromptTokensDetails{
+			CachedTokens:        u.PromptTokensDetails.CachedTokens,
+			CacheCreationTokens: u.PromptTokensDetails.CacheCreationTokens,
+			AudioTokens:         u.PromptTokensDetails.AudioTokens,
+		}
+	}
+	if u.CompletionTokensDetails != nil {
+		out.CompletionTokensDetails = &api.CompletionTokensDetails{
+			ReasoningTokens:          u.CompletionTokensDetails.ReasoningTokens,
+			AudioTokens:              u.CompletionTokensDetails.AudioTokens,
+			AcceptedPredictionTokens: u.CompletionTokensDetails.AcceptedPredictionTokens,
+			RejectedPredictionTokens: u.CompletionTokensDetails.RejectedPredictionTokens,
+		}
+	}
+	return out
 }
 
 func (c *DefaultChatConverter) ToUsecaseRequest(req *api.ChatRequest) *usecase.ChatRequest {

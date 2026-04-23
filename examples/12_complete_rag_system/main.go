@@ -6,10 +6,10 @@ import (
 	"log"
 	"strings"
 
-	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	llmrerank "github.com/BaSui01/agentflow/llm/capabilities/rerank"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -79,7 +79,10 @@ func main() {
 	cacheConfig := rag.SemanticCacheConfig{
 		SimilarityThreshold: 0.9,
 	}
-	cache := rag.NewSemanticCache(vectorStore, cacheConfig, logger)
+	cache, err := rag.NewSemanticCache(vectorStore, cacheConfig, logger)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// 设置缓存
 	cacheDoc := core.Document{

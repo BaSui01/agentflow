@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +23,7 @@ type openAICompatServiceStub struct {
 	streamReq      *usecase.ChatRequest
 	completeResult *usecase.ChatCompletionResult
 	completeErr    *types.Error
-	streamChunks   []llmcore.UnifiedChunk
+	streamChunks   []usecase.ChatStreamEvent
 	streamErr      *types.Error
 }
 
@@ -36,12 +35,12 @@ func (s *openAICompatServiceStub) Complete(_ context.Context, req *usecase.ChatR
 	return s.completeResult, nil
 }
 
-func (s *openAICompatServiceStub) Stream(_ context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (s *openAICompatServiceStub) Stream(_ context.Context, req *usecase.ChatRequest) (<-chan usecase.ChatStreamEvent, *types.Error) {
 	s.streamReq = req
 	if s.streamErr != nil {
 		return nil, s.streamErr
 	}
-	ch := make(chan llmcore.UnifiedChunk, len(s.streamChunks))
+	ch := make(chan usecase.ChatStreamEvent, len(s.streamChunks))
 	for _, item := range s.streamChunks {
 		ch <- item
 	}
@@ -148,14 +147,14 @@ func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 
 func TestChatHandler_OpenAICompatChatCompletions_Stream(t *testing.T) {
 	svc := &openAICompatServiceStub{
-		streamChunks: []llmcore.UnifiedChunk{
+		streamChunks: []usecase.ChatStreamEvent{
 			{
-				Output: &llm.StreamChunk{
+				Chunk: &usecase.ChatStreamChunk{
 					ID:    "chunk_1",
 					Model: "gpt-5.2",
 					Index: 0,
-					Delta: types.Message{
-						Role:    llm.RoleAssistant,
+					Delta: usecase.Message{
+						Role:    string(llmcore.RoleAssistant),
 						Content: "ok",
 					},
 					FinishReason: "stop",
@@ -375,13 +374,13 @@ func TestConvertOpenAICompatResponsesInput_CustomToolCall(t *testing.T) {
 
 func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 	svc := &openAICompatServiceStub{
-		streamChunks: []llmcore.UnifiedChunk{
+		streamChunks: []usecase.ChatStreamEvent{
 			{
-				Output: &llm.StreamChunk{
+				Chunk: &usecase.ChatStreamChunk{
 					ID:    "resp_stream_1",
 					Model: "gpt-5.2",
-					Delta: types.Message{
-						Role:    llm.RoleAssistant,
+					Delta: usecase.Message{
+						Role:    string(llmcore.RoleAssistant),
 						Content: "hello",
 					},
 					FinishReason: "stop",

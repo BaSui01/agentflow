@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/protocol/a2a"
-	"github.com/BaSui01/agentflow/agent/protocol/mcp"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"

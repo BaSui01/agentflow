@@ -6,7 +6,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -109,28 +108,28 @@ func (g *mockGateway) Stream(_ context.Context, _ *llmcore.UnifiedRequest) (<-ch
 
 type mockFallbackProvider struct {
 	name      string
-	tokenResp *llm.TokenCountResponse
+	tokenResp *llmcore.TokenCountResponse
 	tokenErr  error
 }
 
 func (p *mockFallbackProvider) Name() string { return p.name }
-func (p *mockFallbackProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *mockFallbackProvider) Completion(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
-func (p *mockFallbackProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (p *mockFallbackProvider) Stream(_ context.Context, _ *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
 	return nil, nil
 }
-func (p *mockFallbackProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *mockFallbackProvider) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 func (p *mockFallbackProvider) SupportsNativeFunctionCalling() bool { return true }
-func (p *mockFallbackProvider) ListModels(_ context.Context) ([]llm.Model, error) {
-	return []llm.Model{{ID: "test"}}, nil
+func (p *mockFallbackProvider) ListModels(_ context.Context) ([]llmcore.Model, error) {
+	return []llmcore.Model{{ID: "test"}}, nil
 }
-func (p *mockFallbackProvider) Endpoints() llm.ProviderEndpoints {
-	return llm.ProviderEndpoints{BaseURL: "http://test"}
+func (p *mockFallbackProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{BaseURL: "http://test"}
 }
-func (p *mockFallbackProvider) CountTokens(_ context.Context, _ *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+func (p *mockFallbackProvider) CountTokens(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
 	if p.tokenErr != nil {
 		return nil, p.tokenErr
 	}
@@ -140,28 +139,28 @@ func (p *mockFallbackProvider) CountTokens(_ context.Context, _ *llm.ChatRequest
 func TestChatProviderAdapter_NilGateway(t *testing.T) {
 	adapter := NewChatProviderAdapter(nil, nil)
 
-	_, err := adapter.Completion(context.Background(), &llm.ChatRequest{Model: "test"})
+	_, err := adapter.Completion(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err == nil {
 		t.Fatal("expected error with nil gateway")
 	}
 
-	_, err = adapter.Stream(context.Background(), &llm.ChatRequest{Model: "test"})
+	_, err = adapter.Stream(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err == nil {
 		t.Fatal("expected error with nil gateway for stream")
 	}
 }
 
 func TestChatProviderAdapter_Completion_Success(t *testing.T) {
-	expected := &llm.ChatResponse{
+	expected := &llmcore.ChatResponse{
 		ID: "resp1", Model: "test",
-		Choices: []llm.ChatChoice{{Message: types.Message{Content: "hello"}}},
+		Choices: []llmcore.ChatChoice{{Message: types.Message{Content: "hello"}}},
 	}
 	gw := &mockGateway{
 		invokeResp: &llmcore.UnifiedResponse{Output: expected},
 	}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	resp, err := adapter.Completion(context.Background(), &llm.ChatRequest{Model: "test"})
+	resp, err := adapter.Completion(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +173,7 @@ func TestChatProviderAdapter_Completion_GatewayError(t *testing.T) {
 	gw := &mockGateway{invokeErr: fmt.Errorf("gateway down")}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	_, err := adapter.Completion(context.Background(), &llm.ChatRequest{Model: "test"})
+	_, err := adapter.Completion(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -186,7 +185,7 @@ func TestChatProviderAdapter_Completion_InvalidResponse(t *testing.T) {
 	}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	_, err := adapter.Completion(context.Background(), &llm.ChatRequest{Model: "test"})
+	_, err := adapter.Completion(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err == nil {
 		t.Fatal("expected error for invalid response type")
 	}
@@ -194,14 +193,14 @@ func TestChatProviderAdapter_Completion_InvalidResponse(t *testing.T) {
 
 func TestChatProviderAdapter_Stream_Success(t *testing.T) {
 	ch := make(chan llmcore.UnifiedChunk, 3)
-	ch <- llmcore.UnifiedChunk{Output: &llm.StreamChunk{Delta: types.Message{Content: "hi"}}}
-	ch <- llmcore.UnifiedChunk{Output: &llm.StreamChunk{Delta: types.Message{Content: " there"}}}
+	ch <- llmcore.UnifiedChunk{Output: &llmcore.StreamChunk{Delta: types.Message{Content: "hi"}}}
+	ch <- llmcore.UnifiedChunk{Output: &llmcore.StreamChunk{Delta: types.Message{Content: " there"}}}
 	close(ch)
 
 	gw := &mockGateway{streamCh: ch}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	stream, err := adapter.Stream(context.Background(), &llm.ChatRequest{Model: "test"})
+	stream, err := adapter.Stream(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -222,7 +221,7 @@ func TestChatProviderAdapter_Stream_Error(t *testing.T) {
 	gw := &mockGateway{streamErr: fmt.Errorf("stream failed")}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	_, err := adapter.Stream(context.Background(), &llm.ChatRequest{Model: "test"})
+	_, err := adapter.Stream(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -236,7 +235,7 @@ func TestChatProviderAdapter_Stream_ChunkError(t *testing.T) {
 	gw := &mockGateway{streamCh: ch}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	stream, err := adapter.Stream(context.Background(), &llm.ChatRequest{Model: "test"})
+	stream, err := adapter.Stream(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -255,7 +254,7 @@ func TestChatProviderAdapter_Stream_InvalidChunkType(t *testing.T) {
 	gw := &mockGateway{streamCh: ch}
 	adapter := NewChatProviderAdapter(gw, nil)
 
-	stream, _ := adapter.Stream(context.Background(), &llm.ChatRequest{Model: "test"})
+	stream, _ := adapter.Stream(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	chunk := <-stream
 	if chunk.Err == nil {
 		t.Fatal("expected error for invalid chunk type")
@@ -263,7 +262,7 @@ func TestChatProviderAdapter_Stream_InvalidChunkType(t *testing.T) {
 }
 
 func TestChatProviderAdapter_WithFallback(t *testing.T) {
-	fb := &mockFallbackProvider{name: "test-provider", tokenResp: &llm.TokenCountResponse{InputTokens: 42}}
+	fb := &mockFallbackProvider{name: "test-provider", tokenResp: &llmcore.TokenCountResponse{InputTokens: 42}}
 	adapter := NewChatProviderAdapter(nil, fb)
 
 	if adapter.Name() != "test-provider" {
@@ -284,7 +283,7 @@ func TestChatProviderAdapter_WithFallback(t *testing.T) {
 	if !health.Healthy {
 		t.Fatal("expected healthy from fallback")
 	}
-	countResp, err := adapter.CountTokens(context.Background(), &llm.ChatRequest{Model: "test"})
+	countResp, err := adapter.CountTokens(context.Background(), &llmcore.ChatRequest{Model: "test"})
 	if err != nil {
 		t.Fatalf("expected CountTokens from fallback, got error: %v", err)
 	}
@@ -317,7 +316,7 @@ func TestChatProviderAdapter_WithoutFallback(t *testing.T) {
 	if !health.Healthy {
 		t.Fatal("expected healthy default")
 	}
-	if _, err := adapter.CountTokens(context.Background(), &llm.ChatRequest{Model: "test"}); err == nil {
+	if _, err := adapter.CountTokens(context.Background(), &llmcore.ChatRequest{Model: "test"}); err == nil {
 		t.Fatal("expected CountTokens error without fallback")
 	}
 }
@@ -327,7 +326,7 @@ func TestChatProviderAdapter_Stream_ContextCancel(t *testing.T) {
 	// 持续发送数据模拟无限流
 	go func() {
 		for i := 0; i < 100; i++ {
-			ch <- llmcore.UnifiedChunk{Output: &llm.StreamChunk{Delta: types.Message{Content: "x"}}}
+			ch <- llmcore.UnifiedChunk{Output: &llmcore.StreamChunk{Delta: types.Message{Content: "x"}}}
 		}
 		// 不关闭 ch，模拟长流
 	}()
@@ -336,7 +335,7 @@ func TestChatProviderAdapter_Stream_ContextCancel(t *testing.T) {
 	adapter := NewChatProviderAdapter(gw, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := adapter.Stream(ctx, &llm.ChatRequest{Model: "test"})
+	stream, err := adapter.Stream(ctx, &llmcore.ChatRequest{Model: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

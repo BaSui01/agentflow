@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 type stubTransformer struct {

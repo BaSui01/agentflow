@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/capabilities/memory"
 	"github.com/BaSui01/agentflow/types"
 )
 

@@ -14,7 +14,7 @@ import (
 )
 
 func TestAgentRootPackageFileBudget(t *testing.T) {
-	const maxAgentRootFiles = 42
+	const expectedAgentRootFiles = 0
 
 	entries, err := os.ReadDir("agent")
 	if err != nil {
@@ -33,8 +33,63 @@ func TestAgentRootPackageFileBudget(t *testing.T) {
 		count++
 	}
 
-	if count > maxAgentRootFiles {
-		t.Fatalf("agent root package has %d production files, exceeds budget %d", count, maxAgentRootFiles)
+	if count != expectedAgentRootFiles {
+		t.Fatalf("agent root package must have %d production files, got %d", expectedAgentRootFiles, count)
+	}
+}
+
+func TestAgentRootPublicSurfaceBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "agent")
+}
+
+func TestRAGRootPackageFileBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "rag")
+}
+
+func TestWorkflowRootPackageFileBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "workflow")
+}
+
+func TestLLMRootPackageFileBudget(t *testing.T) {
+	assertModuleRootNoGoFiles(t, "llm")
+}
+
+func assertModuleRootNoGoFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s dir: %v", dir, err)
+	}
+
+	var matched []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		matched = append(matched, name)
+	}
+
+	if len(matched) > 0 {
+		slices.Sort(matched)
+		t.Fatalf("%s root package must not expose any Go files, found: %s", dir, strings.Join(matched, ", "))
+	}
+}
+
+func TestRootLayoutBudget(t *testing.T) {
+	const maxTopLevelEntries = 53
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read repo root: %v", err)
+	}
+
+	if len(entries) > maxTopLevelEntries {
+		t.Fatalf("repo root has %d top-level entries, exceeds budget %d", len(entries), maxTopLevelEntries)
 	}
 }
 
@@ -238,13 +293,39 @@ func TestLLMComposeImportGuards(t *testing.T) {
 	}
 }
 
+func TestAPIHandlerStoreLeakGuards(t *testing.T) {
+	var leaked []string
+
+	walkErr := filepath.WalkDir("api/handlers", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, "_store.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		leaked = append(leaked, filepath.ToSlash(rel))
+		return nil
+	})
+
+	if walkErr != nil {
+		t.Fatalf("scan api handler store leak guards: %v", walkErr)
+	}
+	if len(leaked) > 0 {
+		slices.Sort(leaked)
+		t.Fatalf("api handlers must not own store implementations, found: %s", strings.Join(leaked, ", "))
+	}
+}
+
 func TestAPIHandlerInfraImportGuards(t *testing.T) {
 	disallowedPrefixes := []string{
 		"gorm.io/",
 		"github.com/BaSui01/agentflow/llm/runtime/router",
 		"github.com/BaSui01/agentflow/llm/providers/",
 	}
-	allowlistFileSuffix := []string{"_store.go"}
 
 	fset := token.NewFileSet()
 	var violations []string
@@ -262,11 +343,6 @@ func TestAPIHandlerInfraImportGuards(t *testing.T) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		for _, suffix := range allowlistFileSuffix {
-			if strings.HasSuffix(rel, suffix) {
-				return nil
-			}
-		}
 
 		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if err != nil {
@@ -334,6 +410,185 @@ func TestCmdEntrypointImportAllowlist(t *testing.T) {
 	if len(violations) > 0 {
 		slices.Sort(violations)
 		t.Fatalf("cmd entrypoint import allowlist violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestCmdHotReloadBootstrapEntryPoints(t *testing.T) {
+	data, err := os.ReadFile("cmd/agentflow/server_hotreload.go")
+	if err != nil {
+		t.Fatalf("read cmd/agentflow/server_hotreload.go: %v", err)
+	}
+	src := string(data)
+
+	requiredSnippets := []string{
+		"bootstrap.ApplyReloadedTextRuntimeBindings(",
+		"bootstrap.BuildReloadedResolver(",
+		"bootstrap.BuildReloadedWorkflowRuntime(",
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(src, snippet) {
+			t.Fatalf("cmd/agentflow/server_hotreload.go must contain %q", snippet)
+		}
+	}
+
+	forbiddenSnippets := []string{
+		"handlers.NewChatHandler(",
+		"handlers.NewCostHandler(",
+		"usecase.NewDefaultWorkflowService(",
+		"s.chatHandler.UpdateService(",
+		"s.costHandler.UpdateTracker(",
+		"s.agentHandler.UpdateService(",
+		"s.workflowHandler.UpdateService(",
+		"func (s *Server) buildReloadedResolver(",
+		"func (s *Server) buildReloadedWorkflowRuntime(",
+	}
+	for _, snippet := range forbiddenSnippets {
+		if strings.Contains(src, snippet) {
+			t.Fatalf("cmd/agentflow/server_hotreload.go must not contain %q; delegate handler rebinding to bootstrap seam", snippet)
+		}
+	}
+}
+
+func TestHotReloadDocsImplementationConsistency(t *testing.T) {
+	docData, err := os.ReadFile("docs/architecture/startup-composition.md")
+	if err != nil {
+		t.Fatalf("read docs/architecture/startup-composition.md: %v", err)
+	}
+	doc := string(docData)
+	if !strings.Contains(doc, "ApplyReloadedTextRuntimeBindings") {
+		t.Fatal("docs/architecture/startup-composition.md must document ApplyReloadedTextRuntimeBindings")
+	}
+	if !strings.Contains(doc, "BuildToolingHandlerBundle") {
+		t.Fatal("docs/architecture/startup-composition.md must document BuildToolingHandlerBundle")
+	}
+
+	srcData, err := os.ReadFile("internal/app/bootstrap/handler_adapters_builder.go")
+	if err != nil {
+		t.Fatalf("read internal/app/bootstrap/handler_adapters_builder.go: %v", err)
+	}
+	src := string(srcData)
+	if !strings.Contains(src, "func ApplyReloadedTextRuntimeBindings(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define ApplyReloadedTextRuntimeBindings")
+	}
+	if !strings.Contains(src, "func BuildToolingHandlerBundle(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define BuildToolingHandlerBundle")
+	}
+	if !strings.Contains(src, "func BuildReloadedResolver(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define BuildReloadedResolver")
+	}
+	if !strings.Contains(src, "func BuildReloadedWorkflowRuntime(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define BuildReloadedWorkflowRuntime")
+	}
+
+	hotReloadData, err := os.ReadFile("cmd/agentflow/server_hotreload.go")
+	if err != nil {
+		t.Fatalf("read cmd/agentflow/server_hotreload.go: %v", err)
+	}
+	if !strings.Contains(string(hotReloadData), "bootstrap.ApplyReloadedTextRuntimeBindings(") {
+		t.Fatal("cmd/agentflow/server_hotreload.go must call bootstrap.ApplyReloadedTextRuntimeBindings")
+	}
+
+	serveBuilderData, err := os.ReadFile("internal/app/bootstrap/serve_handler_set_builder.go")
+	if err != nil {
+		t.Fatalf("read internal/app/bootstrap/serve_handler_set_builder.go: %v", err)
+	}
+	if !strings.Contains(string(serveBuilderData), "BuildToolingHandlerBundle(") {
+		t.Fatal("internal/app/bootstrap/serve_handler_set_builder.go must call BuildToolingHandlerBundle")
+	}
+
+	if !strings.Contains(doc, "BuildReloadedResolver") {
+		t.Fatal("docs/architecture/startup-composition.md must document BuildReloadedResolver")
+	}
+	if !strings.Contains(doc, "BuildReloadedWorkflowRuntime") {
+		t.Fatal("docs/architecture/startup-composition.md must document BuildReloadedWorkflowRuntime")
+	}
+}
+
+func TestUsecaseContractBoundaryGuards(t *testing.T) {
+	type fileExpectation struct {
+		path              string
+		requiredSnippets  []string
+		forbiddenSnippets []string
+	}
+
+	expectations := []fileExpectation{
+		{
+			path: "internal/usecase/chat_service.go",
+			requiredSnippets: []string{
+				"Stream(ctx context.Context, req *ChatRequest) (<-chan ChatStreamEvent, *types.Error)",
+			},
+			forbiddenSnippets: []string{
+				"Stream(ctx context.Context, req *ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error)",
+			},
+		},
+		{
+			path: "internal/usecase/workflow_service.go",
+			requiredSnippets: []string{
+				"BuildDAGWorkflow(req WorkflowBuildInput) (*WorkflowPlan, string, *types.Error)",
+				"Execute(ctx context.Context, wf *WorkflowPlan, input any, streamEmitter WorkflowStreamEmitter, nodeEmitter WorkflowNodeEventEmitter) (any, *types.Error)",
+			},
+			forbiddenSnippets: []string{
+				"BuildDAGWorkflow(req WorkflowBuildInput) (*workflow.DAGWorkflow, string, *types.Error)",
+				"Execute(ctx context.Context, wf *workflow.DAGWorkflow, input any, streamEmitter workflow.WorkflowStreamEmitter, nodeEmitter workflowobs.NodeEventEmitter) (any, *types.Error)",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain %q", tt.path, snippet)
+			}
+		}
+	}
+
+	type importGuard struct {
+		path             string
+		forbiddenImports []string
+	}
+	importGuards := []importGuard{
+		{
+			path: "api/handlers/chat.go",
+			forbiddenImports: []string{
+				"github.com/BaSui01/agentflow/llm/core",
+			},
+		},
+		{
+			path: "api/handlers/workflow.go",
+			forbiddenImports: []string{
+				"github.com/BaSui01/agentflow/workflow/core",
+				"github.com/BaSui01/agentflow/workflow/observability",
+			},
+		},
+	}
+
+	fset := token.NewFileSet()
+	for _, tt := range importGuards {
+		file, err := parser.ParseFile(fset, filepath.FromSlash(tt.path), nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatalf("parse imports for %s: %v", tt.path, err)
+		}
+		for _, imp := range file.Imports {
+			importPath, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				t.Fatalf("unquote import path for %s: %v", tt.path, err)
+			}
+			for _, forbidden := range tt.forbiddenImports {
+				if importPath == forbidden {
+					t.Fatalf("%s must not import %s after usecase contract boundary refactor", tt.path, forbidden)
+				}
+			}
+		}
 	}
 }
 
@@ -465,8 +720,8 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── api/                      # 适配层：HTTP/MCP/A2A handler + routes",
 				"├── internal/                 # 组合根支撑：启动期 builder / wiring / bridge",
 				"├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）",
-				"├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）",
-				"├── workflow/                 # Layer 3: 工作流编排层（位于 agent/rag 之上）",
+				"├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）",
+				"├── workflow/                 # Layer 3: 工作流编排层（目录容器；root 无 Go 文件）",
 				"| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |",
 			},
 		},
@@ -478,8 +733,8 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── api/                      # Adapter layer: HTTP/MCP/A2A handlers + routes",
 				"├── internal/                 # Composition-root support: startup builders / bridges",
 				"├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)",
-				"├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)",
-				"├── workflow/                 # Layer 3: Workflow orchestration (above agent/rag)",
+				"├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)",
+				"├── workflow/                 # Layer 3: Workflow orchestration (directory-only container; no root Go files)",
 				"| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
 			},
 		},
@@ -508,23 +763,23 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 
 	expectations := []sourceExpectation{
 		{
-			path: "agent/registry.go",
+			path: "agent/execution/runtime/registry_runtime.go",
 			requiredSnippets: []string{
 				"buildRegistryAgent(",
 				"newAgentBuilder(config).",
 			},
 			forbiddenSnippets: []string{
-				"return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil",
+				"return BuildBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil",
 			},
 		},
 		{
-			path: "agent/multiagent/default_modes.go",
+			path: "agent/collaboration/multiagent/default_modes.go",
 			requiredSnippets: []string{
 				"newHierarchicalModeBaseAgent(",
 				"agentruntime.NewBuilder(gateway, logger).Build(",
 			},
 			forbiddenSnippets: []string{
-				"agent.NewBaseAgent(types.AgentConfig{",
+				"agent.BuildBaseAgent(types.AgentConfig{",
 			},
 		},
 	}
@@ -584,6 +839,147 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 	}
 }
 
+func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
+	type sourceExpectation struct {
+		path             string
+		requiredSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`github.com/BaSui01/agentflow/agent` 根包已删除",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
+			},
+		},
+		{
+			path: "docs/getting_started.md",
+			requiredSnippets: []string{
+				"推荐入口是 `agent/execution/runtime.Builder`",
+				"`agent/execution/runtime`",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/01.快速开始.md",
+			requiredSnippets: []string{
+				"`agent/execution/runtime.Builder` 是 `agent` 子模块 runtime 入口",
+			},
+		},
+		{
+			path: "docs/en/tutorials/01.QuickStart.md",
+			requiredSnippets: []string{
+				"`agent/execution/runtime.Builder` is the runtime entry for the `agent` submodule",
+			},
+		},
+		{
+			path: "docs/cn/tutorials/03.Agent开发教程.md",
+			requiredSnippets: []string{
+				"`agent` 子模块正式 runtime 入口：`agent/execution/runtime.Builder`",
+			},
+		},
+		{
+			path: "docs/en/tutorials/03.AgentDevelopment.md",
+			requiredSnippets: []string{
+				"Official runtime entry for the `agent` submodule: `agent/execution/runtime.Builder`",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q to keep the official runtime entrypoint explicit", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestOfficialEntrypointDocsConsistency(t *testing.T) {
+	type docExpectation struct {
+		path                   string
+		requiredSnippets       []string
+		requiredAdvancedLegacy []string
+		forbiddenSnippets      []string
+	}
+
+	expectations := []docExpectation{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
+				"`github.com/BaSui01/agentflow/agent` 根包已删除",
+			},
+			forbiddenSnippets: []string{
+				"推荐使用 `agent.NewAgentBuilder`",
+				"`agent.NewAgentBuilder` 作为正式入口",
+				"`agent.NewAgentBuilder`",
+				"`agent.BuildBaseAgent`",
+				"`agent.CreateAgent`",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
+				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
+			},
+			forbiddenSnippets: []string{
+				"recommend `agent.NewAgentBuilder`",
+				"`agent.NewAgentBuilder` as the official entrypoint",
+				"`agent.NewAgentBuilder`",
+				"`agent.BuildBaseAgent`",
+				"`agent.CreateAgent`",
+			},
+		},
+		{
+			path: "docs/getting_started.md",
+			requiredSnippets: []string{
+				"sdk.New(sdk.Options{",
+				"`agent/execution/runtime.Builder`",
+				"`agent/execution/runtime`",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q to keep the official entrypoint set consistent", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.requiredAdvancedLegacy {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must describe legacy builders as advanced-extension-only and include %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not promote legacy entrypoint phrasing %q", tt.path, snippet)
+			}
+		}
+	}
+}
+
 func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 	type sourceExpectation struct {
 		path              string
@@ -595,14 +991,14 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "README.md",
 			requiredSnippets: []string{
-				"**官方多 Agent 门面** - `agent/team`",
+				"**官方多 Agent 门面** - `agent/collaboration/team`",
 				"**官方默认** - `ReAct` 作为唯一默认推理/执行主链",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
-				"**Official Multi-Agent Facade** - `agent/team`",
+				"**Official Multi-Agent Facade** - `agent/collaboration/team`",
 				"**Official default** - `ReAct` is the only default reasoning/execution chain",
 			},
 		},
@@ -633,6 +1029,10 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				"## Team（官方多 Agent facade）",
 				"## Legacy：多 Agent 协作",
 			},
+			forbiddenSnippets: []string{
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
+			},
 		},
 		{
 			path: "docs/en/tutorials/03.AgentDevelopment.md",
@@ -641,36 +1041,48 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 				"## Team (Official Multi-Agent Facade)",
 				"## Legacy Multi-Agent Collaboration",
 			},
+			forbiddenSnippets: []string{
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
+				"github.com/BaSui01/agentflow/agent/memory",
+				"github.com/BaSui01/agentflow/agent/guardrails",
+			},
 		},
 		{
 			path: "docs/cn/tutorials/08.多Agent协作.md",
 			requiredSnippets: []string{
-				"`agent/team` 是 AgentFlow 的官方多 Agent facade",
+				"`agent/collaboration/team` 是 AgentFlow 的官方多 Agent facade",
 				"## Legacy：多 Agent 系统",
+			},
+			forbiddenSnippets: []string{
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
 		{
 			path: "docs/en/tutorials/08.MultiAgentCollaboration.md",
 			requiredSnippets: []string{
-				"`agent/team` is the official multi-agent facade in AgentFlow",
+				"`agent/collaboration/team` is the official multi-agent facade in AgentFlow",
 				"## Legacy Multi-Agent System",
 			},
 			forbiddenSnippets: []string{
 				"AgentFlow supports multiple collaboration patterns including hierarchical agents, debate, consensus, pipeline, broadcast, and network modes.",
+				"github.com/BaSui01/agentflow/agent/team",
+				"github.com/BaSui01/agentflow/agent/hierarchical",
 			},
 		},
 		{
 			path: "examples/08_low_priority_features/README.md",
 			requiredSnippets: []string{
 				"legacy 多 Agent surface",
-				"新的多 Agent 接入默认应优先使用 `agent/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/collaboration/team`",
 			},
 		},
 		{
 			path: "examples/09_full_integration/README.md",
 			requiredSnippets: []string{
 				"legacy 层次化多 Agent",
-				"新的多 Agent 接入默认应优先使用 `agent/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/collaboration/team`",
 			},
 		},
 	}
@@ -696,51 +1108,63 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 
 func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
-		data, err := os.ReadFile("agent/loop_executor.go")
+		data, err := os.ReadFile("agent/execution/runtime/agent_builder.go")
 		if err != nil {
-			t.Fatalf("read agent/loop_executor.go: %v", err)
+			t.Fatalf("read agent/execution/runtime/agent_builder.go: %v", err)
 		}
 		src := string(data)
+		start := strings.Index(src, "// Merged from loop_executor.go.")
+		end := strings.Index(src, "// Merged from loop_executor_runtime.go.")
+		if start == -1 || end == -1 || end <= start {
+			t.Fatal("agent/builder.go must keep explicit merged loop executor section markers")
+		}
+		src = src[start:end]
 		for _, needle := range []string{
 			"ResolveRunConfig(",
 			"DisablePlannerEnabled(",
 			"topLevelLoopBudget(",
 		} {
 			if strings.Contains(src, needle) {
-				t.Fatalf("agent/loop_executor.go must not depend on legacy control fallback %q", needle)
+				t.Fatalf("agent/execution/runtime/agent_builder.go must not depend on legacy control fallback %q", needle)
 			}
 		}
 	})
 
 	t.Run("chat_request_construction_stays_in_adapter", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/request.go")
+		requestData, err := os.ReadFile("agent/execution/runtime/request_runtime.go")
 		if err != nil {
-			t.Fatalf("read agent/request.go: %v", err)
+			t.Fatalf("read agent/execution/runtime/request_runtime.go: %v", err)
 		}
 		if strings.Contains(string(requestData), "ChatRequest{") {
-			t.Fatal("agent/request.go must not construct ChatRequest directly; use ChatRequestAdapter")
+			t.Fatal("agent/execution/runtime/request_runtime.go must not construct ChatRequest directly; use ChatRequestAdapter")
 		}
 
-		adapterData, err := os.ReadFile("agent/chat_request_adapter.go")
+		adapterData, err := os.ReadFile("agent/adapters/chat.go")
 		if err != nil {
-			t.Fatalf("read agent/chat_request_adapter.go: %v", err)
+			t.Fatalf("read agent/adapters/chat.go: %v", err)
 		}
 		adapterSrc := string(adapterData)
 		if !strings.Contains(adapterSrc, "ChatRequest{") {
-			t.Fatal("agent/chat_request_adapter.go must remain the primary ChatRequest construction surface")
+			t.Fatal("agent/adapters/chat.go must remain the primary ChatRequest construction surface")
 		}
 		if !strings.Contains(adapterSrc, "func toolChoiceToRequestValue(choice *types.ToolChoice) any") {
-			t.Fatal("agent/chat_request_adapter.go must remain the adapter boundary that lowers ToolChoice into provider request payloads")
+			t.Fatal("agent/adapters/chat.go must remain the adapter boundary that lowers ToolChoice into provider request payloads")
+		}
+
+		if _, err := os.Stat("agent/chat_request_adapter.go"); err == nil {
+			t.Fatal("agent/chat_request_adapter.go must be removed once ChatRequestAdapter moves under agent/adapters")
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat agent/chat_request_adapter.go: %v", err)
 		}
 	})
 
 	t.Run("tool_choice_any_stays_out_of_agent_runtime_surface", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/request.go")
+		requestData, err := os.ReadFile("agent/execution/runtime/request_runtime.go")
 		if err != nil {
-			t.Fatalf("read agent/request.go: %v", err)
+			t.Fatalf("read agent/execution/runtime/request_runtime.go: %v", err)
 		}
 		if !strings.Contains(string(requestData), "types.ParseToolChoiceString(") {
-			t.Fatal("agent/request.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
+			t.Fatal("agent/execution/runtime/request_runtime.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
 		}
 
 		entries, err := os.ReadDir("agent")

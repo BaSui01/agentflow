@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -300,5 +300,3 @@ func TestNewDefaultExecutorWithConfig_SanitizesInvalidValues(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, executor.config.RetryDelay)
 	assert.Equal(t, 2.0, executor.config.RetryBackoff)
 }
-
-

@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/capabilities/memory"
 )
 
 func TestMongoKnowledgeGraph_AddAndQueryEntity(t *testing.T) {

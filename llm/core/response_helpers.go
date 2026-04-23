@@ -1,0 +1,16 @@
+package core
+
+import "fmt"
+
+// FirstChoice safely returns the first choice from a ChatResponse.
+// Returns an error if the response is nil or has no choices.
+func FirstChoice(resp *ChatResponse) (ChatChoice, error) {
+	if resp == nil {
+		return ChatChoice{}, fmt.Errorf("nil ChatResponse")
+	}
+	if len(resp.Choices) == 0 {
+		return ChatChoice{}, fmt.Errorf("empty choices in ChatResponse (model returned no choices)")
+	}
+	return resp.Choices[0], nil
+}
+

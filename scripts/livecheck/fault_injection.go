@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
-	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/llm"
+	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )

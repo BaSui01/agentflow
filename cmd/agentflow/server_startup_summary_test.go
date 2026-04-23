@@ -10,7 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
@@ -30,18 +30,12 @@ func TestStartupSummary_ReportsCapabilitiesDependenciesAndRestartBoundaries(t *t
 	cfg.Multimodal.Enabled = false
 
 	s := &Server{
-		cfg:              cfg,
-		configPath:       "config.yaml",
-		logger:           logger,
-		db:               &gorm.DB{},
-		healthHandler:    nil,
-		provider:         &hotReloadProvider{name: "summary-provider", content: "ok"},
-		agentHandler:     nil,
-		chatHandler:      nil,
-		protocolHandler:  nil,
-		ragHandler:       nil,
-		workflowHandler:  nil,
-		hotReloadManager: &config.HotReloadManager{},
+		cfg:        cfg,
+		configPath: "config.yaml",
+		logger:     logger,
+		infra:      serverInfraBundle{db: &gorm.DB{}},
+		text:       serverTextRuntimeBundle{provider: &hotReloadProvider{name: "summary-provider", content: "ok"}},
+		ops:        serverOpsBundle{hotReloadManager: &config.HotReloadManager{}},
 	}
 	s.logStartupSummary()
 
@@ -81,8 +75,8 @@ func TestInitHandlers_ToleratesConfiguredMainProviderBuilderErrors(t *testing.T)
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.initHandlers())
-	assert.Nil(t, s.chatHandler)
-	assert.Nil(t, s.costHandler)
+	assert.Nil(t, s.handlers.chatHandler)
+	assert.Nil(t, s.handlers.costHandler)
 }
 
 func TestInitHandlers_RedisDependencySurfacesInReadinessProbe(t *testing.T) {
@@ -106,13 +100,13 @@ func TestInitHandlers_RedisDependencySurfacesInReadinessProbe(t *testing.T) {
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
 	require.NoError(t, s.initHandlers())
-	require.NotNil(t, s.healthHandler)
+	require.NotNil(t, s.handlers.healthHandler)
 
 	mr.Close()
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
-	s.healthHandler.HandleReady(rec, req)
+	s.handlers.healthHandler.HandleReady(rec, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"redis"`)
@@ -135,18 +129,22 @@ func TestInitHandlers_MongoDependencySurfacesInReadinessProbe(t *testing.T) {
 	}()
 
 	s := &Server{
-		cfg:           cfg,
-		logger:        zap.NewNop(),
-		mongoClient:   client,
-		healthHandler: handlers.NewHealthHandler(zap.NewNop()),
+		cfg:    cfg,
+		logger: zap.NewNop(),
+		infra: serverInfraBundle{
+			mongoClient: client,
+		},
+		handlers: serverHandlerBundle{
+			healthHandler: handlers.NewHealthHandler(zap.NewNop()),
+		},
 	}
-	s.healthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("mongodb", func(ctx context.Context) error {
-		return s.mongoClient.Ping(ctx)
+	s.handlers.healthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("mongodb", func(ctx context.Context) error {
+		return s.infra.mongoClient.Ping(ctx)
 	}))
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
-	s.healthHandler.HandleReady(rec, req)
+	s.handlers.healthHandler.HandleReady(rec, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"mongodb"`)

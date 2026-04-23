@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -106,4 +106,3 @@ func TestMultiLevelCache_IsCacheable(t *testing.T) {
 		t.Error("request with tools should not be cacheable")
 	}
 }
-

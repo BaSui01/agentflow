@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/engine"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

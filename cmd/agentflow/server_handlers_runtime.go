@@ -7,8 +7,8 @@ import (
 func (s *Server) initHandlers() error {
 	set, err := bootstrap.BuildServeHandlerSet(bootstrap.ServeHandlerSetBuildInput{
 		Cfg:                 s.cfg,
-		DB:                  s.db,
-		MongoClient:         s.mongoClient,
+		DB:                  s.infra.db,
+		MongoClient:         s.infra.mongoClient,
 		Logger:              s.logger,
 		ToolApprovalManager: s.currentToolApprovalManager(),
 		WorkflowHITLManager: s.currentWorkflowHITLManager(),
@@ -18,41 +18,41 @@ func (s *Server) initHandlers() error {
 		return err
 	}
 
-	s.healthHandler = set.HealthHandler
-	s.chatHandler = set.ChatHandler
-	s.chatService = set.ChatService
-	s.agentHandler = set.AgentHandler
-	s.apiKeyHandler = set.APIKeyHandler
-	s.toolRegistryHandler = set.ToolRegistryHandler
-	s.toolProviderHandler = set.ToolProviderHandler
-	s.toolApprovalHandler = set.ToolApprovalHandler
-	s.ragHandler = set.RAGHandler
-	s.workflowHandler = set.WorkflowHandler
-	s.protocolHandler = set.ProtocolHandler
-	s.multimodalHandler = set.MultimodalHandler
-	s.costHandler = set.CostHandler
+	s.handlers.healthHandler = set.HealthHandler
+	s.handlers.chatHandler = set.ChatHandler
+	s.text.chatService = set.ChatService
+	s.handlers.agentHandler = set.AgentHandler
+	s.handlers.apiKeyHandler = set.APIKeyHandler
+	s.handlers.toolRegistryHandler = set.ToolRegistryHandler
+	s.handlers.toolProviderHandler = set.ToolProviderHandler
+	s.handlers.toolApprovalHandler = set.ToolApprovalHandler
+	s.handlers.ragHandler = set.RAGHandler
+	s.handlers.workflowHandler = set.WorkflowHandler
+	s.handlers.protocolHandler = set.ProtocolHandler
+	s.handlers.multimodalHandler = set.MultimodalHandler
+	s.handlers.costHandler = set.CostHandler
 
-	s.multimodalRedis = set.MultimodalRedis
-	s.toolApprovalRedis = set.ToolApprovalRedis
+	s.infra.multimodalRedis = set.MultimodalRedis
+	s.infra.toolApprovalRedis = set.ToolApprovalRedis
 
-	s.provider = set.Provider
-	s.toolProvider = set.ToolProvider
-	s.budgetManager = set.BudgetManager
-	s.costTracker = set.CostTracker
-	s.llmCache = set.LLMCache
-	s.llmMetrics = set.LLMMetrics
+	s.text.provider = set.Provider
+	s.text.toolProvider = set.ToolProvider
+	s.text.budgetManager = set.BudgetManager
+	s.text.costTracker = set.CostTracker
+	s.text.llmCache = set.LLMCache
+	s.text.llmMetrics = set.LLMMetrics
 
-	s.discoveryRegistry = set.DiscoveryRegistry
-	s.agentRegistry = set.AgentRegistry
-	s.toolingRuntime = set.ToolingRuntime
-	s.capabilityCatalog = set.CapabilityCatalog
-	s.resolver = set.Resolver
+	s.tooling.discoveryRegistry = set.DiscoveryRegistry
+	s.tooling.agentRegistry = set.AgentRegistry
+	s.tooling.toolingRuntime = set.ToolingRuntime
+	s.tooling.capabilityCatalog = set.CapabilityCatalog
+	s.workflow.resolver = set.Resolver
 
-	s.checkpointStore = set.CheckpointStore
-	s.checkpointManager = set.CheckpointManager
-	s.workflowCheckpointStore = set.WorkflowCheckpointStore
-	s.ragStore = set.RAGStore
-	s.ragEmbedding = set.RAGEmbedding
+	s.workflow.checkpointStore = set.CheckpointStore
+	s.workflow.checkpointManager = set.CheckpointManager
+	s.workflow.workflowCheckpointStore = set.WorkflowCheckpointStore
+	s.workflow.ragStore = set.RAGStore
+	s.workflow.ragEmbedding = set.RAGEmbedding
 
 	return nil
 }

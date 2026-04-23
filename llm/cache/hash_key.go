@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 )
 
 // HashKeyStrategy Hash 缓存键策略
@@ -33,4 +33,3 @@ func (s *HashKeyStrategy) GenerateKey(req *llmpkg.ChatRequest) string {
 func NewHashKeyStrategy() *HashKeyStrategy {
 	return &HashKeyStrategy{}
 }
-

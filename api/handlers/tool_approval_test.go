@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

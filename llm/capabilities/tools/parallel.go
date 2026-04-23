@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -458,5 +458,3 @@ func (b *BatchExecutor) ExecuteBatched(ctx context.Context, calls []llmpkg.ToolC
 	// 未来:对辅助工具进行实际分批
 	return b.parallel.Execute(ctx, calls)
 }
-
-

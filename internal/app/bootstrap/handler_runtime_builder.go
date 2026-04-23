@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	"go.uber.org/zap"
 	"gorm.io/gorm"

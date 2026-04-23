@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 type PDFLoader struct{}
@@ -38,7 +38,7 @@ func (l *PDFLoader) Load(ctx context.Context, source string) ([]rag.Document, er
 	}
 
 	doc := rag.Document{
-		ID:   clean,
+		ID:      clean,
 		Content: strings.TrimSpace(text),
 		Metadata: map[string]any{
 			"source_file":  filepath.Base(clean),

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"

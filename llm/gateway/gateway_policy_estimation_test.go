@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
@@ -16,15 +15,15 @@ import (
 
 func TestPreflightPolicy_EstimatesChatTokens(t *testing.T) {
 	service := newPolicyTestService(t, 30, &policyNativeTokenProvider{
-		tokenResp: &llm.TokenCountResponse{InputTokens: 16},
+		tokenResp: &llmcore.TokenCountResponse{InputTokens: 16},
 	})
 
 	req := &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "test-model",
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "hello world"},
+			Messages: []llmcore.Message{
+				{Role: llmcore.RoleUser, Content: "hello world"},
 			},
 			MaxTokens: 20,
 		},
@@ -38,7 +37,7 @@ func TestPreflightPolicy_EstimatesChatTokens(t *testing.T) {
 
 func TestPreflightPolicy_UsesMetadataEstimatedTokens(t *testing.T) {
 	service := newPolicyTestService(t, 5, &policyNativeTokenProvider{
-		tokenResp: &llm.TokenCountResponse{InputTokens: 100},
+		tokenResp: &llmcore.TokenCountResponse{InputTokens: 100},
 	})
 
 	req := &llmcore.UnifiedRequest{
@@ -46,10 +45,10 @@ func TestPreflightPolicy_UsesMetadataEstimatedTokens(t *testing.T) {
 		Metadata: map[string]string{
 			"estimated_tokens": "1",
 		},
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "test-model",
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "very long message that should be ignored by override"},
+			Messages: []llmcore.Message{
+				{Role: llmcore.RoleUser, Content: "very long message that should be ignored by override"},
 			},
 			MaxTokens: 100,
 		},
@@ -65,9 +64,9 @@ func TestPreflightPolicy_ChatRequiresNativeTokenCounter(t *testing.T) {
 
 	req := &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model:    "test-model",
-			Messages: []llm.Message{{Role: llm.RoleUser, Content: "hello world"}},
+			Messages: []llmcore.Message{{Role: llmcore.RoleUser, Content: "hello world"}},
 		},
 	}
 
@@ -78,7 +77,7 @@ func TestPreflightPolicy_ChatRequiresNativeTokenCounter(t *testing.T) {
 
 func TestPreflightPolicy_EmbeddingNoLongerEstimatesViaTokenizer(t *testing.T) {
 	service := newPolicyTestService(t, 3, &policyNativeTokenProvider{
-		tokenResp: &llm.TokenCountResponse{InputTokens: 10},
+		tokenResp: &llmcore.TokenCountResponse{InputTokens: 10},
 	})
 
 	req := &llmcore.UnifiedRequest{
@@ -96,7 +95,7 @@ func TestPreflightPolicy_EmbeddingNoLongerEstimatesViaTokenizer(t *testing.T) {
 	require.Empty(t, req.Metadata["estimated_tokens"])
 }
 
-func newPolicyTestService(t *testing.T, maxTokensPerRequest int, provider llm.Provider) *Service {
+func newPolicyTestService(t *testing.T, maxTokensPerRequest int, provider llmcore.Provider) *Service {
 	t.Helper()
 
 	cfg := llmpolicy.DefaultBudgetConfig()
@@ -118,26 +117,28 @@ func newPolicyTestService(t *testing.T, maxTokensPerRequest int, provider llm.Pr
 }
 
 type policyNativeTokenProvider struct {
-	tokenResp *llm.TokenCountResponse
+	tokenResp *llmcore.TokenCountResponse
 	tokenErr  error
 }
 
-func (p *policyNativeTokenProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *policyNativeTokenProvider) Completion(context.Context, *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
-func (p *policyNativeTokenProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (p *policyNativeTokenProvider) Stream(context.Context, *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
 	return nil, nil
 }
-func (p *policyNativeTokenProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *policyNativeTokenProvider) HealthCheck(context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 func (p *policyNativeTokenProvider) Name() string                        { return "native-token-provider" }
 func (p *policyNativeTokenProvider) SupportsNativeFunctionCalling() bool { return true }
-func (p *policyNativeTokenProvider) ListModels(context.Context) ([]llm.Model, error) {
+func (p *policyNativeTokenProvider) ListModels(context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
-func (p *policyNativeTokenProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
-func (p *policyNativeTokenProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+func (p *policyNativeTokenProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
+func (p *policyNativeTokenProvider) CountTokens(context.Context, *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
 	if p.tokenErr != nil {
 		return nil, p.tokenErr
 	}

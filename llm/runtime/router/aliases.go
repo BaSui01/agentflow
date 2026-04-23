@@ -1,7 +1,7 @@
 package router
 
 import (
-	llmcore "github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

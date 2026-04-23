@@ -1,0 +1,138 @@
+# 职责矩阵示例
+
+职责矩阵用于架构重构时明确每个对象的当前职责、问题类型、处理动作和目标归口。
+
+---
+
+## 示例 1：Agent 包重构职责矩阵
+
+| 对象 | 当前职责 | 问题类型 | 处理动作 | 目标归口 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| `agent/builder.go` | 构造 + 配置 | 职责单一 | 保留 | `agent/builder.go` | 唯一正式入口 |
+| `agent/factory.go` | 构造 + 运行时桥接 | 职责混合 | 合并到 builder | `agent/builder.go` | 删除文件 |
+| `agent/runtime/legacy.go` | 旧构造入口 | 并行入口 | 删除 | N/A | 完全删除 |
+| `agent/runtime/bridge.go` | 运行时桥接 | 职责单一 | 保留 | `agent/runtime/bridge.go` | 保留内部构件 |
+| `agent/registry.go` | Agent 注册 | 职责单一 | 保留 | `agent/registry.go` | 独立职责 |
+
+**处理动作说明：**
+- **保留**：职责单一且符合架构，保持不变
+- **合并**：职责重复或混合，合并到目标归口
+- **下沉**：职责过大，拆分到子包或子目录
+- **删除**：并行入口或已废弃实现，完全删除
+
+---
+
+## 示例 2：根目录治理职责矩阵
+
+| 对象 | 当前职责 | 问题类型 | 处理动作 | 目标归口 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| `cmd/` | 启动入口 | 职责单一 | 保留 | `cmd/` | 产品源码 |
+| `internal/` | 内部实现 | 职责单一 | 保留 | `internal/` | 产品源码 |
+| `agent/` | Agent 能力 | 职责单一 | 保留 | `agent/` | 产品源码 |
+| `llm/` | LLM 抽象 | 职责单一 | 保留 | `llm/` | 产品源码 |
+| `docs/` | 正式文档 | 职责单一 | 保留 | `docs/` | 正式文档 |
+| `scripts/` | 构建脚本 | 职责单一 | 保留 | `scripts/` | 构建治理 |
+| `examples/` | 示例代码 | 职责单一 | 保留 | `examples/` | 示例验证 |
+| `tmp/` | 临时文件 | 状态产物 | 保留 | `tmp/` | 状态产物（.gitignore） |
+| `CC-Source/` | 外部参考 | 外部参考 | 保留 | `CC-Source/` | 外部参考（不参与主项目） |
+| `legacy-tools/` | 废弃工具 | 历史遗留 | 删除 | N/A | 已无引用 |
+| `old-api/` | 旧 API 实现 | 并行实现 | 删除 | N/A | 已迁移到 `api/` |
+
+**目录分类：**
+- **产品源码**：`cmd/`, `internal/`, `agent/`, `llm/`, `rag/`, `workflow/`, `api/`, `pkg/`, `types/`
+- **正式文档**：`docs/`, `README.md`, `CHANGELOG.md`
+- **构建治理**：`scripts/`, `.github/`, `Makefile`, `go.mod`
+- **示例验证**：`examples/`, `tests/`
+- **状态产物**：`tmp/`, `dist/`, `bin/`, `.trellis/`
+- **外部参考**：`CC-Source/`, `docs/claude-code/`
+
+---
+
+## 示例 3：LLM Provider 重构职责矩阵
+
+| 对象 | 当前职责 | 问题类型 | 处理动作 | 目标归口 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| `llm/providers/openai/` | OpenAI Provider | 职责单一 | 保留 | `llm/providers/openai/` | 标准实现 |
+| `llm/providers/anthropic/` | Anthropic Provider | 职责单一 | 保留 | `llm/providers/anthropic/` | 标准实现 |
+| `llm/providers/openai_compat/` | OpenAI 兼容层 | 职责单一 | 保留 | `llm/providers/openai_compat/` | 兼容多厂商 |
+| `llm/factory.go` | Provider 工厂 | 职责单一 | 保留 | `llm/factory.go` | 统一构造入口 |
+| `llm/legacy_factory.go` | 旧工厂实现 | 并行入口 | 删除 | N/A | 已迁移到 `factory.go` |
+| `llm/providers/custom/` | 自定义 Provider | 职责不明 | 合并到 openai_compat | `llm/providers/openai_compat/` | 功能重复 |
+
+---
+
+## 使用指南
+
+### 1. 填写职责矩阵
+
+在架构重构计划的 **2.1 职责矩阵** 章节填写：
+
+```markdown
+### 2.1 职责矩阵
+
+| 对象 | 当前职责 | 问题类型 | 处理动作 | 目标归口 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| `path/to/file` | 职责描述 | 问题类型 | 保留/合并/下沉/删除 | `path/to/target` | 备注 |
+```
+
+### 2. 验证职责矩阵完整性
+
+确保：
+- ✅ 每个对象都有明确的处理动作
+- ✅ 每个"合并"或"下沉"都有目标归口
+- ✅ 每个"删除"都有验证命令
+- ✅ 无"待定"或"暂存"项
+
+### 3. 同步到删除清单
+
+将所有"删除"动作同步到计划的 **删除清单** 章节：
+
+```markdown
+## 6. 删除清单
+
+- [ ] 删除旧入口：`path/to/legacy-entry`
+  - 验证命令：`rg "LegacyEntry" path/to/code`
+  - 通过标准：0 命中
+```
+
+### 4. 同步到完成定义
+
+在 **完成定义（DoD）** 中添加职责矩阵闭环检查：
+
+```markdown
+- [ ] 职责矩阵已闭环
+  - 验证命令：人工核对计划中的职责矩阵
+  - 通过标准：所有对象均已有最终归口，无"待定/暂存"项
+```
+
+---
+
+## 常见问题
+
+### Q1：如何判断是"合并"还是"下沉"？
+
+- **合并**：两个对象职责重复，合并到一个对象
+- **下沉**：一个对象职责过大，拆分到子包或子目录
+
+### Q2：如何判断是"保留"还是"删除"？
+
+- **保留**：职责单一且符合架构，有实际使用
+- **删除**：并行入口、已废弃、无引用、职责重复
+
+### Q3：目标归口可以是新创建的吗？
+
+可以！如果需要新建目录或文件，在"目标归口"列写新路径，并在"备注"列说明"新建"。
+
+### Q4：职责矩阵需要包含所有文件吗？
+
+不需要。只需包含：
+- 有问题的对象（职责混合、并行入口、重复语义）
+- 需要明确保留的核心对象
+- 需要删除的旧实现
+
+---
+
+## 相关资源
+
+- 架构重构计划模板：`.agents/skills/cn-refactor-plan-governance/references/架构重构计划模板.md`
+- 重构计划动作矩阵：`.agents/skills/cn-refactor-plan-governance/references/重构计划动作矩阵.md`

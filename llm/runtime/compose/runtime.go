@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -22,8 +21,8 @@ import (
 type Runtime struct {
 	Gateway       llmcore.Gateway
 	ToolGateway   llmcore.Gateway
-	Provider      llm.Provider
-	ToolProvider  llm.Provider
+	Provider      llmcore.Provider
+	ToolProvider  llmcore.Provider
 	BudgetManager *llmpolicy.TokenBudgetManager
 	CostTracker   *observability.CostTracker
 	Ledger        observability.Ledger
@@ -81,7 +80,7 @@ type ToolProviderConfig struct {
 }
 
 // Build assembles the shared runtime chain around the supplied main provider.
-func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime, error) {
+func Build(cfg Config, mainProvider llmcore.Provider, logger *zap.Logger) (*Runtime, error) {
 	if mainProvider == nil {
 		return nil, fmt.Errorf("main provider is required for llm runtime composition")
 	}
@@ -94,9 +93,9 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 		retryPolicy.MaxRetries = cfg.MaxRetries
 	}
 
-	var provider llm.Provider = llm.NewResilientProvider(mainProvider, &llm.ResilientConfig{
+	var provider llmcore.Provider = llmcore.NewResilientProvider(mainProvider, &llmcore.ResilientConfig{
 		RetryPolicy:       retryPolicy,
-		CircuitBreaker:    llm.DefaultCircuitBreakerConfig(),
+		CircuitBreaker:    llmcore.DefaultCircuitBreakerConfig(),
 		EnableIdempotency: true,
 		IdempotencyTTL:    time.Hour,
 	}, logger)
@@ -159,7 +158,7 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 		chain.Use(llmmw.CacheMiddleware(&llmmw.PromptCacheAdapter{Cache: llmCache}))
 	}
 	cleaner := llmmw.NewEmptyToolsCleaner()
-	chain.UseFront(llmmw.TransformMiddleware(func(req *llm.ChatRequest) {
+	chain.UseFront(llmmw.TransformMiddleware(func(req *llmcore.ChatRequest) {
 		if req != nil {
 			if _, err := cleaner.Rewrite(context.Background(), req); err != nil {
 				logger.Warn("empty tools cleaner rewrite failed", zap.Error(err))
@@ -202,7 +201,7 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 	}, nil
 }
 
-func buildToolProviderOrFallback(cfg Config, logger *zap.Logger, mainProvider llm.Provider) llm.Provider {
+func buildToolProviderOrFallback(cfg Config, logger *zap.Logger, mainProvider llmcore.Provider) llmcore.Provider {
 	if mainProvider == nil {
 		return nil
 	}
@@ -241,9 +240,9 @@ func buildToolProviderOrFallback(cfg Config, logger *zap.Logger, mainProvider ll
 		return mainProvider
 	}
 
-	toolProvider = llm.NewResilientProvider(toolProvider, &llm.ResilientConfig{
+	toolProvider = llmcore.NewResilientProvider(toolProvider, &llmcore.ResilientConfig{
 		RetryPolicy:       toolRetryPolicy,
-		CircuitBreaker:    llm.DefaultCircuitBreakerConfig(),
+		CircuitBreaker:    llmcore.DefaultCircuitBreakerConfig(),
 		EnableIdempotency: true,
 		IdempotencyTTL:    time.Hour,
 	}, logger)

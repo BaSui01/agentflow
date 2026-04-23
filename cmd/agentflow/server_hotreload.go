@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/api/handlers"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"go.uber.org/zap"
@@ -19,10 +17,10 @@ import (
 
 func (s *Server) initHotReloadManager() error {
 	runtime := bootstrap.BuildHotReloadRuntime(s.cfg, s.configPath, s.logger)
-	s.hotReloadManager = runtime.Manager
-	s.configAPIHandler = runtime.APIHandler
+	s.ops.hotReloadManager = runtime.Manager
+	s.ops.configAPIHandler = runtime.APIHandler
 
-	bootstrap.RegisterHotReloadCallbacks(s.hotReloadManager, s.logger, func(_old, newConfig *config.Config) {
+	bootstrap.RegisterHotReloadCallbacks(s.ops.hotReloadManager, s.logger, func(_old, newConfig *config.Config) {
 		if err := s.reloadLLMRuntime(newConfig); err != nil {
 			panic(err)
 		}
@@ -36,20 +34,20 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	if cfg == nil {
 		return fmt.Errorf("config is required for llm hot reload")
 	}
-	previousResolver := s.resolver
+	previousResolver := s.workflow.resolver
 
-	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(cfg, s.db, s.logger)
+	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(cfg, s.infra.db, s.logger)
 	if err != nil {
 		return fmt.Errorf("rebuild llm runtime: %w", err)
 	}
 
 	var (
-		provider      llm.Provider
-		toolProvider  llm.Provider
-		budgetManager = s.budgetManager
-		costTracker   = s.costTracker
-		llmCache      = s.llmCache
-		llmMetrics    = s.llmMetrics
+		provider      llmcore.Provider
+		toolProvider  llmcore.Provider
+		budgetManager = s.text.budgetManager
+		costTracker   = s.text.costTracker
+		llmCache      = s.text.llmCache
+		llmMetrics    = s.text.llmMetrics
 		gateway       llmcore.Gateway
 		toolGateway   llmcore.Gateway
 		ledger        observability.Ledger
@@ -65,66 +63,85 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		toolGateway = llmRuntime.ToolGateway
 		ledger = llmRuntime.Ledger
 	}
-	resolver, err := s.buildReloadedResolver(cfg, gateway)
+	resolver, err := bootstrap.BuildReloadedResolver(bootstrap.ReloadedResolverBuildInput{
+		Gateway:           gateway,
+		AgentRegistry:     s.tooling.agentRegistry,
+		DefaultModel:      cfg.Agent.Model,
+		ToolingRuntime:    s.tooling.toolingRuntime,
+		DiscoveryRegistry: s.tooling.discoveryRegistry,
+		WireMongoStores:   s.wireMongoStores,
+		Logger:            s.logger,
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("rebuild resolver: %w", err)
 	}
 
-	workflowRuntime := s.buildReloadedWorkflowRuntime(cfg, gateway, resolver)
+	workflowRuntime := bootstrap.BuildReloadedWorkflowRuntime(bootstrap.ReloadedWorkflowRuntimeBuildInput{
+		Gateway:                 gateway,
+		DefaultModel:            cfg.Agent.Model,
+		Resolver:                resolver,
+		RetrievalStore:          s.workflow.ragStore,
+		EmbeddingProvider:       s.workflow.ragEmbedding,
+		CheckpointStore:         s.workflow.checkpointStore,
+		WorkflowCheckpointStore: s.workflow.workflowCheckpointStore,
+		HITLManager:             s.currentWorkflowHITLManager(),
+		Logger:                  s.logger,
+	})
 
-	s.provider = provider
-	s.toolProvider = toolProvider
-	s.budgetManager = budgetManager
-	s.costTracker = costTracker
-	s.llmCache = llmCache
-	s.llmMetrics = llmMetrics
-	s.resolver = resolver
+	s.text.provider = provider
+	s.text.toolProvider = toolProvider
+	s.text.budgetManager = budgetManager
+	s.text.costTracker = costTracker
+	s.text.llmCache = llmCache
+	s.text.llmMetrics = llmMetrics
+	s.workflow.resolver = resolver
 
-	previousChatService := s.chatService
+	previousChatService := s.text.chatService
 	var chatService usecase.ChatService
 	if llmRuntime != nil {
-		chatService = s.buildChatService(provider, llmRuntime.PolicyManager, ledger)
-	}
-	if previousChatService != nil && chatService == nil {
-		chatService = previousChatService
-	}
-	s.chatService = chatService
-	if s.chatHandler != nil && previousChatService != chatService {
-		s.chatHandler.UpdateService(chatService)
-	} else if s.chatHandler == nil && chatService != nil && s.httpManager == nil {
-		s.chatHandler = handlers.NewChatHandler(chatService, s.logger)
-	} else if chatService != nil && s.httpManager != nil {
-		s.logger.Warn("LLM hot reload rebuilt chat runtime but chat routes were not bound at startup; restart required to activate chat endpoints")
+		chatService = bootstrap.BuildChatService(bootstrap.ChatServiceBuildInput{
+			Provider:            provider,
+			PolicyManager:       llmRuntime.PolicyManager,
+			Ledger:              ledger,
+			ToolingRuntime:      s.tooling.toolingRuntime,
+			ExistingChatService: s.text.chatService,
+			Logger:              s.logger,
+		})
 	}
 
-	if s.costHandler != nil {
-		s.costHandler.UpdateTracker(costTracker)
-	} else if costTracker != nil && s.httpManager == nil {
-		s.costHandler = handlers.NewCostHandler(costTracker, s.logger)
-	} else if costTracker != nil {
+	bindings := bootstrap.ApplyReloadedTextRuntimeBindings(bootstrap.ReloadedTextRuntimeBindingsInput{
+		Logger:              s.logger,
+		ExistingChatService: previousChatService,
+		ChatService:         chatService,
+		ChatHandler:         s.handlers.chatHandler,
+		CostTracker:         costTracker,
+		CostHandler:         s.handlers.costHandler,
+		AgentHandler:        s.handlers.agentHandler,
+		DiscoveryRegistry:   s.tooling.discoveryRegistry,
+		Resolver:            resolver,
+		WorkflowRuntime:     workflowRuntime,
+		WorkflowHandler:     s.handlers.workflowHandler,
+		HTTPRoutesBound:     s.ops.httpManager != nil,
+	})
+	s.text.chatService = bindings.ChatService
+	s.handlers.chatHandler = bindings.ChatHandler
+	s.handlers.costHandler = bindings.CostHandler
+
+	if bindings.ChatRouteRequiresRestart {
+		s.logger.Warn("LLM hot reload rebuilt chat runtime but chat routes were not bound at startup; restart required to activate chat endpoints")
+	}
+	if bindings.CostRouteRequiresRestart {
 		s.logger.Warn("LLM hot reload rebuilt cost runtime but cost routes were not bound at startup; restart required to activate cost endpoints")
 	}
 
-	if s.agentRegistry != nil {
+	if s.tooling.agentRegistry != nil {
 		if gateway != nil {
-			bootstrap.RegisterDefaultRuntimeAgentFactory(s.agentRegistry, gateway, toolGateway, s.checkpointManager, ledger, s.logger)
+			bootstrap.RegisterDefaultRuntimeAgentFactory(s.tooling.agentRegistry, gateway, toolGateway, s.workflow.checkpointManager, ledger, s.logger)
 		} else {
-			s.agentRegistry.Unregister(agent.TypeGeneric)
+			s.tooling.agentRegistry.Unregister(agent.TypeGeneric)
 		}
 	}
-	if s.agentHandler != nil {
-		var agentResolver usecase.AgentResolver
-		if resolver != nil {
-			agentResolver = resolver.Resolve
-		}
-		s.agentHandler.UpdateService(bootstrap.BuildAgentService(s.discoveryRegistry, agentResolver))
-	}
-
-	if s.workflowHandler != nil && workflowRuntime != nil {
-		s.workflowHandler.UpdateService(usecase.NewDefaultWorkflowService(workflowRuntime.Facade, workflowRuntime.Parser))
-	}
-
-	if s.multimodalHandler != nil && cfg.Multimodal.Enabled {
+	if s.handlers.multimodalHandler != nil && cfg.Multimodal.Enabled {
 		s.logger.Warn("LLM hot reload rebuilt text runtime only; multimodal runtime still uses startup bindings until restart")
 	}
 	if previousResolver != nil && previousResolver != resolver {
@@ -139,72 +156,29 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	return nil
 }
 
-func (s *Server) buildReloadedResolver(cfg *config.Config, gateway llmcore.Gateway) (*agent.CachingResolver, error) {
-	if gateway == nil || s.agentRegistry == nil {
-		return nil, nil
-	}
-
-	resolver := agent.NewCachingResolver(s.agentRegistry, gateway, s.logger).
-		WithDefaultModel(cfg.Agent.Model)
-	if tooling := s.toolingRuntime; tooling != nil && tooling.ToolManager != nil {
-		resolver = resolver.WithToolManager(tooling.ToolManager)
-		if len(tooling.ToolNames) > 0 {
-			resolver = resolver.WithRuntimeTools(tooling.ToolNames)
-		}
-	}
-	if s.mongoClient != nil && s.discoveryRegistry != nil {
-		if err := s.wireMongoStores(resolver, s.discoveryRegistry); err != nil {
-			return nil, fmt.Errorf("rewire mongo runtime stores: %w", err)
-		}
-	}
-	return resolver, nil
-}
-
-func (s *Server) buildReloadedWorkflowRuntime(
-	cfg *config.Config,
-	gateway llmcore.Gateway,
-	resolver *agent.CachingResolver,
-) *bootstrap.WorkflowRuntime {
-	opts := bootstrap.WorkflowRuntimeOptions{
-		LLMGateway:              gateway,
-		DefaultModel:            cfg.Agent.Model,
-		RetrievalStore:          s.ragStore,
-		EmbeddingProvider:       s.ragEmbedding,
-		CheckpointStore:         s.checkpointStore,
-		WorkflowCheckpointStore: s.workflowCheckpointStore,
-		HITLManager:             s.currentWorkflowHITLManager(),
-	}
-	if resolver != nil {
-		opts.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {
-			return resolver.Resolve(ctx, agentID)
-		}
-	}
-	return bootstrap.BuildWorkflowRuntime(s.logger, opts)
-}
-
 func (s *Server) currentChatToolManager() agent.ToolManager {
-	if s == nil || s.toolingRuntime == nil {
+	if s == nil || s.tooling.toolingRuntime == nil {
 		return nil
 	}
-	return s.toolingRuntime.ToolManager
+	return s.tooling.toolingRuntime.ToolManager
 }
 
 func (s *Server) currentWorkflowHITLManager() *hitl.InterruptManager {
 	if s == nil {
 		return nil
 	}
-	if s.workflowHITLManager == nil {
-		s.workflowHITLManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
+	if s.workflow.workflowHITLManager == nil {
+		s.workflow.workflowHITLManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
 	}
-	return s.workflowHITLManager
+	return s.workflow.workflowHITLManager
 }
 
 func (s *Server) currentToolApprovalManager() *hitl.InterruptManager {
 	if s == nil {
 		return nil
 	}
-	if s.toolApprovalManager == nil {
-		s.toolApprovalManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
+	if s.tooling.toolApprovalManager == nil {
+		s.tooling.toolApprovalManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
 	}
-	return s.toolApprovalManager
+	return s.tooling.toolApprovalManager
 }

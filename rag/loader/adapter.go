@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/rag/sources"
 )
 
@@ -105,4 +105,3 @@ func (a *ArxivSourceAdapter) Load(ctx context.Context, source string) ([]rag.Doc
 func (a *ArxivSourceAdapter) SupportedTypes() []string {
 	return []string{}
 }
-

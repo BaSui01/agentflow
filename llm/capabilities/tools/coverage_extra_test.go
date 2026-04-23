@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -267,4 +267,3 @@ func (f *fakeTokenCounter) CountTokens(_ string) int { return f.count }
 
 // Ensure it satisfies the interface
 var _ types.TokenCounter = (*fakeTokenCounter)(nil)
-

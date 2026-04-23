@@ -4,20 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/discovery"
-	"github.com/BaSui01/agentflow/agent/evaluation"
-	"github.com/BaSui01/agentflow/agent/memory"
+	agentmemory "github.com/BaSui01/agentflow/agent/capabilities/memory"
+	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
-	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"go.uber.org/zap"
 )
 
 // MongoRuntimeWiring contains optional runtime capabilities wired from MongoDB stores.
 type MongoRuntimeWiring struct {
-	AuditLogger    *tools.DefaultAuditLogger
-	EnhancedMemory *memory.EnhancedMemorySystem
+	AuditLogger    *llmtools.DefaultAuditLogger
+	EnhancedMemory *agentmemory.EnhancedMemorySystem
 	ABTester       *evaluation.ABTester
 }
 
@@ -26,7 +26,7 @@ func WireMongoRuntimeStores(
 	ctx context.Context,
 	client *mongoclient.Client,
 	resolver *agent.CachingResolver,
-	discoveryRegistry *discovery.CapabilityRegistry,
+	discoveryRegistry *agenttools.CapabilityRegistry,
 	logger *zap.Logger,
 ) (*MongoRuntimeWiring, error) {
 	promptStore, err := mongostore.NewPromptStore(ctx, client)
@@ -54,8 +54,8 @@ func WireMongoRuntimeStores(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MongoDB audit backend: %w", err)
 	}
-	auditLogger := tools.NewAuditLogger(&tools.AuditLoggerConfig{
-		Backends: []tools.AuditBackend{auditBackend},
+	auditLogger := llmtools.NewAuditLogger(&llmtools.AuditLoggerConfig{
+		Backends: []llmtools.AuditBackend{auditBackend},
 	}, logger)
 	logger.Info("MongoDB audit backend initialized")
 
@@ -88,31 +88,31 @@ func WireMongoRuntimeStores(
 		}
 	}
 
-	var enhancedMemory *memory.EnhancedMemorySystem
+	var enhancedMemory *agentmemory.EnhancedMemorySystem
 	if memoryStore != nil {
-		memCfg := memory.DefaultEnhancedMemoryConfig()
+		memCfg := agentmemory.DefaultEnhancedMemoryConfig()
 		memCfg.EpisodicEnabled = episodicStore != nil
 		memCfg.SemanticEnabled = knowledgeGraph != nil
 		memCfg.ObservationEnabled = observationStore != nil
 
-		working := memory.NewInMemoryMemoryStore(memory.InMemoryMemoryStoreConfig{
+		working := agentmemory.NewInMemoryMemoryStore(agentmemory.InMemoryMemoryStoreConfig{
 			MaxEntries: memCfg.WorkingMemorySize,
 		}, logger)
 
-		var episodic memory.EpisodicStore
+		var episodic agentmemory.EpisodicStore
 		if episodicStore != nil {
 			episodic = episodicStore
 		}
-		var semantic memory.KnowledgeGraph
+		var semantic agentmemory.KnowledgeGraph
 		if knowledgeGraph != nil {
 			semantic = knowledgeGraph
 		}
-		var obsStore memory.ObservationStore
+		var obsStore agentmemory.ObservationStore
 		if observationStore != nil {
 			obsStore = observationStore
 		}
 
-		enhancedMemory = memory.NewEnhancedMemorySystem(
+		enhancedMemory = agentmemory.NewEnhancedMemorySystem(
 			memoryStore, working, nil, episodic, semantic, obsStore, memCfg, logger,
 		)
 		resolver.WithEnhancedMemory(enhancedMemory)

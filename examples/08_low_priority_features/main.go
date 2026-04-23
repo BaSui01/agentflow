@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration"
-	"github.com/BaSui01/agentflow/agent/hierarchical"
-	"github.com/BaSui01/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
+	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	agentcore "github.com/BaSui01/agentflow/agent/core"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/observability/monitoring"
 	"github.com/BaSui01/agentflow/agent/persistence"
-	runtime "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -142,13 +143,13 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 	fmt.Println("\n2. 可用协作模式")
 	patterns := []struct {
 		name    string
-		pattern collaboration.CollaborationPattern
+		pattern multiagent.CollaborationPattern
 	}{
-		{"辩论模式", collaboration.PatternDebate},
-		{"共识模式", collaboration.PatternConsensus},
-		{"流水线模式", collaboration.PatternPipeline},
-		{"广播模式", collaboration.PatternBroadcast},
-		{"网络模式", collaboration.PatternNetwork},
+		{"辩论模式", multiagent.PatternDebate},
+		{"共识模式", multiagent.PatternConsensus},
+		{"流水线模式", multiagent.PatternPipeline},
+		{"广播模式", multiagent.PatternBroadcast},
+		{"网络模式", multiagent.PatternNetwork},
 	}
 
 	for i, p := range patterns {
@@ -157,11 +158,11 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 
 	// 3. 创建辩论模式系统并打印实际配置
 	fmt.Println("\n3. 创建辩论模式系统")
-	debateConfig := collaboration.DefaultMultiAgentConfig()
-	debateConfig.Pattern = collaboration.PatternDebate
+	debateConfig := multiagent.DefaultMultiAgentConfig()
+	debateConfig.Pattern = multiagent.PatternDebate
 	debateConfig.MaxRounds = 3
 
-	debateSystem := collaboration.NewMultiAgentSystem(agents, debateConfig, logger)
+	debateSystem := multiagent.NewMultiAgentSystem(agents, debateConfig, logger)
 
 	fmt.Printf("配置:\n")
 	fmt.Printf("  - 模式: %s\n", debateConfig.Pattern)
@@ -170,18 +171,18 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 
 	// 4. 创建流水线模式系统
 	fmt.Println("\n4. 创建流水线模式系统")
-	pipelineConfig := collaboration.DefaultMultiAgentConfig()
-	pipelineConfig.Pattern = collaboration.PatternPipeline
+	pipelineConfig := multiagent.DefaultMultiAgentConfig()
+	pipelineConfig.Pattern = multiagent.PatternPipeline
 
-	pipelineSystem := collaboration.NewMultiAgentSystem(agents, pipelineConfig, logger)
+	pipelineSystem := multiagent.NewMultiAgentSystem(agents, pipelineConfig, logger)
 	fmt.Printf("  模式: %s\n", pipelineConfig.Pattern)
 
 	// 5. 创建广播模式系统
 	fmt.Println("\n5. 创建广播模式系统")
-	broadcastConfig := collaboration.DefaultMultiAgentConfig()
-	broadcastConfig.Pattern = collaboration.PatternBroadcast
+	broadcastConfig := multiagent.DefaultMultiAgentConfig()
+	broadcastConfig.Pattern = multiagent.PatternBroadcast
 
-	broadcastSystem := collaboration.NewMultiAgentSystem(agents, broadcastConfig, logger)
+	broadcastSystem := multiagent.NewMultiAgentSystem(agents, broadcastConfig, logger)
 	fmt.Printf("  模式: %s\n", broadcastConfig.Pattern)
 
 	// 注意：实际执行需要真实的 LLM provider
@@ -197,23 +198,23 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 }
 
 func demoRolePipeline(logger *zap.Logger) {
-	registry := collaboration.NewRoleRegistry(logger)
-	_ = collaboration.RegisterResearchRoles(registry)
+	registry := multiagent.NewRoleRegistry(logger)
+	_ = multiagent.RegisterResearchRoles(registry)
 
 	roles := registry.List()
 	fmt.Printf("  已注册研究角色: %d\n", len(roles))
 
-	collector, ok := registry.Get(collaboration.RoleCollector)
+	collector, ok := registry.Get(multiagent.RoleCollector)
 	if ok {
 		fmt.Printf("  收集者角色: %s\n", collector.Name)
 	}
 
-	pipelineCfg := collaboration.DefaultPipelineConfig()
+	pipelineCfg := multiagent.DefaultPipelineConfig()
 	pipelineCfg.Name = "research-role-pipeline-demo"
 	pipelineCfg.MaxConcurrency = 2
 	pipelineCfg.Timeout = 3 * time.Second
 
-	executeFn := func(ctx context.Context, role *collaboration.RoleDefinition, input any) (any, error) {
+	executeFn := func(ctx context.Context, role *multiagent.RoleDefinition, input any) (any, error) {
 		_ = ctx
 		return map[string]any{
 			"role":   role.Type,
@@ -222,10 +223,10 @@ func demoRolePipeline(logger *zap.Logger) {
 		}, nil
 	}
 
-	pipeline := collaboration.NewRolePipeline(pipelineCfg, registry, executeFn, logger).
-		AddStage(collaboration.RoleCollector).
-		AddStage(collaboration.RoleFilter, collaboration.RoleGenerator).
-		AddStage(collaboration.RoleWriter)
+	pipeline := multiagent.NewRolePipeline(pipelineCfg, registry, executeFn, logger).
+		AddStage(multiagent.RoleCollector).
+		AddStage(multiagent.RoleFilter, multiagent.RoleGenerator).
+		AddStage(multiagent.RoleWriter)
 
 	results, err := pipeline.Execute(context.Background(), map[string]any{"topic": "agentflow"})
 	if err != nil {
@@ -236,17 +237,17 @@ func demoRolePipeline(logger *zap.Logger) {
 
 	fmt.Printf("  角色实例数: %d, 转换记录数: %d\n", len(pipeline.GetInstances()), len(pipeline.GetTransitions()))
 
-	_ = registry.Unregister(collaboration.RoleWriter)
+	_ = registry.Unregister(multiagent.RoleWriter)
 
 	// 7. 带持久化的消息中心（覆盖 NewMessageHubWithStore）
 	store := persistence.NewMemoryMessageStore(persistence.StoreConfig{Type: "memory"})
-	hub := collaboration.NewMessageHubWithStore(logger, store)
+	hub := multiagent.NewMessageHubWithStore(logger, store)
 	hub.CreateChannel("demo-a")
 	hub.CreateChannel("demo-b")
-	_ = hub.Send(&collaboration.Message{
+	_ = hub.Send(&multiagent.Message{
 		FromID:  "demo-a",
 		ToID:    "demo-b",
-		Type:    collaboration.MessageTypeProposal,
+		Type:    multiagent.MessageTypeProposal,
 		Content: "hello from persisted hub",
 	})
 	_, _ = hub.Receive("demo-b", 100*time.Millisecond)
@@ -418,10 +419,10 @@ func demoObservabilitySystem(logger *zap.Logger) {
 
 	// 7. Simple evaluation strategy path
 	eval := &observability.SimpleEvaluationStrategy{}
-	_, _ = eval.Evaluate(context.Background(), &agent.Input{
+	_, _ = eval.Evaluate(context.Background(), &agentcore.Input{
 		TraceID: "trace-eval",
 		Content: "summarize this incident",
-	}, &agent.Output{
+	}, &agentcore.Output{
 		TraceID: "trace-eval",
 		Content: "incident summary output",
 	})

@@ -16,19 +16,19 @@ func (s *Server) startHTTPServer() error {
 	bootstrap.RegisterHTTPRoutes(
 		mux,
 		bootstrap.HTTPRouteHandlers{
-			Health:        s.healthHandler,
-			Chat:          s.chatHandler,
-			Agent:         s.agentHandler,
-			APIKey:        s.apiKeyHandler,
-			Tools:         s.toolRegistryHandler,
-			ToolProviders: s.toolProviderHandler,
-			ToolApprovals: s.toolApprovalHandler,
-			Multimodal:    s.multimodalHandler,
-			Protocol:      s.protocolHandler,
-			RAG:           s.ragHandler,
-			Workflow:      s.workflowHandler,
-			ConfigAPI:     s.configAPIHandler,
-			Cost:          s.costHandler,
+			Health:        s.handlers.healthHandler,
+			Chat:          s.handlers.chatHandler,
+			Agent:         s.handlers.agentHandler,
+			APIKey:        s.handlers.apiKeyHandler,
+			Tools:         s.handlers.toolRegistryHandler,
+			ToolProviders: s.handlers.toolProviderHandler,
+			ToolApprovals: s.handlers.toolApprovalHandler,
+			Multimodal:    s.handlers.multimodalHandler,
+			Protocol:      s.handlers.protocolHandler,
+			RAG:           s.handlers.ragHandler,
+			Workflow:      s.handlers.workflowHandler,
+			ConfigAPI:     s.ops.configAPIHandler,
+			Cost:          s.handlers.costHandler,
 		},
 		Version,
 		BuildTime,
@@ -37,18 +37,18 @@ func (s *Server) startHTTPServer() error {
 		s.logger,
 	)
 
-	httpMiddlewares, err := bootstrap.BuildHTTPMiddlewares(s.cfg.Server, s.metricsCollector, s.logger)
+	httpMiddlewares, err := bootstrap.BuildHTTPMiddlewares(s.cfg.Server, s.ops.metricsCollector, s.logger)
 	if err != nil {
 		return err
 	}
-	s.rateLimiterCancel = httpMiddlewares.RateLimiterCancel
-	s.tenantRateLimiterCancel = httpMiddlewares.TenantRateLimiterCancel
+	s.ops.rateLimiterCancel = httpMiddlewares.RateLimiterCancel
+	s.ops.tenantRateLimiterCancel = httpMiddlewares.TenantRateLimiterCancel
 	handler := mw.Chain(mux, httpMiddlewares.List...)
 
 	// ========================================
 	// 使用 internal/server.Manager
 	// ========================================
-	s.httpManager = server.NewManager(handler, bootstrap.BuildHTTPServerConfig(s.cfg.Server), s.logger)
+	s.ops.httpManager = server.NewManager(handler, bootstrap.BuildHTTPServerConfig(s.cfg.Server), s.logger)
 	return nil
 }
 
@@ -62,7 +62,7 @@ func (s *Server) startHTTPServer() error {
 // startMetricsServer 启动 Metrics 服务器
 func (s *Server) startMetricsServer() error {
 	mux := buildMetricsMux(s.cfg.Server.EnablePProf)
-	s.metricsManager = server.NewManager(mux, bootstrap.BuildMetricsServerConfig(s.cfg.Server), s.logger)
+	s.ops.metricsManager = server.NewManager(mux, bootstrap.BuildMetricsServerConfig(s.cfg.Server), s.logger)
 	return nil
 }
 

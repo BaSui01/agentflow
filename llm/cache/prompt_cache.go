@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"

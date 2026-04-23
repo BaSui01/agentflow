@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type providerAdapterTokenCountingProvider struct{}
 
-func (p *providerAdapterTokenCountingProvider) Name() string { return "token-counter" }
+func (p *providerAdapterTokenCountingProvider) Name() string                        { return "token-counter" }
 func (p *providerAdapterTokenCountingProvider) SupportsNativeFunctionCalling() bool { return true }
 func (p *providerAdapterTokenCountingProvider) Completion(context.Context, *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 	return &llmpkg.ChatResponse{}, nil

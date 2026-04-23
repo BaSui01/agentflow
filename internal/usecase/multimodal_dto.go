@@ -1,9 +1,9 @@
 package usecase
 
 import (
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
