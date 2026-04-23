@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
+	agentcore "github.com/BaSui01/agentflow/agent/core"
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -2811,12 +2812,12 @@ func TestReflectionRunnerAdapter_ExecuteWithReflection(t *testing.T) {
 
 func TestPanicPayloadToError(t *testing.T) {
 	// error input
-	err := panicPayloadToError(fmt.Errorf("boom"))
+	err := agentcore.PanicPayloadToError(fmt.Errorf("boom"))
 	if err == nil || err.Error() != "boom" {
 		t.Fatalf("expected 'boom', got %v", err)
 	}
 	// string input
-	err = panicPayloadToError("oops")
+	err = agentcore.PanicPayloadToError("oops")
 	if err == nil {
 		t.Fatal("expected non-nil error")
 	}
@@ -2824,7 +2825,7 @@ func TestPanicPayloadToError(t *testing.T) {
 		t.Fatalf("expected 'panic: oops', got %v", err)
 	}
 	// int input
-	err = panicPayloadToError(42)
+	err = agentcore.PanicPayloadToError(42)
 	if err == nil {
 		t.Fatal("expected non-nil error")
 	}

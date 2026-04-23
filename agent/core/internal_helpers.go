@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -71,3 +72,10 @@ func FallbackString(values ...string) string {
 	return ""
 }
 
+// PanicPayloadToError normalizes recover() payloads into errors.
+func PanicPayloadToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
+}
