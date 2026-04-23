@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // JSONLoaderConfig configures the JSON/JSONL loader.
@@ -156,4 +156,3 @@ func (l *JSONLoader) extractID(obj map[string]any, source string, index int) str
 func (l *JSONLoader) SupportedTypes() []string {
 	return []string{".json", ".jsonl"}
 }
-

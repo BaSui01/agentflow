@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities"
 	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/llm/capabilities/avatar"
@@ -27,7 +26,7 @@ import (
 
 // Config 定义 gateway 运行依赖。
 type Config struct {
-	ChatProvider   llm.Provider
+	ChatProvider   llmcore.Provider
 	Capabilities   *capabilities.Entry
 	CostCalculator *observability.CostCalculator
 	Ledger         observability.Ledger
@@ -98,7 +97,7 @@ type AvatarInput struct {
 
 // Service 是统一入口 gateway 实现。
 type Service struct {
-	chatProvider   llm.Provider
+	chatProvider   llmcore.Provider
 	capabilities   *capabilities.Entry
 	costCalculator *observability.CostCalculator
 	ledger         observability.Ledger
@@ -133,7 +132,7 @@ func New(cfg Config) *Service {
 }
 
 // ChatProvider exposes the underlying chat provider used by this gateway.
-func (s *Service) ChatProvider() llm.Provider {
+func (s *Service) ChatProvider() llmcore.Provider {
 	if s == nil {
 		return nil
 	}
@@ -214,9 +213,9 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 		return nil, llmcore.GatewayUnavailableError("chat provider is not configured")
 	}
 
-	chatReq, ok := req.Payload.(*llm.ChatRequest)
+	chatReq, ok := req.Payload.(*llmcore.ChatRequest)
 	if !ok || chatReq == nil {
-		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llm.ChatRequest")
+		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llmcore.ChatRequest")
 	}
 	mergeChatRoutingMetadata(req, chatReq)
 	provider := s.prepareChatExecutionProvider(chatReq)
@@ -224,7 +223,7 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 		return nil, llmcore.GatewayUnavailableError("chat provider is not available")
 	}
 
-	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
+	ctx, resolvedCallRecorder := llmcore.WithResolvedProviderCallRecorder(ctx)
 	source, err := provider.Stream(ctx, chatReq)
 	if err != nil {
 		return nil, err
@@ -321,9 +320,9 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 		return nil, llmcore.GatewayUnavailableError("chat provider is not configured")
 	}
 
-	chatReq, ok := req.Payload.(*llm.ChatRequest)
+	chatReq, ok := req.Payload.(*llmcore.ChatRequest)
 	if !ok || chatReq == nil {
-		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llm.ChatRequest")
+		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llmcore.ChatRequest")
 	}
 	mergeChatRoutingMetadata(req, chatReq)
 	provider := s.prepareChatExecutionProvider(chatReq)
@@ -331,7 +330,7 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 		return nil, llmcore.GatewayUnavailableError("chat provider is not available")
 	}
 
-	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
+	ctx, resolvedCallRecorder := llmcore.WithResolvedProviderCallRecorder(ctx)
 	resp, err := provider.Completion(ctx, chatReq)
 	if err != nil {
 		return nil, err
@@ -826,7 +825,7 @@ func (s *Service) invokeAvatar(ctx context.Context, req *llmcore.UnifiedRequest)
 	}, nil
 }
 
-func fromChatUsage(u llm.ChatUsage) llmcore.Usage {
+func fromChatUsage(u llmcore.ChatUsage) llmcore.Usage {
 	return llmcore.Usage{
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
@@ -936,7 +935,7 @@ func (s *Service) estimateRequestTokens(ctx context.Context, req *llmcore.Unifie
 
 	switch req.Capability {
 	case llmcore.CapabilityChat:
-		chatReq, ok := req.Payload.(*llm.ChatRequest)
+		chatReq, ok := req.Payload.(*llmcore.ChatRequest)
 		if !ok || chatReq == nil {
 			return 0, nil
 		}
@@ -946,12 +945,12 @@ func (s *Service) estimateRequestTokens(ctx context.Context, req *llmcore.Unifie
 	}
 }
 
-func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) (int, error) {
+func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRequest, chatReq *llmcore.ChatRequest) (int, error) {
 	s.normalizeChatToolCallMode(chatReq)
 	if s.chatProvider == nil {
 		return 0, types.NewServiceUnavailableError("gateway chat budget precheck requires a chat provider with native token counting")
 	}
-	tokenCounter, ok := s.chatProvider.(llm.TokenCountProvider)
+	tokenCounter, ok := s.chatProvider.(llmcore.TokenCountProvider)
 	if !ok {
 		return 0, types.NewServiceUnavailableError("gateway chat budget precheck requires native token counting")
 	}
@@ -978,27 +977,27 @@ func (s *Service) estimateChatTokens(ctx context.Context, req *llmcore.UnifiedRe
 	return total, nil
 }
 
-func (s *Service) normalizeChatToolCallMode(req *llm.ChatRequest) {
+func (s *Service) normalizeChatToolCallMode(req *llmcore.ChatRequest) {
 	if req == nil || s == nil || s.chatProvider == nil {
 		return
 	}
-	if req.ToolCallMode == llm.ToolCallModeXML || len(req.Tools) == 0 {
+	if req.ToolCallMode == llmcore.ToolCallModeXML || len(req.Tools) == 0 {
 		return
 	}
 	if s.chatProvider.SupportsNativeFunctionCalling() {
 		return
 	}
-	req.ToolCallMode = llm.ToolCallModeXML
+	req.ToolCallMode = llmcore.ToolCallModeXML
 	s.logger.Info("provider does not support native function calling, enabling XML tool call mode in gateway",
 		zap.String("provider", s.chatProvider.Name()))
 }
 
-func (s *Service) prepareChatExecutionProvider(req *llm.ChatRequest) llm.Provider {
+func (s *Service) prepareChatExecutionProvider(req *llmcore.ChatRequest) llmcore.Provider {
 	if s == nil || s.chatProvider == nil {
 		return nil
 	}
 	s.normalizeChatToolCallMode(req)
-	if req == nil || req.ToolCallMode != llm.ToolCallModeXML {
+	if req == nil || req.ToolCallMode != llmcore.ToolCallModeXML {
 		return s.chatProvider
 	}
 	return middleware.NewXMLToolCallProvider(s.chatProvider, s.logger)
@@ -1083,7 +1082,7 @@ func cloneTags(src []string) []string {
 	return out
 }
 
-func mergeChatRoutingMetadata(req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) {
+func mergeChatRoutingMetadata(req *llmcore.UnifiedRequest, chatReq *llmcore.ChatRequest) {
 	if req == nil || chatReq == nil {
 		return
 	}
@@ -1158,7 +1157,7 @@ func providerHintFromMetadata(metadata map[string]string) string {
 	)
 }
 
-func buildUnifiedChatRequest(req *llm.ChatRequest) *llmcore.UnifiedRequest {
+func buildUnifiedChatRequest(req *llmcore.ChatRequest) *llmcore.UnifiedRequest {
 	if req == nil {
 		return &llmcore.UnifiedRequest{Capability: llmcore.CapabilityChat}
 	}
@@ -1214,14 +1213,14 @@ func costAmount(cost *llmcore.Cost) float64 {
 	return cost.AmountUSD
 }
 
-// ChatProviderAdapter 将 gateway 暴露为 llm.Provider，便于复用既有上层组件。
+// ChatProviderAdapter 将 gateway 暴露为 llmcore.Provider，便于复用既有上层组件。
 type ChatProviderAdapter struct {
 	gateway  llmcore.Gateway
-	fallback llm.Provider
+	fallback llmcore.Provider
 }
 
 // NewChatProviderAdapter 创建适配器。
-func NewChatProviderAdapter(gw llmcore.Gateway, fallback llm.Provider) *ChatProviderAdapter {
+func NewChatProviderAdapter(gw llmcore.Gateway, fallback llmcore.Provider) *ChatProviderAdapter {
 	return &ChatProviderAdapter{
 		gateway:  gw,
 		fallback: fallback,
@@ -1237,14 +1236,14 @@ func (a *ChatProviderAdapter) Gateway() llmcore.Gateway {
 }
 
 // FallbackProvider returns the underlying provider used for non-gateway metadata.
-func (a *ChatProviderAdapter) FallbackProvider() llm.Provider {
+func (a *ChatProviderAdapter) FallbackProvider() llmcore.Provider {
 	if a == nil {
 		return nil
 	}
 	return a.fallback
 }
 
-func (a *ChatProviderAdapter) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (a *ChatProviderAdapter) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	if a.gateway == nil {
 		return nil, llmcore.GatewayUnavailableError("llm gateway is not configured")
 	}
@@ -1252,14 +1251,14 @@ func (a *ChatProviderAdapter) Completion(ctx context.Context, req *llm.ChatReque
 	if err != nil {
 		return nil, err
 	}
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || chatResp == nil {
 		return nil, types.NewInternalError("invalid gateway chat response")
 	}
 	return chatResp, nil
 }
 
-func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
 	if a.gateway == nil {
 		return nil, llmcore.GatewayUnavailableError("llm gateway is not configured")
 	}
@@ -1268,7 +1267,7 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) 
 		return nil, err
 	}
 
-	out := make(chan llm.StreamChunk)
+	out := make(chan llmcore.StreamChunk)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -1277,13 +1276,13 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) 
 			close(out)
 		}()
 		for chunk := range stream {
-			var sc llm.StreamChunk
+			var sc llmcore.StreamChunk
 			if chunk.Err != nil {
-				sc = llm.StreamChunk{Err: chunk.Err}
+				sc = llmcore.StreamChunk{Err: chunk.Err}
 			} else {
-				streamChunk, ok := chunk.Output.(*llm.StreamChunk)
+				streamChunk, ok := chunk.Output.(*llmcore.StreamChunk)
 				if !ok || streamChunk == nil {
-					sc = llm.StreamChunk{
+					sc = llmcore.StreamChunk{
 						Err: types.NewInternalError("invalid gateway stream chunk"),
 					}
 				} else {
@@ -1301,11 +1300,11 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) 
 	return out, nil
 }
 
-func (a *ChatProviderAdapter) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
+func (a *ChatProviderAdapter) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
 	if a.fallback != nil {
 		return a.fallback.HealthCheck(ctx)
 	}
-	return &llm.HealthStatus{Healthy: true}, nil
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (a *ChatProviderAdapter) Name() string {
@@ -1331,22 +1330,22 @@ func (a *ChatProviderAdapter) SupportsStructuredOutput() bool {
 	return ok && p.SupportsStructuredOutput()
 }
 
-func (a *ChatProviderAdapter) ListModels(ctx context.Context) ([]llm.Model, error) {
+func (a *ChatProviderAdapter) ListModels(ctx context.Context) ([]llmcore.Model, error) {
 	if a.fallback != nil {
 		return a.fallback.ListModels(ctx)
 	}
 	return nil, nil
 }
 
-func (a *ChatProviderAdapter) Endpoints() llm.ProviderEndpoints {
+func (a *ChatProviderAdapter) Endpoints() llmcore.ProviderEndpoints {
 	if a.fallback != nil {
 		return a.fallback.Endpoints()
 	}
-	return llm.ProviderEndpoints{}
+	return llmcore.ProviderEndpoints{}
 }
 
-func (a *ChatProviderAdapter) CountTokens(ctx context.Context, req *llm.ChatRequest) (*llm.TokenCountResponse, error) {
-	tokenCounter, ok := a.fallback.(llm.TokenCountProvider)
+func (a *ChatProviderAdapter) CountTokens(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
+	tokenCounter, ok := a.fallback.(llmcore.TokenCountProvider)
 	if !ok {
 		return nil, types.NewServiceUnavailableError("wrapped provider does not implement native token counting")
 	}

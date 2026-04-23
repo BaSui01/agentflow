@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"go.uber.org/zap"
 	"gorm.io/gorm"

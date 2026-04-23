@@ -1,13 +1,13 @@
 package router
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -344,5 +344,3 @@ func TestABRouter_StickyCache_MaxSize(t *testing.T) {
 	assert.LessOrEqual(t, len(router.stickyCache), 6) // max + 1 before next clear
 	router.stickyCacheMu.RUnlock()
 }
-
-

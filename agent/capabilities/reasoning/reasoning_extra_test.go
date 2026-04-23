@@ -8,8 +8,8 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

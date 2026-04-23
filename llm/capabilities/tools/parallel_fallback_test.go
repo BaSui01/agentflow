@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -236,4 +236,3 @@ func TestBatchExecutor_ExecuteBatched(t *testing.T) {
 	results := be.ExecuteBatched(context.Background(), calls)
 	assert.Len(t, results.Results, 3)
 }
-

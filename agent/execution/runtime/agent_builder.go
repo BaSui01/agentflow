@@ -1,4 +1,4 @@
-﻿package runtime
+package runtime
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	agentfeatures "github.com/BaSui01/agentflow/agent/integration"
 	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -1949,10 +1948,10 @@ type BaseAgent struct {
 
 	mainGateway          llmcore.Gateway
 	toolGateway          llmcore.Gateway
-	mainProviderCompat   llm.Provider
-	toolProviderCompat   llm.Provider
-	gatewayProviderCache llm.Provider
-	toolGatewayProvider  llm.Provider
+	mainProviderCompat   llmcore.Provider
+	toolProviderCompat   llmcore.Provider
+	gatewayProviderCache llmcore.Provider
+	toolGatewayProvider  llmcore.Provider
 	ledger               observability.Ledger
 	memory               MemoryManager
 	toolManager          ToolManager
@@ -2308,7 +2307,7 @@ func (b *BaseAgent) SetGateway(gw llmcore.Gateway) {
 	b.gatewayProviderCache = nil
 }
 
-func (b *BaseAgent) gatewayProvider() llm.Provider {
+func (b *BaseAgent) gatewayProvider() llmcore.Provider {
 	gateway := b.MainGateway()
 	if gateway != nil {
 		if b.gatewayProviderCache != nil {
@@ -2319,7 +2318,7 @@ func (b *BaseAgent) gatewayProvider() llm.Provider {
 	return nil
 }
 
-func (b *BaseAgent) gatewayToolProvider() llm.Provider {
+func (b *BaseAgent) gatewayToolProvider() llmcore.Provider {
 	if b.hasDedicatedToolExecutionSurface() {
 		toolGateway := b.ToolGateway()
 		if toolGateway != nil {
@@ -2333,10 +2332,10 @@ func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 }
 
 type providerBackedGateway interface {
-	ChatProvider() llm.Provider
+	ChatProvider() llmcore.Provider
 }
 
-func compatProviderFromGateway(gateway llmcore.Gateway) llm.Provider {
+func compatProviderFromGateway(gateway llmcore.Gateway) llmcore.Provider {
 	if gateway == nil {
 		return nil
 	}
@@ -2347,7 +2346,7 @@ func compatProviderFromGateway(gateway llmcore.Gateway) llm.Provider {
 	return backed.ChatProvider()
 }
 
-func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llmcore.Gateway {
+func wrapProviderWithGateway(provider llmcore.Provider, logger *zap.Logger, ledger observability.Ledger) llmcore.Gateway {
 	if provider == nil {
 		return nil
 	}
@@ -2981,4 +2980,3 @@ func (r *ExtensionRegistry) syncLegacyLSP() {
 		r.inner.EnableLSP(r.lspClient)
 	}
 }
-

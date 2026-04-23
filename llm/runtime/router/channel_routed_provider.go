@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	llmroot "github.com/BaSui01/agentflow/llm"
+	llmroot "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )

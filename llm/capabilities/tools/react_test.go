@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -239,5 +239,3 @@ func TestReActExecutor_Execute_MaxIterationsReached(t *testing.T) {
 		t.Fatalf("expected 2 steps, got %d", len(steps))
 	}
 }
-
-

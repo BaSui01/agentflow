@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/testutil/mocks"
@@ -17,16 +16,16 @@ import (
 	"go.uber.org/zap"
 )
 
-func testGateway(provider llm.Provider) llmcore.Gateway {
+func testGateway(provider llmcore.Provider) llmcore.Gateway {
 	if provider == nil {
 		return nil
 	}
 	return llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: zap.NewNop()})
 }
 
-func testGatewayProvider(gateway llmcore.Gateway) llm.Provider {
+func testGatewayProvider(gateway llmcore.Gateway) llmcore.Provider {
 	type providerBackedGateway interface {
-		ChatProvider() llm.Provider
+		ChatProvider() llmcore.Provider
 	}
 	backed, ok := gateway.(providerBackedGateway)
 	if !ok {
@@ -490,10 +489,10 @@ func TestBuilder_Build_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
 
 type captureRuntimeProvider struct {
 	content     string
-	lastRequest *llm.ChatRequest
+	lastRequest *llmcore.ChatRequest
 }
 
-func (p *captureRuntimeProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *captureRuntimeProvider) Completion(_ context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	cloned := *req
 	if req.Metadata != nil {
 		cloned.Metadata = make(map[string]string, len(req.Metadata))
@@ -502,9 +501,9 @@ func (p *captureRuntimeProvider) Completion(_ context.Context, req *llm.ChatRequ
 		}
 	}
 	p.lastRequest = &cloned
-	return &llm.ChatResponse{
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{{
+		Choices: []llmcore.ChatChoice{{
 			Index: 0,
 			Message: types.Message{
 				Role:    types.RoleAssistant,
@@ -514,9 +513,9 @@ func (p *captureRuntimeProvider) Completion(_ context.Context, req *llm.ChatRequ
 	}, nil
 }
 
-func (p *captureRuntimeProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 1)
-	ch <- llm.StreamChunk{
+func (p *captureRuntimeProvider) Stream(_ context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk, 1)
+	ch <- llmcore.StreamChunk{
 		Model: req.Model,
 		Delta: types.Message{
 			Role:    types.RoleAssistant,
@@ -527,16 +526,18 @@ func (p *captureRuntimeProvider) Stream(_ context.Context, req *llm.ChatRequest)
 	return ch, nil
 }
 
-func (p *captureRuntimeProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true, Latency: time.Millisecond}, nil
+func (p *captureRuntimeProvider) HealthCheck(context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true, Latency: time.Millisecond}, nil
 }
 
 func (p *captureRuntimeProvider) Name() string                        { return "capture-runtime-provider" }
 func (p *captureRuntimeProvider) SupportsNativeFunctionCalling() bool { return true }
-func (p *captureRuntimeProvider) ListModels(context.Context) ([]llm.Model, error) {
-	return []llm.Model{{ID: "test-model"}}, nil
+func (p *captureRuntimeProvider) ListModels(context.Context) ([]llmcore.Model, error) {
+	return []llmcore.Model{{ID: "test-model"}}, nil
 }
-func (p *captureRuntimeProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *captureRuntimeProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type builderResolverStub struct {
 	options types.ExecutionOptions

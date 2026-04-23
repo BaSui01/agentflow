@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/adapters/structured"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -195,7 +194,7 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 
 	// 调用 LLM 进行评估
 	req := newJudgeChatRequest(j.config.Model, []types.Message{
-		{Role: llm.RoleUser, Content: prompt},
+		{Role: llmcore.RoleUser, Content: prompt},
 	}, 0.1)
 	so, err := structured.NewStructuredOutput[llmJudgeStructuredResult](j.gateway)
 	if err != nil {

@@ -1,4 +1,4 @@
-﻿package runtime
+package runtime
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	toolcap "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	agentcore "github.com/BaSui01/agentflow/agent/core"
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -2991,4 +2991,3 @@ func mergeInputWithCheckpoint(input *Input, checkpoint *Checkpoint) *Input {
 	}
 	return merged
 }
-

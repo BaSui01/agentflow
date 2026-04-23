@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"google.golang.org/genai"
 )
 

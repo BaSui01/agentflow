@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 )
 
-func invokeChatGateway(ctx context.Context, gateway llmcore.Gateway, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func invokeChatGateway(ctx context.Context, gateway llmcore.Gateway, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	if gateway == nil {
 		return nil, fmt.Errorf("reasoning gateway is not configured")
 	}
@@ -26,12 +25,12 @@ func invokeChatGateway(ctx context.Context, gateway llmcore.Gateway, req *llm.Ch
 	return unwrapUnifiedChatResponse(resp)
 }
 
-func unwrapUnifiedChatResponse(resp *llmcore.UnifiedResponse) (*llm.ChatResponse, error) {
+func unwrapUnifiedChatResponse(resp *llmcore.UnifiedResponse) (*llmcore.ChatResponse, error) {
 	if resp == nil {
 		return nil, fmt.Errorf("gateway response is nil")
 	}
 
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || chatResp == nil {
 		return nil, fmt.Errorf("invalid gateway chat response output type %T", resp.Output)
 	}

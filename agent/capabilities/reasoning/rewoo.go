@@ -10,7 +10,6 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
@@ -153,11 +152,11 @@ Rules:
 
 	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
-		func(req *llm.ChatRequest) {
+		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		func(req *llmcore.ChatRequest) {
 			req.Tools = []types.ToolSchema{toolPlanToolSchema()}
 			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
-			req.ToolCallMode = llm.ToolCallModeNative
+			req.ToolCallMode = llmcore.ToolCallModeNative
 			req.Temperature = 0.2
 			req.MaxTokens = 2000
 		},
@@ -166,7 +165,7 @@ Rules:
 		return nil, 0, err
 	}
 
-	choice, err := llm.FirstChoice(resp)
+	choice, err := llmcore.FirstChoice(resp)
 	if err != nil {
 		return nil, 0, fmt.Errorf("plan generation returned no choices: %w", err)
 	}
@@ -292,8 +291,8 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 
 	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
-		func(req *llm.ChatRequest) {
+		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 1000
 		},
@@ -302,7 +301,7 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 		return "", 0, err
 	}
 
-	choice, err := llm.FirstChoice(resp)
+	choice, err := llmcore.FirstChoice(resp)
 	if err != nil {
 		return "", 0, fmt.Errorf("synthesis returned no choices: %w", err)
 	}

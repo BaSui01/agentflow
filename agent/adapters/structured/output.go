@@ -6,17 +6,16 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
 // ParseResult代表了解析结构化输出的结果.
 type ParseResult[T any] struct {
-	Value  *T             `json:"value,omitempty"`
-	Raw    string         `json:"raw"`
-	Errors []ParseError   `json:"errors,omitempty"`
-	Usage  *llm.ChatUsage `json:"usage,omitempty"`
+	Value  *T                 `json:"value,omitempty"`
+	Raw    string             `json:"raw"`
+	Errors []ParseError       `json:"errors,omitempty"`
+	Usage  *llmcore.ChatUsage `json:"usage,omitempty"`
 }
 
 // IsValid 如果解析成功且没有出错, 则返回为真 。
@@ -82,7 +81,7 @@ func (s *StructuredOutput[T]) Schema() *JSONSchema {
 // provider 差异由 llm 层处理。
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
 	return s.GenerateWithRequest(ctx, newStructuredChatRequest([]types.Message{
-		{Role: llm.RoleUser, Content: prompt},
+		{Role: llmcore.RoleUser, Content: prompt},
 	}))
 }
 
@@ -92,7 +91,7 @@ func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages
 }
 
 // GenerateWithRequest 从完整 ChatRequest 生成结构化输出，并保留调用方的模型与采样参数。
-func (s *StructuredOutput[T]) GenerateWithRequest(ctx context.Context, req *llm.ChatRequest) (*T, error) {
+func (s *StructuredOutput[T]) GenerateWithRequest(ctx context.Context, req *llmcore.ChatRequest) (*T, error) {
 	result, err := s.GenerateWithRequestAndParse(ctx, req)
 	if err != nil {
 		return nil, err
@@ -106,7 +105,7 @@ func (s *StructuredOutput[T]) GenerateWithRequest(ctx context.Context, req *llm.
 // 生成 WithParse 生成结构化输出并返回详细解析结果 。
 func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt string) (*ParseResult[T], error) {
 	return s.GenerateWithRequestAndParse(ctx, newStructuredChatRequest([]types.Message{
-		{Role: llm.RoleUser, Content: prompt},
+		{Role: llmcore.RoleUser, Content: prompt},
 	}))
 }
 
@@ -116,7 +115,7 @@ func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, 
 }
 
 // GenerateWithRequestAndParse 从完整 ChatRequest 生成结构化输出并返回详细解析结果。
-func (s *StructuredOutput[T]) GenerateWithRequestAndParse(ctx context.Context, req *llm.ChatRequest) (*ParseResult[T], error) {
+func (s *StructuredOutput[T]) GenerateWithRequestAndParse(ctx context.Context, req *llmcore.ChatRequest) (*ParseResult[T], error) {
 	value, raw, usage, parseErrors, err := s.generateWithGatewayDetailed(ctx, req)
 	if err != nil {
 		return nil, err
@@ -131,7 +130,7 @@ func (s *StructuredOutput[T]) GenerateWithRequestAndParse(ctx context.Context, r
 }
 
 // generateWithGatewayDetailed 通过 llmcore.Gateway 统一入口生成结构化输出。
-func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, req *llm.ChatRequest) (*T, string, *llm.ChatUsage, []ParseError, error) {
+func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, req *llmcore.ChatRequest) (*T, string, *llmcore.ChatUsage, []ParseError, error) {
 	if req == nil {
 		return nil, "", nil, nil, fmt.Errorf("chat request cannot be nil")
 	}
@@ -150,9 +149,9 @@ func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, r
 
 	strict := true
 	reqCopy := *req
-	reqCopy.ResponseFormat = &llm.ResponseFormat{
-		Type: llm.ResponseFormatJSONSchema,
-		JSONSchema: &llm.JSONSchemaParam{
+	reqCopy.ResponseFormat = &llmcore.ResponseFormat{
+		Type: llmcore.ResponseFormatJSONSchema,
+		JSONSchema: &llmcore.JSONSchemaParam{
 			Name:   "structured_output",
 			Schema: schemaMap,
 			Strict: &strict,
@@ -175,7 +174,7 @@ func (s *StructuredOutput[T]) generateWithGatewayDetailed(ctx context.Context, r
 	return value, raw, &usage, parseErrors, nil
 }
 
-func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	if s.gateway == nil {
 		return nil, fmt.Errorf("gateway is not configured")
 	}
@@ -188,7 +187,7 @@ func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llm.ChatReque
 	if err != nil {
 		return nil, err
 	}
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || chatResp == nil {
 		return nil, fmt.Errorf("invalid chat response from gateway")
 	}

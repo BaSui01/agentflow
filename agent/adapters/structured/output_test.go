@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +15,7 @@ import (
 type mockProvider struct {
 	response string
 	err      error
-	lastReq  *llm.ChatRequest
+	lastReq  *llmcore.ChatRequest
 }
 
 func (m *mockProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
@@ -26,14 +25,14 @@ func (m *mockProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) 
 	if req == nil || req.Capability != llmcore.CapabilityChat {
 		return nil, assert.AnError
 	}
-	chatReq, ok := req.Payload.(*llm.ChatRequest)
+	chatReq, ok := req.Payload.(*llmcore.ChatRequest)
 	if !ok || chatReq == nil {
 		return nil, assert.AnError
 	}
 	m.lastReq = chatReq
 	return &llmcore.UnifiedResponse{
-		Output: &llm.ChatResponse{
-			Choices: []llm.ChatChoice{
+		Output: &llmcore.ChatResponse{
+			Choices: []llmcore.ChatChoice{
 				{Message: types.Message{Content: m.response}},
 			},
 		},
@@ -137,7 +136,7 @@ func TestStructuredOutput_GenerateWithMessages(t *testing.T) {
 		require.NoError(t, err)
 
 		messages := []types.Message{
-			{Role: llm.RoleUser, Content: "Generate a task result"},
+			{Role: llmcore.RoleUser, Content: "Generate a task result"},
 		}
 		result, err := so.GenerateWithMessages(context.Background(), messages)
 		require.NoError(t, err)
@@ -275,7 +274,7 @@ func TestStructuredOutput_UsesGatewayStructuredRequest(t *testing.T) {
 		assert.Equal(t, "Native", result.Message)
 		require.NotNil(t, provider.lastReq)
 		require.NotNil(t, provider.lastReq.ResponseFormat)
-		assert.Equal(t, llm.ResponseFormatJSONSchema, provider.lastReq.ResponseFormat.Type)
+		assert.Equal(t, llmcore.ResponseFormatJSONSchema, provider.lastReq.ResponseFormat.Type)
 		require.NotNil(t, provider.lastReq.ResponseFormat.JSONSchema)
 		assert.Equal(t, "structured_output", provider.lastReq.ResponseFormat.JSONSchema.Name)
 	})

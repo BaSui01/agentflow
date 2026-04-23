@@ -8,7 +8,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/collaboration/team"
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

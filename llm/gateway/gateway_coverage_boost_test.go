@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/llm/capabilities/avatar"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
@@ -34,7 +33,7 @@ func TestService_Stream_ContextCancelMidStream(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := svc.Stream(ctx, &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
+		Payload:    &llmcore.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
 	})
 	require.NoError(t, err)
 
@@ -59,7 +58,7 @@ func TestService_Stream_NoUsageChunks(t *testing.T) {
 
 	ch, err := svc.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
+		Payload:    &llmcore.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
 	})
 	require.NoError(t, err)
 
@@ -80,7 +79,7 @@ func TestService_Stream_ErrorChunk(t *testing.T) {
 
 	ch, err := svc.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload:    &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
+		Payload:    &llmcore.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}},
 	})
 	require.NoError(t, err)
 
@@ -273,20 +272,20 @@ func TestCostAmount_EmptyCurrency(t *testing.T) {
 
 func TestMergeChatRoutingMetadata_NilInputs(t *testing.T) {
 	mergeChatRoutingMetadata(nil, nil)
-	mergeChatRoutingMetadata(nil, &llm.ChatRequest{})
+	mergeChatRoutingMetadata(nil, &llmcore.ChatRequest{})
 	mergeChatRoutingMetadata(&llmcore.UnifiedRequest{}, nil)
 }
 
 func TestMergeChatRoutingMetadata_TagsCopied(t *testing.T) {
 	req := &llmcore.UnifiedRequest{Tags: []string{"tag1", "tag2"}}
-	chatReq := &llm.ChatRequest{}
+	chatReq := &llmcore.ChatRequest{}
 	mergeChatRoutingMetadata(req, chatReq)
 	assert.Equal(t, []string{"tag1", "tag2"}, chatReq.Tags)
 }
 
 func TestMergeChatRoutingMetadata_ExistingTagsNotOverwritten(t *testing.T) {
 	req := &llmcore.UnifiedRequest{Tags: []string{"new-tag"}}
-	chatReq := &llm.ChatRequest{Tags: []string{"existing-tag"}}
+	chatReq := &llmcore.ChatRequest{Tags: []string{"existing-tag"}}
 	mergeChatRoutingMetadata(req, chatReq)
 	assert.Equal(t, []string{"existing-tag"}, chatReq.Tags)
 }
@@ -446,9 +445,9 @@ func TestEstimateRequestTokens_RerankCapability(t *testing.T) {
 
 func TestEstimateChatTokens_WithMaxCompletionTokens(t *testing.T) {
 	maxTokens := 500
-	svc := New(Config{ChatProvider: &boostNativeTokenCountProvider{resp: &llm.TokenCountResponse{InputTokens: 10}}, Logger: zap.NewNop()})
+	svc := New(Config{ChatProvider: &boostNativeTokenCountProvider{resp: &llmcore.TokenCountResponse{InputTokens: 10}}, Logger: zap.NewNop()})
 
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Model:               "test",
 		Messages:            []types.Message{{Role: "user", Content: "hi"}},
 		MaxCompletionTokens: &maxTokens,
@@ -461,7 +460,7 @@ func TestEstimateChatTokens_WithMaxCompletionTokens(t *testing.T) {
 func TestEstimateChatTokens_RequiresNativeProvider(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
 
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Model:    "test",
 		Messages: []types.Message{{Role: "user", Content: "hi"}},
 	}
@@ -470,9 +469,9 @@ func TestEstimateChatTokens_RequiresNativeProvider(t *testing.T) {
 }
 
 func TestEstimateChatTokens_WithMaxTokensFallback(t *testing.T) {
-	svc := New(Config{ChatProvider: &boostNativeTokenCountProvider{resp: &llm.TokenCountResponse{InputTokens: 10}}, Logger: zap.NewNop()})
+	svc := New(Config{ChatProvider: &boostNativeTokenCountProvider{resp: &llmcore.TokenCountResponse{InputTokens: 10}}, Logger: zap.NewNop()})
 
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Model:     "test",
 		Messages:  []types.Message{{Role: "user", Content: "hi"}},
 		MaxTokens: 200,
@@ -498,7 +497,7 @@ func TestBuildUnifiedChatRequest_NilReq(t *testing.T) {
 }
 
 func TestBuildUnifiedChatRequest_WithMetadata(t *testing.T) {
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Model:   "gpt-4",
 		TraceID: "trace-123",
 		Metadata: map[string]string{
@@ -523,72 +522,76 @@ type boostSlowStreamProvider struct {
 }
 
 func (p *boostSlowStreamProvider) Name() string { return "slow-stream" }
-func (p *boostSlowStreamProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *boostSlowStreamProvider) Completion(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
-func (p *boostSlowStreamProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 10)
+func (p *boostSlowStreamProvider) Stream(_ context.Context, _ *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk, 10)
 	go func() {
 		defer close(ch)
 		for i := 0; i < p.chunkCount; i++ {
 			time.Sleep(p.delay)
-			ch <- llm.StreamChunk{Delta: types.Message{Content: "x"}}
+			ch <- llmcore.StreamChunk{Delta: types.Message{Content: "x"}}
 		}
 	}()
 	return ch, nil
 }
-func (p *boostSlowStreamProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *boostSlowStreamProvider) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
-func (p *boostSlowStreamProvider) SupportsNativeFunctionCalling() bool               { return false }
-func (p *boostSlowStreamProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
-func (p *boostSlowStreamProvider) Endpoints() llm.ProviderEndpoints                  { return llm.ProviderEndpoints{} }
+func (p *boostSlowStreamProvider) SupportsNativeFunctionCalling() bool { return false }
+func (p *boostSlowStreamProvider) ListModels(_ context.Context) ([]llmcore.Model, error) {
+	return nil, nil
+}
+func (p *boostSlowStreamProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type boostNoUsageStreamProvider struct{}
 
 func (p *boostNoUsageStreamProvider) Name() string { return "no-usage-stream" }
-func (p *boostNoUsageStreamProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *boostNoUsageStreamProvider) Completion(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
-func (p *boostNoUsageStreamProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 2)
-	ch <- llm.StreamChunk{Delta: types.Message{Content: "hi"}}
-	ch <- llm.StreamChunk{Delta: types.Message{Content: " there"}}
+func (p *boostNoUsageStreamProvider) Stream(_ context.Context, _ *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk, 2)
+	ch <- llmcore.StreamChunk{Delta: types.Message{Content: "hi"}}
+	ch <- llmcore.StreamChunk{Delta: types.Message{Content: " there"}}
 	close(ch)
 	return ch, nil
 }
-func (p *boostNoUsageStreamProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *boostNoUsageStreamProvider) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 func (p *boostNoUsageStreamProvider) SupportsNativeFunctionCalling() bool { return false }
-func (p *boostNoUsageStreamProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+func (p *boostNoUsageStreamProvider) ListModels(_ context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
-func (p *boostNoUsageStreamProvider) Endpoints() llm.ProviderEndpoints {
-	return llm.ProviderEndpoints{}
+func (p *boostNoUsageStreamProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
 }
 
 type boostErrorChunkStreamProvider struct{}
 
 func (p *boostErrorChunkStreamProvider) Name() string { return "error-chunk-stream" }
-func (p *boostErrorChunkStreamProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *boostErrorChunkStreamProvider) Completion(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
-func (p *boostErrorChunkStreamProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 1)
-	ch <- llm.StreamChunk{Err: &types.Error{Code: types.ErrUpstreamError, Message: "upstream error"}}
+func (p *boostErrorChunkStreamProvider) Stream(_ context.Context, _ *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk, 1)
+	ch <- llmcore.StreamChunk{Err: &types.Error{Code: types.ErrUpstreamError, Message: "upstream error"}}
 	close(ch)
 	return ch, nil
 }
-func (p *boostErrorChunkStreamProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *boostErrorChunkStreamProvider) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 func (p *boostErrorChunkStreamProvider) SupportsNativeFunctionCalling() bool { return false }
-func (p *boostErrorChunkStreamProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+func (p *boostErrorChunkStreamProvider) ListModels(_ context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
-func (p *boostErrorChunkStreamProvider) Endpoints() llm.ProviderEndpoints {
-	return llm.ProviderEndpoints{}
+func (p *boostErrorChunkStreamProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
 }
 
 type boostErrorLedger struct{}
@@ -843,7 +846,7 @@ func TestEstimateChatTokens_NativeProviderError(t *testing.T) {
 		Logger:       zap.NewNop(),
 	})
 
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Model:    "test",
 		Messages: []types.Message{{Role: "user", Content: "hello world"}},
 	}
@@ -853,11 +856,11 @@ func TestEstimateChatTokens_NativeProviderError(t *testing.T) {
 
 func TestEstimateChatTokens_UsesNativeCountOnly(t *testing.T) {
 	svc := New(Config{
-		ChatProvider: &boostNativeTokenCountProvider{resp: &llm.TokenCountResponse{InputTokens: 10}},
+		ChatProvider: &boostNativeTokenCountProvider{resp: &llmcore.TokenCountResponse{InputTokens: 10}},
 		Logger:       zap.NewNop(),
 	})
 
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Model:    "test",
 		Messages: []types.Message{{Role: "user", Content: "hi"}},
 		Tools:    []types.ToolSchema{{Name: "search", Description: "search tool"}},
@@ -898,7 +901,7 @@ func TestMergeChatRoutingMetadata_MetadataMerge(t *testing.T) {
 	req := &llmcore.UnifiedRequest{
 		Metadata: map[string]string{"key1": "val1", "key2": "val2"},
 	}
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Metadata: map[string]string{"key1": "existing"},
 	}
 	mergeChatRoutingMetadata(req, chatReq)
@@ -910,7 +913,7 @@ func TestMergeChatRoutingMetadata_MetadataMerge(t *testing.T) {
 
 func TestMergeChatRoutingMetadata_ProviderHintFromMetadata(t *testing.T) {
 	req := &llmcore.UnifiedRequest{}
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Metadata: map[string]string{llmcore.MetadataKeyChatProvider: "anthropic"},
 	}
 	mergeChatRoutingMetadata(req, chatReq)
@@ -922,14 +925,14 @@ func TestMergeChatRoutingMetadata_ProviderHintFromReqHints(t *testing.T) {
 	req := &llmcore.UnifiedRequest{
 		Hints: llmcore.CapabilityHints{ChatProvider: "openai"},
 	}
-	chatReq := &llm.ChatRequest{}
+	chatReq := &llmcore.ChatRequest{}
 	mergeChatRoutingMetadata(req, chatReq)
 	assert.Equal(t, "openai", req.ProviderHint)
 }
 
 func TestMergeChatRoutingMetadata_RoutePolicyFromMetadata(t *testing.T) {
 	req := &llmcore.UnifiedRequest{}
-	chatReq := &llm.ChatRequest{
+	chatReq := &llmcore.ChatRequest{
 		Metadata: map[string]string{"route_policy": "latency"},
 	}
 	mergeChatRoutingMetadata(req, chatReq)
@@ -940,7 +943,7 @@ func TestMergeChatRoutingMetadata_RoutePolicyFromReq(t *testing.T) {
 	req := &llmcore.UnifiedRequest{
 		RoutePolicy: llmcore.RoutePolicyBalanced,
 	}
-	chatReq := &llm.ChatRequest{}
+	chatReq := &llmcore.ChatRequest{}
 	mergeChatRoutingMetadata(req, chatReq)
 	assert.Equal(t, llmcore.RoutePolicyBalanced, req.RoutePolicy)
 	assert.Equal(t, "balanced", chatReq.RoutePolicy)
@@ -950,7 +953,7 @@ func TestMergeChatRoutingMetadata_MetadataNilInit(t *testing.T) {
 	req := &llmcore.UnifiedRequest{
 		Metadata: map[string]string{"a": "b"},
 	}
-	chatReq := &llm.ChatRequest{} // Metadata is nil
+	chatReq := &llmcore.ChatRequest{} // Metadata is nil
 	mergeChatRoutingMetadata(req, chatReq)
 	assert.Equal(t, "b", chatReq.Metadata["a"])
 }
@@ -1031,28 +1034,28 @@ func TestValidateRequest_AudioTTSValid(t *testing.T) {
 }
 
 type boostNativeTokenCountProvider struct {
-	resp *llm.TokenCountResponse
+	resp *llmcore.TokenCountResponse
 	err  error
 }
 
 func (p *boostNativeTokenCountProvider) Name() string { return "native-token-provider" }
-func (p *boostNativeTokenCountProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *boostNativeTokenCountProvider) Completion(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
-func (p *boostNativeTokenCountProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+func (p *boostNativeTokenCountProvider) Stream(_ context.Context, _ *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
 	return nil, nil
 }
-func (p *boostNativeTokenCountProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *boostNativeTokenCountProvider) HealthCheck(_ context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 func (p *boostNativeTokenCountProvider) SupportsNativeFunctionCalling() bool { return true }
-func (p *boostNativeTokenCountProvider) ListModels(_ context.Context) ([]llm.Model, error) {
+func (p *boostNativeTokenCountProvider) ListModels(_ context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
-func (p *boostNativeTokenCountProvider) Endpoints() llm.ProviderEndpoints {
-	return llm.ProviderEndpoints{}
+func (p *boostNativeTokenCountProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
 }
-func (p *boostNativeTokenCountProvider) CountTokens(_ context.Context, _ *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+func (p *boostNativeTokenCountProvider) CountTokens(_ context.Context, _ *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
 	if p.err != nil {
 		return nil, p.err
 	}

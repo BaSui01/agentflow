@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -506,4 +506,3 @@ func TestLoaderRegistry_Integration_LoadsCorrectFormat(t *testing.T) {
 		})
 	}
 }
-

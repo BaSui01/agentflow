@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
@@ -33,7 +32,7 @@ func TestService_Invoke_RecordsLedger(t *testing.T) {
 		Metadata: map[string]string{
 			"user_id": "u-1",
 		},
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "ledger-model",
 			Messages: []types.Message{
 				{Role: types.RoleUser, Content: "hello"},
@@ -70,7 +69,7 @@ func TestService_Stream_RecordsLedger(t *testing.T) {
 	ch, err := service.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
 		TraceID:    "trace-stream",
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "ledger-model",
 			Messages: []types.Message{
 				{Role: types.RoleUser, Content: "stream"},
@@ -119,7 +118,7 @@ func TestService_Stream_RecordsUsageOnceWithFinalChunk(t *testing.T) {
 	ch, err := service.Stream(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
 		TraceID:    "trace-stream-final",
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "ledger-model",
 			Messages: []types.Message{
 				{Role: types.RoleUser, Content: "stream"},
@@ -150,7 +149,7 @@ func TestService_Invoke_WithoutLedgerDoesNotFail(t *testing.T) {
 
 	resp, err := service.Invoke(context.Background(), &llmcore.UnifiedRequest{
 		Capability: llmcore.CapabilityChat,
-		Payload: &llm.ChatRequest{
+		Payload: &llmcore.ChatRequest{
 			Model: "ledger-model",
 			Messages: []types.Message{
 				{Role: types.RoleUser, Content: "hello"},
@@ -183,12 +182,12 @@ func (l *recordingLedger) Entries() []observability.LedgerEntry {
 
 type ledgerProvider struct{}
 
-func (p *ledgerProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *ledgerProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		ID:       "resp-ledger",
 		Provider: "ledger-provider",
 		Model:    req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
@@ -197,7 +196,7 @@ func (p *ledgerProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 				},
 			},
 		},
-		Usage: llm.ChatUsage{
+		Usage: llmcore.ChatUsage{
 			PromptTokens:     4,
 			CompletionTokens: 6,
 		},
@@ -205,9 +204,9 @@ func (p *ledgerProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}, nil
 }
 
-func (p *ledgerProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	out := make(chan llm.StreamChunk, 1)
-	out <- llm.StreamChunk{
+func (p *ledgerProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	out := make(chan llmcore.StreamChunk, 1)
+	out <- llmcore.StreamChunk{
 		ID:       "chunk-ledger",
 		Provider: "ledger-provider",
 		Model:    req.Model,
@@ -215,7 +214,7 @@ func (p *ledgerProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			Role:    types.RoleAssistant,
 			Content: "part",
 		},
-		Usage: &llm.ChatUsage{
+		Usage: &llmcore.ChatUsage{
 			PromptTokens:     1,
 			CompletionTokens: 2,
 		},
@@ -224,30 +223,30 @@ func (p *ledgerProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	return out, nil
 }
 
-func (p *ledgerProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *ledgerProvider) HealthCheck(context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *ledgerProvider) Name() string { return "ledger-provider" }
 
 func (p *ledgerProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *ledgerProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *ledgerProvider) ListModels(context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (p *ledgerProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
-func (p *ledgerProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
-	return &llm.TokenCountResponse{InputTokens: 1, TotalTokens: 1}, nil
+func (p *ledgerProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }
+func (p *ledgerProvider) CountTokens(context.Context, *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
+	return &llmcore.TokenCountResponse{InputTokens: 1, TotalTokens: 1}, nil
 }
 
 type ledgerMultiUsageProvider struct{}
 
-func (p *ledgerMultiUsageProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *ledgerMultiUsageProvider) Completion(context.Context, *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, nil
 }
 
-func (p *ledgerMultiUsageProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	out := make(chan llm.StreamChunk, 2)
-	out <- llm.StreamChunk{
+func (p *ledgerMultiUsageProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	out := make(chan llmcore.StreamChunk, 2)
+	out <- llmcore.StreamChunk{
 		ID:       "chunk-1",
 		Provider: "ledger-provider",
 		Model:    req.Model,
@@ -255,13 +254,13 @@ func (p *ledgerMultiUsageProvider) Stream(ctx context.Context, req *llm.ChatRequ
 			Role:    types.RoleAssistant,
 			Content: "a",
 		},
-		Usage: &llm.ChatUsage{
+		Usage: &llmcore.ChatUsage{
 			PromptTokens:     1,
 			CompletionTokens: 1,
 			TotalTokens:      2,
 		},
 	}
-	out <- llm.StreamChunk{
+	out <- llmcore.StreamChunk{
 		ID:       "chunk-2",
 		Provider: "ledger-provider",
 		Model:    req.Model,
@@ -269,7 +268,7 @@ func (p *ledgerMultiUsageProvider) Stream(ctx context.Context, req *llm.ChatRequ
 			Role:    types.RoleAssistant,
 			Content: "b",
 		},
-		Usage: &llm.ChatUsage{
+		Usage: &llmcore.ChatUsage{
 			PromptTokens:     2,
 			CompletionTokens: 3,
 			TotalTokens:      5,
@@ -279,17 +278,21 @@ func (p *ledgerMultiUsageProvider) Stream(ctx context.Context, req *llm.ChatRequ
 	return out, nil
 }
 
-func (p *ledgerMultiUsageProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *ledgerMultiUsageProvider) HealthCheck(context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *ledgerMultiUsageProvider) Name() string { return "ledger-provider" }
 
 func (p *ledgerMultiUsageProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *ledgerMultiUsageProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *ledgerMultiUsageProvider) ListModels(context.Context) ([]llmcore.Model, error) {
+	return nil, nil
+}
 
-func (p *ledgerMultiUsageProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
-func (p *ledgerMultiUsageProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
-	return &llm.TokenCountResponse{InputTokens: 1, TotalTokens: 1}, nil
+func (p *ledgerMultiUsageProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
+func (p *ledgerMultiUsageProvider) CountTokens(context.Context, *llmcore.ChatRequest) (*llmcore.TokenCountResponse, error) {
+	return &llmcore.TokenCountResponse{InputTokens: 1, TotalTokens: 1}, nil
 }

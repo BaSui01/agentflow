@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/llm/runtime/router/extensions/runtimepolicy"
 	"github.com/BaSui01/agentflow/types"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // DocumentLoader is the unified interface for loading documents from any source.
@@ -89,4 +89,3 @@ func (r *LoaderRegistry) SupportedTypes() []string {
 	sort.Strings(exts)
 	return exts
 }
-

@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"
@@ -46,7 +46,11 @@ const (
 
 // ─── 测试结果 ────────────────────────────────────────────
 
-type R struct{ Name, Status string; D time.Duration; Info string }
+type R struct {
+	Name, Status string
+	D            time.Duration
+	Info         string
+}
 
 var rs []R
 
@@ -292,8 +296,8 @@ func c05EmbeddingSimilarity(ctx context.Context) {
 	// 语义相近的两句话 vs 语义无关的一句话
 	texts := []string{
 		"Go语言是一种高效的编程语言",     // A
-		"Golang是一种性能优秀的开发语言",  // B（与A语义相近）
-		"今天天气真好适合出去玩",         // C（与A语义无关）
+		"Golang是一种性能优秀的开发语言", // B（与A语义相近）
+		"今天天气真好适合出去玩",        // C（与A语义无关）
 	}
 
 	vecs, err := embProvider.EmbedDocuments(ctx, texts)

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -36,11 +35,11 @@ func NewLLMReasoner(gateway llmcore.Gateway, model string, logger *zap.Logger) *
 func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string, confidence float64, err error) {
 	req := newReasonerChatRequest(r.model, []types.Message{
 		{
-			Role:    llm.RoleSystem,
+			Role:    llmcore.RoleSystem,
 			Content: reasoningSystemPrompt,
 		},
 		{
-			Role:    llm.RoleUser,
+			Role:    llmcore.RoleUser,
 			Content: prompt,
 		},
 	}, 0.3)
@@ -65,7 +64,7 @@ func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string,
 	return content, confidence, nil
 }
 
-func (r *LLMReasoner) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (r *LLMReasoner) invokeChat(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	if r.gateway == nil {
 		return nil, fmt.Errorf("gateway is not configured")
 	}
@@ -78,7 +77,7 @@ func (r *LLMReasoner) invokeChat(ctx context.Context, req *llm.ChatRequest) (*ll
 	if err != nil {
 		return nil, err
 	}
-	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || chatResp == nil {
 		return nil, fmt.Errorf("invalid chat response from gateway")
 	}

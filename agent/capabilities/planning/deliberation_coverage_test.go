@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -45,9 +44,9 @@ func TestParseConfidence(t *testing.T) {
 
 func TestLLMReasoner_Think(t *testing.T) {
 	provider := &testLLMProvider{
-		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{
+		completionFn: func(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+			return &llmcore.ChatResponse{
+				Choices: []llmcore.ChatChoice{
 					{Message: types.Message{Content: "analysis\nCONFIDENCE: 0.85"}},
 				},
 			}, nil
@@ -63,8 +62,8 @@ func TestLLMReasoner_Think(t *testing.T) {
 
 func TestLLMReasoner_Think_NoChoices(t *testing.T) {
 	provider := &testLLMProvider{
-		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-			return &llm.ChatResponse{Choices: nil}, nil
+		completionFn: func(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+			return &llmcore.ChatResponse{Choices: nil}, nil
 		},
 	}
 	reasoner := NewLLMReasoner(provider, "test-model", nil)
@@ -75,11 +74,11 @@ func TestLLMReasoner_Think_NoChoices(t *testing.T) {
 }
 
 type testLLMProvider struct {
-	completionFn func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
+	completionFn func(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error)
 }
 
 func (p *testLLMProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
-	chatReq, ok := req.Payload.(*llm.ChatRequest)
+	chatReq, ok := req.Payload.(*llmcore.ChatRequest)
 	if !ok || chatReq == nil {
 		return nil, assert.AnError
 	}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/rag/retrieval"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,14 +74,14 @@ func TestNewRetrievalToolAdapter(t *testing.T) {
 
 func TestRetrievalToolAdapter_Retrieve(t *testing.T) {
 	tests := []struct {
-		name      string
-		query     string
-		topK      int
-		results   []rag.RetrievalResult
-		embedErr  error
+		name        string
+		query       string
+		topK        int
+		results     []rag.RetrievalResult
+		embedErr    error
 		retrieveErr error
-		wantErr   bool
-		wantLen   int
+		wantErr     bool
+		wantLen     int
 	}{
 		{
 			name:  "success with results",
@@ -128,11 +128,11 @@ func TestRetrievalToolAdapter_Retrieve(t *testing.T) {
 			wantLen: 0,
 		},
 		{
-			name:       "embedding error",
-			query:      "test",
-			topK:       5,
-			embedErr:   assert.AnError,
-			wantErr:    true,
+			name:     "embedding error",
+			query:    "test",
+			topK:     5,
+			embedErr: assert.AnError,
+			wantErr:  true,
 		},
 		{
 			name:        "retrieve error",

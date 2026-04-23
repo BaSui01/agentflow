@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 )
 
 // HierarchicalKeyStrategy 层次化缓存键策略

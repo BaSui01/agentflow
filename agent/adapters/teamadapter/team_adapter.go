@@ -11,7 +11,6 @@ import (
 	teamcore "github.com/BaSui01/agentflow/agent/collaboration/team"
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
@@ -282,9 +281,9 @@ func newHierarchicalModeBaseAgent(supervisor agent.Agent, gateway llmcore.Gatewa
 	})
 }
 
-func extractGatewayProvider(gateway llmcore.Gateway) llm.Provider {
+func extractGatewayProvider(gateway llmcore.Gateway) llmcore.Provider {
 	type providerBackedGateway interface {
-		ChatProvider() llm.Provider
+		ChatProvider() llmcore.Provider
 	}
 	backed, ok := gateway.(providerBackedGateway)
 	if !ok {
@@ -314,25 +313,25 @@ func BuildHierarchicalAgent(supervisor agent.Agent, workers []agent.Agent, logge
 // safeStubProvider provides safe defaults for wrappers that don't directly call provider methods.
 type safeStubProvider struct{}
 
-func (safeStubProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (safeStubProvider) Completion(_ context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{{
+		Choices: []llmcore.ChatChoice{{
 			Index: 0,
 			Message: types.Message{
-				Role:    llm.RoleAssistant,
+				Role:    llmcore.RoleAssistant,
 				Content: "[stub provider response]",
 			},
 		}},
 	}, nil
 }
 
-func (safeStubProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 1)
-	ch <- llm.StreamChunk{
+func (safeStubProvider) Stream(_ context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk, 1)
+	ch <- llmcore.StreamChunk{
 		Model: req.Model,
 		Delta: types.Message{
-			Role:    llm.RoleAssistant,
+			Role:    llmcore.RoleAssistant,
 			Content: "[stub provider response]",
 		},
 		FinishReason: "stop",
@@ -341,14 +340,14 @@ func (safeStubProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan 
 	return ch, nil
 }
 
-func (safeStubProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (safeStubProvider) HealthCheck(context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (safeStubProvider) Name() string { return "safe-stub" }
 
 func (safeStubProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (safeStubProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+func (safeStubProvider) ListModels(context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (safeStubProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (safeStubProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }

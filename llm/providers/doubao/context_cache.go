@@ -11,7 +11,7 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
 // ContextCacheRequest 创建上下文缓存的请求。

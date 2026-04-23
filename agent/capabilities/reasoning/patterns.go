@@ -9,7 +9,6 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
@@ -278,8 +277,8 @@ Return the thought candidates using the provided structured output schema.`, tas
 
 	parseResult, err := generateStructured[[]thoughtCandidate](ctx, t.gateway, newGatewayChatRequest(
 		defaultModel(t.config.Model),
-		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
-		func(req *llm.ChatRequest) {
+		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.8
 			req.MaxTokens = 1000
 		},
@@ -348,8 +347,8 @@ Return the score using the provided structured output schema.`, task, thought.Co
 
 	parseResult, err := generateStructured[reflexionScore](ctx, t.gateway, newGatewayChatRequest(
 		defaultModel(t.config.EvalModel),
-		[]types.Message{{Role: llm.RoleUser, Content: prompt}},
-		func(req *llm.ChatRequest) {
+		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.1
 			req.MaxTokens = 10
 		},

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,11 +21,13 @@ type mockProvider struct {
 	supportsNative bool
 }
 
-func (m *mockProvider) Name() string { return m.name }
+func (m *mockProvider) Name() string                        { return m.name }
 func (m *mockProvider) SupportsNativeFunctionCalling() bool { return m.supportsNative }
-func (m *mockProvider) HealthCheck(ctx context.Context) (*llmpkg.HealthStatus, error) { return nil, nil }
+func (m *mockProvider) HealthCheck(ctx context.Context) (*llmpkg.HealthStatus, error) {
+	return nil, nil
+}
 func (m *mockProvider) ListModels(ctx context.Context) ([]llmpkg.Model, error) { return nil, nil }
-func (m *mockProvider) Endpoints() llmpkg.ProviderEndpoints { return llmpkg.ProviderEndpoints{} }
+func (m *mockProvider) Endpoints() llmpkg.ProviderEndpoints                    { return llmpkg.ProviderEndpoints{} }
 
 func (m *mockProvider) Completion(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 	if m.completionErr != nil {
@@ -265,9 +267,9 @@ func TestXMLToolCallProvider_Stream_PanicRecovery(t *testing.T) {
 
 func TestXMLToolCallProvider_Completion_FinishReason_Preserved(t *testing.T) {
 	tests := []struct {
-		name           string
-		finishReason   string
-		expectReason   string
+		name         string
+		finishReason string
+		expectReason string
 	}{
 		{"stop_overridden", "stop", "tool_calls"},
 		{"empty_overridden", "", "tool_calls"},

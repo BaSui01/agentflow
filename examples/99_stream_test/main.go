@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"

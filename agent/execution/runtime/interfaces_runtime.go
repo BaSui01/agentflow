@@ -1,4 +1,4 @@
-﻿package runtime
+package runtime
 
 import (
 	"context"
@@ -16,8 +16,8 @@ import (
 	agentpersistence "github.com/BaSui01/agentflow/agent/persistence"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"sort"
@@ -2253,4 +2253,3 @@ func extractKeywords(text string) []string {
 func parseToolIndices(text string) []int {
 	return skills.DynamicToolParseIndices(text)
 }
-

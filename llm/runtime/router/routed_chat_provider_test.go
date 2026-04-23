@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	llmroot "github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
@@ -58,9 +57,9 @@ func (p *captureProvider) ListModels(ctx context.Context) ([]Model, error) { ret
 
 func (p *captureProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
 
-func (p *captureProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmroot.TokenCountResponse, error) {
+func (p *captureProvider) CountTokens(ctx context.Context, req *ChatRequest) (*llmcore.TokenCountResponse, error) {
 	p.lastCount = req.Model
-	return &llmroot.TokenCountResponse{InputTokens: len(req.Messages) + 1}, nil
+	return &llmcore.TokenCountResponse{InputTokens: len(req.Messages) + 1}, nil
 }
 
 func setupRouterForRoutedProviderTest(t *testing.T) (*MultiProviderRouter, map[string]*captureProvider) {

@@ -3,7 +3,6 @@ package gateway
 import (
 	"strings"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -34,9 +33,9 @@ func normalizeRequest(req *llmcore.UnifiedRequest) {
 func validateCapabilityPayload(req *llmcore.UnifiedRequest) *types.Error {
 	switch req.Capability {
 	case llmcore.CapabilityChat:
-		payload, ok := req.Payload.(*llm.ChatRequest)
+		payload, ok := req.Payload.(*llmcore.ChatRequest)
 		if !ok || payload == nil {
-			return types.NewInvalidRequestError("chat payload must be *llm.ChatRequest")
+			return types.NewInvalidRequestError("chat payload must be *llmcore.ChatRequest")
 		}
 	case llmcore.CapabilityTools:
 		payload, ok := req.Payload.(*ToolsInput)

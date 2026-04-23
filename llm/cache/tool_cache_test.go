@@ -1,15 +1,15 @@
 package cache
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -315,5 +315,3 @@ func TestHashKeyStrategy_DifferentModels(t *testing.T) {
 
 	assert.NotEqual(t, key1, key2)
 }
-
-

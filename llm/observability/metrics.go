@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const instrumentationName = "github.com/BaSui01/agentflow/llm"
+const instrumentationName = "github.com/BaSui01/agentflow/llm/core"
 
 // Metrics LLM 指标收集器
 type Metrics struct {

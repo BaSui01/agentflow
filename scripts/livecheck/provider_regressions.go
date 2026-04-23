@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	claudeprov "github.com/BaSui01/agentflow/llm/providers/anthropic"
 	geminiprov "github.com/BaSui01/agentflow/llm/providers/gemini"

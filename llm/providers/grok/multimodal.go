@@ -14,7 +14,7 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
 // Grok 视频生成端点（BaseURL 默认 defaultGrokBaseURL，在 provider.go 设置）

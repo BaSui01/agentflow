@@ -1,4 +1,4 @@
-package llm
+package core
 
 import "github.com/BaSui01/agentflow/types"
 

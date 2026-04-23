@@ -11,7 +11,6 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"go.uber.org/zap"
@@ -44,8 +43,8 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	}
 
 	var (
-		provider      llm.Provider
-		toolProvider  llm.Provider
+		provider      llmcore.Provider
+		toolProvider  llmcore.Provider
 		budgetManager = s.budgetManager
 		costTracker   = s.costTracker
 		llmCache      = s.llmCache

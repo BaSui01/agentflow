@@ -5,11 +5,10 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent/adapters/structured"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 )
 
-func generateStructured[T any](ctx context.Context, gateway llmcore.Gateway, req *llm.ChatRequest) (*structured.ParseResult[T], error) {
+func generateStructured[T any](ctx context.Context, gateway llmcore.Gateway, req *llmcore.ChatRequest) (*structured.ParseResult[T], error) {
 	so, err := structured.NewStructuredOutput[T](gateway)
 	if err != nil {
 		return nil, fmt.Errorf("initialize structured output: %w", err)

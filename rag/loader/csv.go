@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // CSVLoaderConfig configures the CSV loader.
@@ -142,4 +142,3 @@ func (l *CSVLoader) resolveContentColumns(header []string) []int {
 func (l *CSVLoader) SupportedTypes() []string {
 	return []string{".csv"}
 }
-

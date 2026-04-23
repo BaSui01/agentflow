@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/openai/openai-go/v3/packages/param"

@@ -6,25 +6,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// 模拟 Provider 工具 llm. 测试供应商
+// 模拟 Provider 工具 llmcore. 测试供应商
 type mockProvider struct {
 	response    string
 	err         error
 	callCount   int
-	lastRequest *llm.ChatRequest
+	lastRequest *llmcore.ChatRequest
 }
 
 func (m *mockProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error) {
 	m.callCount++
 	if req != nil {
-		if chatReq, ok := req.Payload.(*llm.ChatRequest); ok {
+		if chatReq, ok := req.Payload.(*llmcore.ChatRequest); ok {
 			m.lastRequest = chatReq
 		}
 	}
@@ -32,8 +31,8 @@ func (m *mockProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) 
 		return nil, m.err
 	}
 	return &llmcore.UnifiedResponse{
-		Output: &llm.ChatResponse{
-			Choices: []llm.ChatChoice{
+		Output: &llmcore.ChatResponse{
+			Choices: []llmcore.ChatChoice{
 				{Message: types.Message{Content: m.response}},
 			},
 		},

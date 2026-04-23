@@ -27,7 +27,6 @@ import (
 	orchestration "github.com/BaSui01/agentflow/agent/execution/runtime/orchestration"
 	"github.com/BaSui01/agentflow/agent/integration/voice"
 	"github.com/BaSui01/agentflow/agent/persistence"
-	"github.com/BaSui01/agentflow/llm"
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -121,12 +120,12 @@ func demoLLMCanary(logger *zap.Logger) {
 	canaryCfg := llmrouter.NewCanaryConfig(nil, logger)
 	defer canaryCfg.Stop()
 
-	deployment := &llm.CanaryDeployment{
+	deployment := &llmcore.CanaryDeployment{
 		ProviderID:     1,
 		CanaryVersion:  "gpt-4o-2026-03",
 		StableVersion:  "gpt-4o-2025-12",
 		TrafficPercent: 10,
-		Stage:          llm.CanaryStage10Pct,
+		Stage:          llmcore.CanaryStage10Pct,
 		StartTime:      time.Now(),
 		MaxErrorRate:   0.15,
 		MaxLatencyP95:  500 * time.Millisecond,
@@ -134,14 +133,14 @@ func demoLLMCanary(logger *zap.Logger) {
 	}
 	_ = canaryCfg.SetDeployment(deployment)
 	_ = canaryCfg.GetDeployment(1)
-	_ = canaryCfg.UpdateStage(1, llm.CanaryStage50Pct)
+	_ = canaryCfg.UpdateStage(1, llmcore.CanaryStage50Pct)
 	_ = canaryCfg.GetAllDeployments()
 	_ = canaryCfg.TriggerRollback(1, "demo rollback")
 	canaryCfg.RemoveDeployment(1)
 	fmt.Println("   Canary mode: in-memory")
 	fmt.Printf("   Canary deployments after cleanup: %d\n", len(canaryCfg.GetAllDeployments()))
 
-	monitor := llm.NewCanaryMonitor(nil, canaryCfg, logger)
+	monitor := llmcore.NewCanaryMonitor(nil, canaryCfg, logger)
 	startCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	done := make(chan struct{})
@@ -158,46 +157,46 @@ func demoLLMCoreExtensions(logger *zap.Logger) {
 	fmt.Println("19. LLM Core Extensions Reachability")
 	fmt.Println("------------------------------------")
 
-	cred := llm.CredentialOverride{
+	cred := llmcore.CredentialOverride{
 		APIKey:    "sk-demo-key",
 		SecretKey: "demo-secret",
 	}
 	_ = cred.String()
 	_, _ = cred.MarshalJSON()
-	ctx := llm.WithCredentialOverride(context.Background(), cred)
-	_, _ = llm.CredentialOverrideFromContext(ctx)
+	ctx := llmcore.WithCredentialOverride(context.Background(), cred)
+	_, _ = llmcore.CredentialOverrideFromContext(ctx)
 
-	security := &llm.NoOpSecurityProvider{}
+	security := &llmcore.NoOpSecurityProvider{}
 	identity, _ := security.Authenticate(ctx, cred)
 	_ = security.Authorize(ctx, identity, "provider", "invoke")
 
-	audit := &llm.NoOpAuditLogger{}
-	_ = audit.Log(ctx, llm.AuditEvent{
+	audit := &llmcore.NoOpAuditLogger{}
+	_ = audit.Log(ctx, llmcore.AuditEvent{
 		Timestamp: time.Now(),
 		EventType: "provider.request",
 		ActorID:   "demo",
 		Result:    "success",
 	})
-	_, _ = audit.Query(ctx, llm.AuditFilter{})
+	_, _ = audit.Query(ctx, llmcore.AuditFilter{})
 
-	limiter := &llm.NoOpRateLimiter{}
+	limiter := &llmcore.NoOpRateLimiter{}
 	_, _ = limiter.Allow(ctx, "tenant-demo")
 	_, _ = limiter.AllowN(ctx, "tenant-demo", 2)
 	_ = limiter.Reset(ctx, "tenant-demo")
 
-	tracer := &llm.NoOpTracer{}
+	tracer := &llmcore.NoOpTracer{}
 	_, span := tracer.StartSpan(ctx, "demo-span")
 	span.SetAttribute("key", "value")
 	span.AddEvent("event", map[string]any{"ok": true})
 	span.SetError(fmt.Errorf("demo error"))
 	span.End()
 
-	m1 := llm.ProviderMiddlewareFunc(func(next llm.Provider) llm.Provider { return next })
-	m2 := llm.ProviderMiddlewareFunc(func(next llm.Provider) llm.Provider { return next })
+	m1 := llmcore.ProviderMiddlewareFunc(func(next llmcore.Provider) llmcore.Provider { return next })
+	m2 := llmcore.ProviderMiddlewareFunc(func(next llmcore.Provider) llmcore.Provider { return next })
 	_ = m1.Wrap(&demoProvider{})
-	_ = llm.ChainProviderMiddleware(&demoProvider{}, m1, m2)
+	_ = llmcore.ChainProviderMiddleware(&demoProvider{}, m1, m2)
 
-	registry := llm.NewProviderRegistry()
+	registry := llmcore.NewProviderRegistry()
 	registry.Register("demo", &demoProvider{})
 	_, _ = registry.Get("demo")
 	_ = registry.SetDefault("demo")
@@ -216,19 +215,19 @@ func demoLLMAdvancedRuntime(logger *zap.Logger) {
 	ctx := context.Background()
 
 	// resilience.NewResilientProviderSimple
-	resilient := llm.NewResilientProviderSimple(&reasonerProvider{}, nil, logger)
-	_, _ = resilient.Completion(ctx, &llm.ChatRequest{
+	resilient := llmcore.NewResilientProviderSimple(&reasonerProvider{}, nil, logger)
+	_, _ = resilient.Completion(ctx, &llmcore.ChatRequest{
 		Model: "demo-model",
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "resilience ping"},
+			{Role: llmcore.RoleUser, Content: "resilience ping"},
 		},
 	})
 
 	// thought_signatures manager + middleware
-	tsMgr := llm.NewThoughtSignatureManager(0)
+	tsMgr := llmcore.NewThoughtSignatureManager(0)
 	_ = tsMgr.CreateChain("demo-chain")
 	_ = tsMgr.GetChain("demo-chain")
-	_ = tsMgr.AddSignature("demo-chain", llm.ThoughtSignature{
+	_ = tsMgr.AddSignature("demo-chain", llmcore.ThoughtSignature{
 		ID:        "sig-0",
 		Signature: "prev-signature",
 		Model:     "demo-model",
@@ -236,23 +235,23 @@ func demoLLMAdvancedRuntime(logger *zap.Logger) {
 	})
 	_ = tsMgr.GetLatestSignatures("demo-chain", 5)
 
-	tsMiddleware := llm.NewThoughtSignatureMiddleware(&reasonerProvider{}, tsMgr)
-	_, _ = tsMiddleware.Completion(ctx, &llm.ChatRequest{
+	tsMiddleware := llmcore.NewThoughtSignatureMiddleware(&reasonerProvider{}, tsMgr)
+	_, _ = tsMiddleware.Completion(ctx, &llmcore.ChatRequest{
 		Model: "demo-model",
 		Metadata: map[string]string{
 			"thought_chain_id": "demo-chain",
 		},
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "think with signatures"},
+			{Role: llmcore.RoleUser, Content: "think with signatures"},
 		},
 	})
-	stream, _ := tsMiddleware.Stream(ctx, &llm.ChatRequest{
+	stream, _ := tsMiddleware.Stream(ctx, &llmcore.ChatRequest{
 		Model: "demo-model",
 		Metadata: map[string]string{
 			"thought_chain_id": "demo-chain",
 		},
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "stream signatures"},
+			{Role: llmcore.RoleUser, Content: "stream signatures"},
 		},
 	})
 	for range stream {
@@ -288,10 +287,10 @@ func demoLLMAdvancedRuntime(logger *zap.Logger) {
 	_ = batchProcessor.Stats().BatchEfficiency()
 
 	// llm types table names
-	_ = llm.LLMModel{}.TableName()
-	_ = llm.LLMProvider{}.TableName()
-	_ = llm.LLMProviderModel{}.TableName()
-	_ = llm.LLMProviderAPIKey{}.TableName()
+	_ = llmcore.LLMModel{}.TableName()
+	_ = llmcore.LLMProvider{}.TableName()
+	_ = llmcore.LLMProviderModel{}.TableName()
+	_ = llmcore.LLMProviderAPIKey{}.TableName()
 
 	fmt.Println()
 }
@@ -844,7 +843,7 @@ func demoRunConfigHelpers() {
 	baseCfg := types.AgentConfig{}
 	options := agent.NewDefaultExecutionOptionsResolver().Resolve(ctx, baseCfg, nil)
 	req, err := agentadapters.NewDefaultChatRequestAdapter().Build(options, []types.Message{
-		{Role: llm.RoleUser, Content: "demo request"},
+		{Role: llmcore.RoleUser, Content: "demo request"},
 	})
 	if err != nil {
 		fmt.Printf("   Build request error: %v\n\n", err)
@@ -1017,43 +1016,43 @@ func (a *demoAgent) Observe(ctx context.Context, feedback *agent.Feedback) error
 
 type demoProvider struct{}
 
-func (p *demoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *demoProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	return nil, fmt.Errorf("demo provider completion not implemented")
 }
 
-func (p *demoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *demoProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *demoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *demoProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *demoProvider) Name() string { return "demo-provider" }
 
 func (p *demoProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *demoProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *demoProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (p *demoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *demoProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }
 
 type reasonerProvider struct{}
 
-func (p *reasonerProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *reasonerProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
-					Role:    llm.RoleAssistant,
+					Role:    llmcore.RoleAssistant,
 					Content: "Reasoning done.\nCONFIDENCE: 0.81",
 				},
 			},
 		},
-		Usage: llm.ChatUsage{TotalTokens: 10},
+		Usage: llmcore.ChatUsage{TotalTokens: 10},
 	}, nil
 }
 
@@ -1501,7 +1500,7 @@ func demoStructuredOutput(logger *zap.Logger) {
 	}
 
 	parseResult2, _ := so.GenerateWithMessagesAndParse(ctx, []types.Message{
-		{Role: llm.RoleUser, Content: "generate with messages"},
+		{Role: llmcore.RoleUser, Content: "generate with messages"},
 	})
 	if parseResult2 != nil {
 		_ = parseResult2.IsValid()
@@ -1592,23 +1591,23 @@ func (w *demoRetrievalWorker) Retrieve(ctx context.Context, query string) ([]typ
 	}, nil
 }
 
-func (p *reasonerProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *reasonerProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *reasonerProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *reasonerProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *reasonerProvider) Name() string { return "reasoner-provider" }
 
 func (p *reasonerProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *reasonerProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *reasonerProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) { return nil, nil }
 
-func (p *reasonerProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *reasonerProvider) Endpoints() llmcore.ProviderEndpoints { return llmcore.ProviderEndpoints{} }
 
 type demoLLMToolExecutor struct{}
 
@@ -1638,7 +1637,7 @@ func (e *demoLLMToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCal
 
 type reasoningDemoProvider struct{}
 
-func (p *reasoningDemoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p *reasoningDemoProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
 	prompt := ""
 	if len(req.Messages) > 0 {
 		prompt = req.Messages[len(req.Messages)-1].Content
@@ -1680,38 +1679,42 @@ func (p *reasoningDemoProvider) Completion(ctx context.Context, req *llm.ChatReq
 		content = "Iterative deepening synthesis complete."
 	}
 
-	return &llm.ChatResponse{
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
-					Role:    llm.RoleAssistant,
+					Role:    llmcore.RoleAssistant,
 					Content: content,
 				},
 			},
 		},
-		Usage: llm.ChatUsage{TotalTokens: 16},
+		Usage: llmcore.ChatUsage{TotalTokens: 16},
 	}, nil
 }
 
-func (p *reasoningDemoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *reasoningDemoProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *reasoningDemoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *reasoningDemoProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *reasoningDemoProvider) Name() string { return "reasoning-demo-provider" }
 
 func (p *reasoningDemoProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *reasoningDemoProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *reasoningDemoProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) {
+	return nil, nil
+}
 
-func (p *reasoningDemoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *reasoningDemoProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type reasoningToolExecutor struct{}
 
@@ -1815,41 +1818,43 @@ type demoStructuredRecord struct {
 
 type structuredDemoProvider struct{}
 
-func (p *structuredDemoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return &llm.ChatResponse{
+func (p *structuredDemoProvider) Completion(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
+	return &llmcore.ChatResponse{
 		Model: req.Model,
-		Choices: []llm.ChatChoice{
+		Choices: []llmcore.ChatChoice{
 			{
 				Index: 0,
 				Message: types.Message{
-					Role:    llm.RoleAssistant,
+					Role:    llmcore.RoleAssistant,
 					Content: `{"status":"success","message":"structured demo response"}`,
 				},
 			},
 		},
-		Usage: llm.ChatUsage{TotalTokens: 12},
+		Usage: llmcore.ChatUsage{TotalTokens: 12},
 	}, nil
 }
 
-func (p *structuredDemoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk)
+func (p *structuredDemoProvider) Stream(ctx context.Context, req *llmcore.ChatRequest) (<-chan llmcore.StreamChunk, error) {
+	ch := make(chan llmcore.StreamChunk)
 	close(ch)
 	return ch, nil
 }
 
-func (p *structuredDemoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
+func (p *structuredDemoProvider) HealthCheck(ctx context.Context) (*llmcore.HealthStatus, error) {
+	return &llmcore.HealthStatus{Healthy: true}, nil
 }
 
 func (p *structuredDemoProvider) Name() string { return "structured-demo-provider" }
 
 func (p *structuredDemoProvider) SupportsNativeFunctionCalling() bool { return false }
 
-func (p *structuredDemoProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+func (p *structuredDemoProvider) ListModels(ctx context.Context) ([]llmcore.Model, error) {
 	return nil, nil
 }
 
-func (p *structuredDemoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *structuredDemoProvider) Endpoints() llmcore.ProviderEndpoints {
+	return llmcore.ProviderEndpoints{}
+}
 
 type demoSTTProvider struct{}
 

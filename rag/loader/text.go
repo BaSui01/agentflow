@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // TextLoader loads plain text files as a single Document.
@@ -46,4 +46,3 @@ func (l *TextLoader) Load(ctx context.Context, source string) ([]rag.Document, e
 func (l *TextLoader) SupportedTypes() []string {
 	return []string{".txt"}
 }
-

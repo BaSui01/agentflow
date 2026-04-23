@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"

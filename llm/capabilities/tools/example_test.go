@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 	"go.uber.org/zap"
 )
 
@@ -354,4 +354,3 @@ func TestToolTimeout(t *testing.T) {
 		t.Errorf("expected timeout error, got: %s", result.Error)
 	}
 }
-

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"log"
 	"os"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/anthropic"
 	"github.com/BaSui01/agentflow/llm/providers/gemini"
@@ -48,9 +48,9 @@ func main() {
 func testOpenAIResponsesAPI(ctx context.Context, logger *zap.Logger) {
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:          os.Getenv("OPENAI_API_KEY"),
-			BaseURL:         "https://api.openai.com",
-			Model:           "gpt-4o-mini",
+			APIKey:  os.Getenv("OPENAI_API_KEY"),
+			BaseURL: "https://api.openai.com",
+			Model:   "gpt-4o-mini",
 		},
 		UseResponsesAPI: true, // 启用新 API
 	}
@@ -81,9 +81,9 @@ func testOpenAIResponsesAPI(ctx context.Context, logger *zap.Logger) {
 func testOpenAIChatCompletions(ctx context.Context, logger *zap.Logger) {
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:          os.Getenv("OPENAI_API_KEY"),
-			BaseURL:         "https://api.openai.com",
-			Model:           "gpt-4o-mini",
+			APIKey:  os.Getenv("OPENAI_API_KEY"),
+			BaseURL: "https://api.openai.com",
+			Model:   "gpt-4o-mini",
 		},
 		UseResponsesAPI: false, // 使用传统 API
 	}
@@ -269,5 +269,3 @@ func testProviderToolCalling(ctx context.Context, logger *zap.Logger, providerNa
 		fmt.Printf("响应: %s\n", resp.Choices[0].Message.Content)
 	}
 }
-
-

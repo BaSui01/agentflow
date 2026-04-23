@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -150,12 +149,12 @@ func TestChatHandler_OpenAICompatChatCompletions_Stream(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		streamChunks: []llmcore.UnifiedChunk{
 			{
-				Output: &llm.StreamChunk{
+				Output: &llmcore.StreamChunk{
 					ID:    "chunk_1",
 					Model: "gpt-5.2",
 					Index: 0,
 					Delta: types.Message{
-						Role:    llm.RoleAssistant,
+						Role:    llmcore.RoleAssistant,
 						Content: "ok",
 					},
 					FinishReason: "stop",
@@ -377,11 +376,11 @@ func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		streamChunks: []llmcore.UnifiedChunk{
 			{
-				Output: &llm.StreamChunk{
+				Output: &llmcore.StreamChunk{
 					ID:    "resp_stream_1",
 					Model: "gpt-5.2",
 					Delta: types.Message{
-						Role:    llm.RoleAssistant,
+						Role:    llmcore.RoleAssistant,
 						Content: "hello",
 					},
 					FinishReason: "stop",

@@ -4,13 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
 
 func TestNewSemanticCache(t *testing.T) {
-	store := rag.NewInMemoryVectorStore(zap.NewNop())
+	store := NewInMemoryVectorStore(zap.NewNop())
 	if _, err := NewSemanticCache(store, SemanticCacheConfig{SimilarityThreshold: 0.95}, zap.NewNop()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -24,7 +23,7 @@ func TestNewSemanticCache(t *testing.T) {
 
 func TestSemanticCacheSetGetClear(t *testing.T) {
 	ctx := context.Background()
-	store := rag.NewInMemoryVectorStore(zap.NewNop())
+	store := NewInMemoryVectorStore(zap.NewNop())
 	cache, err := NewSemanticCache(store, SemanticCacheConfig{SimilarityThreshold: 0.9}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("NewSemanticCache failed: %v", err)

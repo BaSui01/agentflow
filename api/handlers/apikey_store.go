@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"gorm.io/gorm"
 )
 
@@ -74,4 +74,3 @@ func (s *GormAPIKeyStore) DeleteAPIKey(keyID, providerID uint) (int64, error) {
 	result := s.db.Where("id = ? AND provider_id = ?", keyID, providerID).Delete(&llm.LLMProviderAPIKey{})
 	return result.RowsAffected, result.Error
 }
-

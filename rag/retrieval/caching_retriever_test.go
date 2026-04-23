@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/rag"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 )
 
 // --- mocks ---

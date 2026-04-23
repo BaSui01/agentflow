@@ -21,7 +21,6 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -61,10 +60,10 @@ func (m *mockChatService) Complete(_ context.Context, req *usecase.ChatRequest) 
 				Usage:     usecase.ChatUsage{PromptTokens: 20, CompletionTokens: 10, TotalTokens: 30},
 				CreatedAt: time.Now(),
 			},
-			Raw: &llm.ChatResponse{
+			Raw: &llmcore.ChatResponse{
 				ID:    "chatcmpl-tool-001",
 				Model: req.Model,
-				Usage: llm.ChatUsage{PromptTokens: 20, CompletionTokens: 10, TotalTokens: 30},
+				Usage: llmcore.ChatUsage{PromptTokens: 20, CompletionTokens: 10, TotalTokens: 30},
 			},
 			Duration: 30 * time.Millisecond,
 		}, nil
@@ -85,10 +84,10 @@ func (m *mockChatService) Complete(_ context.Context, req *usecase.ChatRequest) 
 			Usage:     usecase.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 			CreatedAt: time.Now(),
 		},
-		Raw: &llm.ChatResponse{
+		Raw: &llmcore.ChatResponse{
 			ID:    "chatcmpl-mock-001",
 			Model: req.Model,
-			Usage: llm.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: llmcore.ChatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		},
 		Duration: 50 * time.Millisecond,
 	}, nil
@@ -101,7 +100,7 @@ func (m *mockChatService) Stream(_ context.Context, req *usecase.ChatRequest) (<
 		// Send two content chunks then a finish chunk.
 		for _, text := range []string{"Hello", " world"} {
 			ch <- llmcore.UnifiedChunk{
-				Output: &llm.StreamChunk{
+				Output: &llmcore.StreamChunk{
 					ID:    "chatcmpl-stream-001",
 					Model: req.Model,
 					Delta: types.Message{Role: types.RoleAssistant, Content: text},
@@ -109,7 +108,7 @@ func (m *mockChatService) Stream(_ context.Context, req *usecase.ChatRequest) (<
 			}
 		}
 		ch <- llmcore.UnifiedChunk{
-			Output: &llm.StreamChunk{
+			Output: &llmcore.StreamChunk{
 				ID:           "chatcmpl-stream-001",
 				Model:        req.Model,
 				Delta:        types.Message{Role: types.RoleAssistant},

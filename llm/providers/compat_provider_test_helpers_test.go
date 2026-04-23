@@ -3,7 +3,7 @@ package providers_test
 import (
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	"go.uber.org/zap"
 )

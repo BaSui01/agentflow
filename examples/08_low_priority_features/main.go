@@ -12,7 +12,7 @@ import (
 	runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/monitoring"
 	"github.com/BaSui01/agentflow/agent/persistence"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"

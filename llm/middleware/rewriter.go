@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm/core"
 )
 
 // RequestRewriter 请求改写器接口
@@ -75,4 +75,3 @@ func (c *RewriterChain) GetRewriters() []RequestRewriter {
 	copy(out, c.rewriters)
 	return out
 }
-

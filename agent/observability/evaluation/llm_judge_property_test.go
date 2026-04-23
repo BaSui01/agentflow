@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -420,8 +419,8 @@ func (m *mockJudgeProvider) Invoke(ctx context.Context, req *llmcore.UnifiedRequ
 		return nil, m.err
 	}
 	return &llmcore.UnifiedResponse{
-		Output: &llm.ChatResponse{
-			Choices: []llm.ChatChoice{
+		Output: &llmcore.ChatResponse{
+			Choices: []llmcore.ChatChoice{
 				{Message: types.Message{Content: m.response}},
 			},
 		},

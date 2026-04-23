@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/rag/retrieval"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 )
 

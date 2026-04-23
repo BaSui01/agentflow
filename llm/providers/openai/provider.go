@@ -12,7 +12,7 @@ import (
 	openaiofficial "github.com/BaSui01/agentflow/llm/internal/openaiofficial"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"

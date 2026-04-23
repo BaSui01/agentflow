@@ -6,7 +6,6 @@ import (
 	"time"
 
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
@@ -16,8 +15,8 @@ import (
 // ChatConverter centralizes request/response conversion between API and LLM layers.
 // Implementations are provided by the handlers layer.
 type ChatConverter interface {
-	ToLLMRequest(req *ChatRequest) *llm.ChatRequest
-	ToChatResponse(resp *llm.ChatResponse) *ChatResponse
+	ToLLMRequest(req *ChatRequest) *llmcore.ChatRequest
+	ToChatResponse(resp *llmcore.ChatResponse) *ChatResponse
 }
 
 // ChatService encapsulates chat routing and gateway invocation logic.
@@ -31,14 +30,14 @@ type ChatService interface {
 // ChatCompletionResult captures completion output and execution metadata.
 type ChatCompletionResult struct {
 	Response *ChatResponse
-	Raw      *llm.ChatResponse
+	Raw      *llmcore.ChatResponse
 	Duration time.Duration
 }
 
 // ChatRuntime captures the hot-swappable runtime dependencies used by ChatService.
 type ChatRuntime struct {
 	Gateway      llmcore.Gateway
-	ChatProvider llm.Provider
+	ChatProvider llmcore.Provider
 	ToolManager  agent.ToolManager
 }
 
@@ -123,7 +122,7 @@ func (s *DefaultChatService) Complete(ctx context.Context, req *ChatRequest) (*C
 	if invokeErr != nil {
 		return nil, toTypesChatError(invokeErr)
 	}
-	raw, ok := resp.Output.(*llm.ChatResponse)
+	raw, ok := resp.Output.(*llmcore.ChatResponse)
 	if !ok || raw == nil {
 		return nil, types.NewInternalError("invalid chat gateway response")
 	}
@@ -164,7 +163,7 @@ func (s *DefaultChatService) DefaultRoutePolicy() string {
 	return string(llmcore.RoutePolicyBalanced)
 }
 
-func (s *DefaultChatService) buildUnifiedRequest(req *ChatRequest) (*llmcore.UnifiedRequest, *llm.ChatRequest, *types.Error) {
+func (s *DefaultChatService) buildUnifiedRequest(req *ChatRequest) (*llmcore.UnifiedRequest, *llmcore.ChatRequest, *types.Error) {
 	if req == nil {
 		return nil, nil, types.NewInvalidRequestError("request is required")
 	}
@@ -201,7 +200,7 @@ func (s *DefaultChatService) buildUnifiedRequest(req *ChatRequest) (*llmcore.Uni
 	}, llmReq, nil
 }
 
-func (s *DefaultChatService) buildLocalToolRequest(runtime ChatRuntime, llmReq *llm.ChatRequest) (*llm.ChatRequest, bool) {
+func (s *DefaultChatService) buildLocalToolRequest(runtime ChatRuntime, llmReq *llmcore.ChatRequest) (*llmcore.ChatRequest, bool) {
 	if llmReq == nil || len(llmReq.Tools) == 0 || runtime.ToolManager == nil || runtime.ChatProvider == nil {
 		return nil, false
 	}
@@ -242,7 +241,7 @@ func (s *DefaultChatService) buildLocalToolRequest(runtime ChatRuntime, llmReq *
 	return &reactReq, true
 }
 
-func (s *DefaultChatService) executeLocalReAct(ctx context.Context, runtime ChatRuntime, req *llm.ChatRequest) (*llm.ChatResponse, *types.Error) {
+func (s *DefaultChatService) executeLocalReAct(ctx context.Context, runtime ChatRuntime, req *llmcore.ChatRequest) (*llmcore.ChatResponse, *types.Error) {
 	executor := llmtools.NewReActExecutor(
 		runtime.ChatProvider,
 		newChatToolManagerExecutor(runtime.ToolManager, chatToolRuntimeAgentID, req.Tools),
@@ -263,7 +262,7 @@ func (s *DefaultChatService) executeLocalReAct(ctx context.Context, runtime Chat
 	return resp, nil
 }
 
-func (s *DefaultChatService) streamLocalReAct(ctx context.Context, runtime ChatRuntime, req *llm.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (s *DefaultChatService) streamLocalReAct(ctx context.Context, runtime ChatRuntime, req *llmcore.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
 	executor := llmtools.NewReActExecutor(
 		runtime.ChatProvider,
 		newChatToolManagerExecutor(runtime.ToolManager, chatToolRuntimeAgentID, req.Tools),

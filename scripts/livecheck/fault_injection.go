@@ -10,10 +10,10 @@ import (
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )

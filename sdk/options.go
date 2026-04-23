@@ -5,12 +5,12 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm"
+	llm "github.com/BaSui01/agentflow/llm/core"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"go.uber.org/zap"
 )
 

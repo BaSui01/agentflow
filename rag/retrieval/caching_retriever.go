@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/metrics"
-	"github.com/BaSui01/agentflow/rag"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"go.uber.org/zap"
 )
 
 const (
-	cacheTypeRAGSemantic       = "rag_semantic"
+	cacheTypeRAGSemantic      = "rag_semantic"
 	cacheBackgroundOpTimeout  = 30 * time.Second
 	cacheEmptyResultTTLFactor = 10
 )
