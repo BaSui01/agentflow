@@ -107,7 +107,7 @@ type ExecutorStats struct {
 type SandboxExecutor struct {
 	config    SandboxConfig
 	backend   ExecutionBackend
-	validator *CodeValidator
+	validator *SandboxCodeValidator
 	logger    *zap.Logger
 	mu        sync.RWMutex
 	stats     ExecutorStats
@@ -121,7 +121,7 @@ func NewSandboxExecutor(config SandboxConfig, backend ExecutionBackend, logger *
 	return &SandboxExecutor{
 		config:    config,
 		backend:   backend,
-		validator: NewCodeValidator(),
+		validator: NewSandboxCodeValidator(),
 		logger:    logger.With(zap.String("component", "sandbox_executor")),
 	}
 }
@@ -564,14 +564,14 @@ func (p *ProcessBackend) buildArgs(req *ExecutionRequest) []string {
 // Cleanup is a no-op for the process backend.
 func (p *ProcessBackend) Cleanup() error { return nil }
 
-// CodeValidator performs simple pattern-based safety checks.
-type CodeValidator struct {
+// SandboxCodeValidator performs simple pattern-based safety checks.
+type SandboxCodeValidator struct {
 	blockedPatterns map[Language][]string
 }
 
-// NewCodeValidator creates a runtime validator tuned for sandbox execution.
-func NewCodeValidator() *CodeValidator {
-	return &CodeValidator{
+// NewSandboxCodeValidator creates a runtime validator tuned for sandbox execution.
+func NewSandboxCodeValidator() *SandboxCodeValidator {
+	return &SandboxCodeValidator{
 		blockedPatterns: map[Language][]string{
 			LangPython: {
 				"import os", "from os", "os.system", "os.popen", "os.exec",
@@ -625,7 +625,7 @@ func NewCodeValidator() *CodeValidator {
 }
 
 // Validate returns warnings for suspicious code patterns.
-func (v *CodeValidator) Validate(lang Language, code string) []string {
+func (v *SandboxCodeValidator) Validate(lang Language, code string) []string {
 	if strings.TrimSpace(code) == "" {
 		return nil
 	}
@@ -666,7 +666,7 @@ func findPattern(s, pattern string) int {
 // SandboxTool exposes sandbox execution as a JSON-driven tool.
 type SandboxTool struct {
 	executor  *SandboxExecutor
-	validator *CodeValidator
+	validator *SandboxCodeValidator
 	logger    *zap.Logger
 }
 
@@ -677,7 +677,7 @@ func NewSandboxTool(executor *SandboxExecutor, logger *zap.Logger) *SandboxTool 
 	}
 	return &SandboxTool{
 		executor:  executor,
-		validator: NewCodeValidator(),
+		validator: NewSandboxCodeValidator(),
 		logger:    logger.With(zap.String("component", "sandbox_tool")),
 	}
 }

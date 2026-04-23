@@ -11,10 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// CheckpointStore abstracts checkpoint persistence.
+// ExecutionCheckpointStore abstracts ExecutionCheckpoint persistence.
 // Default implementation uses filesystem (existing behavior).
 // Persistence-backed implementation uses TaskStoreAdapter.
-type CheckpointStore interface {
+type ExecutionCheckpointStore interface {
 	SaveCheckpoint(ctx context.Context, exec *Execution) error
 	LoadCheckpoint(ctx context.Context, execID string) (*Execution, error)
 	ListCheckpoints(ctx context.Context) ([]*Execution, error)
@@ -28,7 +28,7 @@ type FileCheckpointStore struct {
 	logger *zap.Logger
 }
 
-// NewFileCheckpointStore creates a new filesystem-based checkpoint store.
+// NewFileCheckpointStore creates a new filesystem-based ExecutionCheckpoint store.
 func NewFileCheckpointStore(dir string, logger *zap.Logger) *FileCheckpointStore {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -45,12 +45,12 @@ func (s *FileCheckpointStore) SaveCheckpoint(_ context.Context, exec *Execution)
 	data, err := json.Marshal(exec)
 	exec.mu.Unlock()
 	if err != nil {
-		return fmt.Errorf("marshaling checkpoint: %w", err)
+		return fmt.Errorf("marshaling ExecutionCheckpoint: %w", err)
 	}
 
 	path := filepath.Join(s.dir, exec.ID+".json")
 	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("writing checkpoint file: %w", err)
+		return fmt.Errorf("writing ExecutionCheckpoint file: %w", err)
 	}
 	return nil
 }
@@ -60,21 +60,21 @@ func (s *FileCheckpointStore) LoadCheckpoint(_ context.Context, execID string) (
 	path := filepath.Join(s.dir, execID+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading checkpoint file: %w", err)
+		return nil, fmt.Errorf("reading ExecutionCheckpoint file: %w", err)
 	}
 
 	var exec Execution
 	if err := json.Unmarshal(data, &exec); err != nil {
-		return nil, fmt.Errorf("unmarshaling checkpoint: %w", err)
+		return nil, fmt.Errorf("unmarshaling ExecutionCheckpoint: %w", err)
 	}
 	return &exec, nil
 }
 
-// ListCheckpoints reads all checkpoint files from the directory.
+// ListCheckpoints reads all ExecutionCheckpoint files from the directory.
 func (s *FileCheckpointStore) ListCheckpoints(_ context.Context) ([]*Execution, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
-		return nil, fmt.Errorf("reading checkpoint directory: %w", err)
+		return nil, fmt.Errorf("reading ExecutionCheckpoint directory: %w", err)
 	}
 
 	var execs []*Execution
@@ -85,13 +85,13 @@ func (s *FileCheckpointStore) ListCheckpoints(_ context.Context) ([]*Execution, 
 		path := filepath.Join(s.dir, entry.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
-			s.logger.Warn("skipping unreadable checkpoint file",
+			s.logger.Warn("skipping unreadable ExecutionCheckpoint file",
 				zap.String("path", path), zap.Error(err))
 			continue
 		}
 		var exec Execution
 		if err := json.Unmarshal(data, &exec); err != nil {
-			s.logger.Warn("skipping malformed checkpoint file",
+			s.logger.Warn("skipping malformed ExecutionCheckpoint file",
 				zap.String("path", path), zap.Error(err))
 			continue
 		}
@@ -100,11 +100,11 @@ func (s *FileCheckpointStore) ListCheckpoints(_ context.Context) ([]*Execution, 
 	return execs, nil
 }
 
-// DeleteCheckpoint removes a checkpoint file from disk.
+// DeleteCheckpoint removes a ExecutionCheckpoint file from disk.
 func (s *FileCheckpointStore) DeleteCheckpoint(_ context.Context, execID string) error {
 	path := filepath.Join(s.dir, execID+".json")
 	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("removing checkpoint file: %w", err)
+		return fmt.Errorf("removing ExecutionCheckpoint file: %w", err)
 	}
 	return nil
 }

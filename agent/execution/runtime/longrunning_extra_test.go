@@ -164,9 +164,9 @@ func TestTaskStoreBridge_SaveAndGetTask(t *testing.T) {
 
 	rec := &TaskRecord{
 		ID:       "task-1",
-		Status:   string(StateRunning),
+		Status:   string(ExecutionStateRunning),
 		Progress: 50.0,
-		Data:     []byte("checkpoint data"),
+		Data:     []byte("ExecutionCheckpoint data"),
 		Metadata: map[string]string{"key": "value"},
 	}
 
@@ -176,7 +176,7 @@ func TestTaskStoreBridge_SaveAndGetTask(t *testing.T) {
 	got, err := bridge.GetTask(ctx, "task-1")
 	require.NoError(t, err)
 	assert.Equal(t, "task-1", got.ID)
-	assert.Equal(t, []byte("checkpoint data"), got.Data)
+	assert.Equal(t, []byte("ExecutionCheckpoint data"), got.Data)
 }
 
 func TestTaskStoreBridge_ListTasks(t *testing.T) {
@@ -184,8 +184,8 @@ func TestTaskStoreBridge_ListTasks(t *testing.T) {
 	bridge := NewTaskStoreBridge(store)
 	ctx := context.Background()
 
-	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(StateRunning)})
-	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t2", Status: string(StateCompleted)})
+	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(ExecutionStateRunning)})
+	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t2", Status: string(ExecutionStateCompleted)})
 
 	tasks, err := bridge.ListTasks(ctx)
 	require.NoError(t, err)
@@ -197,7 +197,7 @@ func TestTaskStoreBridge_DeleteTask(t *testing.T) {
 	bridge := NewTaskStoreBridge(store)
 	ctx := context.Background()
 
-	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(StateRunning)})
+	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(ExecutionStateRunning)})
 	err := bridge.DeleteTask(ctx, "t1")
 	require.NoError(t, err)
 
@@ -210,7 +210,7 @@ func TestTaskStoreBridge_UpdateProgress(t *testing.T) {
 	bridge := NewTaskStoreBridge(store)
 	ctx := context.Background()
 
-	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(StateRunning)})
+	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(ExecutionStateRunning)})
 	err := bridge.UpdateProgress(ctx, "t1", 75.0)
 	require.NoError(t, err)
 }
@@ -220,8 +220,8 @@ func TestTaskStoreBridge_UpdateStatus(t *testing.T) {
 	bridge := NewTaskStoreBridge(store)
 	ctx := context.Background()
 
-	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(StateRunning)})
-	err := bridge.UpdateStatus(ctx, "t1", string(StateCompleted))
+	_ = bridge.SaveTask(ctx, &TaskRecord{ID: "t1", Status: string(ExecutionStateRunning)})
+	err := bridge.UpdateStatus(ctx, "t1", string(ExecutionStateCompleted))
 	require.NoError(t, err)
 }
 
@@ -230,13 +230,13 @@ func TestMapStatusToTaskStatus(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{string(StateInitialized), "pending"},
-		{string(StateRunning), "running"},
-		{string(StateResuming), "running"},
-		{string(StateCompleted), "completed"},
-		{string(StateFailed), "failed"},
-		{string(StateCancelled), "cancelled"},
-		{string(StatePaused), "pending"},
+		{string(ExecutionStateInitialized), "pending"},
+		{string(ExecutionStateRunning), "running"},
+		{string(ExecutionStateResuming), "running"},
+		{string(ExecutionStateCompleted), "completed"},
+		{string(ExecutionStateFailed), "failed"},
+		{string(ExecutionStateCancelled), "cancelled"},
+		{string(ExecutionStatePaused), "pending"},
 		{"unknown_state", "pending"},
 	}
 	for _, tt := range tests {

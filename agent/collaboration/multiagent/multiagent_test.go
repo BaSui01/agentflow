@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 )
 
 // mockAgent implements agent.Agent for testing.

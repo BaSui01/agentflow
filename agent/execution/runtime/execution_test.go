@@ -539,10 +539,10 @@ func TestProcessBackendCleanup(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// --- CodeValidator additional tests ---
+// --- SandboxCodeValidator additional tests ---
 
 func TestCodeValidatorMultiplePatterns(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 
 	// Python code with multiple dangerous patterns
 	code := "import os\nimport subprocess\nos.system('ls')\nsubprocess.call(['rm'])"
@@ -551,13 +551,13 @@ func TestCodeValidatorMultiplePatterns(t *testing.T) {
 }
 
 func TestCodeValidatorEmptyCode(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 	warnings := v.Validate(LangPython, "")
 	assert.Empty(t, warnings)
 }
 
 func TestCodeValidatorAllLanguages(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 	languages := []Language{LangPython, LangJavaScript, LangBash, LangGo, LangRust}
 	for _, lang := range languages {
 		// Safe code should produce no warnings
@@ -566,10 +566,10 @@ func TestCodeValidatorAllLanguages(t *testing.T) {
 	}
 }
 
-// --- CodeValidator ---
+// --- SandboxCodeValidator ---
 
 func TestCodeValidator(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 
 	t.Run("Python dangerous patterns", func(t *testing.T) {
 		warnings := v.Validate(LangPython, "import os\nos.system('rm -rf /')")

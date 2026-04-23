@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration/team"
 	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
+	"github.com/BaSui01/agentflow/agent/collaboration/team"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"

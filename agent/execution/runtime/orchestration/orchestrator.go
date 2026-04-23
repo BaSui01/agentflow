@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"go.uber.org/zap"
 )
 

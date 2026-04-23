@@ -25,7 +25,7 @@ func (b *TaskStoreBridge) SaveTask(ctx context.Context, task *TaskRecord) error 
 	now := time.Now()
 	asyncTask := &persistence.AsyncTask{
 		ID:        task.ID,
-		Type:      "checkpoint",
+		Type:      "ExecutionCheckpoint",
 		Status:    mapStatusToTaskStatus(task.Status),
 		Progress:  task.Progress,
 		Result:    task.Data,
@@ -48,7 +48,7 @@ func (b *TaskStoreBridge) GetTask(ctx context.Context, taskID string) (*TaskReco
 // ListTasks retrieves all tasks and converts them to TaskRecords.
 func (b *TaskStoreBridge) ListTasks(ctx context.Context) ([]*TaskRecord, error) {
 	asyncTasks, err := b.store.ListTasks(ctx, persistence.TaskFilter{
-		Type: "checkpoint",
+		Type: "ExecutionCheckpoint",
 	})
 	if err != nil {
 		return nil, err
@@ -83,17 +83,17 @@ func (b *TaskStoreBridge) UpdateStatus(ctx context.Context, taskID string, statu
 // mapStatusToTaskStatus maps an ExecutionState string to persistence.TaskStatus.
 func mapStatusToTaskStatus(status string) persistence.TaskStatus {
 	switch ExecutionState(status) {
-	case StateInitialized:
+	case ExecutionStateInitialized:
 		return persistence.TaskStatusPending
-	case StateRunning, StateResuming:
+	case ExecutionStateRunning, ExecutionStateResuming:
 		return persistence.TaskStatusRunning
-	case StateCompleted:
+	case ExecutionStateCompleted:
 		return persistence.TaskStatusCompleted
-	case StateFailed:
+	case ExecutionStateFailed:
 		return persistence.TaskStatusFailed
-	case StateCancelled:
+	case ExecutionStateCancelled:
 		return persistence.TaskStatusCancelled
-	case StatePaused:
+	case ExecutionStatePaused:
 		return persistence.TaskStatusPending
 	default:
 		return persistence.TaskStatusPending

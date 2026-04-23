@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/capabilities/reasoning"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -52,7 +51,7 @@ func TestDefaultBuildOptions(t *testing.T) {
 	assert.Equal(t, "0.1.0", opts.MCPServerVersion)
 	assert.Equal(t, "agentflow-lsp", opts.LSPServerName)
 	assert.Equal(t, "0.1.0", opts.LSPServerVersion)
-	assert.Equal(t, agent.ReasoningExposureOfficial, opts.ReasoningExposure)
+	assert.Equal(t, ReasoningExposureOfficial, opts.ReasoningExposure)
 	assert.False(t, opts.InitAgent)
 }
 
@@ -300,7 +299,7 @@ func TestBuilder_Build_MatchesRegistryUnifiedCoreForBuiltinFactory(t *testing.T)
 		Core: types.CoreConfig{
 			ID:   "typed-agent",
 			Name: "Typed Agent",
-			Type: string(agent.TypeAssistant),
+			Type: string(TypeAssistant),
 		},
 		LLM: types.LLMConfig{
 			Model: "gpt-4o-mini",
@@ -308,12 +307,12 @@ func TestBuilder_Build_MatchesRegistryUnifiedCoreForBuiltinFactory(t *testing.T)
 	}
 	provider := mocks.NewSuccessProvider("hello")
 	logger := zap.NewNop()
-	registry := agent.NewAgentRegistry(logger)
+	registry := NewAgentRegistry(logger)
 
 	created, err := registry.Create(cfg, testGateway(provider), nil, nil, nil, logger)
 	require.NoError(t, err)
 
-	registryAgent, ok := created.(*agent.BaseAgent)
+	registryAgent, ok := created.(*BaseAgent)
 	require.True(t, ok)
 	require.NotNil(t, registryAgent.ReasoningRegistry())
 
@@ -399,7 +398,7 @@ func TestResolveRuntimeReasoningRegistry_UsesAdvancedExposureModes(t *testing.T)
 		}),
 		"gpt-4",
 		"agent-1",
-		BuildOptions{ReasoningExposure: agent.ReasoningExposureAdvanced},
+		BuildOptions{ReasoningExposure: ReasoningExposureAdvanced},
 		zap.NewNop(),
 	)
 
@@ -415,7 +414,7 @@ func TestResolveRuntimeReasoningRegistry_UsesAllExposureModes(t *testing.T) {
 		}),
 		"gpt-4",
 		"agent-1",
-		BuildOptions{ReasoningExposure: agent.ReasoningExposureAll},
+		BuildOptions{ReasoningExposure: ReasoningExposureAll},
 		zap.NewNop(),
 	)
 
@@ -442,7 +441,7 @@ func TestBuilder_Build_InjectsCheckpointManagerWhenProvided(t *testing.T) {
 		},
 	}
 	provider := mocks.NewSuccessProvider("hello")
-	checkpointManager := &agent.CheckpointManager{}
+	checkpointManager := &CheckpointManager{}
 
 	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{CheckpointManager: checkpointManager}).
@@ -473,9 +472,9 @@ func TestBuilder_Build_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
 
-	rc := agent.RunConfigFromInputContext(map[string]any{"max_loop_iterations": 4})
+	rc := RunConfigFromInputContext(map[string]any{"max_loop_iterations": 4})
 	require.NotNil(t, rc)
-	ctx := agent.WithRunConfig(context.Background(), rc)
+	ctx := WithRunConfig(context.Background(), rc)
 
 	_, err = ag.ChatCompletion(ctx, []types.Message{{
 		Role:    types.RoleUser,
@@ -543,7 +542,7 @@ type builderResolverStub struct {
 	options types.ExecutionOptions
 }
 
-func (s builderResolverStub) Resolve(_ context.Context, _ types.AgentConfig, _ *agent.Input) types.ExecutionOptions {
+func (s builderResolverStub) Resolve(_ context.Context, _ types.AgentConfig, _ *Input) types.ExecutionOptions {
 	return s.options.Clone()
 }
 
@@ -558,15 +557,15 @@ func (builderAdapterStub) Build(options types.ExecutionOptions, messages []types
 
 type builderReasoningRuntimeStub struct{}
 
-func (builderReasoningRuntimeStub) Select(context.Context, *agent.Input, *agent.LoopState) agent.ReasoningSelection {
-	return agent.ReasoningSelection{Mode: "react"}
+func (builderReasoningRuntimeStub) Select(context.Context, *Input, *LoopState) ReasoningSelection {
+	return ReasoningSelection{Mode: "react"}
 }
 
-func (builderReasoningRuntimeStub) Execute(context.Context, *agent.Input, *agent.LoopState, agent.ReasoningSelection) (*agent.Output, error) {
-	return &agent.Output{Content: "runtime-output"}, nil
+func (builderReasoningRuntimeStub) Execute(context.Context, *Input, *LoopState, ReasoningSelection) (*Output, error) {
+	return &Output{Content: "runtime-output"}, nil
 }
 
-func (builderReasoningRuntimeStub) Reflect(context.Context, *agent.Input, *agent.Output, *agent.LoopState) (*agent.LoopReflectionResult, error) {
+func (builderReasoningRuntimeStub) Reflect(context.Context, *Input, *Output, *LoopState) (*LoopReflectionResult, error) {
 	return nil, nil
 }
 
@@ -606,7 +605,7 @@ func TestBuilder_Build_WiresCustomRuntimeComponents(t *testing.T) {
 	require.NotNil(t, provider.lastRequest)
 	assert.Equal(t, "resolver-model-adapted", provider.lastRequest.Model)
 
-	output, err := ag.Execute(context.Background(), &agent.Input{Content: "hello"})
+	output, err := ag.Execute(context.Background(), &Input{Content: "hello"})
 	require.NoError(t, err)
 	assert.Equal(t, "runtime-output", output.Content)
 }

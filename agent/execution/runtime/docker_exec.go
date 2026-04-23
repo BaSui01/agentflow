@@ -295,7 +295,7 @@ func sanitizeID(id string) string {
 // RealProcessBackend 执行 ExecutiveBackend 使用实际的 os/ exec.
 type RealProcessBackend struct {
 	*ProcessBackend
-	validator *CodeValidator
+	validator *SandboxCodeValidator
 }
 
 // New Real ProcessBackend 创建一个进程后端,可以实际执行代码.
@@ -305,7 +305,7 @@ func NewRealProcessBackend(logger *zap.Logger, enabled bool) *RealProcessBackend
 		ProcessBackend: NewProcessBackendWithConfig(logger, ProcessBackendConfig{
 			Enabled: enabled,
 		}),
-		validator: NewCodeValidator(),
+		validator: NewSandboxCodeValidator(),
 	}
 }
 

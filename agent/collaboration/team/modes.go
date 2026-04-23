@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/BaSui01/agentflow/agent"
 	planner "github.com/BaSui01/agentflow/agent/capabilities/planning"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 
 	"go.uber.org/zap"
 )

@@ -16,36 +16,36 @@ import (
 type ExecutionState string
 
 const (
-	StateInitialized ExecutionState = "initialized"
-	StateRunning     ExecutionState = "running"
-	StatePaused      ExecutionState = "paused"
-	StateResuming    ExecutionState = "resuming"
-	StateCompleted   ExecutionState = "completed"
-	StateFailed      ExecutionState = "failed"
-	StateCancelled   ExecutionState = "cancelled"
+	ExecutionStateInitialized ExecutionState = "initialized"
+	ExecutionStateRunning     ExecutionState = "running"
+	ExecutionStatePaused      ExecutionState = "paused"
+	ExecutionStateResuming    ExecutionState = "resuming"
+	ExecutionStateCompleted   ExecutionState = "completed"
+	ExecutionStateFailed      ExecutionState = "failed"
+	ExecutionStateCancelled   ExecutionState = "cancelled"
 )
 
 // Execution is a long-running agent execution instance.
 type Execution struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	State       ExecutionState `json:"state"`
-	Progress    float64        `json:"progress"`
-	CurrentStep int            `json:"current_step"`
-	TotalSteps  int            `json:"total_steps"`
-	StepNames   []string       `json:"step_names,omitempty"`
-	StartTime   time.Time      `json:"start_time"`
-	LastUpdate  time.Time      `json:"last_update"`
-	EndTime     *time.Time     `json:"end_time,omitempty"`
-	Checkpoints []Checkpoint   `json:"checkpoints"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
-	Error       string         `json:"error,omitempty"`
+	ID          string                `json:"id"`
+	Name        string                `json:"name"`
+	State       ExecutionState        `json:"state"`
+	Progress    float64               `json:"progress"`
+	CurrentStep int                   `json:"current_step"`
+	TotalSteps  int                   `json:"total_steps"`
+	StepNames   []string              `json:"step_names,omitempty"`
+	StartTime   time.Time             `json:"start_time"`
+	LastUpdate  time.Time             `json:"last_update"`
+	EndTime     *time.Time            `json:"end_time,omitempty"`
+	Checkpoints []ExecutionCheckpoint `json:"checkpoints"`
+	Metadata    map[string]any        `json:"metadata,omitempty"`
+	Error       string                `json:"error,omitempty"`
 
-	mu sync.Mutex `json:"-"` // protects concurrent checkpoint writes
+	mu sync.Mutex `json:"-"` // protects concurrent ExecutionCheckpoint writes
 }
 
-// Checkpoint is a recoverable checkpoint snapshot.
-type Checkpoint struct {
+// ExecutionCheckpoint is a recoverable ExecutionCheckpoint snapshot.
+type ExecutionCheckpoint struct {
 	ID        string         `json:"id"`
 	Step      int            `json:"step"`
 	State     any            `json:"state"`
@@ -76,27 +76,27 @@ func DefaultExecutorConfig() ExecutorConfig {
 // StepFunc represents a single step in a long-running execution.
 type StepFunc func(ctx context.Context, state any) (any, error)
 
-// NamedStep pairs a step function with a name for checkpoint-based resume.
+// NamedStep pairs a step function with a name for ExecutionCheckpoint-based resume.
 type NamedStep struct {
 	Name string
 	Func StepFunc
 }
 
-// EventType identifies the kind of execution event.
-type EventType string
+// ExecutionEventType identifies the kind of execution event.
+type ExecutionEventType string
 
 const (
-	EventStepStarted   EventType = "step_started"
-	EventStepCompleted EventType = "step_completed"
-	EventStepFailed    EventType = "step_failed"
-	EventCheckpointed  EventType = "checkpointed"
-	EventPaused        EventType = "paused"
-	EventResumed       EventType = "resumed"
+	ExecutionEventStepStarted   ExecutionEventType = "step_started"
+	ExecutionEventStepCompleted ExecutionEventType = "step_completed"
+	ExecutionEventStepFailed    ExecutionEventType = "step_failed"
+	ExecutionEventCheckpointed  ExecutionEventType = "checkpointed"
+	ExecutionEventPaused        ExecutionEventType = "paused"
+	ExecutionEventResumed       ExecutionEventType = "resumed"
 )
 
 // ExecutionEvent is emitted during execution lifecycle transitions.
 type ExecutionEvent struct {
-	Type      EventType
+	Type      ExecutionEventType
 	ExecID    string
 	Step      int
 	Timestamp time.Time
@@ -135,26 +135,26 @@ func (r *StepRegistry) Get(name string) (StepFunc, bool) {
 // ExecutorOption configures the Executor.
 type ExecutorOption func(*Executor)
 
-// WithCheckpointStore sets a custom CheckpointStore on the Executor.
-func WithCheckpointStore(store CheckpointStore) ExecutorOption {
+// WithCheckpointStore sets a custom ExecutionCheckpointStore on the Executor.
+func WithCheckpointStore(store ExecutionCheckpointStore) ExecutorOption {
 	return func(e *Executor) {
-		e.checkpointStore = store
+		e.ExecutionCheckpointStore = store
 	}
 }
 
 // Executor manages long-running agent executions.
 type Executor struct {
-	config          ExecutorConfig
-	executions      map[string]*Execution
-	steps           map[string][]StepFunc
-	namedSteps      map[string][]NamedStep
-	pauseCh         map[string]chan struct{}
-	resumeCh        map[string]chan struct{}
-	registry        *StepRegistry
-	checkpointStore CheckpointStore
-	OnEvent         func(ExecutionEvent)
-	logger          *zap.Logger
-	mu              sync.RWMutex
+	config                   ExecutorConfig
+	executions               map[string]*Execution
+	steps                    map[string][]StepFunc
+	namedSteps               map[string][]NamedStep
+	pauseCh                  map[string]chan struct{}
+	resumeCh                 map[string]chan struct{}
+	registry                 *StepRegistry
+	ExecutionCheckpointStore ExecutionCheckpointStore
+	OnEvent                  func(ExecutionEvent)
+	logger                   *zap.Logger
+	mu                       sync.RWMutex
 }
 
 // NewExecutor creates a new long-running executor.
@@ -163,7 +163,7 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger, opts ...ExecutorOpti
 		logger = zap.NewNop()
 	}
 	if err := os.MkdirAll(config.CheckpointDir, 0755); err != nil {
-		logger.Warn("failed to create checkpoint directory",
+		logger.Warn("failed to create ExecutionCheckpoint directory",
 			zap.String("dir", config.CheckpointDir),
 			zap.Error(err),
 		)
@@ -179,7 +179,7 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger, opts ...ExecutorOpti
 		registry:   NewStepRegistry(),
 		logger:     logger.With(zap.String("component", "longrunning")),
 	}
-	e.checkpointStore = NewFileCheckpointStore(config.CheckpointDir, logger)
+	e.ExecutionCheckpointStore = NewFileCheckpointStore(config.CheckpointDir, logger)
 
 	for _, opt := range opts {
 		opt(e)
@@ -215,13 +215,13 @@ func (e *Executor) CreateExecution(name string, steps []StepFunc) *Execution {
 	exec := &Execution{
 		ID:          generateID("exec"),
 		Name:        name,
-		State:       StateInitialized,
+		State:       ExecutionStateInitialized,
 		Progress:    0,
 		CurrentStep: 0,
 		TotalSteps:  len(steps),
 		StartTime:   time.Now(),
 		LastUpdate:  time.Now(),
-		Checkpoints: make([]Checkpoint, 0),
+		Checkpoints: make([]ExecutionCheckpoint, 0),
 		Metadata:    make(map[string]any),
 	}
 
@@ -254,14 +254,14 @@ func (e *Executor) CreateNamedExecution(name string, steps []NamedStep) *Executi
 	exec := &Execution{
 		ID:          generateID("exec"),
 		Name:        name,
-		State:       StateInitialized,
+		State:       ExecutionStateInitialized,
 		Progress:    0,
 		CurrentStep: 0,
 		TotalSteps:  len(steps),
 		StepNames:   stepNames,
 		StartTime:   time.Now(),
 		LastUpdate:  time.Now(),
-		Checkpoints: make([]Checkpoint, 0),
+		Checkpoints: make([]ExecutionCheckpoint, 0),
 		Metadata:    make(map[string]any),
 	}
 
@@ -295,7 +295,7 @@ func (e *Executor) Start(ctx context.Context, execID string, initialState any) e
 	}
 
 	exec.mu.Lock()
-	exec.State = StateRunning
+	exec.State = ExecutionStateRunning
 	exec.LastUpdate = time.Now()
 	exec.mu.Unlock()
 
@@ -324,7 +324,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		select {
 		case <-ctx.Done():
 			exec.mu.Lock()
-			exec.State = StateCancelled
+			exec.State = ExecutionStateCancelled
 			exec.mu.Unlock()
 			e.saveCheckpoint(exec, currentState)
 			return
@@ -338,11 +338,11 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		select {
 		case <-pauseCh:
 			exec.mu.Lock()
-			exec.State = StatePaused
+			exec.State = ExecutionStatePaused
 			exec.mu.Unlock()
 			e.saveCheckpoint(exec, currentState)
 			e.emitEvent(ExecutionEvent{
-				Type: EventPaused, ExecID: exec.ID,
+				Type: ExecutionEventPaused, ExecID: exec.ID,
 				Step: exec.CurrentStep, Timestamp: time.Now(), State: currentState,
 			})
 			// Block until resume signal or context cancellation.
@@ -357,15 +357,15 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 				e.mu.Unlock()
 
 				exec.mu.Lock()
-				exec.State = StateRunning
+				exec.State = ExecutionStateRunning
 				exec.mu.Unlock()
 				e.emitEvent(ExecutionEvent{
-					Type: EventResumed, ExecID: exec.ID,
+					Type: ExecutionEventResumed, ExecID: exec.ID,
 					Step: exec.CurrentStep, Timestamp: time.Now(), State: currentState,
 				})
 			case <-ctx.Done():
 				exec.mu.Lock()
-				exec.State = StateCancelled
+				exec.State = ExecutionStateCancelled
 				exec.mu.Unlock()
 				e.saveCheckpoint(exec, currentState)
 				return
@@ -376,7 +376,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		// Execute step with retry and exponential backoff.
 		step := steps[exec.CurrentStep]
 		e.emitEvent(ExecutionEvent{
-			Type: EventStepStarted, ExecID: exec.ID,
+			Type: ExecutionEventStepStarted, ExecID: exec.ID,
 			Step: exec.CurrentStep, Timestamp: time.Now(), State: currentState,
 		})
 
@@ -395,7 +395,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 				zap.Error(err),
 			)
 			e.emitEvent(ExecutionEvent{
-				Type: EventStepFailed, ExecID: exec.ID,
+				Type: ExecutionEventStepFailed, ExecID: exec.ID,
 				Step: exec.CurrentStep, Timestamp: time.Now(), Error: err, State: currentState,
 			})
 			if retry < e.config.MaxRetries {
@@ -407,7 +407,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 				case <-time.After(backoff):
 				case <-ctx.Done():
 					exec.mu.Lock()
-					exec.State = StateCancelled
+					exec.State = ExecutionStateCancelled
 					exec.mu.Unlock()
 					e.saveCheckpoint(exec, currentState)
 					return
@@ -417,7 +417,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 
 		if err != nil {
 			exec.mu.Lock()
-			exec.State = StateFailed
+			exec.State = ExecutionStateFailed
 			exec.Error = err.Error()
 			now := time.Now()
 			exec.EndTime = &now
@@ -439,7 +439,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		exec.mu.Unlock()
 
 		e.emitEvent(ExecutionEvent{
-			Type: EventStepCompleted, ExecID: exec.ID,
+			Type: ExecutionEventStepCompleted, ExecID: exec.ID,
 			Step: exec.CurrentStep - 1, Timestamp: time.Now(), State: currentState,
 		})
 
@@ -451,7 +451,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 	}
 
 	exec.mu.Lock()
-	exec.State = StateCompleted
+	exec.State = ExecutionStateCompleted
 	exec.Progress = 100
 	now := time.Now()
 	exec.EndTime = &now
@@ -479,28 +479,28 @@ func (e *Executor) cleanupExecutionChannels(execID string) {
 	delete(e.namedSteps, execID)
 }
 
-// saveCheckpoint persists execution state via the CheckpointStore.
+// saveCheckpoint persists execution state via the ExecutionCheckpointStore.
 func (e *Executor) saveCheckpoint(exec *Execution, state any) {
 	exec.mu.Lock()
-	checkpoint := Checkpoint{
+	ExecutionCheckpoint := ExecutionCheckpoint{
 		ID:        generateID("cp"),
 		Step:      exec.CurrentStep,
 		State:     state,
 		Timestamp: time.Now(),
 	}
-	exec.Checkpoints = append(exec.Checkpoints, checkpoint)
+	exec.Checkpoints = append(exec.Checkpoints, ExecutionCheckpoint)
 	exec.mu.Unlock()
 
 	e.emitEvent(ExecutionEvent{
-		Type: EventCheckpointed, ExecID: exec.ID,
-		Step: checkpoint.Step, Timestamp: checkpoint.Timestamp, State: state,
+		Type: ExecutionEventCheckpointed, ExecID: exec.ID,
+		Step: ExecutionCheckpoint.Step, Timestamp: ExecutionCheckpoint.Timestamp, State: state,
 	})
 
-	if e.checkpointStore == nil {
+	if e.ExecutionCheckpointStore == nil {
 		return
 	}
-	if err := e.checkpointStore.SaveCheckpoint(context.Background(), exec); err != nil {
-		e.logger.Error("failed to save checkpoint", zap.Error(err))
+	if err := e.ExecutionCheckpointStore.SaveCheckpoint(context.Background(), exec); err != nil {
+		e.logger.Error("failed to save ExecutionCheckpoint", zap.Error(err))
 	}
 }
 
@@ -519,7 +519,7 @@ func (e *Executor) Pause(execID string) error {
 	state := exec.State
 	exec.mu.Unlock()
 
-	if state != StateRunning {
+	if state != ExecutionStateRunning {
 		return fmt.Errorf("execution not running: %s", state)
 	}
 
@@ -550,7 +550,7 @@ func (e *Executor) Resume(execID string) error {
 	state := exec.State
 	exec.mu.Unlock()
 
-	if state != StatePaused {
+	if state != ExecutionStatePaused {
 		return fmt.Errorf("execution not paused: %s", state)
 	}
 
@@ -568,14 +568,14 @@ func (e *Executor) Resume(execID string) error {
 	return nil
 }
 
-// LoadExecution loads an execution from the checkpoint store.
+// LoadExecution loads an execution from the ExecutionCheckpoint store.
 func (e *Executor) LoadExecution(execID string) (*Execution, error) {
-	if e.checkpointStore == nil {
-		return nil, fmt.Errorf("checkpoint store not configured")
+	if e.ExecutionCheckpointStore == nil {
+		return nil, fmt.Errorf("ExecutionCheckpoint store not configured")
 	}
-	exec, err := e.checkpointStore.LoadCheckpoint(context.Background(), execID)
+	exec, err := e.ExecutionCheckpointStore.LoadCheckpoint(context.Background(), execID)
 	if err != nil {
-		return nil, fmt.Errorf("loading checkpoint: %w", err)
+		return nil, fmt.Errorf("loading ExecutionCheckpoint: %w", err)
 	}
 
 	e.mu.Lock()
@@ -587,7 +587,7 @@ func (e *Executor) LoadExecution(execID string) (*Execution, error) {
 	return exec, nil
 }
 
-// ResumeExecution resumes a loaded execution from its last checkpoint using the step registry.
+// ResumeExecution resumes a loaded execution from its last ExecutionCheckpoint using the step registry.
 func (e *Executor) ResumeExecution(ctx context.Context, execID string, lastState any) error {
 	e.mu.RLock()
 	exec, ok := e.executions[execID]
@@ -616,18 +616,18 @@ func (e *Executor) ResumeExecution(ctx context.Context, execID string, lastState
 	e.mu.Unlock()
 
 	exec.mu.Lock()
-	exec.State = StateResuming
+	exec.State = ExecutionStateResuming
 	exec.LastUpdate = time.Now()
 	exec.mu.Unlock()
 
-	e.logger.Info("resuming execution from checkpoint",
+	e.logger.Info("resuming execution from ExecutionCheckpoint",
 		zap.String("exec_id", execID),
 		zap.Int("from_step", exec.CurrentStep),
 		zap.Int("total_steps", exec.TotalSteps),
 	)
 
 	exec.mu.Lock()
-	exec.State = StateRunning
+	exec.State = ExecutionStateRunning
 	exec.mu.Unlock()
 
 	go e.runExecution(ctx, exec, steps, lastState)
@@ -658,10 +658,10 @@ func (e *Executor) ListExecutions() []*Execution {
 // resumable (running, paused, or resuming) and have named steps registered in
 // the step registry.
 func (e *Executor) AutoResumeAll(ctx context.Context) (int, error) {
-	if e.checkpointStore == nil {
+	if e.ExecutionCheckpointStore == nil {
 		return 0, nil
 	}
-	execs, err := e.checkpointStore.ListCheckpoints(ctx)
+	execs, err := e.ExecutionCheckpointStore.ListCheckpoints(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing checkpoints: %w", err)
 	}
@@ -718,14 +718,14 @@ func (e *Executor) AutoResumeAll(ctx context.Context) (int, error) {
 // isResumableState returns true if the execution state can be resumed.
 func isResumableState(state ExecutionState) bool {
 	switch state {
-	case StateRunning, StatePaused, StateResuming:
+	case ExecutionStateRunning, ExecutionStatePaused, ExecutionStateResuming:
 		return true
 	default:
 		return false
 	}
 }
 
-// drainTickers processes any pending checkpoint/heartbeat ticks.
+// drainTickers processes any pending ExecutionCheckpoint/heartbeat ticks.
 func (e *Executor) drainTickers(exec *Execution, cpTicker, hbTicker *time.Ticker, state any) {
 	for {
 		select {

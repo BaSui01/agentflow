@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/adapters/handoff"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"go.uber.org/zap"
 )
 

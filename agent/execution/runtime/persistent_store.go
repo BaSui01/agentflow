@@ -9,7 +9,7 @@ import (
 )
 
 // TaskStoreAdapter is a local interface matching the subset of
-// persistence.TaskStore needed for checkpoint storage.
+// persistence.TaskStore needed for ExecutionCheckpoint storage.
 // Using local interface pattern to avoid direct import of persistence
 // in most of the longrunning package.
 type TaskStoreAdapter interface {
@@ -30,13 +30,13 @@ type TaskRecord struct {
 	Metadata map[string]string
 }
 
-// PersistentCheckpointStore implements CheckpointStore using TaskStoreAdapter.
+// PersistentCheckpointStore implements ExecutionCheckpointStore using TaskStoreAdapter.
 type PersistentCheckpointStore struct {
 	store  TaskStoreAdapter
 	logger *zap.Logger
 }
 
-// NewPersistentCheckpointStore creates a checkpoint store backed by a TaskStoreAdapter.
+// NewPersistentCheckpointStore creates a ExecutionCheckpoint store backed by a TaskStoreAdapter.
 func NewPersistentCheckpointStore(store TaskStoreAdapter, logger *zap.Logger) *PersistentCheckpointStore {
 	if logger == nil {
 		logger = zap.NewNop()

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/google/uuid"

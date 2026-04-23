@@ -55,12 +55,12 @@ func waitForCheckpointFile(t *testing.T, dir, execID string, timeout time.Durati
 			return data
 		}
 		if !os.IsNotExist(err) {
-			t.Fatalf("failed reading checkpoint file: %v", err)
+			t.Fatalf("failed reading ExecutionCheckpoint file: %v", err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	t.Fatalf("checkpoint file not found: %s", path)
+	t.Fatalf("ExecutionCheckpoint file not found: %s", path)
 	return nil
 }
 
@@ -93,7 +93,7 @@ func TestExecutionLifecycle(t *testing.T) {
 	}
 
 	exec := e.CreateExecution("lifecycle-test", steps)
-	if exec.State != StateInitialized {
+	if exec.State != ExecutionStateInitialized {
 		t.Fatalf("expected initialized, got %s", exec.State)
 	}
 	if !strings.HasPrefix(exec.ID, "exec_") {
@@ -105,7 +105,7 @@ func TestExecutionLifecycle(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 5*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 
 	mu.Lock()
 	if len(callOrder) != 3 || callOrder[0] != 1 || callOrder[1] != 2 || callOrder[2] != 3 {
@@ -154,14 +154,14 @@ func TestPauseResume(t *testing.T) {
 	// Let step 1 finish so the loop iteration completes and hits the pause check.
 	close(step2Gate)
 
-	waitForState(t, exec, StatePaused, 5*time.Second)
+	waitForState(t, exec, ExecutionStatePaused, 5*time.Second)
 
 	// Resume and wait for completion.
 	if err := e.Resume(exec.ID); err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 5*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 }
 
 func TestCheckpointSaveLoad(t *testing.T) {
@@ -174,22 +174,22 @@ func TestCheckpointSaveLoad(t *testing.T) {
 		},
 	}
 
-	exec := e.CreateExecution("checkpoint-test", steps)
+	exec := e.CreateExecution("ExecutionCheckpoint-test", steps)
 	ctx := context.Background()
 	if err := e.Start(ctx, exec.ID, "init"); err != nil {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 5*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 
-	// Verify checkpoint file exists on disk.
+	// Verify ExecutionCheckpoint file exists on disk.
 	data := waitForCheckpointFile(t, cfg.CheckpointDir, exec.ID, 2*time.Second)
 
 	var loaded Execution
 	if err := json.Unmarshal(data, &loaded); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
-	if loaded.State != StateCompleted {
+	if loaded.State != ExecutionStateCompleted {
 		t.Fatalf("loaded state: expected completed, got %s", loaded.State)
 	}
 
@@ -227,7 +227,7 @@ func TestRetryWithExponentialBackoff(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 10*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 10*time.Second)
 
 	got := atomic.LoadInt32(&attempts)
 	if got != 3 {
@@ -252,7 +252,7 @@ func TestRetryExhausted(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateFailed, 10*time.Second)
+	waitForState(t, exec, ExecutionStateFailed, 10*time.Second)
 
 	exec.mu.Lock()
 	errMsg := exec.Error
@@ -289,13 +289,13 @@ func TestContextCancellation(t *testing.T) {
 
 	// The step returns ctx.Err() which is non-nil, so after retries it fails.
 	// But context cancellation is also checked at the top of the loop and during backoff.
-	// Either StateCancelled or StateFailed is acceptable here.
+	// Either ExecutionStateCancelled or ExecutionStateFailed is acceptable here.
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		exec.mu.Lock()
 		s := exec.State
 		exec.mu.Unlock()
-		if s == StateCancelled || s == StateFailed {
+		if s == ExecutionStateCancelled || s == ExecutionStateFailed {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -324,7 +324,7 @@ func TestNamedStepRegistrationAndResume(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 5*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 
 	if len(exec.StepNames) != 2 {
 		t.Fatalf("expected 2 step names, got %d", len(exec.StepNames))
@@ -337,7 +337,7 @@ func TestNamedStepRegistrationAndResume(t *testing.T) {
 		}
 	}
 
-	// Test ResumeExecution: simulate loading from checkpoint and resuming.
+	// Test ResumeExecution: simulate loading from ExecutionCheckpoint and resuming.
 	e2 := NewExecutor(cfg, nil)
 	// Register steps in the new executor's registry.
 	e2.Registry().Register("step-a", namedSteps[0].Func)
@@ -352,7 +352,7 @@ func TestNamedStepRegistrationAndResume(t *testing.T) {
 	// Simulate partial completion: reset to step 1.
 	loaded.mu.Lock()
 	loaded.CurrentStep = 1
-	loaded.State = StatePaused
+	loaded.State = ExecutionStatePaused
 	loaded.mu.Unlock()
 
 	err = e2.ResumeExecution(ctx, loaded.ID, "a-done")
@@ -360,14 +360,14 @@ func TestNamedStepRegistrationAndResume(t *testing.T) {
 		t.Fatalf("ResumeExecution failed: %v", err)
 	}
 
-	waitForState(t, loaded, StateCompleted, 5*time.Second)
+	waitForState(t, loaded, ExecutionStateCompleted, 5*time.Second)
 }
 
 func TestEventHooks(t *testing.T) {
 	cfg := testConfig(t)
 	e := NewExecutor(cfg, nil)
 
-	var events []EventType
+	var events []ExecutionEventType
 	var mu sync.Mutex
 
 	e.OnEvent = func(evt ExecutionEvent) {
@@ -388,7 +388,7 @@ func TestEventHooks(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 5*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -399,11 +399,11 @@ func TestEventHooks(t *testing.T) {
 	hasCheckpointed := false
 	for _, et := range events {
 		switch et {
-		case EventStepStarted:
+		case ExecutionEventStepStarted:
 			hasStarted = true
-		case EventStepCompleted:
+		case ExecutionEventStepCompleted:
 			hasCompleted = true
-		case EventCheckpointed:
+		case ExecutionEventCheckpointed:
 			hasCheckpointed = true
 		}
 	}

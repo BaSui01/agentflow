@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

@@ -937,22 +937,22 @@ func TestRealProcessBackend_Execute_UnsupportedLang(t *testing.T) {
 	assert.False(t, result.Success)
 }
 
-// --- CodeValidator more coverage ---
+// --- SandboxCodeValidator more coverage ---
 
 func TestCodeValidator_Validate_GoPatterns(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 	warnings := v.Validate(LangGo, `import "os/exec"; exec.Command("ls")`)
 	assert.NotEmpty(t, warnings)
 }
 
 func TestCodeValidator_Validate_RustPatterns(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 	warnings := v.Validate(LangRust, `unsafe { std::process::Command::new("ls") }`)
 	assert.NotEmpty(t, warnings)
 }
 
 func TestCodeValidator_Validate_UnknownLanguage(t *testing.T) {
-	v := NewCodeValidator()
+	v := NewSandboxCodeValidator()
 	warnings := v.Validate(Language("lua"), "print('hi')")
 	assert.Empty(t, warnings)
 }

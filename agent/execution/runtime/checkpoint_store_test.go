@@ -19,13 +19,13 @@ func TestFileCheckpointStore_SaveLoadLifecycle(t *testing.T) {
 	exec := &Execution{
 		ID:          "exec_test_001",
 		Name:        "lifecycle-test",
-		State:       StateCompleted,
+		State:       ExecutionStateCompleted,
 		Progress:    100,
 		CurrentStep: 2,
 		TotalSteps:  2,
 		StartTime:   time.Now().Add(-time.Minute),
 		LastUpdate:  time.Now(),
-		Checkpoints: []Checkpoint{
+		Checkpoints: []ExecutionCheckpoint{
 			{ID: "cp_1", Step: 0, State: "state-0", Timestamp: time.Now()},
 			{ID: "cp_2", Step: 1, State: "state-1", Timestamp: time.Now()},
 		},
@@ -40,7 +40,7 @@ func TestFileCheckpointStore_SaveLoadLifecycle(t *testing.T) {
 	// Verify file exists on disk
 	path := filepath.Join(dir, exec.ID+".json")
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("checkpoint file not found: %v", err)
+		t.Fatalf("ExecutionCheckpoint file not found: %v", err)
 	}
 
 	// Load
@@ -51,8 +51,8 @@ func TestFileCheckpointStore_SaveLoadLifecycle(t *testing.T) {
 	if loaded.ID != exec.ID {
 		t.Fatalf("ID mismatch: got %s, want %s", loaded.ID, exec.ID)
 	}
-	if loaded.State != StateCompleted {
-		t.Fatalf("State mismatch: got %s, want %s", loaded.State, StateCompleted)
+	if loaded.State != ExecutionStateCompleted {
+		t.Fatalf("State mismatch: got %s, want %s", loaded.State, ExecutionStateCompleted)
 	}
 	if loaded.Progress != 100 {
 		t.Fatalf("Progress mismatch: got %f, want 100", loaded.Progress)
@@ -72,8 +72,8 @@ func TestFileCheckpointStore_ListCheckpoints(t *testing.T) {
 		exec := &Execution{
 			ID:          fmt.Sprintf("exec_list_%d", i),
 			Name:        fmt.Sprintf("list-test-%d", i),
-			State:       StateCompleted,
-			Checkpoints: []Checkpoint{},
+			State:       ExecutionStateCompleted,
+			Checkpoints: []ExecutionCheckpoint{},
 			Metadata:    map[string]any{},
 		}
 		if err := store.SaveCheckpoint(ctx, exec); err != nil {
@@ -98,8 +98,8 @@ func TestFileCheckpointStore_DeleteCheckpoint(t *testing.T) {
 	exec := &Execution{
 		ID:          "exec_delete_001",
 		Name:        "delete-test",
-		State:       StateCompleted,
-		Checkpoints: []Checkpoint{},
+		State:       ExecutionStateCompleted,
+		Checkpoints: []ExecutionCheckpoint{},
 		Metadata:    map[string]any{},
 	}
 	if err := store.SaveCheckpoint(ctx, exec); err != nil {
@@ -118,7 +118,7 @@ func TestFileCheckpointStore_DeleteCheckpoint(t *testing.T) {
 
 	// Load should fail
 	if _, err := store.LoadCheckpoint(ctx, exec.ID); err == nil {
-		t.Fatal("expected error loading deleted checkpoint")
+		t.Fatal("expected error loading deleted ExecutionCheckpoint")
 	}
 }
 
@@ -201,13 +201,13 @@ func TestPersistentCheckpointStore_SaveLoad(t *testing.T) {
 	exec := &Execution{
 		ID:          "exec_persist_001",
 		Name:        "persist-test",
-		State:       StateRunning,
+		State:       ExecutionStateRunning,
 		Progress:    50,
 		CurrentStep: 1,
 		TotalSteps:  2,
 		StartTime:   time.Now(),
 		LastUpdate:  time.Now(),
-		Checkpoints: []Checkpoint{},
+		Checkpoints: []ExecutionCheckpoint{},
 		Metadata:    map[string]any{"key": "val"},
 	}
 
@@ -221,8 +221,8 @@ func TestPersistentCheckpointStore_SaveLoad(t *testing.T) {
 	if !ok {
 		t.Fatal("expected record to be saved")
 	}
-	if rec.Status != string(StateRunning) {
-		t.Fatalf("expected status %s, got %s", StateRunning, rec.Status)
+	if rec.Status != string(ExecutionStateRunning) {
+		t.Fatalf("expected status %s, got %s", ExecutionStateRunning, rec.Status)
 	}
 
 	// Verify the Data field is valid JSON of the Execution.
@@ -281,8 +281,8 @@ func TestPersistentCheckpointStore_ListAndDelete(t *testing.T) {
 		exec := &Execution{
 			ID:          fmt.Sprintf("exec_ld_%d", i),
 			Name:        fmt.Sprintf("ld-test-%d", i),
-			State:       StateCompleted,
-			Checkpoints: []Checkpoint{},
+			State:       ExecutionStateCompleted,
+			Checkpoints: []ExecutionCheckpoint{},
 			Metadata:    map[string]any{},
 		}
 		if err := store.SaveCheckpoint(ctx, exec); err != nil {
@@ -335,14 +335,14 @@ func TestExecutorWithCustomCheckpointStore(t *testing.T) {
 		t.Fatalf("start failed: %v", err)
 	}
 
-	waitForState(t, exec, StateCompleted, 5*time.Second)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 
-	// Verify checkpoint was saved via the custom store.
+	// Verify ExecutionCheckpoint was saved via the custom store.
 	loaded, err := customStore.LoadCheckpoint(ctx, exec.ID)
 	if err != nil {
 		t.Fatalf("LoadCheckpoint from custom store failed: %v", err)
 	}
-	if loaded.State != StateCompleted {
+	if loaded.State != ExecutionStateCompleted {
 		t.Fatalf("expected completed, got %s", loaded.State)
 	}
 }
@@ -359,18 +359,18 @@ func TestAutoResumeAll(t *testing.T) {
 
 	store := NewFileCheckpointStore(dir, nil)
 
-	// Create a "paused" execution checkpoint on disk.
+	// Create a "paused" execution ExecutionCheckpoint on disk.
 	exec := &Execution{
 		ID:          "exec_resume_001",
 		Name:        "resume-test",
-		State:       StatePaused,
+		State:       ExecutionStatePaused,
 		Progress:    50,
 		CurrentStep: 1,
 		TotalSteps:  2,
 		StepNames:   []string{"step-a", "step-b"},
 		StartTime:   time.Now().Add(-time.Minute),
 		LastUpdate:  time.Now(),
-		Checkpoints: []Checkpoint{
+		Checkpoints: []ExecutionCheckpoint{
 			{ID: "cp_1", Step: 1, State: "a-done", Timestamp: time.Now()},
 		},
 		Metadata: map[string]any{},
@@ -406,7 +406,7 @@ func TestAutoResumeAll(t *testing.T) {
 		t.Fatal("resumed execution not found in executor")
 	}
 
-	waitForState(t, resumedExec, StateCompleted, 5*time.Second)
+	waitForState(t, resumedExec, ExecutionStateCompleted, 5*time.Second)
 }
 
 func TestAutoResumeAll_SkipsCompleted(t *testing.T) {
@@ -425,9 +425,9 @@ func TestAutoResumeAll_SkipsCompleted(t *testing.T) {
 	exec := &Execution{
 		ID:          "exec_completed_001",
 		Name:        "completed-test",
-		State:       StateCompleted,
+		State:       ExecutionStateCompleted,
 		StepNames:   []string{"step-a"},
-		Checkpoints: []Checkpoint{},
+		Checkpoints: []ExecutionCheckpoint{},
 		Metadata:    map[string]any{},
 	}
 	if err := store.SaveCheckpoint(ctx, exec); err != nil {
