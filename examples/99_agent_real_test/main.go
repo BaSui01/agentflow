@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"

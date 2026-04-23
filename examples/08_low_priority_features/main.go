@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	agentcore "github.com/BaSui01/agentflow/agent/core"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/monitoring"
 	"github.com/BaSui01/agentflow/agent/persistence"
@@ -418,10 +419,10 @@ func demoObservabilitySystem(logger *zap.Logger) {
 
 	// 7. Simple evaluation strategy path
 	eval := &observability.SimpleEvaluationStrategy{}
-	_, _ = eval.Evaluate(context.Background(), &agent.Input{
+	_, _ = eval.Evaluate(context.Background(), &agentcore.Input{
 		TraceID: "trace-eval",
 		Content: "summarize this incident",
-	}, &agent.Output{
+	}, &agentcore.Output{
 		TraceID: "trace-eval",
 		Content: "incident summary output",
 	})

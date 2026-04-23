@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
@@ -65,12 +65,12 @@ type testOrchestrationAgent struct {
 	id string
 }
 
-func (a *testOrchestrationAgent) ID() string                                   { return a.id }
-func (a *testOrchestrationAgent) Name() string                                 { return a.id }
-func (a *testOrchestrationAgent) Type() agent.AgentType                        { return agent.TypeGeneric }
-func (a *testOrchestrationAgent) State() agent.State                           { return agent.StateReady }
-func (a *testOrchestrationAgent) Init(context.Context) error                    { return nil }
-func (a *testOrchestrationAgent) Teardown(context.Context) error               { return nil }
+func (a *testOrchestrationAgent) ID() string                     { return a.id }
+func (a *testOrchestrationAgent) Name() string                   { return a.id }
+func (a *testOrchestrationAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (a *testOrchestrationAgent) State() agent.State             { return agent.StateReady }
+func (a *testOrchestrationAgent) Init(context.Context) error     { return nil }
+func (a *testOrchestrationAgent) Teardown(context.Context) error { return nil }
 func (a *testOrchestrationAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return nil, nil
 }
@@ -133,8 +133,8 @@ func TestBuildExecutionNode_AllStepTypes(t *testing.T) {
 		CodeHandler: func(ctx context.Context, input core.StepInput) (map[string]any, error) {
 			return map[string]any{"code": true}, nil
 		},
-		ChainRegistry:      &testChainRegistry{},
-		HybridRetriever:    &stepIntegrationHybridRetriever{},
+		ChainRegistry:     &testChainRegistry{},
+		HybridRetriever:   &stepIntegrationHybridRetriever{},
 		MultiHopReasoner:  &stepIntegrationMultiHopReasoner{},
 		RetrievalReranker: &stepIntegrationReranker{},
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
@@ -369,7 +369,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 			ID:                     def.ID,
 			Type:                   core.StepTypeOrchestration,
 			OrchestrationMode:      stepDef.Orchestration.Mode,
-			OrchestrationAgents:   append([]string(nil), stepDef.Orchestration.AgentIDs...),
+			OrchestrationAgents:    append([]string(nil), stepDef.Orchestration.AgentIDs...),
 			OrchestrationMaxRounds: stepDef.Orchestration.MaxRounds,
 		}
 		if stepDef.Orchestration.TimeoutMs > 0 {

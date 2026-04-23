@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"go.uber.org/zap"
 )
@@ -18,12 +18,12 @@ type mockOrchestrationAgent struct {
 	out  string
 }
 
-func (m *mockOrchestrationAgent) ID() string                                   { return m.id }
-func (m *mockOrchestrationAgent) Name() string                                  { return m.name }
-func (m *mockOrchestrationAgent) Type() agent.AgentType                         { return agent.TypeGeneric }
-func (m *mockOrchestrationAgent) State() agent.State                            { return agent.StateReady }
-func (m *mockOrchestrationAgent) Init(context.Context) error                    { return nil }
-func (m *mockOrchestrationAgent) Teardown(context.Context) error                { return nil }
+func (m *mockOrchestrationAgent) ID() string                     { return m.id }
+func (m *mockOrchestrationAgent) Name() string                   { return m.name }
+func (m *mockOrchestrationAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (m *mockOrchestrationAgent) State() agent.State             { return agent.StateReady }
+func (m *mockOrchestrationAgent) Init(context.Context) error     { return nil }
+func (m *mockOrchestrationAgent) Teardown(context.Context) error { return nil }
 func (m *mockOrchestrationAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return nil, nil
 }
@@ -56,8 +56,8 @@ func TestOrchestrationStep_Validate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "nil resolver",
-			step: NewOrchestrationStep("s1", nil, nil, nil),
+			name:    "nil resolver",
+			step:    NewOrchestrationStep("s1", nil, nil, nil),
 			wantErr: true,
 		},
 		{

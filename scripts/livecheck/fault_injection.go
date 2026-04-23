@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"

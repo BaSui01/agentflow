@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/agent"
 	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"

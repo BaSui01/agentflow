@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 )
 

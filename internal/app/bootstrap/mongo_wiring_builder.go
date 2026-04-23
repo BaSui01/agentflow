@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/agent"
 	agentmemory "github.com/BaSui01/agentflow/agent/capabilities/memory"
 	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"

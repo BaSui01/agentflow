@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent"
 	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
 	"github.com/BaSui01/agentflow/agent/adapters/structured"
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
@@ -23,6 +22,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	orchestration "github.com/BaSui01/agentflow/agent/execution/runtime/orchestration"
 	"github.com/BaSui01/agentflow/agent/integration/voice"

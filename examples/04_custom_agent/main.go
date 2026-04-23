@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/BaSui01/agentflow/agent"
+	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
