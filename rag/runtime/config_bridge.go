@@ -4,8 +4,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/rag"
-	"github.com/BaSui01/agentflow/rag/core"
+		"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
 
@@ -19,22 +18,22 @@ func newVectorStoreFromConfig(cfg *config.Config, storeType core.VectorStoreType
 
 	switch storeType {
 	case core.VectorStoreMemory, "":
-		return rag.NewInMemoryVectorStore(logger), nil
+		return NewInMemoryVectorStore(logger), nil
 	case core.VectorStoreQdrant:
-		return rag.NewQdrantStore(mapQdrantConfig(&cfg.Qdrant), logger), nil
+		return NewQdrantStore(mapQdrantConfig(&cfg.Qdrant), logger), nil
 	case core.VectorStoreWeaviate:
-		return rag.NewWeaviateStore(mapWeaviateConfig(&cfg.Weaviate), logger), nil
+		return NewWeaviateStore(mapWeaviateConfig(&cfg.Weaviate), logger), nil
 	case core.VectorStoreMilvus:
-		return rag.NewMilvusStore(mapMilvusConfig(&cfg.Milvus), logger), nil
+		return NewMilvusStore(mapMilvusConfig(&cfg.Milvus), logger), nil
 	case core.VectorStorePinecone:
-		return rag.NewPineconeStore(rag.PineconeConfig{}, logger), nil
+		return NewPineconeStore(PineconeConfig{}, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported vector store type: %s", storeType)
 	}
 }
 
-func mapQdrantConfig(c *config.QdrantConfig) rag.QdrantConfig {
-	return rag.QdrantConfig{
+func mapQdrantConfig(c *config.QdrantConfig) QdrantConfig {
+	return QdrantConfig{
 		Host:                 c.Host,
 		Port:                 c.Port,
 		APIKey:               c.APIKey,
@@ -43,8 +42,8 @@ func mapQdrantConfig(c *config.QdrantConfig) rag.QdrantConfig {
 	}
 }
 
-func mapWeaviateConfig(c *config.WeaviateConfig) rag.WeaviateConfig {
-	return rag.WeaviateConfig{
+func mapWeaviateConfig(c *config.WeaviateConfig) WeaviateConfig {
+	return WeaviateConfig{
 		Host:             c.Host,
 		Port:             c.Port,
 		Scheme:           c.Scheme,
@@ -57,8 +56,8 @@ func mapWeaviateConfig(c *config.WeaviateConfig) rag.WeaviateConfig {
 	}
 }
 
-func mapMilvusConfig(c *config.MilvusConfig) rag.MilvusConfig {
-	return rag.MilvusConfig{
+func mapMilvusConfig(c *config.MilvusConfig) MilvusConfig {
+	return MilvusConfig{
 		Host:                 c.Host,
 		Port:                 c.Port,
 		Username:             c.Username,
@@ -67,8 +66,8 @@ func mapMilvusConfig(c *config.MilvusConfig) rag.MilvusConfig {
 		Database:             c.Database,
 		Collection:           c.Collection,
 		VectorDimension:      c.VectorDimension,
-		IndexType:            rag.MilvusIndexType(c.IndexType),
-		MetricType:           rag.MilvusMetricType(c.MetricType),
+		IndexType:            MilvusIndexType(c.IndexType),
+		MetricType:           MilvusMetricType(c.MetricType),
 		AutoCreateCollection: c.AutoCreateCollection,
 		Timeout:              c.Timeout,
 		BatchSize:            c.BatchSize,

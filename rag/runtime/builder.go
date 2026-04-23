@@ -7,8 +7,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/rag"
-	"github.com/BaSui01/agentflow/rag/core"
+		"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +24,7 @@ type Builder struct {
 	vectorStore       core.VectorStore
 	embeddingProvider core.EmbeddingProvider
 	rerankProvider    core.RerankProvider
-	hybridConfig      *rag.HybridRetrievalConfig
+	hybridConfig      *HybridRetrievalConfig
 
 	// API Key 快捷路径
 	apiKey string
@@ -85,7 +84,7 @@ func (b *Builder) WithRerankProvider(p core.RerankProvider) *Builder {
 }
 
 // WithHybridConfig 覆盖混合检索配置。
-func (b *Builder) WithHybridConfig(cfg rag.HybridRetrievalConfig) *Builder {
+func (b *Builder) WithHybridConfig(cfg HybridRetrievalConfig) *Builder {
 	b.hybridConfig = &cfg
 	return b
 }
@@ -132,7 +131,7 @@ func (b *Builder) BuildVectorStore() (core.VectorStore, error) {
 
 	if b.cfg == nil {
 		// 默认使用内存存储
-		return rag.NewInMemoryVectorStore(b.logger), nil
+		return NewInMemoryVectorStore(b.logger), nil
 	}
 
 	vectorType := b.vectorStoreType
@@ -149,18 +148,18 @@ func (b *Builder) BuildVectorStore() (core.VectorStore, error) {
 
 // BuildEnhancedRetriever 构建增强检索器。
 // 这是 RAG 层的主要入口，统一了 vector store、embedding、rerank 的组装。
-func (b *Builder) BuildEnhancedRetriever() (*rag.EnhancedRetriever, error) {
+func (b *Builder) BuildEnhancedRetriever() (*EnhancedRetriever, error) {
 	providers, err := b.BuildProviders()
 	if err != nil {
 		return nil, err
 	}
 
-	hybridConfig := rag.DefaultHybridRetrievalConfig()
+	hybridConfig := DefaultHybridRetrievalConfig()
 	if b.hybridConfig != nil {
 		hybridConfig = *b.hybridConfig
 	}
 
-	return rag.NewEnhancedRetriever(rag.EnhancedRetrieverConfig{
+	return NewEnhancedRetriever(EnhancedRetrieverConfig{
 		HybridConfig:      hybridConfig,
 		EmbeddingProvider: providers.Embedding,
 		RerankProvider:    providers.Rerank,
@@ -168,24 +167,24 @@ func (b *Builder) BuildEnhancedRetriever() (*rag.EnhancedRetriever, error) {
 }
 
 // BuildHybridRetriever 构建混合检索器（不依赖外部 provider）。
-func (b *Builder) BuildHybridRetriever() (*rag.HybridRetriever, error) {
-	hybridConfig := rag.DefaultHybridRetrievalConfig()
+func (b *Builder) BuildHybridRetriever() (*HybridRetriever, error) {
+	hybridConfig := DefaultHybridRetrievalConfig()
 	if b.hybridConfig != nil {
 		hybridConfig = *b.hybridConfig
 	}
-	return rag.NewHybridRetriever(hybridConfig, b.logger), nil
+	return NewHybridRetriever(hybridConfig, b.logger), nil
 }
 
 // BuildHybridRetrieverWithVectorStore 构建带向量存储的混合检索器。
-func (b *Builder) BuildHybridRetrieverWithVectorStore() (*rag.HybridRetriever, error) {
+func (b *Builder) BuildHybridRetrieverWithVectorStore() (*HybridRetriever, error) {
 	store, err := b.BuildVectorStore()
 	if err != nil {
 		return nil, fmt.Errorf("build vector store: %w", err)
 	}
 
-	hybridConfig := rag.DefaultHybridRetrievalConfig()
+	hybridConfig := DefaultHybridRetrievalConfig()
 	if b.hybridConfig != nil {
 		hybridConfig = *b.hybridConfig
 	}
-	return rag.NewHybridRetrieverWithVectorStore(hybridConfig, store, b.logger), nil
+	return NewHybridRetrieverWithVectorStore(hybridConfig, store, b.logger), nil
 }
