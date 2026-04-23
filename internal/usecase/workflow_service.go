@@ -20,8 +20,8 @@ type WorkflowExecutor interface {
 }
 
 type WorkflowService interface {
-	BuildDAGWorkflow(req WorkflowBuildInput) (*workflow.DAGWorkflow, string, *types.Error)
-	Execute(ctx context.Context, wf *workflow.DAGWorkflow, input any, streamEmitter workflow.WorkflowStreamEmitter, nodeEmitter workflowobs.NodeEventEmitter) (any, *types.Error)
+	BuildDAGWorkflow(req WorkflowBuildInput) (*WorkflowPlan, string, *types.Error)
+	Execute(ctx context.Context, wf *WorkflowPlan, input any, streamEmitter WorkflowStreamEmitter, nodeEmitter WorkflowNodeEventEmitter) (any, *types.Error)
 	ValidateDSL(rawDSL string) WorkflowDSLValidationResult
 }
 
@@ -37,7 +37,7 @@ func NewDefaultWorkflowService(executor WorkflowExecutor, parser *dsl.Parser) Wo
 	}
 }
 
-func (s *defaultWorkflowService) BuildDAGWorkflow(req WorkflowBuildInput) (*workflow.DAGWorkflow, string, *types.Error) {
+func (s *defaultWorkflowService) BuildDAGWorkflow(req WorkflowBuildInput) (*WorkflowPlan, string, *types.Error) {
 	if s.parser == nil {
 		return nil, "", types.NewInternalError("workflow parser is not configured")
 	}
@@ -87,30 +87,72 @@ func (s *defaultWorkflowService) BuildDAGWorkflow(req WorkflowBuildInput) (*work
 			WithHTTPStatus(http.StatusBadRequest)
 	}
 
-	return wf, source, nil
+	return newWorkflowPlan(wf), source, nil
 }
 
 func (s *defaultWorkflowService) Execute(
 	ctx context.Context,
-	wf *workflow.DAGWorkflow,
+	wf *WorkflowPlan,
 	input any,
-	streamEmitter workflow.WorkflowStreamEmitter,
-	nodeEmitter workflowobs.NodeEventEmitter,
+	streamEmitter WorkflowStreamEmitter,
+	nodeEmitter WorkflowNodeEventEmitter,
 ) (any, *types.Error) {
 	if s.executor == nil {
 		return nil, types.NewInternalError("workflow executor is not configured").
 			WithHTTPStatus(http.StatusNotImplemented)
 	}
+	if wf == nil || wf.dag == nil {
+		return nil, types.NewInvalidRequestError("workflow is required").
+			WithHTTPStatus(http.StatusBadRequest)
+	}
 
-	execCtx := workflow.WithWorkflowStreamEmitter(ctx, streamEmitter)
-	execCtx = workflowobs.WithNodeEventEmitter(execCtx, nodeEmitter)
+	execCtx := workflow.WithWorkflowStreamEmitter(ctx, adaptWorkflowStreamEmitter(streamEmitter))
+	execCtx = workflowobs.WithNodeEventEmitter(execCtx, adaptWorkflowNodeEmitter(nodeEmitter))
 
-	result, err := s.executor.ExecuteDAG(execCtx, wf, input)
+	result, err := s.executor.ExecuteDAG(execCtx, wf.dag, input)
 	if err != nil {
 		return nil, types.NewError(types.ErrInternalError, "workflow execution failed: "+err.Error()).
 			WithCause(err)
 	}
 	return result, nil
+}
+
+func adaptWorkflowStreamEmitter(emitter WorkflowStreamEmitter) workflow.WorkflowStreamEmitter {
+	if emitter == nil {
+		return nil
+	}
+	return func(event workflow.WorkflowStreamEvent) {
+		errMsg := ""
+		if event.Error != nil {
+			errMsg = event.Error.Error()
+		}
+		emitter(WorkflowStreamEvent{
+			Type:     WorkflowStreamEventType(event.Type),
+			NodeID:   event.NodeID,
+			NodeName: event.NodeName,
+			Data:     event.Data,
+			Error:    errMsg,
+		})
+	}
+}
+
+func adaptWorkflowNodeEmitter(emitter WorkflowNodeEventEmitter) workflowobs.NodeEventEmitter {
+	if emitter == nil {
+		return nil
+	}
+	return func(event workflowobs.NodeEvent) {
+		emitter(WorkflowNodeEvent{
+			Type:       event.Type,
+			TraceID:    event.TraceID,
+			RunID:      event.RunID,
+			WorkflowID: event.WorkflowID,
+			NodeID:     event.NodeID,
+			NodeType:   event.NodeType,
+			LatencyMs:  event.LatencyMs,
+			Error:      event.Error,
+			Timestamp:  event.Timestamp,
+		})
+	}
 }
 
 func (s *defaultWorkflowService) ValidateDSL(rawDSL string) WorkflowDSLValidationResult {

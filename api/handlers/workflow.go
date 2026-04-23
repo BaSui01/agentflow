@@ -6,8 +6,6 @@ import (
 
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
-	workflow "github.com/BaSui01/agentflow/workflow/core"
-	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
 	"go.uber.org/zap"
 )
 
@@ -87,12 +85,12 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, execErr := service.Execute(r.Context(), wf, req.Input, func(event workflow.WorkflowStreamEvent) {
+	result, execErr := service.Execute(r.Context(), wf, req.Input, func(event usecase.WorkflowStreamEvent) {
 		h.logger.Debug("workflow stream event",
 			zap.String("type", string(event.Type)),
 			zap.String("node_id", event.NodeID),
 		)
-	}, func(event workflowobs.NodeEvent) {
+	}, func(event usecase.WorkflowNodeEvent) {
 		h.logger.Debug("workflow node event",
 			zap.String("type", string(event.Type)),
 			zap.String("node_id", event.NodeID),

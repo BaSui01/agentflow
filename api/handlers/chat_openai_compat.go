@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -407,14 +408,13 @@ func (h *ChatHandler) handleOpenAICompatChatCompletionsStream(w http.ResponseWri
 			flusher.Flush()
 			return
 		}
-		llmChunk, ok := chunk.Output.(*llmcore.StreamChunk)
-		if !ok || llmChunk == nil {
+		if chunk.Chunk == nil {
 			continue
 		}
-		if strings.TrimSpace(llmChunk.Model) != "" {
-			model = llmChunk.Model
+		if strings.TrimSpace(chunk.Chunk.Model) != "" {
+			model = chunk.Chunk.Model
 		}
-		payload := toOpenAICompatChatChunkResponse(llmChunk, created, model)
+		payload := toOpenAICompatChatChunkResponse(chunk.Chunk, created, model)
 		if err := writeSSEJSON(w, payload); err != nil {
 			return
 		}
@@ -471,14 +471,13 @@ func (h *ChatHandler) handleOpenAICompatResponsesStream(w http.ResponseWriter, r
 			flusher.Flush()
 			return
 		}
-		llmChunk, ok := chunk.Output.(*llmcore.StreamChunk)
-		if !ok || llmChunk == nil {
+		if chunk.Chunk == nil {
 			continue
 		}
-		if strings.TrimSpace(llmChunk.Model) != "" {
-			model = llmChunk.Model
+		if strings.TrimSpace(chunk.Chunk.Model) != "" {
+			model = chunk.Chunk.Model
 		}
-		for _, ev := range toOpenAICompatResponsesStreamEvents(llmChunk) {
+		for _, ev := range toOpenAICompatResponsesStreamEvents(chunk.Chunk) {
 			if err := writeSSEEventJSON(w, ev.name, ev.payload); err != nil {
 				return
 			}
@@ -503,7 +502,7 @@ type openAICompatResponsesStreamEvent struct {
 	payload any
 }
 
-func toOpenAICompatResponsesStreamEvents(chunk *llmcore.StreamChunk) []openAICompatResponsesStreamEvent {
+func toOpenAICompatResponsesStreamEvents(chunk *usecase.ChatStreamChunk) []openAICompatResponsesStreamEvent {
 	if chunk == nil {
 		return nil
 	}
@@ -1320,7 +1319,7 @@ func toOpenAICompatChatResponse(resp *api.ChatResponse) openAICompatChatResponse
 	return out
 }
 
-func toOpenAICompatChatChunkResponse(chunk *llmcore.StreamChunk, created int64, model string) openAICompatChatChunkResponse {
+func toOpenAICompatChatChunkResponse(chunk *usecase.ChatStreamChunk, created int64, model string) openAICompatChatChunkResponse {
 	out := openAICompatChatChunkResponse{
 		ID:      firstNonEmptyString(chunk.ID, fmt.Sprintf("chatcmpl_%d", time.Now().UnixNano())),
 		Object:  "chat.completion.chunk",
@@ -1330,7 +1329,7 @@ func toOpenAICompatChatChunkResponse(chunk *llmcore.StreamChunk, created int64, 
 			{
 				Index: chunk.Index,
 				Delta: openAICompatOutboundMsg{
-					Role:             string(chunk.Delta.Role),
+					Role:             chunk.Delta.Role,
 					Content:          chunk.Delta.Content,
 					ReasoningContent: chunk.Delta.ReasoningContent,
 					Refusal:          chunk.Delta.Refusal,
@@ -1643,15 +1642,4 @@ func asString(v any) string {
 		return s
 	}
 	return ""
-}
-
-func extractStreamChunk(chunk llmcore.UnifiedChunk) (*llmcore.StreamChunk, *types.Error) {
-	if chunk.Err != nil {
-		return nil, chunk.Err
-	}
-	llmChunk, ok := chunk.Output.(*llmcore.StreamChunk)
-	if !ok || llmChunk == nil {
-		return nil, types.NewInternalError("invalid stream chunk payload")
-	}
-	return llmChunk, nil
 }

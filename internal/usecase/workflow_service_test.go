@@ -113,7 +113,7 @@ func TestWorkflowService_ValidateDSL_InvalidYAML(t *testing.T) {
 func TestWorkflowService_Execute_ExecutorNotConfigured(t *testing.T) {
 	svc := NewDefaultWorkflowService(nil, dsl.NewParser())
 
-	out, err := svc.Execute(context.Background(), &workflow.DAGWorkflow{}, "input", nil, nil)
+	out, err := svc.Execute(context.Background(), newWorkflowPlan(&workflow.DAGWorkflow{}), "input", nil, nil)
 	require.Nil(t, out)
 	require.NotNil(t, err)
 	assert.Equal(t, types.ErrInternalError, err.Code)
@@ -138,7 +138,7 @@ func TestWorkflowService_Execute_InjectsNodeEmitter(t *testing.T) {
 	}
 	svc := NewDefaultWorkflowService(executor, dsl.NewParser())
 
-	out, err := svc.Execute(context.Background(), &workflow.DAGWorkflow{}, "input", nil, func(event workflowobs.NodeEvent) {
+	out, err := svc.Execute(context.Background(), newWorkflowPlan(&workflow.DAGWorkflow{}), "input", nil, func(event WorkflowNodeEvent) {
 		emitted = event.NodeID == "n1"
 	})
 	require.Nil(t, err)

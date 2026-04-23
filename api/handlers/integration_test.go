@@ -24,7 +24,7 @@ import (
 
 type mockChatService struct {
 	completeFunc func(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error)
-	streamFunc   func(ctx context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error)
+	streamFunc   func(ctx context.Context, req *usecase.ChatRequest) (<-chan usecase.ChatStreamEvent, *types.Error)
 }
 
 func (m *mockChatService) Complete(ctx context.Context, req *usecase.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
@@ -55,11 +55,11 @@ func (m *mockChatService) Complete(ctx context.Context, req *usecase.ChatRequest
 	}, nil
 }
 
-func (m *mockChatService) Stream(ctx context.Context, req *usecase.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (m *mockChatService) Stream(ctx context.Context, req *usecase.ChatRequest) (<-chan usecase.ChatStreamEvent, *types.Error) {
 	if m.streamFunc != nil {
 		return m.streamFunc(ctx, req)
 	}
-	ch := make(chan llmcore.UnifiedChunk, 1)
+	ch := make(chan usecase.ChatStreamEvent, 1)
 	close(ch)
 	return ch, nil
 }

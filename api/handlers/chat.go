@@ -9,7 +9,6 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -202,8 +201,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		llmChunk, ok := chunk.Output.(*llm.StreamChunk)
-		if !ok || llmChunk == nil {
+		if chunk.Chunk == nil {
 			h.logger.Error("invalid stream chunk payload",
 				zap.String("request_id", requestID),
 			)
@@ -212,7 +210,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 转换为 API 格式
-		apiChunk := h.convertToAPIStreamChunk(llmChunk)
+		apiChunk := h.convertToAPIStreamChunk(chunk.Chunk)
 
 		// 发送 SSE 事件
 		if err := writeSSE(w, []byte("data: ")); err != nil {
@@ -330,43 +328,9 @@ func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// convertToLLMRequest 转换为 LLM 请求
-func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
-	return h.converter.ToLLMRequest(req)
-}
-
 // convertToAPIStreamChunk 转换流式块
-func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
-	return h.converter.ToAPIStreamChunk(chunk)
-}
-
-// convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage
-// without relying on unsafe pointer casts between distinct types.
-func convertStreamUsage(u *llm.ChatUsage) *api.ChatUsage {
-	if u == nil {
-		return nil
-	}
-	out := &api.ChatUsage{
-		PromptTokens:     u.PromptTokens,
-		CompletionTokens: u.CompletionTokens,
-		TotalTokens:      u.TotalTokens,
-	}
-	if u.PromptTokensDetails != nil {
-		out.PromptTokensDetails = &api.PromptTokensDetails{
-			CachedTokens:        u.PromptTokensDetails.CachedTokens,
-			CacheCreationTokens: u.PromptTokensDetails.CacheCreationTokens,
-			AudioTokens:         u.PromptTokensDetails.AudioTokens,
-		}
-	}
-	if u.CompletionTokensDetails != nil {
-		out.CompletionTokensDetails = &api.CompletionTokensDetails{
-			ReasoningTokens:          u.CompletionTokensDetails.ReasoningTokens,
-			AudioTokens:              u.CompletionTokensDetails.AudioTokens,
-			AcceptedPredictionTokens: u.CompletionTokensDetails.AcceptedPredictionTokens,
-			RejectedPredictionTokens: u.CompletionTokensDetails.RejectedPredictionTokens,
-		}
-	}
-	return out
+func (h *ChatHandler) convertToAPIStreamChunk(chunk *usecase.ChatStreamChunk) *api.StreamChunk {
+	return h.converter.ToAPIStreamChunkFromUsecase(chunk)
 }
 
 // handleProviderError 处理 Provider 错误

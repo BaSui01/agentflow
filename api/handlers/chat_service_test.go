@@ -405,12 +405,11 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 	require.NotNil(t, stream)
 	assert.Nil(t, gw.streamReq)
 
-	var chunks []*llmcore.StreamChunk
+	var chunks []*usecase.ChatStreamChunk
 	for c := range stream {
 		require.Nil(t, c.Err)
-		chunk, ok := c.Output.(*llmcore.StreamChunk)
-		require.True(t, ok)
-		chunks = append(chunks, chunk)
+		require.NotNil(t, c.Chunk)
+		chunks = append(chunks, c.Chunk)
 	}
 
 	require.NotEmpty(t, chunks)
