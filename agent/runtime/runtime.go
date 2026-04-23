@@ -12,6 +12,10 @@ type Feedback = legacy.Feedback
 type State = legacy.State
 type RunConfig = legacy.RunConfig
 type ToolManager = legacy.ToolManager
+type MemoryManager = legacy.MemoryManager
+type EventBus = legacy.EventBus
+type SessionManager = legacy.SessionManager
+type SteeringChannel = legacy.SteeringChannel
 type BuildOptions = legacy.BuildOptions
 type Builder = legacy.Builder
 type AgentRegistry = legacy.AgentRegistry
@@ -42,11 +46,25 @@ const (
 	StatePaused    = legacy.StatePaused
 	StateCompleted = legacy.StateCompleted
 	StateFailed    = legacy.StateFailed
+
+	RuntimeStreamToken        = legacy.RuntimeStreamToken
+	RuntimeStreamReasoning    = legacy.RuntimeStreamReasoning
+	RuntimeStreamToolCall     = legacy.RuntimeStreamToolCall
+	RuntimeStreamToolResult   = legacy.RuntimeStreamToolResult
+	RuntimeStreamToolProgress = legacy.RuntimeStreamToolProgress
+	RuntimeStreamApproval     = legacy.RuntimeStreamApproval
+	RuntimeStreamSession      = legacy.RuntimeStreamSession
+	RuntimeStreamStatus       = legacy.RuntimeStreamStatus
+	RuntimeStreamSteering     = legacy.RuntimeStreamSteering
+	RuntimeStreamStopAndSend  = legacy.RuntimeStreamStopAndSend
 )
 
 var (
 	NewBuilder                = legacy.NewBuilder
 	NewAgentRegistry          = legacy.NewAgentRegistry
+	NewSessionManager         = legacy.NewSessionManager
+	BuildBaseAgent            = legacy.BuildBaseAgent
+	WithSteeringChannel       = legacy.WithSteeringChannel
 	DefaultBuildOptions       = legacy.DefaultBuildOptions
 	WithRunConfig             = legacy.WithRunConfig
 	WithMaxRounds             = legacy.WithMaxRounds
