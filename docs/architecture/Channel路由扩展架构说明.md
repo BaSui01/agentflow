@@ -173,7 +173,7 @@ chatProvider, err := router.BuildChannelRoutedProvider(router.ChannelRoutedProvi
 - 当前 hot reload 只会原地更新启动时已经绑定到 `ServeMux` 的 handler；如果某些文本端点在启动时因为没有 main provider 而未注册，后续 reload 出来的 runtime 仍需要重启进程才能暴露这些新路由。
 - workflow runtime 在 reload 时会复用同一个 `hitl.InterruptManager`，因此已有 approval/input interrupt 不会因为 parser/runtime 重建而丢失。
 - reload 成功完成一次 runtime swap 后才会清理旧 resolver cache；如果新的 text runtime 构建失败，回滚会按恢复配置再走同一条 reload seam，只有当恢复后的 runtime 已经重新接管时才会清理过期 resolver cache。
-- 外部项目的最小 adapter-only 接入模板、组合根配置切换示例见 `docs/architecture/channel-routing-adapter-template.zh-CN.md`。
+- 外部项目的最小 adapter-only 接入模板、组合根配置切换示例见 `docs/architecture/Channel路由外部接入模板-中文版.md`。
 
 ## 5. 新入口
 

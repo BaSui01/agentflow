@@ -1,4 +1,6 @@
-# 📚 AgentFlow 中文文档
+﻿# 📚 AgentFlow 中文文档
+
+> 官方入口：sdk.New(opts).Build(ctx)；单 Agent：gent/runtime；多 Agent：gent/team；显式编排：workflow/runtime。
 
 > 高性能 Go 语言 AI Agent 框架 - 统一 LLM 抽象、智能路由、工具调用、工作流编排
 
@@ -35,6 +37,31 @@
 | [🔗 Hosted 工具与 MCP](./tutorials/09.Hosted工具与MCP.md) | 托管工具和 MCP 协议集成 | ⭐⭐⭐ |
 | [📊 工作流编排进阶](./tutorials/10.工作流编排进阶.md) | 高级工作流模式与 DSL | ⭐⭐⭐⭐ |
 | [💰 成本追踪](./tutorials/11.成本追踪.md) | Token 计数与成本管理 | ⭐⭐ |
+
+### 🏗️ 架构与框架设计
+
+| 文档 | 描述 | 适用场景 |
+|------|------|----------|
+| [`../architecture/Agent框架现状评估与主流框架调研-2026-04-23.md`](../architecture/Agent框架现状评估与主流框架调研-2026-04-23.md) | 当前 Agent 框架可用性评估 + 主流框架调研 | 想先判断“现在能不能用”、看外部框架对比 |
+| [`../architecture/AgentFlow收口改造方案与实施清单-2026-04-23.md`](../architecture/AgentFlow收口改造方案与实施清单-2026-04-23.md) | AgentFlow 收口路线、实施切片、验收标准 | 想推进 `sdk/runtime/team/workflow` 边界收口 |
+| [`../architecture/我的Agent框架设计参考-2026-04-23.md`](../architecture/我的Agent框架设计参考-2026-04-23.md) | 面向自定义 Agent 框架的设计参考 | 想基于外部框架经验设计自己的 Agent 框架 |
+| [`../architecture/权限控制系统重构与引入方案-2026-04-24.md`](../architecture/权限控制系统重构与引入方案-2026-04-24.md) | 统一鉴权、授权、审批、审计的重构方案 | 想引入权限控制系统或完善工具审批链路 |
+| [`../architecture/权限控制系统详细设计-2026-04-24.md`](../architecture/权限控制系统详细设计-2026-04-24.md) | package / 接口 / 数据结构级权限设计 | 要开始实现权限控制系统时优先阅读 |
+| [`../architecture/启动装配链路与组合根说明.md`](../architecture/启动装配链路与组合根说明.md) | 服务启动链路、组合根边界与热更新真相 | 想理解 `cmd -> bootstrap -> api -> domain` 主链 |
+| [`../architecture/原生Provider与SDK边界说明.md`](../architecture/原生Provider与SDK边界说明.md) | OpenAI / Anthropic / Gemini 原生 SDK 边界 | 想改 Provider 或 SDK 接入边界 |
+| [`../architecture/Provider原生Token计数说明.md`](../architecture/Provider原生Token计数说明.md) | 原生 token counting 约束与预算准入边界 | 想改预算、token counting 或 provider admission |
+| [`../architecture/Provider工具负载映射说明.md`](../architecture/Provider工具负载映射说明.md) | tool payload 在 gateway / provider / sdk 之间的映射规则 | 想改 function calling / tool payload 语义 |
+| [`../architecture/Channel路由扩展架构说明.md`](../architecture/Channel路由扩展架构说明.md) | channel-based routing 的设计与迁移说明 | 想做渠道路由扩展或替换 `MultiProviderRouter` |
+| [`../architecture/Channel路由外部接入模板-中文版.md`](../architecture/Channel路由外部接入模板-中文版.md) | 外部项目最小接入模板（中文） | 想复用 `ChannelRoutedProvider` 接业务侧 channel/key/mapping 系统 |
+| [`../architecture/Gemini官方SDK迁移清理计划.md`](../architecture/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移清理计划 | 想继续推进 Gemini / Google GenAI 官方 SDK 化 |
+| [`../architecture/LLM供应商维度重构分析.md`](../architecture/LLM供应商维度重构分析.md) | 按供应商维度组织 LLM 能力的重构分析 | 想继续推进 vendor profile / 多模态 profile 化 |
+| [`../重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 一次性硬切换总计划（TDD / 删除清单 / DoD） | 想直接推进“我的 Agent 框架”重构实施 |
+
+### 🗄️ 历史归档
+
+| 文档 | 描述 |
+|------|------|
+| [`../archive/归档说明.md`](../archive/归档说明.md) | 历史快照与归档文档说明，不作为当前契约真相 |
 
 ### 📘 指南
 
@@ -143,7 +170,9 @@
 ## 📦 快速安装
 
 ```bash
-# 安装 AgentFlow
+# 安装 AgentFlow
+
+> 官方入口：sdk.New(opts).Build(ctx)；单 Agent：gent/runtime；多 Agent：gent/team；显式编排：workflow/runtime。
 go get github.com/BaSui01/agentflow
 ```
 
@@ -225,3 +254,4 @@ AgentFlow 采用 [MIT 许可证](../../LICENSE) 开源。
 <p align="center">
   <sub>Made with ❤️ by AgentFlow Team</sub>
 </p>
+

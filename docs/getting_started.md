@@ -1,12 +1,12 @@
-# AgentFlow 快速开始
+﻿# AgentFlow 快速开始
 
 本指南帮助你在 5 分钟内运行第一个 Agent。
 
 正式入口口径：
 
 - 仓库级正式入口：`sdk.New(opts).Build(ctx)`
-- `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/execution/runtime`
+- `agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
+- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/runtime`
 
 ## 前提条件
 
@@ -32,7 +32,7 @@ import (
     "log"
     "os"
 
-    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+    agent "github.com/BaSui01/agentflow/agent/runtime"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
     "github.com/BaSui01/agentflow/sdk"
@@ -98,10 +98,10 @@ go run main.go
 
 ## `agent` 子模块 runtime 入口
 
-如果你明确只在 `agent` 子模块内装配运行时，推荐入口是 `agent/execution/runtime.Builder`：
+如果你明确只在 `agent` 子模块内装配运行时，推荐入口是 `agent/runtime.Builder`：
 
 ```go
-import runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
+import runtime "github.com/BaSui01/agentflow/agent/runtime"
 import llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 
 opts := runtime.DefaultBuildOptions()
@@ -118,7 +118,7 @@ ag, err := runtime.NewBuilder(gateway, logger).
 
 ## 并发与运行时策略
 
-默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/execution/runtime.Builder` 管理运行时能力；如需直接装配运行时，请从 `agent/execution/runtime` 子包导入公开 DTO 和 Builder。
+默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/runtime.Builder` 管理运行时能力；如需直接装配运行时，请从 `agent/runtime` 子包导入公开 DTO 和 Builder。
 
 > 注意：并发上限仍受底层 Provider 的速率限制和机器资源约束。
 
@@ -127,3 +127,4 @@ ag, err := runtime.NewBuilder(gateway, logger).
 - [沙箱环境配置](./sandbox_setup.md) - 启用代码执行能力
 - `examples/` 目录 - 查看完整示例（流式输出、工具调用、RAG、多智能体编排）
 - `api/openapi.yaml` - HTTP API 参考
+

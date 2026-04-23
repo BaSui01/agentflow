@@ -1,4 +1,4 @@
-
+﻿
 ## Project Rules
 
 ### 1) 开发阶段：禁止兼容代码（强制）
@@ -59,6 +59,74 @@
 
 - **默认使用中文交互**：在本仓库作用域内，与用户沟通、汇报进展、总结结果时默认使用中文。
 - **专业术语可保留原文**：专业术语、代码、命令、路径、标识符、原始报错与协议字段可直接保留英文或原文，避免歧义。
+
+
+### 10) 我的 Agent 框架官方入口（强制）
+
+- 仓库级正式入口：`sdk.New(opts).Build(ctx)`。
+- 单 Agent 正式入口：`agent/runtime`。
+- 多 Agent 正式入口：`agent/team`。
+- 显式编排正式入口：`workflow/runtime`。
+- 统一授权入口：`internal/usecase/authorization_service.go`。
+
+### 10) Agent 框架 / 权限控制文档索引（建议优先阅读）
+
+涉及 Agent 框架现状、收口方案、自定义框架设计与权限控制系统时，优先参考：
+
+- `docs/architecture/Agent框架现状评估与主流框架调研-2026-04-23.md`
+  - 当前项目 Agent 框架是否可用、主流框架横向对比、现状判断。
+- `docs/architecture/AgentFlow收口改造方案与实施清单-2026-04-23.md`
+  - AgentFlow 官方入口收口、`sdk/runtime/team/workflow` 边界、实施切片与验收标准。
+- `docs/architecture/我的Agent框架设计参考-2026-04-23.md`
+  - 面向自定义 Agent 框架的设计参考，吸收 OpenAI Agents SDK、Google ADK、Microsoft Agent Framework、LangGraph、PydanticAI、CrewAI、Mastra、Pi 等框架经验。
+- `docs/architecture/权限控制系统重构与引入方案-2026-04-24.md`
+  - 鉴权/授权/HITL 审批/工具权限/审计链路的统一重构方案。
+- `docs/architecture/权限控制系统详细设计-2026-04-24.md`
+  - 权限控制系统的 package、接口、数据结构、执行挂点与迁移切片级详细设计。
+- `docs/architecture/启动装配链路与组合根说明.md`
+  - 当前服务启动主链、组合根边界、hot reload / tooling bundle 真实挂点。
+- `docs/architecture/原生Provider与SDK边界说明.md`
+  - 原生 Provider 与官方 SDK 的边界约束；修改 OpenAI / Anthropic / Gemini Provider 前优先阅读。
+- `docs/architecture/Provider原生Token计数说明.md`
+  - 原生 token counting、预算准入与 provider admission 相关约束。
+- `docs/architecture/Provider工具负载映射说明.md`
+  - tool payload 在 SDK / provider / gateway / runtime 之间的语义映射规则。
+- `docs/architecture/Channel路由扩展架构说明.md`
+  - Channel-based routing 的架构设计、边界和 phased migration 说明。
+- `docs/architecture/Channel路由外部接入模板-中文版.md`
+  - 面向中文场景的外部项目接入模板，复用 `ChannelRoutedProvider` / `llm/runtime/compose.Build(...)`。
+- `docs/architecture/Channel路由外部接入模板-英文版.md`
+  - 外部英文项目接入模板；需要对外英文文档或英文示例时参考。
+- `docs/architecture/闭环Agent回归守卫说明.md`
+  - 默认单 Agent 闭环执行链的长期回归约束。
+- `docs/architecture/Context取消检查报告.md`
+  - 长循环 / 后台任务的 context 取消检查历史报告。
+- `docs/architecture/Gemini官方SDK迁移清理计划.md`
+  - Gemini / Google GenAI 官方 SDK 迁移的清理计划与风险点。
+- `docs/architecture/LLM供应商维度重构分析.md`
+  - 供应商维度 profile 化重构及对多智能体的影响分析。
+- `docs/重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md`
+  - 面向“我的 Agent 框架”的一次性硬切换总计划，含职责矩阵、删除清单、TDD、DoD 与 gate 验收要求。
+
+历史归档文档统一放在：
+
+- `docs/archive/归档说明.md`
+  - 仅用于追溯历史背景，不作为当前架构契约或公开入口真相。
+
+核心 ADR（架构决策记录）优先参考：
+
+- `docs/architecture/ADRs/001-分层架构设计.md`
+- `docs/architecture/ADRs/002-统一配置管理.md`
+- `docs/architecture/ADRs/003-零依赖Types包.md`
+- `docs/architecture/ADRs/004-多Agent团队抽象.md`
+- `docs/architecture/ADRs/005-LLM-Provider与SDK边界.md`
+- `docs/architecture/ADRs/006-Gemini官方SDK接入.md`
+- `docs/architecture/ADRs/007-一次性应用边界收口.md`
+
+处理相关任务时遵循：
+
+- 先确认**唯一正式入口**和**唯一官方表面**，避免再引入并行入口。
+- 涉及权限控制时，优先复用现有 `ToolApproval` / `PermissionManager` / `HITL` 链路，不重复造轮子。
 <!-- TRELLIS:START -->
 # Trellis Instructions
 
@@ -81,3 +149,4 @@ If you're using Codex, project-scoped helpers may also live in:
 Keep this managed block so 'trellis update' can refresh the instructions.
 
 <!-- TRELLIS:END -->
+

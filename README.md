@@ -1,4 +1,4 @@
-# AgentFlow
+﻿# AgentFlow
 
 > 🚀 2026 年生产级 Go 语言 LLM Agent 框架
 
@@ -15,7 +15,7 @@
 ### 🤖 Agent 框架
 
 - **官方单 Agent 主链** - `react + native tool calling + checkpoint/session/guardrails`
-- **官方多 Agent 门面** - `agent/collaboration/team`，统一 `supervisor / selector / round_robin / swarm`
+- **官方多 Agent 门面** - `agent/team`，统一 `supervisor / selector / round_robin / swarm`
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
 - **双模型架构 (toolProvider)** - 便宜模型优先承担工具调用链路（原生 tool calling，非原生 provider 自动降级 XML tool-calling），贵模型做内容生成，大幅降低成本
@@ -60,7 +60,7 @@
 ### 🧱 启动装配链路
 
 - **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
-- **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
+- **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/启动装配链路与组合根说明.md`）
 - **组合根状态已分 bundle** - `cmd/agentflow/server_runtime_bundles.go` 将长生命周期状态收口到 `handlers / text / tooling / workflow / infra / ops` 六组，避免 `Server` 持有一整份扁平跨域字段表
 - **热重载单 seam** - `server_hotreload.go` 只负责触发重建与状态回写，真正的 `chat/cost` 绑定、resolver 重建、workflow runtime 重建统一下沉到 `internal/app/bootstrap`
 - **用例边界已收口** - `internal/usecase` 现在对 handler 暴露自有 `chat/workflow` 契约，例如 `ChatStreamEvent`、`WorkflowPlan`、`WorkflowNodeEvent`，handler 不再直接依赖 `llmcore.UnifiedChunk` 或 `workflow.DAGWorkflow`
@@ -131,8 +131,9 @@ go get github.com/BaSui01/agentflow
 正式入口约定：
 
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
-- `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/execution/runtime`
+- `agent/runtime.Builder` 作为 `agent` 子模块 runtime 入口
+- 多 Agent 正式入口统一为 `agent/team`，显式编排正式入口统一为 `workflow/runtime`
+- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/runtime`
 - `github.com/BaSui01/agentflow/rag`、`github.com/BaSui01/agentflow/workflow`、`github.com/BaSui01/agentflow/llm` 根包已删除；分别改为导入 `rag/runtime`、`workflow/core|runtime`、`llm/core|gateway|runtime/compose`
 - Agent 运行时主面采用三层模型：`Model / Control / Tools`
   - `Model` 负责模型与 provider 相关参数
@@ -153,7 +154,7 @@ import (
     "fmt"
     "os"
 
-    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+    agent "github.com/BaSui01/agentflow/agent/runtime"
     "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
@@ -317,8 +318,8 @@ func main() {
 - 仓库内置 `llm.main_provider_mode` 启动切换位；仓库自身通过 `internal/app/bootstrap.RegisterMainProviderBuilder(...)` 注册 `channel_routed` builder 并复用 server 启动链；外部项目若需要相同模式，应在自己的组合根直接调用 `channelstore.NewMainProviderBuilder(...)` 或自行装配 routed provider
 - `llm/runtime/router/extensions/runtimepolicy` 提供可复用的 `UsageRecorder` / `CooldownController` / `QuotaPolicy` 参考实现，便于先把 usage、cooldown、daily limit、concurrency limit 链路跑通
 - 第一阶段不把 `image/video` 接进 `ChannelRoutedProvider`，因为 image/video 当前走的是 capability 路由面：`gateway + capabilities + vendor.Profile`；若硬塞进 `llm.Provider`，会把文本 routed provider 与多模态 capability 入口过早耦合
-- 外部项目的 adapter-only 接入模板与配置切换示例见 `docs/architecture/channel-routing-adapter-template.zh-CN.md`
-- 设计与迁移说明见 `docs/architecture/channel-routing-extension.md`
+- 外部项目的 adapter-only 接入模板与配置切换示例见 `docs/architecture/Channel路由外部接入模板-中文版.md`
+- 设计与迁移说明见 `docs/architecture/Channel路由扩展架构说明.md`
 
 ### Reflection 自我改进
 
@@ -371,7 +372,7 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-上下文运行时默认会随 `sdk` -> `agent/execution/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
+上下文运行时默认会随 `sdk` -> `agent/runtime.Builder` 主链装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
 
 ```go
 cfg.Context = &types.ContextConfig{
@@ -517,7 +518,7 @@ agentflow/
 │   └── tools/                # 工具执行
 │
 ├── agent/                    # Layer 2: Agent 核心（目录容器；root 无 Go 文件）
-│   ├── adapters/             # 适配层（chat/declarative/structured/handoff/teamadapter）
+│   ├── adapters/             # 适配层（chat/declarative/structured/handoff）
 │   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
 │   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）
 │   ├── core/                 # 核心层（registry/helpers/extension contracts）
@@ -643,3 +644,7 @@ agentflow/
 ## 📄 License
 
 MIT License - 详见 [LICENSE](LICENSE)
+
+
+
+
