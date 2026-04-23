@@ -241,4 +241,3 @@ func TestHealthHandler_ConcurrentChecks(t *testing.T) {
 		<-done
 	}
 }
-
