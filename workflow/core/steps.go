@@ -107,7 +107,7 @@ func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 	}
 	if inputMap, ok := input.(map[string]any); ok {
 		for k, v := range inputMap {
-		if _, exists := params[k]; !exists {
+			if _, exists := params[k]; !exists {
 				params[k] = v
 			}
 		}
@@ -169,5 +169,3 @@ func (s *CodeStep) Execute(ctx context.Context, input any) (any, error) {
 	}
 	return nil, NewStepError("code", StepTypeCode, ErrNotConfigured)
 }
-
-

@@ -303,4 +303,3 @@ func (r *CircuitBreakerRegistry) ResetAll() {
 		cb.Reset()
 	}
 }
-

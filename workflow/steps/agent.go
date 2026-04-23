@@ -10,9 +10,9 @@ import (
 
 // AgentStep 通过 AgentExecutor 抽象执行 agent。
 type AgentStep struct {
-	id          string
-	AgentID     string
-	Agent       core.AgentExecutor
+	id      string
+	AgentID string
+	Agent   core.AgentExecutor
 }
 
 // NewAgentStep 创建 agent 步骤。
