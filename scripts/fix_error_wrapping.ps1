@@ -14,7 +14,6 @@ $filesToFix = @(
     "agent/builder.go",
     "agent/discovery/composer.go",
     "agent/discovery/executor.go",
-    "agent/integration.go",
     "agent/protocol/a2a/client.go",
     "agent/streaming/bidirectional.go",
     "config/hotreload.go",

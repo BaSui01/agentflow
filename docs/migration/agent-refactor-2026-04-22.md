@@ -29,15 +29,11 @@
 - `observability/`
 - `persistence/`
 
-`agent/` 根目录已收口为 9 个非测试 Go 文件，仅保留薄 public surface：
+`agent/` 根目录当前已收口为 5 个非测试 Go 文件，仅保留薄 public surface：
 
 - `base.go`
 - `builder.go`
-- `checkpoint_binding.go`
-- `defensive_prompt.go`
-- `integration.go`
 - `interfaces.go`
-- `prompt_bundle.go`
 - `registry.go`
 - `request.go`
 

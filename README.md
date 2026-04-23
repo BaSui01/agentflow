@@ -519,11 +519,9 @@ agentflow/
 ├── agent/                    # Layer 2: Agent 核心
 │   ├── base.go               # 核心类型与公共状态/错误/EventBus
 │   ├── builder.go            # BaseAgent + AgentBuilder 收口面
-│   ├── checkpoint_binding.go # Checkpoint 公共类型与管理入口
-│   ├── integration.go        # Execute/Plan/Observe + 闭环执行主链
 │   ├── interfaces.go         # 扩展接口、Reflection/ToolSelector 等公开面
 │   ├── registry.go           # AgentRegistry 与公开运行时注册能力
-│   ├── request.go            # RunConfig / request/runtime protocol 入口
+│   ├── request.go            # RunConfig / request/runtime protocol + 闭环执行主链
 │   ├── adapters/             # 适配层（chat/declarative/structured/handoff/teamadapter）
 │   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
 │   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）

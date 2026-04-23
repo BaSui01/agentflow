@@ -963,15 +963,15 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 
 func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
-		data, err := os.ReadFile("agent/integration.go")
+		data, err := os.ReadFile("agent/builder.go")
 		if err != nil {
-			t.Fatalf("read agent/integration.go: %v", err)
+			t.Fatalf("read agent/builder.go: %v", err)
 		}
 		src := string(data)
 		start := strings.Index(src, "// Merged from loop_executor.go.")
 		end := strings.Index(src, "// Merged from loop_executor_runtime.go.")
 		if start == -1 || end == -1 || end <= start {
-			t.Fatal("agent/integration.go must keep explicit merged loop executor section markers")
+			t.Fatal("agent/builder.go must keep explicit merged loop executor section markers")
 		}
 		src = src[start:end]
 		for _, needle := range []string{
@@ -980,7 +980,7 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 			"topLevelLoopBudget(",
 		} {
 			if strings.Contains(src, needle) {
-				t.Fatalf("agent/integration.go must not depend on legacy control fallback %q", needle)
+				t.Fatalf("agent/builder.go must not depend on legacy control fallback %q", needle)
 			}
 		}
 	})

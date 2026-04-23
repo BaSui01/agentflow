@@ -513,11 +513,9 @@ agentflow/
 ├── agent/                    # Layer 2: Agent core
 │   ├── base.go               # Core types, public state/errors, EventBus
 │   ├── builder.go            # BaseAgent + AgentBuilder consolidation surface
-│   ├── checkpoint_binding.go # Public checkpoint types and manager entry
-│   ├── integration.go        # Execute/Plan/Observe and closed-loop runtime chain
 │   ├── interfaces.go         # Extension interfaces and public reflection/tool-selector surface
 │   ├── registry.go           # AgentRegistry and public runtime registration surface
-│   ├── request.go            # RunConfig / request-runtime protocol entry
+│   ├── request.go            # RunConfig / request-runtime protocol + closed-loop runtime chain
 │   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff/teamadapter)
 │   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
 │   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)
