@@ -14,7 +14,9 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmobservability "github.com/BaSui01/agentflow/llm/observability"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
 	workflowcore "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/redis/go-redis/v9"
@@ -33,6 +35,49 @@ func BuildAgentService(
 	resolver usecase.AgentResolver,
 ) usecase.AgentService {
 	return usecase.NewDefaultAgentService(discoveryRegistry, resolver)
+}
+
+// ChatServiceBuildInput defines the inputs required to build or refresh the
+// handler-facing ChatService around the shared text runtime.
+type ChatServiceBuildInput struct {
+	Provider            llmcore.Provider
+	PolicyManager       *llmpolicy.Manager
+	Ledger              llmobservability.Ledger
+	ToolingRuntime      *AgentToolingRuntime
+	ExistingChatService usecase.ChatService
+	Logger              *zap.Logger
+}
+
+// BuildChatService builds the handler-facing ChatService and reuses an existing
+// DefaultChatService instance when possible by swapping its runtime in place.
+func BuildChatService(in ChatServiceBuildInput) usecase.ChatService {
+	var runtime usecase.ChatRuntime
+	if in.Provider != nil {
+		gateway := llmgateway.New(llmgateway.Config{
+			ChatProvider:  in.Provider,
+			PolicyManager: in.PolicyManager,
+			Ledger:        in.Ledger,
+			Logger:        in.Logger,
+		})
+		runtime = usecase.ChatRuntime{
+			Gateway:      gateway,
+			ChatProvider: llmgateway.NewChatProviderAdapter(gateway, in.Provider),
+		}
+		if in.ToolingRuntime != nil {
+			runtime.ToolManager = in.ToolingRuntime.ToolManager
+		}
+	}
+
+	if existing, ok := in.ExistingChatService.(*usecase.DefaultChatService); ok {
+		existing.UpdateRuntime(runtime)
+		return existing
+	}
+	if in.Provider == nil {
+		return nil
+	}
+
+	converter := handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(defaultServeChatServiceTimeout))
+	return usecase.NewDefaultChatService(runtime, converter, in.Logger)
 }
 
 // ReloadedTextRuntimeBindingsInput defines the mutable handler bindings that can be

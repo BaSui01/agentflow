@@ -99,7 +99,14 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	previousChatService := s.text.chatService
 	var chatService usecase.ChatService
 	if llmRuntime != nil {
-		chatService = s.buildChatService(provider, llmRuntime.PolicyManager, ledger)
+		chatService = bootstrap.BuildChatService(bootstrap.ChatServiceBuildInput{
+			Provider:            provider,
+			PolicyManager:       llmRuntime.PolicyManager,
+			Ledger:              ledger,
+			ToolingRuntime:      s.tooling.toolingRuntime,
+			ExistingChatService: s.text.chatService,
+			Logger:              s.logger,
+		})
 	}
 
 	bindings := bootstrap.ApplyReloadedTextRuntimeBindings(bootstrap.ReloadedTextRuntimeBindingsInput{

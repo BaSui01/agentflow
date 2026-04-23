@@ -14,10 +14,9 @@ import (
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm/cache"
 	llm "github.com/BaSui01/agentflow/llm/core"
-	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
-	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/BaSui01/agentflow/rag/core"
 	workflowpkg "github.com/BaSui01/agentflow/workflow/core"
@@ -233,7 +232,13 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 
 	if llmRuntime != nil && set.Provider != nil {
-		set.ChatService = buildServeChatService(llmRuntime.Provider, llmRuntime.PolicyManager, llmRuntime.Ledger, set.ToolingRuntime, in.Logger)
+		set.ChatService = BuildChatService(ChatServiceBuildInput{
+			Provider:       llmRuntime.Provider,
+			PolicyManager:  llmRuntime.PolicyManager,
+			Ledger:         llmRuntime.Ledger,
+			ToolingRuntime: set.ToolingRuntime,
+			Logger:         in.Logger,
+		})
 		set.ChatHandler = handlers.NewChatHandler(
 			set.ChatService,
 			in.Logger,
@@ -322,34 +327,4 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 
 	in.Logger.Info("Handlers initialized")
 	return set, nil
-}
-
-func buildServeChatService(
-	provider llm.Provider,
-	policyManager *llmpolicy.Manager,
-	ledger observability.Ledger,
-	toolingRuntime *AgentToolingRuntime,
-	logger *zap.Logger,
-) usecase.ChatService {
-	gateway := llmgateway.New(llmgateway.Config{
-		ChatProvider:  provider,
-		PolicyManager: policyManager,
-		Ledger:        ledger,
-		Logger:        logger,
-	})
-	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
-	var toolManager agent.ToolManager
-	if toolingRuntime != nil {
-		toolManager = toolingRuntime.ToolManager
-	}
-	converter := handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(defaultServeChatServiceTimeout))
-	return usecase.NewDefaultChatService(
-		usecase.ChatRuntime{
-			Gateway:      gateway,
-			ChatProvider: chatProvider,
-			ToolManager:  toolManager,
-		},
-		converter,
-		logger,
-	)
 }

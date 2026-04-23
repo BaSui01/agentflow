@@ -572,7 +572,6 @@ agentflow/
 │   ├── server_services.go    # 基于 pkg/service.Registry 的生命周期总线
 │   ├── server_http.go        # 路由注册与 HTTP/Metrics 管理器构建
 │   ├── server_handlers_runtime.go # 调用 BuildServeHandlerSet 并回填 Server 字段
-│   ├── server_chat_service_runtime.go # chat usecase service runtime 构建辅助
 │   ├── server_startup_summary.go # 启动摘要与能力/依赖状态汇总
 │   ├── server_stores.go      # Mongo/RAG/Memory/Audit 装配
 │   ├── server_hotreload.go   # 热重载管理器初始化

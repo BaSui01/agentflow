@@ -558,7 +558,6 @@ agentflow/
 │   ├── server_services.go    # Lifecycle bus based on pkg/service.Registry
 │   ├── server_http.go        # Route registration and HTTP/Metrics manager wiring
 │   ├── server_handlers_runtime.go # Call BuildServeHandlerSet and assign Server fields
-│   ├── server_chat_service_runtime.go # Chat usecase service runtime build helper
 │   ├── server_startup_summary.go # Startup summary and capability/dependency status report
 │   ├── server_stores.go      # Mongo/RAG/Memory/Audit wiring
 │   ├── server_hotreload.go   # Hot-reload manager initialization
