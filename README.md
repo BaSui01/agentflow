@@ -61,6 +61,9 @@
 
 - **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
 - **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
+- **组合根状态已分 bundle** - `cmd/agentflow/server_runtime_bundles.go` 将长生命周期状态收口到 `handlers / text / tooling / workflow / infra / ops` 六组，避免 `Server` 持有一整份扁平跨域字段表
+- **热重载单 seam** - `server_hotreload.go` 只负责触发重建与状态回写，真正的 `chat/cost` 绑定、resolver 重建、workflow runtime 重建统一下沉到 `internal/app/bootstrap`
+- **用例边界已收口** - `internal/usecase` 现在对 handler 暴露自有 `chat/workflow` 契约，例如 `ChatStreamEvent`、`WorkflowPlan`、`WorkflowNodeEvent`，handler 不再直接依赖 `llmcore.UnifiedChunk` 或 `workflow.DAGWorkflow`
 - **领域入口并列** - `api/handlers` 可直接进入 `agent usecase`、`rag usecase`、`workflow usecase`；不是所有请求都必须先进入 `workflow`
 - **编排关系固定** - `workflow` 是 Layer 3 编排层，不是 `agent` 的一种；有编排需求时由 `workflow` 调用 `agent/rag/llm`，无编排需求时可直接走 `agent` 或 `rag`
 
@@ -565,6 +568,7 @@ agentflow/
 │   ├── main.go               # CLI 入口（serve/migrate/health/version）
 │   ├── migrate.go            # 迁移子命令
 │   ├── server_runtime.go     # Server 结构与启动编排
+│   ├── server_runtime_bundles.go # Server 运行时 bundle 分组（handlers/text/tooling/workflow/infra/ops）
 │   ├── server_services.go    # 基于 pkg/service.Registry 的生命周期总线
 │   ├── server_http.go        # 路由注册与 HTTP/Metrics 管理器构建
 │   ├── server_handlers_runtime.go # 调用 BuildServeHandlerSet 并回填 Server 字段

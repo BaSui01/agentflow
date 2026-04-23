@@ -60,6 +60,9 @@ English | [中文](README.md)
 
 - **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.BuildServeHandlerSet -> cmd/agentflow/server_http.RegisterHTTPRoutes -> api/routes -> api/handlers -> internal/usecase -> domain(agent/rag/workflow/llm)`
 - **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
+- **Bundle-based Server State** - `cmd/agentflow/server_runtime_bundles.go` groups long-lived server state into `handlers / text / tooling / workflow / infra / ops` bundles instead of one flat cross-domain field list
+- **Single Hot-Reload Seam** - `server_hotreload.go` only triggers rebuilds and state replacement; the actual `chat/cost` rebinding, resolver rebuild, and workflow runtime rebuild now live in `internal/app/bootstrap`
+- **Usecase-owned Handler Contracts** - `internal/usecase` now exposes handler-facing `chat/workflow` contracts such as `ChatStreamEvent`, `WorkflowPlan`, and `WorkflowNodeEvent`, so handlers no longer depend directly on `llmcore.UnifiedChunk` or `workflow.DAGWorkflow`
 
 ### 🔍 RAG System (Retrieval-Augmented Generation)
 
@@ -551,6 +554,7 @@ agentflow/
 │   ├── main.go               # CLI entry (serve/migrate/health/version)
 │   ├── migrate.go            # Migration subcommands
 │   ├── server_runtime.go     # Server struct and startup orchestration
+│   ├── server_runtime_bundles.go # Server runtime bundle grouping (handlers/text/tooling/workflow/infra/ops)
 │   ├── server_services.go    # Lifecycle bus based on pkg/service.Registry
 │   ├── server_http.go        # Route registration and HTTP/Metrics manager wiring
 │   ├── server_handlers_runtime.go # Call BuildServeHandlerSet and assign Server fields

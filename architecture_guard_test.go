@@ -293,13 +293,39 @@ func TestLLMComposeImportGuards(t *testing.T) {
 	}
 }
 
+func TestAPIHandlerStoreLeakGuards(t *testing.T) {
+	var leaked []string
+
+	walkErr := filepath.WalkDir("api/handlers", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, "_store.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		leaked = append(leaked, filepath.ToSlash(rel))
+		return nil
+	})
+
+	if walkErr != nil {
+		t.Fatalf("scan api handler store leak guards: %v", walkErr)
+	}
+	if len(leaked) > 0 {
+		slices.Sort(leaked)
+		t.Fatalf("api handlers must not own store implementations, found: %s", strings.Join(leaked, ", "))
+	}
+}
+
 func TestAPIHandlerInfraImportGuards(t *testing.T) {
 	disallowedPrefixes := []string{
 		"gorm.io/",
 		"github.com/BaSui01/agentflow/llm/runtime/router",
 		"github.com/BaSui01/agentflow/llm/providers/",
 	}
-	allowlistFileSuffix := []string{"_store.go"}
 
 	fset := token.NewFileSet()
 	var violations []string
@@ -317,11 +343,6 @@ func TestAPIHandlerInfraImportGuards(t *testing.T) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		for _, suffix := range allowlistFileSuffix {
-			if strings.HasSuffix(rel, suffix) {
-				return nil
-			}
-		}
 
 		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if err != nil {
@@ -389,6 +410,185 @@ func TestCmdEntrypointImportAllowlist(t *testing.T) {
 	if len(violations) > 0 {
 		slices.Sort(violations)
 		t.Fatalf("cmd entrypoint import allowlist violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestCmdHotReloadBootstrapEntryPoints(t *testing.T) {
+	data, err := os.ReadFile("cmd/agentflow/server_hotreload.go")
+	if err != nil {
+		t.Fatalf("read cmd/agentflow/server_hotreload.go: %v", err)
+	}
+	src := string(data)
+
+	requiredSnippets := []string{
+		"bootstrap.ApplyReloadedTextRuntimeBindings(",
+		"bootstrap.BuildReloadedResolver(",
+		"bootstrap.BuildReloadedWorkflowRuntime(",
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(src, snippet) {
+			t.Fatalf("cmd/agentflow/server_hotreload.go must contain %q", snippet)
+		}
+	}
+
+	forbiddenSnippets := []string{
+		"handlers.NewChatHandler(",
+		"handlers.NewCostHandler(",
+		"usecase.NewDefaultWorkflowService(",
+		"s.chatHandler.UpdateService(",
+		"s.costHandler.UpdateTracker(",
+		"s.agentHandler.UpdateService(",
+		"s.workflowHandler.UpdateService(",
+		"func (s *Server) buildReloadedResolver(",
+		"func (s *Server) buildReloadedWorkflowRuntime(",
+	}
+	for _, snippet := range forbiddenSnippets {
+		if strings.Contains(src, snippet) {
+			t.Fatalf("cmd/agentflow/server_hotreload.go must not contain %q; delegate handler rebinding to bootstrap seam", snippet)
+		}
+	}
+}
+
+func TestHotReloadDocsImplementationConsistency(t *testing.T) {
+	docData, err := os.ReadFile("docs/architecture/startup-composition.md")
+	if err != nil {
+		t.Fatalf("read docs/architecture/startup-composition.md: %v", err)
+	}
+	doc := string(docData)
+	if !strings.Contains(doc, "ApplyReloadedTextRuntimeBindings") {
+		t.Fatal("docs/architecture/startup-composition.md must document ApplyReloadedTextRuntimeBindings")
+	}
+	if !strings.Contains(doc, "BuildToolingHandlerBundle") {
+		t.Fatal("docs/architecture/startup-composition.md must document BuildToolingHandlerBundle")
+	}
+
+	srcData, err := os.ReadFile("internal/app/bootstrap/handler_adapters_builder.go")
+	if err != nil {
+		t.Fatalf("read internal/app/bootstrap/handler_adapters_builder.go: %v", err)
+	}
+	src := string(srcData)
+	if !strings.Contains(src, "func ApplyReloadedTextRuntimeBindings(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define ApplyReloadedTextRuntimeBindings")
+	}
+	if !strings.Contains(src, "func BuildToolingHandlerBundle(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define BuildToolingHandlerBundle")
+	}
+	if !strings.Contains(src, "func BuildReloadedResolver(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define BuildReloadedResolver")
+	}
+	if !strings.Contains(src, "func BuildReloadedWorkflowRuntime(") {
+		t.Fatal("internal/app/bootstrap/handler_adapters_builder.go must define BuildReloadedWorkflowRuntime")
+	}
+
+	hotReloadData, err := os.ReadFile("cmd/agentflow/server_hotreload.go")
+	if err != nil {
+		t.Fatalf("read cmd/agentflow/server_hotreload.go: %v", err)
+	}
+	if !strings.Contains(string(hotReloadData), "bootstrap.ApplyReloadedTextRuntimeBindings(") {
+		t.Fatal("cmd/agentflow/server_hotreload.go must call bootstrap.ApplyReloadedTextRuntimeBindings")
+	}
+
+	serveBuilderData, err := os.ReadFile("internal/app/bootstrap/serve_handler_set_builder.go")
+	if err != nil {
+		t.Fatalf("read internal/app/bootstrap/serve_handler_set_builder.go: %v", err)
+	}
+	if !strings.Contains(string(serveBuilderData), "BuildToolingHandlerBundle(") {
+		t.Fatal("internal/app/bootstrap/serve_handler_set_builder.go must call BuildToolingHandlerBundle")
+	}
+
+	if !strings.Contains(doc, "BuildReloadedResolver") {
+		t.Fatal("docs/architecture/startup-composition.md must document BuildReloadedResolver")
+	}
+	if !strings.Contains(doc, "BuildReloadedWorkflowRuntime") {
+		t.Fatal("docs/architecture/startup-composition.md must document BuildReloadedWorkflowRuntime")
+	}
+}
+
+func TestUsecaseContractBoundaryGuards(t *testing.T) {
+	type fileExpectation struct {
+		path              string
+		requiredSnippets  []string
+		forbiddenSnippets []string
+	}
+
+	expectations := []fileExpectation{
+		{
+			path: "internal/usecase/chat_service.go",
+			requiredSnippets: []string{
+				"Stream(ctx context.Context, req *ChatRequest) (<-chan ChatStreamEvent, *types.Error)",
+			},
+			forbiddenSnippets: []string{
+				"Stream(ctx context.Context, req *ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error)",
+			},
+		},
+		{
+			path: "internal/usecase/workflow_service.go",
+			requiredSnippets: []string{
+				"BuildDAGWorkflow(req WorkflowBuildInput) (*WorkflowPlan, string, *types.Error)",
+				"Execute(ctx context.Context, wf *WorkflowPlan, input any, streamEmitter WorkflowStreamEmitter, nodeEmitter WorkflowNodeEventEmitter) (any, *types.Error)",
+			},
+			forbiddenSnippets: []string{
+				"BuildDAGWorkflow(req WorkflowBuildInput) (*workflow.DAGWorkflow, string, *types.Error)",
+				"Execute(ctx context.Context, wf *workflow.DAGWorkflow, input any, streamEmitter workflow.WorkflowStreamEmitter, nodeEmitter workflowobs.NodeEventEmitter) (any, *types.Error)",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain %q", tt.path, snippet)
+			}
+		}
+	}
+
+	type importGuard struct {
+		path             string
+		forbiddenImports []string
+	}
+	importGuards := []importGuard{
+		{
+			path: "api/handlers/chat.go",
+			forbiddenImports: []string{
+				"github.com/BaSui01/agentflow/llm/core",
+			},
+		},
+		{
+			path: "api/handlers/workflow.go",
+			forbiddenImports: []string{
+				"github.com/BaSui01/agentflow/workflow/core",
+				"github.com/BaSui01/agentflow/workflow/observability",
+			},
+		},
+	}
+
+	fset := token.NewFileSet()
+	for _, tt := range importGuards {
+		file, err := parser.ParseFile(fset, filepath.FromSlash(tt.path), nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatalf("parse imports for %s: %v", tt.path, err)
+		}
+		for _, imp := range file.Imports {
+			importPath, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				t.Fatalf("unquote import path for %s: %v", tt.path, err)
+			}
+			for _, forbidden := range tt.forbiddenImports {
+				if importPath == forbidden {
+					t.Fatalf("%s must not import %s after usecase contract boundary refactor", tt.path, forbidden)
+				}
+			}
+		}
 	}
 }
 
