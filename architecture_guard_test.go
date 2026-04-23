@@ -14,7 +14,7 @@ import (
 )
 
 func TestAgentRootPackageFileBudget(t *testing.T) {
-	const maxAgentRootFiles = 42
+	const expectedAgentRootFiles = 0
 
 	entries, err := os.ReadDir("agent")
 	if err != nil {
@@ -33,22 +33,12 @@ func TestAgentRootPackageFileBudget(t *testing.T) {
 		count++
 	}
 
-	if count > maxAgentRootFiles {
-		t.Fatalf("agent root package has %d production files, exceeds budget %d", count, maxAgentRootFiles)
+	if count != expectedAgentRootFiles {
+		t.Fatalf("agent root package must have %d production files, got %d", expectedAgentRootFiles, count)
 	}
 }
 
 func TestAgentRootPublicSurfaceBudget(t *testing.T) {
-	const maxImplementationHeavyRootFiles = 11
-	implementationMarkers := []string{
-		"runtime",
-		"facade",
-		"adapter",
-		"selector",
-		"pipeline",
-		"executor",
-	}
-
 	entries, err := os.ReadDir("agent")
 	if err != nil {
 		t.Fatalf("read agent dir: %v", err)
@@ -60,20 +50,15 @@ func TestAgentRootPublicSurfaceBudget(t *testing.T) {
 			continue
 		}
 		name := e.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+		if !strings.HasSuffix(name, ".go") {
 			continue
 		}
-		for _, marker := range implementationMarkers {
-			if strings.Contains(name, marker) {
-				matched = append(matched, name)
-				break
-			}
-		}
+		matched = append(matched, name)
 	}
 
-	if len(matched) > maxImplementationHeavyRootFiles {
+	if len(matched) > 0 {
 		slices.Sort(matched)
-		t.Fatalf("agent root package has %d implementation-heavy files (%s), exceeds budget %d", len(matched), strings.Join(matched, ", "), maxImplementationHeavyRootFiles)
+		t.Fatalf("agent root package must not expose any Go files, found: %s", strings.Join(matched, ", "))
 	}
 }
 
@@ -560,7 +545,7 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 
 	expectations := []sourceExpectation{
 		{
-			path: "agent/registry.go",
+			path: "agent/execution/runtime/registry_runtime.go",
 			requiredSnippets: []string{
 				"buildRegistryAgent(",
 				"newAgentBuilder(config).",
@@ -647,20 +632,21 @@ func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
 			path: "README.md",
 			requiredSnippets: []string{
 				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
-				"`agent.NewAgentBuilder`、`agent.BuildBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景",
+				"`github.com/BaSui01/agentflow/agent` 根包已删除",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
 				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
-				"`agent.NewAgentBuilder`, `agent.BuildBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths",
+				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
 			},
 		},
 		{
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
 				"推荐入口是 `agent/execution/runtime.Builder`",
+				"`agent/execution/runtime`",
 			},
 		},
 		{
@@ -717,16 +703,14 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
 				"`agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"`agent.BuildBaseAgent`",
-				"`agent.CreateAgent`",
-				"高级扩展",
+				"`github.com/BaSui01/agentflow/agent` 根包已删除",
 			},
 			forbiddenSnippets: []string{
 				"推荐使用 `agent.NewAgentBuilder`",
 				"`agent.NewAgentBuilder` 作为正式入口",
+				"`agent.NewAgentBuilder`",
+				"`agent.BuildBaseAgent`",
+				"`agent.CreateAgent`",
 			},
 		},
 		{
@@ -734,16 +718,14 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
 				"`agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"`agent.BuildBaseAgent`",
-				"`agent.CreateAgent`",
-				"advanced extension",
+				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
 			},
 			forbiddenSnippets: []string{
 				"recommend `agent.NewAgentBuilder`",
 				"`agent.NewAgentBuilder` as the official entrypoint",
+				"`agent.NewAgentBuilder`",
+				"`agent.BuildBaseAgent`",
+				"`agent.CreateAgent`",
 			},
 		},
 		{
@@ -751,62 +733,7 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
 				"`agent/execution/runtime.Builder`",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"高级扩展",
-			},
-		},
-		{
-			path: "docs/cn/tutorials/01.快速开始.md",
-			requiredSnippets: []string{
-				"sdk.New(sdk.Options{",
-				"`agent/execution/runtime.Builder` 是 `agent` 子模块 runtime 入口",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"`agent.CreateAgent`",
-				"`agent.BuildBaseAgent`",
-				"高级扩展",
-			},
-		},
-		{
-			path: "docs/en/tutorials/01.QuickStart.md",
-			requiredSnippets: []string{
-				"sdk.New(sdk.Options{",
-				"`agent/execution/runtime.Builder` is the runtime entry for the `agent` submodule",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"`agent.CreateAgent`",
-				"`agent.BuildBaseAgent`",
-				"advanced extension",
-			},
-		},
-		{
-			path: "docs/cn/tutorials/03.Agent开发教程.md",
-			requiredSnippets: []string{
-				"sdk.New(sdk.Options{",
-				"`agent` 子模块正式 runtime 入口：`agent/execution/runtime.Builder`",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"`agent.CreateAgent`",
-				"`agent.BuildBaseAgent`",
-				"高级扩展",
-			},
-		},
-		{
-			path: "docs/en/tutorials/03.AgentDevelopment.md",
-			requiredSnippets: []string{
-				"sdk.New(sdk.Options{",
-				"Official runtime entry for the `agent` submodule: `agent/execution/runtime.Builder`",
-			},
-			requiredAdvancedLegacy: []string{
-				"`agent.NewAgentBuilder`",
-				"`agent.CreateAgent`",
-				"`agent.BuildBaseAgent`",
-				"advanced extension",
+				"`agent/execution/runtime`",
 			},
 		},
 	}
@@ -963,9 +890,9 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 
 func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
-		data, err := os.ReadFile("agent/builder.go")
+		data, err := os.ReadFile("agent/execution/runtime/agent_builder.go")
 		if err != nil {
-			t.Fatalf("read agent/builder.go: %v", err)
+			t.Fatalf("read agent/execution/runtime/agent_builder.go: %v", err)
 		}
 		src := string(data)
 		start := strings.Index(src, "// Merged from loop_executor.go.")
@@ -980,18 +907,18 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 			"topLevelLoopBudget(",
 		} {
 			if strings.Contains(src, needle) {
-				t.Fatalf("agent/builder.go must not depend on legacy control fallback %q", needle)
+				t.Fatalf("agent/execution/runtime/agent_builder.go must not depend on legacy control fallback %q", needle)
 			}
 		}
 	})
 
 	t.Run("chat_request_construction_stays_in_adapter", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/request.go")
+		requestData, err := os.ReadFile("agent/execution/runtime/request_runtime.go")
 		if err != nil {
-			t.Fatalf("read agent/request.go: %v", err)
+			t.Fatalf("read agent/execution/runtime/request_runtime.go: %v", err)
 		}
 		if strings.Contains(string(requestData), "ChatRequest{") {
-			t.Fatal("agent/request.go must not construct ChatRequest directly; use ChatRequestAdapter")
+			t.Fatal("agent/execution/runtime/request_runtime.go must not construct ChatRequest directly; use ChatRequestAdapter")
 		}
 
 		adapterData, err := os.ReadFile("agent/adapters/chat.go")
@@ -1014,12 +941,12 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	})
 
 	t.Run("tool_choice_any_stays_out_of_agent_runtime_surface", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/request.go")
+		requestData, err := os.ReadFile("agent/execution/runtime/request_runtime.go")
 		if err != nil {
-			t.Fatalf("read agent/request.go: %v", err)
+			t.Fatalf("read agent/execution/runtime/request_runtime.go: %v", err)
 		}
 		if !strings.Contains(string(requestData), "types.ParseToolChoiceString(") {
-			t.Fatal("agent/request.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
+			t.Fatal("agent/execution/runtime/request_runtime.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
 		}
 
 		entries, err := os.ReadDir("agent")

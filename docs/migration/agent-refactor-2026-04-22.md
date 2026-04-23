@@ -10,11 +10,11 @@
 - `agent` 子模块正式 runtime 入口：`agent/execution/runtime.Builder`
 - 官方多 Agent facade：`agent/collaboration/team`
 
-以下符号不再作为正式主入口宣传，只保留为高级扩展或底层构件：
+## 破坏性迁移说明
 
-- `agent.NewAgentBuilder(...)`
-- `agent.BuildBaseAgent(...)`
-- `agent.CreateAgent(...)`
+- `github.com/BaSui01/agentflow/agent` 根包已删除，不再保留 facade、alias、兼容入口或 root-level tests
+- 需要直接使用 Agent runtime DTO / Builder / Registry 时，请改为导入 `github.com/BaSui01/agentflow/agent/execution/runtime`
+- 需要稳定基础契约（如 `Agent`、`Input`、`Output` 等核心类型）时，请改为导入 `github.com/BaSui01/agentflow/agent/core`
 
 ## 目录口径
 
@@ -29,16 +29,20 @@
 - `observability/`
 - `persistence/`
 
-`agent/` 根目录当前已收口为 5 个非测试 Go 文件，仅保留薄 public surface：
+`agent/` 根目录现在不保留任何 `.go` 或 `_test.go` 文件，只作为 8 个顶层子目录的容器：
 
-- `base.go`
-- `builder.go`
-- `interfaces.go`
-- `registry.go`
-- `request.go`
+- `adapters/`
+- `capabilities/`
+- `collaboration/`
+- `core/`
+- `execution/`
+- `integration/`
+- `observability/`
+- `persistence/`
 
 ## 需要替换的旧路径
 
+- 根包 `agent` → `agent/execution/runtime` 或 `agent/core`（按符号归属拆分）
 - 多 Agent 协作统一改为 `agent/collaboration/multiagent`
 - 官方团队编排改为 `agent/collaboration/team`
 - team 适配包装器改为 `agent/adapters/teamadapter`
@@ -48,6 +52,9 @@
 
 ## 示例迁移对照
 
+- `agent.Input` → `runtime.Input`（`import runtime "github.com/BaSui01/agentflow/agent/execution/runtime"`）
+- `agent.BaseAgent` → `runtime.BaseAgent`
+- `agent.NewAgentRegistry(...)` → `runtime.NewAgentRegistry(...)`
 - `collaboration.DefaultMultiAgentConfig()` → `multiagent.DefaultMultiAgentConfig()`
 - `collaboration.NewMultiAgentSystem(...)` → `multiagent.NewMultiAgentSystem(...)`
 - `collaboration.NewRoleRegistry(...)` → `multiagent.NewRoleRegistry(...)`

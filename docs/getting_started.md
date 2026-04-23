@@ -6,7 +6,7 @@
 
 - 仓库级正式入口：`sdk.New(opts).Build(ctx)`
 - `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `agent.NewAgentBuilder`、`agent.CreateAgent`、`agent.BuildBaseAgent` 仅保留给高级扩展场景，不作为默认接入方式
+- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/execution/runtime`
 
 ## 前提条件
 
@@ -32,7 +32,7 @@ import (
     "log"
     "os"
 
-    "github.com/BaSui01/agentflow/agent"
+    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
     "github.com/BaSui01/agentflow/sdk"
@@ -118,7 +118,7 @@ ag, err := runtime.NewBuilder(gateway, logger).
 
 ## 并发与运行时策略
 
-默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/execution/runtime.Builder` 管理运行时能力；`agent.NewAgentBuilder` 更适合需要逐项注入底层依赖的高级扩展场景。
+默认情况下，单个 Agent 实例的并发执行数为 1（互斥）。常规接入建议优先通过 `sdk.New(opts).Build(ctx)` 或 `agent/execution/runtime.Builder` 管理运行时能力；如需直接装配运行时，请从 `agent/execution/runtime` 子包导入公开 DTO 和 Builder。
 
 > 注意：并发上限仍受底层 Provider 的速率限制和机器资源约束。
 

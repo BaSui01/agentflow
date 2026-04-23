@@ -118,7 +118,7 @@ Entrypoint policy:
 
 - Repository-level official entry: `sdk.New(opts).Build(ctx)`
 - `agent/execution/runtime.Builder` is only the runtime entry for the `agent` submodule
-- `agent.NewAgentBuilder`, `agent.BuildBaseAgent`, and `agent.CreateAgent` remain available only as advanced extension paths, not peer official entrypoints
+- the root package `github.com/BaSui01/agentflow/agent` has been removed; import `agent/execution/runtime` directly when you need runtime DTOs or builders
 - The Agent runtime main surface follows a three-layer model: `Model / Control / Tools`
   - `Model` carries model/provider parameters
   - `Control` carries loop budgets, reasoning mode, overrides, and execution policy
@@ -138,7 +138,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/agent"
+    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
     "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
@@ -510,12 +510,7 @@ agentflow/
 │   │   └── estimator.go      # CJK estimator
 │   └── tools/                # Tool execution
 │
-├── agent/                    # Layer 2: Agent core
-│   ├── base.go               # Core types, public state/errors, EventBus
-│   ├── builder.go            # BaseAgent + AgentBuilder consolidation surface
-│   ├── interfaces.go         # Extension interfaces and public reflection/tool-selector surface
-│   ├── registry.go           # AgentRegistry and public runtime registration surface
-│   ├── request.go            # RunConfig / request-runtime protocol + closed-loop runtime chain
+├── agent/                    # Layer 2: Agent core (directory-only container; no root Go files)
 │   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff/teamadapter)
 │   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
 │   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)

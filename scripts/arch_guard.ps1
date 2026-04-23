@@ -8,7 +8,7 @@ $strictMode = $true
 if ($env:ARCH_GUARD_STRICT -eq "0") {
     $strictMode = $false
 }
-$maxAgentRootFiles = 42
+$maxAgentRootFiles = 0
 if ($env:ARCH_GUARD_MAX_FILES) {
     $maxAgentRootFiles = [int]$env:ARCH_GUARD_MAX_FILES
 }
@@ -71,10 +71,10 @@ if ($null -eq $goArchLint) {
 }
 
 # Rule 1: root agent package file budget (aligned with architecture_guard_test.go)
-$agentRootFiles = Get-ChildItem agent -File -Filter "*.go" |
-    Where-Object { $_.Name -notmatch "_test\.go$" }
-if ($agentRootFiles.Count -gt $maxAgentRootFiles) {
-    $warnings += "[SIZE] agent root package has $($agentRootFiles.Count) production files (threshold=$maxAgentRootFiles)"
+$agentRootFiles = @(Get-ChildItem agent -File -Filter "*.go" |
+    Where-Object { $_.Name -notmatch "_test\.go$" })
+if ($agentRootFiles.Count -ne $maxAgentRootFiles) {
+    $errors += "[SIZE] agent root package must have $maxAgentRootFiles production files; found $($agentRootFiles.Count)"
 }
 
 # Rule 2: single-file pkg directory allowlist (aligned with architecture_guard_test.go)

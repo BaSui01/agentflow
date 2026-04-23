@@ -129,7 +129,7 @@ go get github.com/BaSui01/agentflow
 
 - 仓库级正式入口统一为 `sdk.New(opts).Build(ctx)`
 - `agent/execution/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口
-- `agent.NewAgentBuilder`、`agent.BuildBaseAgent`、`agent.CreateAgent` 仅保留给高级扩展场景；其中 builder/registry 已切换到 gateway 注入语义，不再推荐 provider 直入
+- `github.com/BaSui01/agentflow/agent` 根包已删除；需要直接使用 Agent runtime DTO / Builder 时，请显式导入 `agent/execution/runtime`
 - Agent 运行时主面采用三层模型：`Model / Control / Tools`
   - `Model` 负责模型与 provider 相关参数
   - `Control` 负责 loop/budget/reasoning/override 等执行控制
@@ -149,7 +149,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/agent"
+    agent "github.com/BaSui01/agentflow/agent/execution/runtime"
     "github.com/BaSui01/agentflow/sdk"
     "github.com/BaSui01/agentflow/llm/providers"
     openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
@@ -516,12 +516,7 @@ agentflow/
 │   ├── tokenizer/            # 统一 Token 计数器
 │   └── tools/                # 工具执行
 │
-├── agent/                    # Layer 2: Agent 核心
-│   ├── base.go               # 核心类型与公共状态/错误/EventBus
-│   ├── builder.go            # BaseAgent + AgentBuilder 收口面
-│   ├── interfaces.go         # 扩展接口、Reflection/ToolSelector 等公开面
-│   ├── registry.go           # AgentRegistry 与公开运行时注册能力
-│   ├── request.go            # RunConfig / request/runtime protocol + 闭环执行主链
+├── agent/                    # Layer 2: Agent 核心（目录容器；root 无 Go 文件）
 │   ├── adapters/             # 适配层（chat/declarative/structured/handoff/teamadapter）
 │   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
 │   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）
