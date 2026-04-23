@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/steps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

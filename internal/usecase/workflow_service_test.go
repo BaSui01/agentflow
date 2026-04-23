@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/types"
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/dsl"
 	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
 	"github.com/stretchr/testify/assert"

@@ -9,7 +9,6 @@ import (
 
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
-	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/engine"
 	"go.uber.org/zap"
@@ -19,9 +18,9 @@ import (
 // Parser DSL 解析器
 type Parser struct {
 	// stepRegistry 步骤注册表（step name -> Step 工厂函数）
-	stepRegistry map[string]func(config map[string]any) (workflow.Step, error)
+	stepRegistry map[string]func(config map[string]any) (core.Step, error)
 	// conditionRegistry 条件表达式注册表
-	conditionRegistry map[string]workflow.ConditionFunc
+	conditionRegistry map[string]core.ConditionFunc
 	// stepDeps 为 engine-step integration 注入依赖（可选）
 	stepDeps engine.StepDependencies
 }
@@ -29,20 +28,20 @@ type Parser struct {
 // NewParser 创建 DSL 解析器
 func NewParser() *Parser {
 	p := &Parser{
-		stepRegistry:      make(map[string]func(config map[string]any) (workflow.Step, error)),
-		conditionRegistry: make(map[string]workflow.ConditionFunc),
+		stepRegistry:      make(map[string]func(config map[string]any) (core.Step, error)),
+		conditionRegistry: make(map[string]core.ConditionFunc),
 	}
 	p.registerBuiltinSteps()
 	return p
 }
 
 // RegisterStep 注册自定义步骤工厂
-func (p *Parser) RegisterStep(name string, factory func(config map[string]any) (workflow.Step, error)) {
+func (p *Parser) RegisterStep(name string, factory func(config map[string]any) (core.Step, error)) {
 	p.stepRegistry[name] = factory
 }
 
 // RegisterCondition 注册命名条件
-func (p *Parser) RegisterCondition(name string, fn workflow.ConditionFunc) {
+func (p *Parser) RegisterCondition(name string, fn core.ConditionFunc) {
 	p.conditionRegistry[name] = fn
 }
 
@@ -53,7 +52,7 @@ func (p *Parser) WithStepDependencies(deps engine.StepDependencies) *Parser {
 }
 
 // ParseFile 从文件解析 DSL
-func (p *Parser) ParseFile(filename string) (*workflow.DAGWorkflow, error) {
+func (p *Parser) ParseFile(filename string) (*core.DAGWorkflow, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("read DSL file: %w", err)
@@ -62,7 +61,7 @@ func (p *Parser) ParseFile(filename string) (*workflow.DAGWorkflow, error) {
 }
 
 // Parse 从 YAML 字节解析 DSL
-func (p *Parser) Parse(data []byte) (*workflow.DAGWorkflow, error) {
+func (p *Parser) Parse(data []byte) (*core.DAGWorkflow, error) {
 	var dsl WorkflowDSL
 	if err := yaml.Unmarshal(data, &dsl); err != nil {
 		return nil, fmt.Errorf("parse YAML: %w", err)
@@ -132,8 +131,8 @@ func (p *Parser) buildWorkflow(
 	nodesDef WorkflowNodesDef,
 	dsl *WorkflowDSL,
 	vars map[string]any,
-) (*workflow.DAGWorkflow, error) {
-	builder := workflow.NewDAGBuilder(name).
+) (*core.DAGWorkflow, error) {
+	builder := core.NewDAGBuilder(name).
 		WithDescription(description).
 		WithLogger(zap.NewNop())
 
@@ -145,11 +144,11 @@ func (p *Parser) buildWorkflow(
 
 		nodeBuilder := builder.AddNode(node.ID, node.Type)
 		switch node.Type {
-		case workflow.NodeTypeAction:
+		case core.NodeTypeAction:
 			if node.Step != nil {
 				nodeBuilder.WithStep(node.Step)
 			}
-		case workflow.NodeTypeCondition:
+		case core.NodeTypeCondition:
 			if node.Condition != nil {
 				nodeBuilder.WithCondition(node.Condition)
 			}
@@ -159,11 +158,11 @@ func (p *Parser) buildWorkflow(
 			if len(nodeDef.OnFalse) > 0 {
 				nodeBuilder.WithOnFalse(nodeDef.OnFalse...)
 			}
-		case workflow.NodeTypeLoop:
+		case core.NodeTypeLoop:
 			if node.LoopConfig != nil {
 				nodeBuilder.WithLoop(*node.LoopConfig)
 			}
-		case workflow.NodeTypeSubGraph:
+		case core.NodeTypeSubGraph:
 			if node.SubGraph != nil {
 				nodeBuilder.WithSubGraph(node.SubGraph)
 			}
@@ -201,10 +200,10 @@ func (p *Parser) buildWorkflow(
 }
 
 // buildNode 构建单个节点
-func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) (*workflow.DAGNode, error) {
-	node := &workflow.DAGNode{
+func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) (*core.DAGNode, error) {
+	node := &core.DAGNode{
 		ID:       def.ID,
-		Type:     workflow.NodeType(def.Type),
+		Type:     core.NodeType(def.Type),
 		Metadata: make(map[string]any),
 	}
 
@@ -213,15 +212,15 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) 
 		node.Metadata[k] = v
 	}
 
-	switch workflow.NodeType(def.Type) {
-	case workflow.NodeTypeAction:
+	switch core.NodeType(def.Type) {
+	case core.NodeTypeAction:
 		step, err := p.resolveStep(def, dsl, vars)
 		if err != nil {
 			return nil, err
 		}
 		node.Step = step
 
-	case workflow.NodeTypeCondition:
+	case core.NodeTypeCondition:
 		condFn, err := p.resolveCondition(def.Condition, vars)
 		if err != nil {
 			return nil, err
@@ -234,7 +233,7 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) 
 			node.Metadata["on_false"] = def.OnFalse
 		}
 
-	case workflow.NodeTypeLoop:
+	case core.NodeTypeLoop:
 		if def.Loop == nil {
 			return nil, fmt.Errorf("loop node requires loop definition")
 		}
@@ -244,10 +243,10 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) 
 		}
 		node.LoopConfig = loopConfig
 
-	case workflow.NodeTypeParallel:
+	case core.NodeTypeParallel:
 		// parallel 节点的边在 buildGraph 中处理
 
-	case workflow.NodeTypeSubGraph:
+	case core.NodeTypeSubGraph:
 		if def.SubGraph != nil {
 			subWf, err := p.buildWorkflow(dsl.Name+"_sub", "subgraph", *def.SubGraph, dsl, vars)
 			if err != nil {
@@ -259,8 +258,8 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) 
 
 	// 错误处理配置
 	if def.Error != nil {
-		node.ErrorConfig = &workflow.ErrorConfig{
-			Strategy:      workflow.ErrorStrategy(def.Error.Strategy),
+		node.ErrorConfig = &core.ErrorConfig{
+			Strategy:      core.ErrorStrategy(def.Error.Strategy),
 			MaxRetries:    def.Error.MaxRetries,
 			RetryDelayMs:  def.Error.RetryDelayMs,
 			FallbackValue: def.Error.FallbackValue,
@@ -271,7 +270,7 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) 
 }
 
 // resolveStep 解析步骤（引用或内联）
-func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) (workflow.Step, error) {
+func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) (core.Step, error) {
 	var stepDef *StepDef
 
 	if def.StepDef != nil {
@@ -407,7 +406,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		return p.newEngineBackedStep(spec, "chain")
 
 	case string(core.StepTypePassthrough):
-		return &workflow.PassthroughStep{}, nil
+		return &core.PassthroughStep{}, nil
 
 	default:
 		// 查找注册的自定义步骤
@@ -420,7 +419,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 }
 
 // resolveCondition 解析条件表达式
-func (p *Parser) resolveCondition(expr string, vars map[string]any) (workflow.ConditionFunc, error) {
+func (p *Parser) resolveCondition(expr string, vars map[string]any) (core.ConditionFunc, error) {
 	// 1. 检查是否是注册的命名条件
 	if fn, ok := p.conditionRegistry[expr]; ok {
 		return fn, nil
@@ -433,7 +432,7 @@ func (p *Parser) resolveCondition(expr string, vars map[string]any) (workflow.Co
 // parseSimpleExpression 解析条件表达式。
 // 支持比较运算符 (==, !=, >, <, >=, <=)、逻辑运算符 (&&, ||, !)、
 // 字段访问 (result.score)、字面量 (数字、字符串、布尔) 和括号分组。
-func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (workflow.ConditionFunc, error) {
+func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (core.ConditionFunc, error) {
 	eval := &exprEvaluator{}
 	return func(_ context.Context, input any) (bool, error) {
 		// Merge static vars with runtime input
@@ -461,7 +460,7 @@ func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (workfl
 	}, nil
 }
 
-func (p *Parser) newEngineBackedStep(spec engine.StepSpec, name string) (workflow.Step, error) {
+func (p *Parser) newEngineBackedStep(spec engine.StepSpec, name string) (core.Step, error) {
 	node, err := engine.BuildExecutionNode(spec, p.effectiveStepDeps())
 	if err != nil {
 		return nil, err
@@ -648,9 +647,9 @@ func (s *protocolStepAdapter) Execute(ctx context.Context, input any) (any, erro
 }
 
 // resolveLoop 解析循环配置
-func (p *Parser) resolveLoop(def *LoopDef, vars map[string]any) (*workflow.LoopConfig, error) {
-	config := &workflow.LoopConfig{
-		Type:          workflow.LoopType(def.Type),
+func (p *Parser) resolveLoop(def *LoopDef, vars map[string]any) (*core.LoopConfig, error) {
+	config := &core.LoopConfig{
+		Type:          core.LoopType(def.Type),
 		MaxIterations: def.MaxIterations,
 	}
 
@@ -667,7 +666,7 @@ func (p *Parser) resolveLoop(def *LoopDef, vars map[string]any) (*workflow.LoopC
 
 // registerBuiltinSteps 注册内置步骤
 func (p *Parser) registerBuiltinSteps() {
-	p.RegisterStep("passthrough", func(_ map[string]any) (workflow.Step, error) {
-		return &workflow.PassthroughStep{}, nil
+	p.RegisterStep("passthrough", func(_ map[string]any) (core.Step, error) {
+		return &core.PassthroughStep{}, nil
 	})
 }

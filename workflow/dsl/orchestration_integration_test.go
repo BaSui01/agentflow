@@ -6,7 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/dsl"
 	"github.com/BaSui01/agentflow/workflow/engine"
 	"go.uber.org/zap"

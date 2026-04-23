@@ -8,7 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/rag/core"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/dsl"
 	workflowruntime "github.com/BaSui01/agentflow/workflow/runtime"
 	"go.uber.org/zap"

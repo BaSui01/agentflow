@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	workflowpkg "github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
 )
 
@@ -95,8 +94,8 @@ func TestLLMStepExecute_StreamsTokensWhenEmitterPresent(t *testing.T) {
 	})
 	step.Prompt = "say hi"
 
-	var events []workflowpkg.WorkflowStreamEvent
-	ctx := workflowpkg.WithWorkflowStreamEmitter(context.Background(), func(event workflowpkg.WorkflowStreamEvent) {
+	var events []core.WorkflowStreamEvent
+	ctx := core.WithWorkflowStreamEmitter(context.Background(), func(event core.WorkflowStreamEvent) {
 		events = append(events, event)
 	})
 
@@ -124,7 +123,7 @@ func TestLLMStepExecute_FallsBackToInvokeWhenStreamUnavailable(t *testing.T) {
 		invokeResponse: &core.LLMResponse{Content: "fallback", Model: "gpt-test"},
 	})
 
-	ctx := workflowpkg.WithWorkflowStreamEmitter(context.Background(), func(event workflowpkg.WorkflowStreamEvent) {})
+	ctx := core.WithWorkflowStreamEmitter(context.Background(), func(event core.WorkflowStreamEvent) {})
 	out, err := step.Execute(ctx, core.StepInput{})
 	if err != nil {
 		t.Fatalf("execute llm step failed: %v", err)

@@ -1,43 +1,19 @@
-package workflow
+package core
 
 import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/BaSui01/agentflow/workflow/core"
 )
 
 // ErrNotConfigured is returned when a step's required dependency (Gateway, Registry, Handler)
 // has not been injected. Callers can check for this with errors.Is(err, ErrNotConfigured).
 var ErrNotConfigured = errors.New("step dependency not configured")
 
-// ============================================================
-// Workflow-local interfaces (avoid circular dependency on agent/)
-// ============================================================
-
-// ToolRegistry abstracts tool lookup and execution for workflow steps.
-// Implement this interface to bridge workflow with your tool management layer.
-type ToolRegistry interface {
-	// GetTool returns a Tool by name. Returns nil, false if not found.
-	GetTool(name string) (Tool, bool)
-	// ExecuteTool looks up and executes a tool in one call.
-	ExecuteTool(ctx context.Context, name string, params map[string]any) (any, error)
-}
-
 // Tool represents an executable tool within a workflow.
 type Tool interface {
 	Name() string
 	Execute(ctx context.Context, params map[string]any) (any, error)
-}
-
-// HumanInputHandler abstracts human-in-the-loop interaction for workflow steps.
-// Implement this interface to bridge workflow with your HITL management layer.
-type HumanInputHandler interface {
-	// RequestInput sends a prompt to a human and waits for a response.
-	// inputType hints at the expected response format (e.g. "text", "choice").
-	// options provides selectable choices when inputType is "choice".
-	RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error)
 }
 
 // ============================================================
@@ -64,14 +40,14 @@ type LLMStep struct {
 	Prompt      string
 	Temperature float64
 	MaxTokens   int
-	Gateway     core.GatewayLike // Optional: inject to enable real LLM calls
+	Gateway     GatewayLike // Optional: inject to enable real LLM calls
 }
 
 func (s *LLMStep) Name() string { return "llm" }
 
 func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Gateway == nil {
-		return nil, core.NewStepError("llm", core.StepTypeLLM, ErrNotConfigured)
+		return nil, NewStepError("llm", StepTypeLLM, ErrNotConfigured)
 	}
 
 	// Build the user message from prompt + input
@@ -86,7 +62,7 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 		}
 	}
 
-	req := &core.LLMRequest{
+	req := &LLMRequest{
 		Model:       s.Model,
 		Prompt:      userContent,
 		Temperature: s.Temperature,
@@ -95,11 +71,11 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 
 	resp, err := s.Gateway.Invoke(ctx, req)
 	if err != nil {
-		return nil, core.NewStepError("llm", core.StepTypeLLM, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
+		return nil, NewStepError("llm", StepTypeLLM, fmt.Errorf("%w: %w", ErrStepExecution, err))
 	}
 
 	if resp == nil || resp.Content == "" {
-		return nil, core.NewStepError("llm", core.StepTypeLLM, fmt.Errorf("%w: empty response", core.ErrStepExecution))
+		return nil, NewStepError("llm", StepTypeLLM, fmt.Errorf("%w: empty response", ErrStepExecution))
 	}
 
 	return resp.Content, nil
@@ -121,7 +97,7 @@ func (s *ToolStep) Name() string { return s.ToolName }
 
 func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Registry == nil {
-		return nil, core.NewStepError(s.ToolName, core.StepTypeTool, ErrNotConfigured)
+		return nil, NewStepError(s.ToolName, StepTypeTool, ErrNotConfigured)
 	}
 
 	// Merge static params with dynamic input if input is a map
@@ -131,7 +107,7 @@ func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 	}
 	if inputMap, ok := input.(map[string]any); ok {
 		for k, v := range inputMap {
-			if _, exists := params[k]; !exists {
+		if _, exists := params[k]; !exists {
 				params[k] = v
 			}
 		}
@@ -141,7 +117,7 @@ func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 
 	result, err := s.Registry.ExecuteTool(ctx, s.ToolName, params)
 	if err != nil {
-		return nil, core.NewStepError(s.ToolName, core.StepTypeTool, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
+		return nil, NewStepError(s.ToolName, StepTypeTool, fmt.Errorf("%w: %w", ErrStepExecution, err))
 	}
 
 	return result, nil
@@ -165,12 +141,12 @@ func (s *HumanInputStep) Name() string { return "human_input" }
 
 func (s *HumanInputStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Handler == nil {
-		return nil, core.NewStepError("human_input", core.StepTypeHumanInput, ErrNotConfigured)
+		return nil, NewStepError("human_input", StepTypeHumanInput, ErrNotConfigured)
 	}
 
 	result, err := s.Handler.RequestInput(ctx, s.Prompt, s.Type, s.Options)
 	if err != nil {
-		return nil, core.NewStepError("human_input", core.StepTypeHumanInput, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
+		return nil, NewStepError("human_input", StepTypeHumanInput, fmt.Errorf("%w: %w", ErrStepExecution, err))
 	}
 
 	return result, nil
@@ -191,7 +167,7 @@ func (s *CodeStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Handler != nil {
 		return s.Handler(ctx, input)
 	}
-	return nil, core.NewStepError("code", core.StepTypeCode, ErrNotConfigured)
+	return nil, NewStepError("code", StepTypeCode, ErrNotConfigured)
 }
 
 

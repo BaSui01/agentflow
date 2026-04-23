@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"gorm.io/gorm"
 )
 

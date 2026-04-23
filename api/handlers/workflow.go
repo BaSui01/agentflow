@@ -6,7 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
-	"github.com/BaSui01/agentflow/workflow"
+	workflow "github.com/BaSui01/agentflow/workflow/core"
 	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
 	"go.uber.org/zap"
 )

@@ -8,7 +8,7 @@ import (
 
 	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
-	"github.com/BaSui01/agentflow/rag"
+	rag "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/core"
 )

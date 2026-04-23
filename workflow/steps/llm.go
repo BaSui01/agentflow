@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/types"
-	workflowpkg "github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
 )
 
@@ -44,7 +43,7 @@ func (s *LLMStep) Execute(ctx context.Context, input core.StepInput) (core.StepO
 	start := time.Now()
 	req := s.buildRequest(input)
 
-	if _, ok := workflowpkg.WorkflowStreamEmitterFromContext(ctx); ok {
+	if _, ok := core.WorkflowStreamEmitterFromContext(ctx); ok {
 		if output, err := s.executeStreaming(ctx, req, start); err == nil {
 			return output, nil
 		}
@@ -96,7 +95,7 @@ func (s *LLMStep) executeStreaming(ctx context.Context, req *core.LLMRequest, st
 		return core.StepOutput{}, err
 	}
 
-	emitter, _ := workflowpkg.WorkflowStreamEmitterFromContext(ctx)
+	emitter, _ := core.WorkflowStreamEmitterFromContext(ctx)
 	var (
 		contentBuilder   strings.Builder
 		reasoningBuilder strings.Builder
@@ -128,8 +127,8 @@ func (s *LLMStep) executeStreaming(ctx context.Context, req *core.LLMRequest, st
 			if chunk.ReasoningContent != nil && *chunk.ReasoningContent != "" {
 				payload["reasoning_content"] = *chunk.ReasoningContent
 			}
-			emitter(workflowpkg.WorkflowStreamEvent{
-				Type:     workflowpkg.WorkflowEventToken,
+			emitter(core.WorkflowStreamEvent{
+				Type:     core.WorkflowEventToken,
 				NodeID:   s.id,
 				NodeName: s.id,
 				Data:     payload,
