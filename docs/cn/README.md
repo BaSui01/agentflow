@@ -1,4 +1,4 @@
-﻿# 📚 AgentFlow 中文文档
+﻿# 📚 AgentFlow 中文文档
 
 > 官方入口：sdk.New(opts).Build(ctx)；单 Agent：gent/runtime；多 Agent：gent/team；显式编排：workflow/runtime。
 
@@ -42,8 +42,8 @@
 
 | 文档 | 描述 | 适用场景 |
 |------|------|----------|
-| [`../architecture/Agent框架现状评估与主流框架调研-2026-04-23.md`](../architecture/Agent框架现状评估与主流框架调研-2026-04-23.md) | 当前 Agent 框架可用性评估 + 主流框架调研 | 想先判断“现在能不能用”、看外部框架对比 |
-| [`../architecture/AgentFlow收口改造方案与实施清单-2026-04-23.md`](../architecture/AgentFlow收口改造方案与实施清单-2026-04-23.md) | AgentFlow 收口路线、实施切片、验收标准 | 想推进 `sdk/runtime/team/workflow` 边界收口 |
+| [`../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md) | 当前 Agent 框架可用性评估 + 主流框架调研 | 想先判断"现在能不能用"、看外部框架对比 |
+| [`../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md) | AgentFlow 收口路线、实施切片、验收标准 | 想推进 `sdk/runtime/team/workflow` 边界收口 |
 | [`../architecture/我的Agent框架设计参考-2026-04-23.md`](../architecture/我的Agent框架设计参考-2026-04-23.md) | 面向自定义 Agent 框架的设计参考 | 想基于外部框架经验设计自己的 Agent 框架 |
 | [`../architecture/权限控制系统重构与引入方案-2026-04-24.md`](../architecture/权限控制系统重构与引入方案-2026-04-24.md) | 统一鉴权、授权、审批、审计的重构方案 | 想引入权限控制系统或完善工具审批链路 |
 | [`../architecture/权限控制系统详细设计-2026-04-24.md`](../architecture/权限控制系统详细设计-2026-04-24.md) | package / 接口 / 数据结构级权限设计 | 要开始实现权限控制系统时优先阅读 |
@@ -53,8 +53,8 @@
 | [`../architecture/Provider工具负载映射说明.md`](../architecture/Provider工具负载映射说明.md) | tool payload 在 gateway / provider / sdk 之间的映射规则 | 想改 function calling / tool payload 语义 |
 | [`../architecture/Channel路由扩展架构说明.md`](../architecture/Channel路由扩展架构说明.md) | channel-based routing 的设计与迁移说明 | 想做渠道路由扩展或替换 `MultiProviderRouter` |
 | [`../architecture/Channel路由外部接入模板-中文版.md`](../architecture/Channel路由外部接入模板-中文版.md) | 外部项目最小接入模板（中文） | 想复用 `ChannelRoutedProvider` 接业务侧 channel/key/mapping 系统 |
-| [`../architecture/Gemini官方SDK迁移清理计划.md`](../architecture/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移清理计划 | 想继续推进 Gemini / Google GenAI 官方 SDK 化 |
-| [`../architecture/LLM供应商维度重构分析.md`](../architecture/LLM供应商维度重构分析.md) | 按供应商维度组织 LLM 能力的重构分析 | 想继续推进 vendor profile / 多模态 profile 化 |
+| [`../archive/Gemini官方SDK迁移清理计划.md`](../archive/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移清理计划（已归档） | 追溯 Gemini 迁移历史 |
+| [`../archive/LLM供应商维度重构分析.md`](../archive/LLM供应商维度重构分析.md) | 按供应商维度组织 LLM 能力的重构分析（已归档） | 追溯 vendor profile 重构历史 |
 | [`../重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 一次性硬切换总计划（TDD / 删除清单 / DoD） | 想直接推进“我的 Agent 框架”重构实施 |
 
 ### 🗄️ 历史归档
@@ -76,11 +76,11 @@
 | 层次 | 先看什么 | 适用场景 |
 |------|----------|----------|
 | 官方主流模型 | [近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 需要确认最新一年的主流 chat / image / video / speech 模型 |
-| 项目统一总览 | [`../模型与媒体端点参考.md`](../模型与媒体端点参考.md) | 需要看 provider `/models`、chat / image / video / speech 总览 |
-| 当前代码能力 | [`../多模态能力端点参考.md`](../多模态能力端点参考.md) | 需要确认项目当前真正已实现哪些多模态能力 |
-| 厂商接入与配置 | [`../视频与图像厂商及端点说明.md`](../视频与图像厂商及端点说明.md) | 需要接入图像 / 视频厂商、看共享 key / endpoint / 配置关系 |
+| 项目统一总览 | [`./guides/模型与媒体端点参考.md`](./guides/模型与媒体端点参考.md) | 需要看 provider `/models`、chat / image / video / speech 总览 |
+| 当前代码能力 | [`./guides/多模态能力端点参考.md`](./guides/多模态能力端点参考.md) | 需要确认项目当前真正已实现哪些多模态能力 |
+| 厂商接入与配置 | [`./guides/视频与图像厂商及端点说明.md`](./guides/视频与图像厂商及端点说明.md) | 需要接入图像 / 视频厂商、看共享 key / endpoint / 配置关系 |
 | 教程示例 | [Provider 配置指南](./tutorials/02.Provider配置指南.md) / [多模态处理](./tutorials/06.多模态处理.md) | 需要复制示例、快速上手 |
-| 历史背景 | [`../多模态实现总结.md`](../多模态实现总结.md) / [`../多模态功能实现报告.md`](../多模态功能实现报告.md) | 需要追溯历史设计与阶段性实现背景 |
+| 历史背景 | [`../archive/多模态实现总结.md`](../archive/多模态实现总结.md) / [`../archive/多模态功能实现报告.md`](../archive/多模态功能实现报告.md) | 需要追溯历史设计与阶段性实现背景 |
 
 ---
 
@@ -170,7 +170,7 @@
 ## 📦 快速安装
 
 ```bash
-# 安装 AgentFlow
+# 安装 AgentFlow
 
 > 官方入口：sdk.New(opts).Build(ctx)；单 Agent：gent/runtime；多 Agent：gent/team；显式编排：workflow/runtime。
 go get github.com/BaSui01/agentflow

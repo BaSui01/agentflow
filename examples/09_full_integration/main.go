@@ -243,7 +243,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 	}
 
 	// 3. Create hierarchical system
-	hierarchicalConfig := hierarchical.DefaultHierarchicalConfig()
+	hierarchicalConfig := team.DefaultHierarchicalConfig()
 	hierarchicalConfig.MaxWorkers = 2
 	hierarchicalConfig.TaskTimeout = 20 * time.Second
 	hierarchicalConfig.EnableRetry = false
@@ -251,7 +251,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 	hierarchicalConfig.WorkerSelection = "least_loaded"
 	hierarchicalConfig.EnableLoadBalance = true
 
-	hierarchicalAgent := hierarchical.NewHierarchicalAgent(
+	hierarchicalAgent := team.NewHierarchicalAgent(
 		supervisor,
 		supervisor,
 		workers,
@@ -435,7 +435,7 @@ func demoProductionConfig(logger *zap.Logger) {
 
 	// 6. Hierarchical system for production
 	fmt.Println("\n6. Hierarchical system defaults")
-	hConfig := hierarchical.DefaultHierarchicalConfig()
+	hConfig := team.DefaultHierarchicalConfig()
 	fmt.Printf("  MaxWorkers: %d, TaskTimeout: %v, EnableRetry: %v, MaxRetries: %d\n",
 		hConfig.MaxWorkers, hConfig.TaskTimeout, hConfig.EnableRetry, hConfig.MaxRetries)
 

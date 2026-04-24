@@ -81,11 +81,11 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 
 	// 3. 创建层次化 Agent
 	fmt.Println("\n3. 创建层次化 Agent")
-	hierarchicalConfig := hierarchical.DefaultHierarchicalConfig()
+	hierarchicalConfig := team.DefaultHierarchicalConfig()
 	hierarchicalConfig.MaxWorkers = 3
 	hierarchicalConfig.WorkerSelection = "round_robin"
 
-	hierarchicalAgent := hierarchical.NewHierarchicalAgent(
+	hierarchicalAgent := team.NewHierarchicalAgent(
 		supervisor,
 		supervisor,
 		workers,
@@ -107,7 +107,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 		fmt.Printf("  - %s: 状态=%s\n", w.ID(), w.State())
 	}
 
-	coordinator := hierarchical.NewTaskCoordinator(workers, hierarchicalConfig, logger)
+	coordinator := team.NewTaskCoordinator(workers, hierarchicalConfig, logger)
 	status := coordinator.GetWorkerStatus()
 	fmt.Printf("  - TaskCoordinator 状态数: %d\n", len(status))
 

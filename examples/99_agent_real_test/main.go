@@ -834,11 +834,11 @@ func d13HierarchicalAgent(ctx context.Context, provider llm.Provider, lg *zap.Lo
 	}
 
 	// 创建 HierarchicalAgent
-	hAgent := hierarchical.NewHierarchicalAgent(
+	hAgent := team.NewHierarchicalAgent(
 		supervisor,
 		supervisor, // supervisor 同时作为 base 和 supervisor
 		[]agent.Agent{worker1, worker2},
-		hierarchical.HierarchicalConfig{
+		team.HierarchicalConfig{
 			MaxWorkers:      2,
 			TaskTimeout:     60 * time.Second,
 			EnableRetry:     true,

@@ -1,15 +1,40 @@
 ---
 name: cn-refactor-plan-governance
-description: >
-  遍历代码库生成中文重构计划，并按计划逐项执行代码修改、验证、同步更新计划文档。
-  Use when user asks to "分析代码架构", "扫描技术债", "生成重构计划", "体检代码库",
-  "执行重构", "推进重构计划", "按计划改代码", "继续做未完成任务",
-  "审核重构计划", "检查计划格式", "归档重构计划", "收尾重构",
-  or mentions "重构计划", "架构问题", "代码问题", "包太乱", "重复太多".
-  When NOT to use: for general code review use the review skill;
-  for writing new features use the implement agent;
-  for debugging use the debug agent.
+description: >-
+  Traverses a codebase to diagnose architecture issues and technical debt,
+  generates structured Chinese-language refactoring plans with TDD verification,
+  and executes uncompleted plan items by modifying code, running verification
+  commands, and syncing plan documents. Specific capabilities: (1) Diagnostic —
+  scans directory structure, layer dependency violations, duplicated semantics,
+  large files, God Objects, and public surface divergence; classifies findings
+  into P0 (hard rule violation) through P3 (cosmetic); outputs a refactoring
+  plan to docs/重构计划/. (2) Execution — reads active plans, prioritizes
+  unchecked items, modifies code following single-track replacement (no compat
+  shims), runs each item's verification command, marks items [x] with evidence.
+  (3) Governance — lints/reports/gates/archives existing plans via guard scripts.
+  Trigger when user asks to "analyze code architecture", "scan for tech debt",
+  "generate a refactoring plan", "check the codebase health", "execute the
+  refactoring plan", "continue the refactoring", "do the remaining tasks",
+  "review the refactoring plan", "archive the plan", mentions "重构计划",
+  "架构问题", "code problems", "package structure is messy", "too much
+  duplication", or references a plan file in docs/重构计划/. Do NOT trigger
+  for general code review (use review skill), writing new features (use
+  implement agent), debugging runtime errors (use debug agent), or adding
+  tests for existing code (use the relevant test tool directly).
 model: sonnet
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Bash
+  - Grep
+  - Glob
+  - WebSearch
+  - WebFetch
+  - TaskCreate
+  - TaskUpdate
+  - TaskList
+  - Agent
 ---
 
 # 重构计划：诊断·执行·治理
@@ -17,16 +42,17 @@ model: sonnet
 ## When to Use
 
 - 用户想了解代码库的架构问题和改进方向
-- 用户需要一份可执行的重构计划文档
+- 用户需要一份可执行的中文重构计划文档
 - 用户已有重构计划，需要逐项执行未完成任务
 - 用户需要审核、归档或收尾现有的重构计划
 
 ## When NOT to Use
 
-- 普通 code review → 用 review skill
-- 开发新功能 → 用 implement agent  
-- 调试 bug → 用 debug agent
-- 写新测试 → 直接用对应工具
+- 普通 code review / PR review → 用 review skill
+- 开发全新功能 → 用 implement agent
+- 调试运行时错误 → 用 debug agent
+- 给现有代码加测试 → 直接用对应测试工具
+- 一次性小范围重命名 → 直接做，不需要生成计划
 
 ---
 
@@ -47,17 +73,16 @@ model: sonnet
 ## 一、诊断模式
 
 **入口条件**：用户表达了分析/诊断意图
+**退出条件**：计划文件已写入 `docs/重构计划/` 且 lint 通过，用户已确认
 
 ### 流程
 
 1. **定范围** — 询问或推断：全仓 / 模块 / 分层 / 问题导向？
-2. **遍历扫描** — 五维度检查（详见 `references/诊断命令参考.md`）
+2. **遍历扫描** — 五维度检查（命令见 `references/诊断命令参考.md`）
 3. **分类定级** — P0（阻塞）→ P3（低）四档
 4. **生成计划** — 写入 `docs/重构计划/<主题>-重构计划-YYYY-MM-DD.md`
-5. **确认** — 输出摘要，等用户确认
+5. **确认** — 输出摘要，等用户确认范围与定级
 6. **输出诊断报告**
-
-**退出条件**：计划文件已生成，用户已确认
 
 ### 扫描五维度
 
@@ -65,9 +90,9 @@ model: sonnet
 |------|--------|----------|
 | 目录结构 | 包数量、文件密度、单文件目录 | 单包超 10 文件、空目录 |
 | 依赖方向 | 跨层 import、适配层污染、cmd 直构 | `agent/` import `cmd/` |
-| 重复语义 | 同名 Builder、重复函数签名、概念重复 | 3 个 `NewTeamBuilder` |
-| 公开表面 | README 推荐入口 vs 实际可用入口 | 文档写用 A 但代码有 A/B/C |
-| 文件职责 | 超大文件（>500 行）、God Object、耦合 | struct 有 25 个字段 |
+| 重复语义 | 同名 Builder/Factory、概念重复 | 3 个 `NewTeamBuilder` |
+| 公开表面 | 文档推荐入口 vs 实际可用入口 | 文档用 A，代码有 A/B/C |
+| 文件职责 | >500 行文件、God Object、高耦合 | struct 有 25 个字段 |
 
 ### 问题定级
 
@@ -92,10 +117,7 @@ model: sonnet
 
 ```markdown
 ## 诊断报告（YYYY-MM-DD）
-
-### 扫描范围
-- N 个包，M 个文件，Layer 0-3 + 适配层 + 组合根
-
+### 扫描范围：N 个包，M 个文件
 ### 发现问题
 | 级别 | 数量 | 典型问题 |
 |------|------|----------|
@@ -103,30 +125,24 @@ model: sonnet
 | P1 | X | ... |
 | P2 | X | ... |
 | P3 | X | ... |
-
-### 生成计划
-- 文件：`docs/重构计划/xxx.md`
-- Phase：N 个，任务：M 项
-
-### 下一步
-审阅计划后说"执行"开始推进
+### 生成计划：`docs/重构计划/xxx.md`，Phase N，任务 M 项
+### 下一步：审阅后说"执行"
 ```
 
 ---
 
 ## 二、执行模式
 
-**入口条件**：用户表达了执行/推进意图，且存在未完成计划
+**入口条件**：用户表达了执行/推进意图，且存在活跃计划
+**退出条件**：本轮任务全部验证通过，计划已同步更新
 
 ### 流程
 
-1. **扫描汇总** — 列出所有活跃计划，统计未完成项，排优先级
-2. **逐项执行** — 读代码 → 修改 → 单轨替换
-3. **验证** — 运行计划中的验证命令，检查通过标准
+1. **扫描汇总** — 列出所有活跃计划，统计 `[ ]`，按优先级排序
+2. **逐项执行** — Read → Edit/Write → 单轨替换
+3. **验证** — 运行任务对应的验证命令，检查通过标准
 4. **更新计划** — `[ ]` → `[x]`，追加本轮执行记录
 5. **输出报告**
-
-**退出条件**：本轮计划项全部执行并验证通过，或遇到阻塞已记录
 
 ### 优先级排序
 
@@ -137,10 +153,10 @@ model: sonnet
 
 ### 执行规则
 
-- 严格按计划，不做计划外改动
-- 单轨替换，删旧实现，不留兼容代码
+- 严格按计划范围，不做计划外改动
+- 单轨替换：删旧实现，不留兼容代码
 - 先 Read 再 Edit，最小修改
-- 遵循 CLAUDE.md 架构约束
+- 遵循 CLAUDE.md 架构分层与启动主链
 - 计划与代码冲突 → 以代码为准，先修正计划
 
 ### 执行报告模板
@@ -150,7 +166,6 @@ model: sonnet
 
 ### 本轮完成任务
 1. Phase-X 任务 → `[x]`
-2. Phase-Y 任务 → `[x]`
 
 ### 修改文件
 | 文件 | 内容 |
@@ -164,10 +179,6 @@ model: sonnet
 
 ### 剩余未完成（N 项）
 1. ...（阻塞原因）
-2. ...
-
-### 阻塞/风险
-- ...
 
 ### 下一步建议
 - ...
@@ -178,6 +189,7 @@ model: sonnet
 ## 三、治理模式
 
 **入口条件**：用户表达了审核/检查/归档意图
+**退出条件**：gate 通过（收尾时）或报告已输出
 
 ### 治理指令
 
@@ -185,7 +197,7 @@ model: sonnet
 2. **进度报告**：`python scripts/refactor_plan_guard.py report --target "<计划>" --require-tdd --require-verifiable-completion`
 3. **TDD**：每个 Phase 必须有失败测试 → 最小实现 → 回归
 4. **门禁**：`python scripts/refactor_plan_guard.py gate --target "<计划>" --require-tdd --require-verifiable-completion`
-5. **归档审计**：`python scripts/audit_plan.py "<计划>"`
+5. **归档审计**：`python .agents/skills/cn-refactor-plan-governance/scripts/audit_plan.py "<计划>"`
 
 ### 治理规则摘要
 
@@ -200,41 +212,41 @@ model: sonnet
 
 ## Common Mistakes
 
-| 错误 | 正确做法 |
-|------|----------|
-| 诊断：只看目录不看代码 | 每个问题必须附文件+行号证据 |
-| 诊断：定级随意 | P0=违反硬规则，P1=明确技术债，以此类推 |
-| 执行：只跑 lint 不改代码 | lint 是分析，改代码+验证才是执行 |
-| 执行：改完不改计划 | 代码+计划同步更新 |
-| 执行：顺手做"小优化" | 严格按计划范围 |
-| 执行：验证失败修无关代码 | 只修本轮引入的问题 |
-| 治理：没证据就勾 `[x]` | 每个 `[x]` 要有测试/脚本/命令输出支撑 |
-| 全部：计划与代码冲突时硬改代码 | 先修正计划，再执行 |
+| 错误 | 为什么错 | 正确做法 |
+|------|---------|----------|
+| 诊断：只看目录不看代码 | 没有证据支撑问题 | 每个问题附文件路径+行号 |
+| 诊断：定级随意 | P0/P1 混淆导致执行优先级错误 | P0=硬规则违反，P1=明确技术债 |
+| 执行：只跑 lint 不改代码 | lint 是分析，不是执行 | 改代码 + 跑验证 + 更新计划 |
+| 执行：改完代码不更新计划 | 计划漂移，下次执行找不到状态 | 代码和计划同步更新 |
+| 执行：顺手做"小优化" | 范围蔓延，引入新问题 | 严格按计划，超出范围写进下一轮 |
+| 执行：验证失败修无关代码 | 扩散范围，难以回滚 | 只修本轮引入的问题 |
+| 治理：没证据就标记 `[x]` | 假完成，下次执行会炸 | 每个 `[x]` 要有命令输出/测试结果 |
+| 全部：计划与代码冲突时硬改代码 | 可能破坏已有正确实现 | 以当前代码为准，先修正计划 |
 
 ---
 
 ## Verification
 
-每个模式结束后验证：
-- **诊断**：计划文件已生成在 `docs/重构计划/`，lint 通过
-- **执行**：`go test` / `go build` 对修改包通过，计划内 `[ ]` 已更新为 `[x]`
-- **治理**：`gate` 退出码为 0
+每个模式结束后自检：
+- **诊断**：计划文件存在于 `docs/重构计划/`，lint 通过
+- **执行**：修改包 `go test` / `go build` 通过，计划内 `[ ]` 已更新为 `[x]`
+- **治理**：`gate` 退出码为 0，才能宣布"可收尾"
 
 ---
 
 ## 资源
 
 ### references/
-| 文件 | 用途 |
-|------|------|
-| `重构计划模板.md` | 通用重构计划模板 |
-| `架构重构计划模板.md` | 架构类重构专用模板 |
-| `重构计划动作矩阵.md` | 完整读取清单与输出模板 |
-| `诊断命令参考.md` | 诊断扫描用 shell 命令集 |
+| 文件 | 内容 | 何时加载 |
+|------|------|----------|
+| `重构计划模板.md` | 通用计划模板 | 生成非架构类计划时 |
+| `架构重构计划模板.md` | 架构类专用模板 | 生成架构重构计划时 |
+| `重构计划动作矩阵.md` | 完整读取清单与输出模板 | 需要详细输出规范时 |
+| `诊断命令参考.md` | 扫描用 shell 命令集 | 诊断模式执行扫描时 |
 
 ### scripts/
 | 脚本 | 用途 |
 |------|------|
 | `run_guard.py` | 仓库 guard 包装器 |
-| `run_guard.ps1` | PowerShell 版包装器 |
+| `run_guard.ps1` | PowerShell 版 |
 | `audit_plan.py` | 计划可归档性审计 |

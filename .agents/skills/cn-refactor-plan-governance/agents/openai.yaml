@@ -1,4 +1,4 @@
 interface:
   display_name: "重构计划：诊断·执行·治理"
-  short_description: "诊断：遍历代码库识别架构问题，生成 TDD 重构计划。执行：按计划逐项改代码、验证、同步更新计划。治理：审核/lint/report/gate/归档。"
-  default_prompt: "先判断模式：诊断（分析/扫描/生成计划）、执行（推进/按计划改）、治理（审核/归档）。诊断：扫描目录结构/依赖方向/重复语义/大文件/公开表面，定级 P0-P3，生成计划到 docs/重构计划/。执行：扫描活跃计划→排优先级→逐项读代码→修改→验证→更新计划→输出报告。治理：跑 lint/report/gate。遵循 CLAUDE.md 架构约束，单轨替换，验证不过不标记完成。"
+  short_description: "Diagnose codebase architecture issues, generate Chinese refactoring plans with TDD checklists, execute uncompleted tasks by modifying code and running verification, govern plans via lint/report/gate/archive."
+  default_prompt: "First determine the mode from user intent: Diagnostic (分析/扫描/生成计划), Execution (执行/推进/按计划改), or Governance (审核/归档). Diagnostic: scan directory structure, layer dependencies, duplicated semantics, large files, public surface divergence → classify P0-P3 → generate plan to docs/重构计划/. Execution: scan active plans → prioritize unchecked items → read code → modify (single-track, no compat shims) → verify → update plan → report. Governance: run lint/report/gate/audit_plan.py. Always follow CLAUDE.md architecture constraints."

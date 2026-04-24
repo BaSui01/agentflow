@@ -174,7 +174,7 @@ foreach ($path in $providerRoutingDocs) {
 $legacyUnifiedEntryDocs = @(
     "README.md",
     "README_EN.md",
-    "docs/getting_started.md",
+    "docs/cn/getting-started/02.框架入口与快速开始.md",
     "docs/cn/tutorials/01.快速开始.md",
     "docs/en/tutorials/01.QuickStart.md",
     "docs/cn/tutorials/03.Agent开发教程.md",
@@ -310,4 +310,3 @@ $env:GOFLAGS = $originalGoFlags
 $env:GOMAXPROCS = $originalGoMaxProcs
 
 Write-Host "Architecture guard passed." -ForegroundColor Green
-

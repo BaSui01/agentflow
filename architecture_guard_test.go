@@ -812,7 +812,7 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 	expectations := []sourceExpectation{
 		{path: "README.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
 		{path: "README_EN.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
-		{path: "docs/getting_started.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
+		{path: "docs/cn/getting-started/02.框架入口与快速开始.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
 		{path: "docs/cn/tutorials/01.快速开始.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
 		{path: "docs/en/tutorials/01.QuickStart.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
 		{path: "docs/cn/tutorials/03.Agent开发教程.md", forbiddenSnippets: []string{"agent.NewAgentBuilder(", "agent.CreateAgent("}},
@@ -861,9 +861,9 @@ func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
 			},
 		},
 		{
-			path: "docs/getting_started.md",
+			path: "docs/cn/getting-started/02.框架入口与快速开始.md",
 			requiredSnippets: []string{
-				"推荐入口是 `agent/runtime.Builder",
+				"`agent/runtime.Builder` 仅作为 `agent` 子模块 runtime 入口",
 				"`agent/runtime",
 			},
 		},
@@ -947,7 +947,7 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 			},
 		},
 		{
-			path: "docs/getting_started.md",
+			path: "docs/cn/getting-started/02.框架入口与快速开始.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
 				"`agent/runtime.Builder",
