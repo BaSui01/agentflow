@@ -1352,7 +1352,7 @@ func TestWorkflowTeamBoundary(t *testing.T) {
 	}
 	src := string(data)
 
-	if !strings.Contains(src, "github.com/BaSui01/agentflow/agent/team/engines/multiagent"`) {
+	if !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team/engines/multiagent"`) {
 		t.Fatal("workflow/steps/orchestration.go must depend on the team-owned mode engine seam")
 	}
 }
@@ -1497,7 +1497,7 @@ func extractCmdAgentflowDocumentedFiles(readmePath string) (map[string]struct{},
 		if strings.HasPrefix(trimmed, "└── examples/") || strings.HasPrefix(trimmed, "├── examples/") {
 			break
 		}
-		if strings.HasPrefix(trimmed, "``") && len(files) > 0 {
+		if strings.HasPrefix(trimmed, "```") && len(files) > 0 {
 			break
 		}
 		if !strings.Contains(line, ".go") {
@@ -1552,5 +1552,3 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
-
-
