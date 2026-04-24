@@ -20,6 +20,8 @@
 |------|------|----------|
 | [⚡ 五分钟快速开始](./getting-started/00.五分钟快速开始.md) | 从零运行第一个程序 | 5 分钟 |
 | [📦 安装与配置](./getting-started/01.安装与配置.md) | 详细安装步骤和配置选项 | 10 分钟 |
+| [🚀 框架入口与快速开始](./getting-started/02.框架入口与快速开始.md) | 官方入口、最小可用示例与并发策略 | 10 分钟 |
+| [🏖️ 沙箱环境配置](./getting-started/03.沙箱环境配置.md) | 启用代码执行与隔离环境 | 10 分钟 |
 
 ### 📚 教程
 
@@ -55,7 +57,7 @@
 | [`../architecture/Channel路由外部接入模板-中文版.md`](../architecture/Channel路由外部接入模板-中文版.md) | 外部项目最小接入模板（中文） | 想复用 `ChannelRoutedProvider` 接业务侧 channel/key/mapping 系统 |
 | [`../archive/Gemini官方SDK迁移清理计划.md`](../archive/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移清理计划（已归档） | 追溯 Gemini 迁移历史 |
 | [`../archive/LLM供应商维度重构分析.md`](../archive/LLM供应商维度重构分析.md) | 按供应商维度组织 LLM 能力的重构分析（已归档） | 追溯 vendor profile 重构历史 |
-| [`../重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 一次性硬切换总计划（TDD / 删除清单 / DoD） | 想直接推进“我的 Agent 框架”重构实施 |
+| [`../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 一次性硬切换总计划（TDD / 删除清单 / DoD） | 想直接推进“我的 Agent 框架”重构实施 |
 
 ### 🗄️ 历史归档
 
@@ -155,7 +157,7 @@
 | 分组 | 主要端点 |
 |------|----------|
 | **System** | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version` |
-| **Chat** | `POST /api/v1/chat/completions`, `/completions/stream`, `POST /v1/chat/completions` (OpenAI 兼容) |
+| **Chat** | `POST /api/v1/chat/completions`, `/completions/stream`, `POST /v1/chat/completions` (OpenAI Chat 兼容), `POST /v1/responses` (OpenAI Responses 兼容), `POST /v1/messages` (Anthropic Messages 兼容) |
 | **Agent** | `GET /api/v1/agents`, `POST /api/v1/agents/execute`, `/execute/stream`, `/plan` |
 | **Provider** | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys` |
 | **Tools** | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `PUT/DELETE /api/v1/tools/{id}` |
@@ -164,6 +166,8 @@
 | **RAG** | `POST /api/v1/rag/query`, `POST /api/v1/rag/index` |
 | **Workflow** | `POST /api/v1/workflows/execute`, `POST /api/v1/workflows/parse`, `GET /api/v1/workflows` |
 | **Config** | `GET/PUT /api/v1/config`, `POST /api/v1/config/reload`, `/rollback` |
+
+说明：Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` 以及 Vertex AI `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` 等路径属于 provider 出站协议，由 `llm/providers/gemini` / `llm/providers/vendor` 负责，不是本项目新增 HTTP 入站路由。
 
 ---
 

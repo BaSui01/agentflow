@@ -5,6 +5,7 @@
 ## 目录
 
 - [核心类型](#核心类型)
+- [协议兼容端点与 Provider 出站端点](#协议兼容端点与-provider-出站端点)
 - [Agent 接口](#agent-接口)
 - [LLM Provider 接口](#llm-provider-接口)
 - [RAG 接口](#rag-接口)
@@ -13,6 +14,21 @@
 ---
 
 ## 核心类型
+
+## 协议兼容端点与 Provider 出站端点
+
+当前与聊天协议直接相关的入口分成两类：
+
+- HTTP 兼容入站：`POST /v1/chat/completions`、`POST /v1/responses`、`POST /v1/messages`
+- Provider 出站协议：Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent`
+- Vertex AI Google 路径：`POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent`
+
+边界约束：
+
+- 前三者是本项目 `api/routes -> api/handlers -> ChatService -> llm/gateway` 的 HTTP 入站协议适配
+- Google / Vertex 路径属于 `llm/providers/gemini`、`llm/providers/vendor` 管理的 provider 出站协议
+- 不新增项目级 `/v1/google/*`、`/v1beta/models/*` HTTP 代理路由
+- handler 只做 DTO 转换、SSE 写出和错误格式适配，不泄漏 `google.golang.org/genai` 等 provider SDK 细节
 
 ### Message
 
