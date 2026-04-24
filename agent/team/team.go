@@ -6,6 +6,7 @@ import (
 	"time"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/team/internal/engines/multiagent"
 
 	"go.uber.org/zap"
 )
@@ -52,6 +53,41 @@ type Team interface {
 	ID() string
 	Members() []agent.TeamMember
 	Execute(ctx context.Context, task string, opts ...agent.TeamOption) (*agent.TeamResult, error)
+}
+
+type ModeRegistry = multiagent.ModeRegistry
+type ModeStrategy = multiagent.ModeStrategy
+type SharedState = multiagent.SharedState
+type InMemorySharedState = multiagent.InMemorySharedState
+type ModeExecutor interface {
+	Execute(ctx context.Context, modeName string, agents []agent.Agent, input *agent.Input) (*agent.Output, error)
+}
+
+const (
+	ModeReasoning     = multiagent.ModeReasoning
+	ModeCollaboration = multiagent.ModeCollaboration
+	ModeHierarchical  = multiagent.ModeHierarchical
+	ModeCrew          = multiagent.ModeCrew
+	ModeDeliberation  = multiagent.ModeDeliberation
+	ModeFederation    = multiagent.ModeFederation
+	ModeParallel      = multiagent.ModeParallel
+	ModeLoop          = multiagent.ModeLoop
+)
+
+func NewModeRegistry() *ModeRegistry { return multiagent.NewModeRegistry() }
+
+func RegisterDefaultModes(reg *ModeRegistry, logger *zap.Logger) error {
+	return multiagent.RegisterDefaultModes(reg, logger)
+}
+
+func GlobalModeRegistry() *ModeRegistry { return multiagent.GlobalModeRegistry() }
+
+func GlobalModeExecutor() ModeExecutor { return multiagent.GlobalModeRegistry() }
+
+func NewInMemorySharedState() *InMemorySharedState { return multiagent.NewInMemorySharedState() }
+
+func NewInMemorySharedStateWithLogger(logger *zap.Logger) *InMemorySharedState {
+	return multiagent.NewInMemorySharedStateWithLogger(logger)
 }
 
 // teamModeStrategy is the internal interface for mode-specific execution logic.

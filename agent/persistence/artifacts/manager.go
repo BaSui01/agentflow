@@ -2,6 +2,8 @@ package artifacts
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"sync"
@@ -319,5 +321,9 @@ func withVersion(version int) CreateOption {
 }
 
 func generateArtifactID() string {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err == nil {
+		return "art_" + hex.EncodeToString(random[:])
+	}
 	return fmt.Sprintf("art_%d", time.Now().UnixNano())
 }

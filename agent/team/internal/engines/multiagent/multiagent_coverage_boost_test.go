@@ -7,7 +7,7 @@ import (
 	"time"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
+
 	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,22 +68,21 @@ func TestSafeStubProvider_Endpoints(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// crewAgentAdapter coverage
+// crew mode coverage
 // ---------------------------------------------------------------------------
 
-func TestCrewAgentAdapter_ID(t *testing.T) {
-	ag := &mockAgent{id: "test-id", name: "test"}
-	adapter := &crewAgentAdapter{agent: ag}
-	assert.Equal(t, "test-id", adapter.ID())
-}
-
-func TestCrewAgentAdapter_Negotiate(t *testing.T) {
-	ag := &mockAgent{id: "test-id", name: "test"}
-	adapter := &crewAgentAdapter{agent: ag}
-	result, err := adapter.Negotiate(context.Background(), team.Proposal{Message: "test"})
+func TestCrewModeStrategy_Execute(t *testing.T) {
+	agents := []agent.Agent{
+		&mockAgent{id: "a1", name: "one", output: &agent.Output{Content: "first", Duration: time.Millisecond}},
+		&mockAgent{id: "a2", name: "two", output: &agent.Output{Content: "second", Duration: time.Millisecond}},
+	}
+	strategy := newCrewModeStrategy(zap.NewNop())
+	out, err := strategy.Execute(context.Background(), agents, &agent.Input{TraceID: "trace-1", Content: "start"})
 	require.NoError(t, err)
-	assert.True(t, result.Accepted)
-	assert.Nil(t, result.Counter)
+	assert.Contains(t, out.Content, "[one] first")
+	assert.Contains(t, out.Content, "[two] second")
+	assert.Equal(t, "trace-1", out.TraceID)
+	assert.Equal(t, ModeCrew, out.Metadata["mode"])
 }
 
 // ---------------------------------------------------------------------------

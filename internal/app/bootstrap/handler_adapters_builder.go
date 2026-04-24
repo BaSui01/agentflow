@@ -9,7 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
