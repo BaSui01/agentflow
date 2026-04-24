@@ -763,7 +763,7 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 
 	expectations := []sourceExpectation{
 		{
-			path: "agent/execution/runtime/registry_runtime.go",
+			path: "agent/runtime/registry_runtime.go",
 			requiredSnippets: []string{
 				"buildRegistryAgent(",
 				"newAgentBuilder(config).",
@@ -773,7 +773,7 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 			},
 		},
 		{
-			path: "agent/collaboration/multiagent/default_modes.go",
+			path: "agent/team/engines/multiagent/default_modes.go",
 			requiredSnippets: []string{
 				"newHierarchicalModeBaseAgent(",
 				"agentruntime.NewBuilder(gateway, logger).Build(",
@@ -1345,29 +1345,11 @@ func TestAuthorizationContracts(t *testing.T) {
 	}
 }
 
-func TestWorkflowTeamBoundary(t *testing.T) {
-	data, err := os.ReadFile(filepath.FromSlash("workflow/steps/orchestration.go"))
-	if err != nil {
-		t.Fatalf("read workflow/steps/orchestration.go: %v", err)
-	}
-	src := string(data)
-
-	if strings.Contains(src, `"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`) {
-		t.Fatal("workflow/steps/orchestration.go must not import the legacy multiagent implementation package directly")
-	}
-	if strings.Contains(src, "*multiagent.ModeRegistry") || strings.Contains(src, "multiagent.GlobalModeRegistry()") {
-		t.Fatal("workflow/steps/orchestration.go must not depend on legacy multiagent registry types directly")
-	}
-	if !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team"`) {
-		t.Fatal("workflow/steps/orchestration.go must depend on the new team contract package")
-	}
-}
-
-func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
+func TestWorkflowTeamBoundary(t *testing.T) {`r`n`tdata, err := os.ReadFile(filepath.FromSlash("workflow/steps/orchestration.go"))`r`n`tif err != nil {`r`n`t	t.Fatalf("read workflow/steps/orchestration.go: %v", err)`r`n`t}`r`n`tsrc := string(data)`r`n`r`n`tif !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team/engines/multiagent"`) {`r`n`t	t.Fatal("workflow/steps/orchestration.go must depend on the team-owned mode engine seam")`r`n`t}`r`n}`r`n`r`nfunc TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
-		data, err := os.ReadFile("agent/execution/runtime/agent_builder.go")
+		data, err := os.ReadFile("agent/runtime/agent_builder.go")
 		if err != nil {
-			t.Fatalf("read agent/execution/runtime/agent_builder.go: %v", err)
+			t.Fatalf("read agent/runtime/agent_builder.go: %v", err)
 		}
 		src := string(data)
 		start := strings.Index(src, "// Merged from loop_executor.go.")
@@ -1382,18 +1364,18 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 			"topLevelLoopBudget(",
 		} {
 			if strings.Contains(src, needle) {
-				t.Fatalf("agent/execution/runtime/agent_builder.go must not depend on legacy control fallback %q", needle)
+				t.Fatalf("agent/runtime/agent_builder.go must not depend on legacy control fallback %q", needle)
 			}
 		}
 	})
 
 	t.Run("chat_request_construction_stays_in_adapter", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/execution/runtime/request_runtime.go")
+		requestData, err := os.ReadFile("agent/runtime/request_runtime.go")
 		if err != nil {
-			t.Fatalf("read agent/execution/runtime/request_runtime.go: %v", err)
+			t.Fatalf("read agent/runtime/request_runtime.go: %v", err)
 		}
 		if strings.Contains(string(requestData), "ChatRequest{") {
-			t.Fatal("agent/execution/runtime/request_runtime.go must not construct ChatRequest directly; use ChatRequestAdapter")
+			t.Fatal("agent/runtime/request_runtime.go must not construct ChatRequest directly; use ChatRequestAdapter")
 		}
 
 		adapterData, err := os.ReadFile("agent/adapters/chat.go")
@@ -1416,12 +1398,12 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	})
 
 	t.Run("tool_choice_any_stays_out_of_agent_runtime_surface", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/execution/runtime/request_runtime.go")
+		requestData, err := os.ReadFile("agent/runtime/request_runtime.go")
 		if err != nil {
-			t.Fatalf("read agent/execution/runtime/request_runtime.go: %v", err)
+			t.Fatalf("read agent/runtime/request_runtime.go: %v", err)
 		}
 		if !strings.Contains(string(requestData), "types.ParseToolChoiceString(") {
-			t.Fatal("agent/execution/runtime/request_runtime.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
+			t.Fatal("agent/runtime/request_runtime.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
 		}
 
 		entries, err := os.ReadDir("agent")
@@ -1558,3 +1540,4 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
+

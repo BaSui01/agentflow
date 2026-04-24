@@ -82,8 +82,8 @@ func (gc *Coordinator) ValidateOutput(ctx context.Context, output string) (strin
 	return gc.outputValidator.ValidateAndFilter(ctx, output)
 }
 
-func (gc *Coordinator) Enabled() bool                           { return gc.enabled }
-func (gc *Coordinator) SetEnabled(enabled bool)                 { gc.enabled = enabled }
+func (gc *Coordinator) Enabled() bool                { return gc.enabled }
+func (gc *Coordinator) SetEnabled(enabled bool)      { gc.enabled = enabled }
 func (gc *Coordinator) GetConfig() *GuardrailsConfig { return gc.config }
 
 func (gc *Coordinator) AddInputValidator(v Validator) {
