@@ -1193,6 +1193,15 @@ func TestMyAgentFrameworkNoLegacyPublicEntrypoints(t *testing.T) {
 				"`agent/adapters/teamadapter`",
 			},
 		},
+		{
+			path: "docs/en/getting-started/01.InstallationAndSetup.md",
+			forbiddenSnippets: []string{
+				"agent/execution/runtime",
+				"agent/collaboration/team",
+				"agent/collaboration/multiagent",
+				"agent/adapters/teamadapter",
+			},
+		},
 	}
 
 	for _, tt := range expectations {
@@ -1205,6 +1214,111 @@ func TestMyAgentFrameworkNoLegacyPublicEntrypoints(t *testing.T) {
 			if strings.Contains(src, snippet) {
 				t.Fatalf("%s must not contain legacy public entrypoint snippet %q after the hard switch", tt.path, snippet)
 			}
+		}
+	}
+}
+
+func TestTeamAdapterIsInternalized(t *testing.T) {
+	if _, err := os.Stat(filepath.FromSlash("agent/adapters/teamadapter")); err == nil {
+		t.Fatal("agent/adapters/teamadapter must not exist; team adapters belong under agent/team/internal/adapters")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat agent/adapters/teamadapter: %v", err)
+	}
+	if _, err := os.Stat(filepath.FromSlash("agent/team/internal/adapters/team_adapter.go")); err != nil {
+		t.Fatalf("team internal adapter implementation is required: %v", err)
+	}
+}
+
+func TestNonAgentPackagesUseOfficialAgentFrameworkEntrypoints(t *testing.T) {
+	forbidden := []string{
+		`"github.com/BaSui01/agentflow/agent/execution/runtime"`,
+		`"github.com/BaSui01/agentflow/agent/collaboration/team"`,
+		`"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`,
+		`"github.com/BaSui01/agentflow/agent/adapters/teamadapter"`,
+	}
+	allowedPrefixes := []string{
+		filepath.FromSlash("agent/"),
+		"architecture_guard_test.go",
+	}
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == ".git" || name == "CC-Source" || name == "test_artifacts" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		normalized := filepath.ToSlash(path)
+		for _, prefix := range allowedPrefixes {
+			if strings.HasPrefix(normalized, filepath.ToSlash(prefix)) || normalized == prefix {
+				return nil
+			}
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		src := string(data)
+		for _, snippet := range forbidden {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must use agent/runtime or agent/team instead of legacy import %s", normalized, snippet)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk go files: %v", err)
+	}
+}
+
+func TestAuthorizationDocsUseUnifiedSurface(t *testing.T) {
+	paths := []string{
+		"AGENTS.md",
+		"README.md",
+		"README_EN.md",
+		"docs/architecture/权限控制系统详细设计-2026-04-24.md",
+		"docs/architecture/权限控制系统重构与引入方案-2026-04-24.md",
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(filepath.FromSlash(path))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(data)
+		for _, forbidden := range []string{"工具审批系统", "ToolApproval.*唯一"} {
+			if strings.Contains(src, forbidden) {
+				t.Fatalf("%s must describe authorization through AuthorizationService, found legacy surface %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestAuthorizationBootstrapFilesDoNotExposeLegacyToolNames(t *testing.T) {
+	legacyFiles := []string{
+		"internal/app/bootstrap/agent_tool_policy_builder.go",
+		"internal/app/bootstrap/agent_tool_approval_builder.go",
+	}
+	for _, file := range legacyFiles {
+		if _, err := os.Stat(filepath.FromSlash(file)); err == nil {
+			t.Fatalf("legacy tool-only authorization bootstrap file must be renamed or removed: %s", file)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", file, err)
+		}
+	}
+	currentFiles := []string{
+		"internal/app/bootstrap/authorization_builder.go",
+		"internal/app/bootstrap/authorization_policy_builder.go",
+		"internal/app/bootstrap/authorization_approval_builder.go",
+	}
+	for _, file := range currentFiles {
+		if _, err := os.Stat(filepath.FromSlash(file)); err != nil {
+			t.Fatalf("authorization bootstrap file is required: %s: %v", file, err)
 		}
 	}
 }
