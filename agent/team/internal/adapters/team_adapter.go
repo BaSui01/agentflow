@@ -1,4 +1,4 @@
-package teamadapter
+package adapters
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
-	teamcore "github.com/BaSui01/agentflow/agent/collaboration/team"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
+	teamcore "github.com/BaSui01/agentflow/agent/team"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"

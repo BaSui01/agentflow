@@ -155,7 +155,7 @@ const (
 
 ### Agent Runtime 入口
 
-`agent` 子模块的正式 runtime 入口是 `agent/execution/runtime.Builder`；仓库级正式入口则应从 `sdk.New(opts).Build(ctx)` 进入。
+`agent` 子模块的正式 runtime 入口是 `agent/runtime.Builder`；仓库级正式入口则应从 `sdk.New(opts).Build(ctx)` 进入。
 
 Agent 运行时主面采用三层模型：`Model / Control / Tools`。
 
@@ -190,7 +190,7 @@ func (b *BaseAgent) Teardown(ctx context.Context) error
 说明：
 
 - `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`。
-- `agent.NewAgentBuilder(...)`、`agent.CreateAgent(...)`、`agent.BuildBaseAgent(...)` 不再作为 `agent` 子模块的正式主入口；它们保留为高级扩展或底层封装面，不应与 `agent/execution/runtime.Builder` 同级推荐。
+- `agent.NewAgentBuilder(...)`、`agent.CreateAgent(...)`、`agent.BuildBaseAgent(...)` 不再作为 `agent` 子模块的正式主入口；它们保留为高级扩展或底层封装面，不应与 `agent/runtime.Builder` 同级推荐。
 - 包级 `agent.CreateAgent(...)` 只是全局 registry 的便捷包装；如果你明确在做 registry 扩展，优先直接调用 `AgentRegistry.Create(...)`，不要把它当作通用构造入口。
 - 默认单 Agent 请求不会经 `multiagent` 模式分发；`multiagent` 仅用于 `agent_ids` 多目标协作请求。
 - `Output` 中的 `current_stage / iteration_count / selected_reasoning_mode / stop_reason / checkpoint_id / resumable` 是默认闭环执行和恢复链路的统一可观测字段。

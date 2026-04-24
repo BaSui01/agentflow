@@ -16,7 +16,7 @@ import (
 	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
-	"github.com/BaSui01/agentflow/agent/execution/runtime"
+	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/integration/voice"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	llm "github.com/BaSui01/agentflow/llm/core"

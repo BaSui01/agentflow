@@ -14,8 +14,8 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"

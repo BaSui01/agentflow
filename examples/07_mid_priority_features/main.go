@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/persistence/conversation"
-	"github.com/BaSui01/agentflow/agent/collaboration/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/agent/adapters/declarative"
 	"github.com/BaSui01/agentflow/agent/adapters/handoff"
 	"github.com/BaSui01/agentflow/agent/integration/hosted"

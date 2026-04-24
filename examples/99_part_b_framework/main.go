@@ -19,11 +19,10 @@ import (
 	"github.com/BaSui01/agentflow/agent/adapters/handoff"
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	memorycore "github.com/BaSui01/agentflow/agent/capabilities/memory"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
-	collaboration "github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
@@ -1161,7 +1160,7 @@ func (a *failAgent) Observe(_ context.Context, _ *agent.Feedback) error { return
 
 func b37SharedState() {
 	t := time.Now()
-	ss := collaboration.NewInMemorySharedState()
+	ss := multiagent.NewInMemorySharedState()
 	ctx := context.Background()
 
 	// Set + Get

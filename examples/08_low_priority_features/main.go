@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 	agentcore "github.com/BaSui01/agentflow/agent/core"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	runtime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/observability/monitoring"
 	"github.com/BaSui01/agentflow/agent/persistence"
 	llm "github.com/BaSui01/agentflow/llm/core"

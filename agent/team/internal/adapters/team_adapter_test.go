@@ -1,4 +1,4 @@
-package teamadapter
+package adapters
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
