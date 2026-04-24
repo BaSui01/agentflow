@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/adapters/handoff"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 	"go.uber.org/zap"
 )
 

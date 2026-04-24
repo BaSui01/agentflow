@@ -1,4 +1,4 @@
-﻿package runtime
+package runtime
 
 import (
 	"context"
@@ -1144,4 +1144,3 @@ func (b *BaseAgent) collectContextMemory(values map[string]any) []string {
 	}
 	return memoryContext
 }
-

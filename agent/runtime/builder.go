@@ -98,7 +98,7 @@ func DefaultBuildOptions() BuildOptions {
 
 func enabled(all bool, v bool) bool { return all || v }
 
-// Builder 是 agent/execution/runtime 的唯一构建入口。
+// Builder 是 agent/runtime 的唯一构建入口。
 type Builder struct {
 	gateway     llmcore.Gateway
 	toolGateway llmcore.Gateway

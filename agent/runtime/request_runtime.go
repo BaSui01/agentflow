@@ -2489,7 +2489,7 @@ func (b *BaseAgent) assembleMessages(
 			return result.Messages, result
 		}
 		if err != nil {
-			b.logger.Warn("context assembly failed, falling back to legacy message construction", zap.Error(err))
+			b.logger.Warn("context assembly failed, falling back to message construction", zap.Error(err))
 		}
 	}
 

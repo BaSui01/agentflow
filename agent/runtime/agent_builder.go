@@ -73,7 +73,7 @@ type AgentBuilder struct {
 }
 
 // newAgentBuilder 创建 Agent 构建器。
-// 正式构造入口已收敛到 agent/execution/runtime.Builder，这里仅保留包内构建核心。
+// 正式构造入口已收敛到 agent/runtime.Builder，这里仅保留包内构建核心。
 func newAgentBuilder(config types.AgentConfig) *AgentBuilder {
 	ensureAgentType(&config)
 	b := &AgentBuilder{

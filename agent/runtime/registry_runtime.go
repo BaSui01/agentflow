@@ -11,8 +11,8 @@ import (
 	"time"
 
 	skills "github.com/BaSui01/agentflow/agent/capabilities/tools"
-	registrycore "github.com/BaSui01/agentflow/agent/collaboration/multiagent/registrycore"
 	agentlsp "github.com/BaSui01/agentflow/agent/integration/lsp"
+	registrycore "github.com/BaSui01/agentflow/agent/team/registrycore"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/google/uuid"
@@ -122,7 +122,7 @@ func buildRegistryAgent(
 	}
 
 	// Keep the registry default factory on the same post-build path as
-	// agent/execution/runtime.Builder:
+	// agent/runtime.Builder:
 	// inject the default reasoning registry and validate the finalized runtime wiring.
 	ag.SetReasoningRegistry(NewDefaultReasoningRegistry(
 		ag.MainGateway(),
@@ -327,7 +327,7 @@ var (
 
 // Init Global Registry将全球代理登记初始化。
 // 该入口只服务 registry 扩展流；常规 Agent 构造应优先使用
-// agent/execution/runtime.Builder。
+// agent/runtime.Builder。
 // 此函数可以安全多次调用 - 只有第一个调用会初始化 。
 func InitGlobalRegistry(logger *zap.Logger) {
 	globalRegistryOnce.Do(func() {
@@ -335,7 +335,7 @@ func InitGlobalRegistry(logger *zap.Logger) {
 	})
 }
 
-// Deprecated: prefer agent/execution/runtime.Builder for regular construction.
+// Deprecated: prefer agent/runtime.Builder for regular construction.
 // Use AgentRegistry.Create only when you intentionally rely on the typed
 // global-registry extension flow.
 func CreateAgent(

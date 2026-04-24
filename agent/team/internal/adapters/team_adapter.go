@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
-	teamcore "github.com/BaSui01/agentflow/agent/team"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+	teamcore "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team/engines/hierarchical"
+	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
@@ -246,7 +246,7 @@ func (t *crewTeam) Execute(ctx context.Context, task string, opts ...agent.TeamO
 	}, nil
 }
 
-// NewCrewTeam creates a Team backed by the legacy crew abstraction.
+// NewCrewTeam creates a Team backed by the crew abstraction.
 func NewCrewTeam(id string, agents []agent.Agent, process string, logger *zap.Logger) agent.Team {
 	if logger == nil {
 		logger = zap.NewNop()
