@@ -11,7 +11,7 @@
 - 仓库已存在正式重构计划：`docs/重构计划/agent模块架构重构-2026-04-22.md`。
 - 当前 `agent/` 根层生产文件为 6 个：`base.go`、`builder.go`、`integration.go`、`interfaces.go`、`registry.go`、`request.go`。
 - 当前 root 文件仍然过厚：`integration.go`、`interfaces.go`、`builder.go` 都较大，`integration.go` 是计划中明确要删除的 root 文件。
-- 现有计划已明确目标：root 最终只保留 5 个文件，正式 runtime 入口继续为 `agent/execution/runtime.Builder`。
+- 现有计划已明确目标：root 最终只保留 5 个文件，正式 runtime 入口继续为 `agent/runtime.Builder`。
 
 ## Assumptions
 
@@ -27,7 +27,7 @@
 - 不新增 `agent/` 根层生产文件。
 - 保持正式入口不变：
   - 仓库级入口：`sdk.New(opts).Build(ctx)`
-  - `agent` 子模块 runtime 入口：`agent/execution/runtime.Builder`
+  - `agent` 子模块 runtime 入口：`agent/runtime.Builder`
 - 必须同步维护相关守卫、测试和文档口径。
 
 ## Acceptance Criteria
@@ -78,4 +78,4 @@
   - `agent/integration/features.go`
   - `agent/execution/loop/completion.go`
   - `agent/execution/context/input_context.go`
-  - `agent/execution/runtime/`
+  - `agent/runtime/`

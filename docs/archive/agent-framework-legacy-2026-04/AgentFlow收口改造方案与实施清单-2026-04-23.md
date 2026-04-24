@@ -20,7 +20,7 @@
 证据：
 
 - `sdk/runtime.go`
-- `agent/execution/runtime/builder.go`
+- `agent/runtime/builder.go`
 - `internal/app/bootstrap/serve_handler_set_builder.go`
 - `internal/usecase/agent_service.go`
 - `api/handlers/agent.go`
@@ -28,7 +28,7 @@
 验证：
 
 ```bash
-go test ./sdk ./agent/execution/runtime ./agent/collaboration/team ./internal/app/bootstrap ./cmd/agentflow -count=1
+go test ./sdk ./agent/runtime ./agent/team ./internal/app/bootstrap ./cmd/agentflow -count=1
 go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDocs|TestAgentOfficialRuntimeEntrypointDocs" -count=1
 ```
 
@@ -45,7 +45,7 @@ go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDo
 
 证据：
 
-- 对外口径：`sdk.New(opts).Build(ctx)`、`agent/execution/runtime.Builder`、`agent/collaboration/team`
+- 对外口径：`sdk.New(opts).Build(ctx)`、`agent/runtime.Builder`、`agent/team`
 - 内部执行：`internal/usecase/agent_service.go:227` 仍直接调 `multiagent.GlobalModeRegistry().Execute(...)`
 
 风险：
@@ -60,11 +60,11 @@ go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDo
 
 | 文件 | 行数 |
 |---|---:|
-| `agent/execution/runtime/request_runtime.go` | 2993 |
-| `agent/execution/runtime/agent_builder.go` | 2982 |
-| `agent/execution/runtime/interfaces_runtime.go` | 2255 |
-| `agent/execution/runtime/registry_runtime.go` | 1591 |
-| `agent/collaboration/multiagent/multi_agent.go` | 1495 |
+| `agent/runtime/request_runtime.go` | 2993 |
+| `agent/runtime/agent_builder.go` | 2982 |
+| `agent/runtime/interfaces_runtime.go` | 2255 |
+| `agent/runtime/registry_runtime.go` | 1591 |
+| `agent/team/engines/multiagent/multi_agent.go` | 1495 |
 
 风险：
 
@@ -144,7 +144,7 @@ go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDo
 
 ### 原则 2：Agent runtime 只负责“单 Agent 自治执行”
 
-保留在 `agent/execution/runtime`：
+保留在 `agent/runtime`：
 
 - 单 Agent loop
 - tool calling
@@ -164,7 +164,7 @@ go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDo
 
 保留：
 
-- `agent/collaboration/team`
+- `agent/team`
 
 约束：
 
@@ -200,16 +200,16 @@ Surface
 
 Single-Agent Runtime
   agent/core/
-  agent/execution/runtime/
+  agent/runtime/
   agent/execution/context/
   agent/capabilities/*
 
 Multi-Agent Official Surface
-  agent/collaboration/team/
+  agent/team/
 
 Multi-Agent Internal Engines
-  agent/collaboration/multiagent/
-  agent/collaboration/hierarchical/
+  agent/team/engines/multiagent/
+  agent/team/engines/hierarchical/
   agent/adapters/teamadapter/
 
 Explicit Orchestration
@@ -265,8 +265,8 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 目标：
 
 - `sdk.New(opts).Build(ctx)` 作为仓库级唯一推荐入口
-- `agent/execution/runtime.Builder` 作为高级 runtime 入口
-- `agent/collaboration/team` 作为唯一官方多 Agent surface
+- `agent/runtime.Builder` 作为高级 runtime 入口
+- `agent/team` 作为唯一官方多 Agent surface
 
 实施项：
 
@@ -300,8 +300,8 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 建议落点：
 
 - `internal/usecase/agent_service.go`
-- `agent/collaboration/team/*`
-- `agent/collaboration/multiagent/*`
+- `agent/team/*`
+- `agent/team/engines/multiagent/*`
 
 验收标准：
 
@@ -353,7 +353,7 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 优先受影响文件：
 
 - `agent/observability/events/runtime_stream.go`
-- `agent/execution/runtime/request_runtime.go`
+- `agent/runtime/request_runtime.go`
 - `api/handlers/agent.go`
 
 
@@ -436,7 +436,7 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 
 ```bash
 go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDocs|TestAgentOfficialRuntimeEntrypointDocs|TestPublicProductSurfaceDocsExamplesConsistency" -count=1
-go test ./sdk ./agent/execution/runtime ./agent/collaboration/team ./internal/app/bootstrap ./cmd/agentflow -count=1
+go test ./sdk ./agent/runtime ./agent/team ./internal/app/bootstrap ./cmd/agentflow -count=1
 ```
 
 ## 5.3 运行时一致性

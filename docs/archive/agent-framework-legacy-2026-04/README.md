@@ -10,7 +10,7 @@
 - `workflow/runtime`：显式编排正式入口
 - `internal/usecase/authorization_service.go`：统一授权入口
 
-归档文件中的 `agent/execution/runtime`、`agent/collaboration/team`、`agent/collaboration/multiagent`、`agent/adapters/teamadapter` 等旧路径只代表历史阶段事实，不再作为当前公开入口契约。
+归档文件中的 `agent/runtime`、`agent/team`、`agent/team/engines/multiagent`、`agent/adapters/teamadapter` 等旧路径只代表历史阶段事实，不再作为当前公开入口契约。
 
 ## 本次归档文件
 

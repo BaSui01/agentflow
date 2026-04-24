@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/adapters/structured"
+	"github.com/BaSui01/agentflow/agent/execution/protocol/a2a"
 )
 
 func main() {
@@ -236,4 +236,3 @@ func demonstrateQuickIntegration(client *a2a.HTTPClient) {
 	_ = ctx    // Used in real scenarios
 	_ = client // Used in real scenarios
 }
-
