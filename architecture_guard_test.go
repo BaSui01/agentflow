@@ -722,7 +722,7 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）",
 				"├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）",
 				"├── workflow/                 # Layer 3: 工作流编排层（目录容器；root 无 Go 文件）",
-				"| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |",
+				"| `workflow/` | 	ypes/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |",
 			},
 		},
 		{
@@ -735,7 +735,7 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)",
 				"├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)",
 				"├── workflow/                 # Layer 3: Workflow orchestration (directory-only container; no root Go files)",
-				"| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
+				"| `workflow/` | 	ypes/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
 			},
 		},
 	}
@@ -820,9 +820,9 @@ func TestPublicUnifiedEntrypointDocs(t *testing.T) {
 		{path: "docs/cn/tutorials/05.工作流编排.md", forbiddenSnippets: []string{"DAGWorkflow.Execute("}},
 		{path: "docs/cn/guides/best-practices.md", forbiddenSnippets: []string{"agent.NewAgentBuilder("}},
 		{path: "README.md", forbiddenSnippets: []string{"`MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥的 routed provider 入口"}},
-		{path: "README_EN.md", forbiddenSnippets: []string{"`MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive routed-provider entries behind `Gateway`"}},
+		{path: "README_EN.md", forbiddenSnippets: []string{"`MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive routed-provider entries behind `Gateway"}},
 		{path: "docs/cn/tutorials/02.Provider配置指南.md", forbiddenSnippets: []string{"`MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥入口"}},
-		{path: "docs/en/tutorials/02.ProviderConfiguration.md", forbiddenSnippets: []string{"`MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive entries behind `Gateway`"}},
+		{path: "docs/en/tutorials/02.ProviderConfiguration.md", forbiddenSnippets: []string{"`MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive entries behind `Gateway"}},
 	}
 
 	for _, tt := range expectations {
@@ -863,8 +863,8 @@ func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
 		{
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
-				"推荐入口是 `agent/runtime.Builder`",
-				"`agent/runtime`",
+				"推荐入口是 `agent/runtime.Builder",
+				"`agent/runtime",
 			},
 		},
 		{
@@ -882,13 +882,13 @@ func TestAgentOfficialRuntimeEntrypointDocs(t *testing.T) {
 		{
 			path: "docs/cn/tutorials/03.Agent开发教程.md",
 			requiredSnippets: []string{
-				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder`",
+				"`agent` 子模块正式 runtime 入口：`agent/runtime.Builder",
 			},
 		},
 		{
 			path: "docs/en/tutorials/03.AgentDevelopment.md",
 			requiredSnippets: []string{
-				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder`",
+				"Official runtime entry for the `agent` submodule: `agent/runtime.Builder",
 			},
 		},
 	}
@@ -924,11 +924,11 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 				"`github.com/BaSui01/agentflow/agent` 根包已删除",
 			},
 			forbiddenSnippets: []string{
-				"推荐使用 `agent.NewAgentBuilder`",
+				"推荐使用 `agent.NewAgentBuilder",
 				"`agent.NewAgentBuilder` 作为正式入口",
-				"`agent.NewAgentBuilder`",
-				"`agent.BuildBaseAgent`",
-				"`agent.CreateAgent`",
+				"`agent.NewAgentBuilder",
+				"`agent.BuildBaseAgent",
+				"`agent.CreateAgent",
 			},
 		},
 		{
@@ -939,19 +939,19 @@ func TestOfficialEntrypointDocsConsistency(t *testing.T) {
 				"the root package `github.com/BaSui01/agentflow/agent` has been removed",
 			},
 			forbiddenSnippets: []string{
-				"recommend `agent.NewAgentBuilder`",
+				"recommend `agent.NewAgentBuilder",
 				"`agent.NewAgentBuilder` as the official entrypoint",
-				"`agent.NewAgentBuilder`",
-				"`agent.BuildBaseAgent`",
-				"`agent.CreateAgent`",
+				"`agent.NewAgentBuilder",
+				"`agent.BuildBaseAgent",
+				"`agent.CreateAgent",
 			},
 		},
 		{
 			path: "docs/getting_started.md",
 			requiredSnippets: []string{
 				"sdk.New(sdk.Options{",
-				"`agent/runtime.Builder`",
-				"`agent/runtime`",
+				"`agent/runtime.Builder",
+				"`agent/runtime",
 			},
 		},
 	}
@@ -991,14 +991,14 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "README.md",
 			requiredSnippets: []string{
-				"**官方多 Agent 门面** - `agent/team`",
+				"**官方多 Agent 门面** - `agent/team",
 				"**官方默认** - `ReAct` 作为唯一默认推理/执行主链",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
-				"**Official Multi-Agent Facade** - `agent/team`",
+				"**Official Multi-Agent Facade** - `agent/team",
 				"**Official default** - `ReAct` is the only default reasoning/execution chain",
 			},
 		},
@@ -1006,7 +1006,7 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			path: "docs/cn/README.md",
 			requiredSnippets: []string{
 				"Team 与 Legacy 多 Agent 协作",
-				"**官方单 Agent 主链**: 默认只走 `react`",
+				"**官方单 Agent 主链**: 默认只走 `react",
 			},
 			forbiddenSnippets: []string{
 				"**推理模式**: ReAct、ReWOO、Plan-Execute、Tree of Thoughts (ToT)",
@@ -1071,14 +1071,14 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			path: "examples/08_low_priority_features/README.md",
 			requiredSnippets: []string{
 				"legacy 多 Agent surface",
-				"新的多 Agent 接入默认应优先使用 `agent/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/team",
 			},
 		},
 		{
 			path: "examples/09_full_integration/README.md",
 			requiredSnippets: []string{
 				"legacy 层次化多 Agent",
-				"新的多 Agent 接入默认应优先使用 `agent/team`",
+				"新的多 Agent 接入默认应优先使用 `agent/team",
 			},
 		},
 	}
@@ -1113,27 +1113,27 @@ func TestMyAgentFrameworkPublicSurface(t *testing.T) {
 			path: "README.md",
 			requiredSnippets: []string{
 				"sdk.New(opts).Build(ctx)",
-				"`agent/runtime`",
-				"`agent/team`",
-				"`workflow/runtime`",
+				"`agent/runtime",
+				"`agent/team",
+				"`workflow/runtime",
 			},
 		},
 		{
 			path: "README_EN.md",
 			requiredSnippets: []string{
 				"sdk.New(opts).Build(ctx)",
-				"`agent/runtime`",
-				"`agent/team`",
-				"`workflow/runtime`",
+				"`agent/runtime",
+				"`agent/team",
+				"`workflow/runtime",
 			},
 		},
 		{
 			path: "AGENTS.md",
 			requiredSnippets: []string{
-				"`agent/runtime`",
-				"`agent/team`",
-				"`workflow/runtime`",
-				"`internal/usecase/authorization_service.go`",
+				"`agent/runtime",
+				"`agent/team",
+				"`workflow/runtime",
+				"`internal/usecase/authorization_service.go",
 			},
 		},
 	}
@@ -1162,35 +1162,35 @@ func TestMyAgentFrameworkNoLegacyPublicEntrypoints(t *testing.T) {
 		{
 			path: "README.md",
 			forbiddenSnippets: []string{
-				"`agent/execution/runtime`",
-				"`agent/collaboration/team`",
-				"`agent/collaboration/multiagent`",
-				"`agent/adapters/teamadapter`",
+				"`agent/execution/runtime",
+				"`agent/collaboration/team",
+				"`agent/collaboration/multiagent",
+				"`agent/adapters/teamadapter",
 			},
 		},
 		{
 			path: "README_EN.md",
 			forbiddenSnippets: []string{
-				"`agent/execution/runtime`",
-				"`agent/collaboration/team`",
-				"`agent/collaboration/multiagent`",
-				"`agent/adapters/teamadapter`",
+				"`agent/execution/runtime",
+				"`agent/collaboration/team",
+				"`agent/collaboration/multiagent",
+				"`agent/adapters/teamadapter",
 			},
 		},
 		{
 			path: "AGENTS.md",
 			forbiddenSnippets: []string{
-				"`agent/execution/runtime`",
-				"`agent/collaboration/team`",
-				"`agent/collaboration/multiagent`",
-				"`agent/adapters/teamadapter`",
+				"`agent/execution/runtime",
+				"`agent/collaboration/team",
+				"`agent/collaboration/multiagent",
+				"`agent/adapters/teamadapter",
 			},
 		},
 		{
 			path: "docs/cn/README.md",
 			forbiddenSnippets: []string{
-				"`agent/collaboration/team`",
-				"`agent/adapters/teamadapter`",
+				"`agent/collaboration/team",
+				"`agent/adapters/teamadapter",
 			},
 		},
 		{
@@ -1231,10 +1231,10 @@ func TestTeamAdapterIsInternalized(t *testing.T) {
 
 func TestNonAgentPackagesUseOfficialAgentFrameworkEntrypoints(t *testing.T) {
 	forbidden := []string{
-		`"github.com/BaSui01/agentflow/agent/execution/runtime"`,
-		`"github.com/BaSui01/agentflow/agent/collaboration/team"`,
-		`"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`,
-		`"github.com/BaSui01/agentflow/agent/adapters/teamadapter"`,
+		"github.com/BaSui01/agentflow/agent/execution/runtime"`,
+		"github.com/BaSui01/agentflow/agent/collaboration/team"`,
+		"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`,
+		"github.com/BaSui01/agentflow/agent/adapters/teamadapter"`,
 	}
 	allowedPrefixes := []string{
 		filepath.FromSlash("agent/"),
@@ -1345,7 +1345,19 @@ func TestAuthorizationContracts(t *testing.T) {
 	}
 }
 
-func TestWorkflowTeamBoundary(t *testing.T) {`r`n`tdata, err := os.ReadFile(filepath.FromSlash("workflow/steps/orchestration.go"))`r`n`tif err != nil {`r`n`t	t.Fatalf("read workflow/steps/orchestration.go: %v", err)`r`n`t}`r`n`tsrc := string(data)`r`n`r`n`tif !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team/engines/multiagent"`) {`r`n`t	t.Fatal("workflow/steps/orchestration.go must depend on the team-owned mode engine seam")`r`n`t}`r`n}`r`n`r`nfunc TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
+func TestWorkflowTeamBoundary(t *testing.T) {
+	data, err := os.ReadFile(filepath.FromSlash("workflow/steps/orchestration.go"))
+	if err != nil {
+		t.Fatalf("read workflow/steps/orchestration.go: %v", err)
+	}
+	src := string(data)
+
+	if !strings.Contains(src, "github.com/BaSui01/agentflow/agent/team/engines/multiagent"`) {
+		t.Fatal("workflow/steps/orchestration.go must depend on the team-owned mode engine seam")
+	}
+}
+
+func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
 		data, err := os.ReadFile("agent/runtime/agent_builder.go")
 		if err != nil {
@@ -1485,7 +1497,7 @@ func extractCmdAgentflowDocumentedFiles(readmePath string) (map[string]struct{},
 		if strings.HasPrefix(trimmed, "└── examples/") || strings.HasPrefix(trimmed, "├── examples/") {
 			break
 		}
-		if strings.HasPrefix(trimmed, "```") && len(files) > 0 {
+		if strings.HasPrefix(trimmed, "``") && len(files) > 0 {
 			break
 		}
 		if !strings.Contains(line, ".go") {
@@ -1540,4 +1552,5 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
+
 
