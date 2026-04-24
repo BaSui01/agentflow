@@ -94,7 +94,7 @@ type NegotiationResult struct {
 	Counter  *Proposal `json:"counter_proposal,omitempty"`
 }
 
-// Crew 是 legacy 角色编排 surface。新接入优先使用 agent/team 作为
+// Crew 是 角色编排 surface。新接入优先使用 agent/team 作为
 // 官方多 Agent facade。
 type Crew struct {
 	ID          string                 `json:"id"`

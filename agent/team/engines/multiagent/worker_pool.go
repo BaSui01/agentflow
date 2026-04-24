@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/google/uuid"

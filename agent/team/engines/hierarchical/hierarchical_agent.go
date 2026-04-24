@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/persistence"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"go.uber.org/zap"
 )
 
-// HierarchicalAgent 是 legacy Supervisor-Worker surface。
+// HierarchicalAgent 是 Supervisor-Worker surface。
 // 新接入优先使用 agent/team 中的 supervisor mode。
 type HierarchicalAgent struct {
 	*agent.BaseAgent

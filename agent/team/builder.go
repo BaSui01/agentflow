@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 
 	"go.uber.org/zap"
 )

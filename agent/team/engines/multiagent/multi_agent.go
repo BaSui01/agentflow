@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
 	"github.com/BaSui01/agentflow/agent/persistence"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -26,7 +26,7 @@ const (
 	PatternNetwork   CollaborationPattern = "network"   // 网络模式
 )
 
-// MultiAgentSystem 是 legacy 多 Agent 协作 surface。新接入优先使用
+// MultiAgentSystem 是 多 Agent 协作 surface。新接入优先使用
 // agent/team 作为统一官方 facade。
 type MultiAgentSystem struct {
 	agents  map[string]agent.Agent

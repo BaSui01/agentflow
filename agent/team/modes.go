@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	planner "github.com/BaSui01/agentflow/agent/capabilities/planning"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
 
 	"go.uber.org/zap"
 )
