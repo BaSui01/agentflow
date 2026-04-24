@@ -105,7 +105,7 @@
   - Gemini / Google GenAI 官方 SDK 迁移的清理计划与风险点。
 - `docs/architecture/LLM供应商维度重构分析.md`
   - 供应商维度 profile 化重构及对多智能体的影响分析。
-- `docs/重构计划/我的Agent框架一次性硬切换重构计划-2026-04-24.md`
+- `docs/archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md`
   - 面向“我的 Agent 框架”的一次性硬切换总计划，含职责矩阵、删除清单、TDD、DoD 与 gate 验收要求。
 
 历史归档文档统一放在：

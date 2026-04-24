@@ -44,11 +44,11 @@
 | Layer | Start here | When to use it |
 |------|------------|----------------|
 | Official recent model families | [Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | You need a 12-month official snapshot for chat / image / video / speech families |
-| Unified project overview | [`../multimodal/模型与媒体端点参考.md`](../multimodal/模型与媒体端点参考.md) | You need the provider `/models` view plus unified media overview |
-| Current implemented capabilities | [`../multimodal/能力端点参考.md`](../multimodal/能力端点参考.md) | You need to know what the codebase actually implements today |
-| Image / video vendor integration | [`../multimodal/视频与图像厂商及端点说明.md`](../multimodal/视频与图像厂商及端点说明.md) | You need provider onboarding, shared keys, endpoint, and config details |
+| Unified project overview | [`../cn/guides/模型与媒体端点参考.md`](../cn/guides/模型与媒体端点参考.md) | You need the provider `/models` view plus unified media overview |
+| Current implemented capabilities | [`../cn/guides/多模态能力端点参考.md`](../cn/guides/多模态能力端点参考.md) | You need to know what the codebase actually implements today |
+| Image / video vendor integration | [`../cn/guides/视频与图像厂商及端点说明.md`](../cn/guides/视频与图像厂商及端点说明.md) | You need provider onboarding, shared keys, endpoint, and config details |
 | Hands-on tutorials | [Provider Configuration](./tutorials/02.ProviderConfiguration.md) / [Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | You want examples you can copy quickly |
-| Historical background | [`../multimodal/README.md`](../multimodal/README.md) | You need design history and implementation milestones |
+| Historical background | [`../cn/guides/多模态能力端点参考.md`](../cn/guides/多模态能力端点参考.md) | You need design history and implementation milestones |
 
 ---
 
@@ -132,7 +132,7 @@
 | Group | Endpoints |
 |-------|-----------|
 | **System** | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version` |
-| **Chat** | `GET /api/v1/chat/capabilities`, `POST /api/v1/chat/completions`, `POST /api/v1/chat/completions/stream`, `POST /v1/chat/completions` (OpenAI compat), `POST /v1/responses` (OpenAI compat) |
+| **Chat** | `GET /api/v1/chat/capabilities`, `POST /api/v1/chat/completions`, `POST /api/v1/chat/completions/stream`, `POST /v1/chat/completions` (OpenAI Chat compat), `POST /v1/responses` (OpenAI Responses compat), `POST /v1/messages` (Anthropic Messages compat) |
 | **Agent** | `GET /api/v1/agents`, `GET /api/v1/agents/{id}`, `GET /api/v1/agents/capabilities`, `POST /api/v1/agents/execute`, `POST /api/v1/agents/execute/stream`, `GET /api/v1/agents/health` |
 | **Provider** | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys`, etc. |
 | **Tools** | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `GET /api/v1/tools/providers`, etc. |
@@ -141,6 +141,8 @@
 | **RAG** | `GET /api/v1/rag/capabilities`, `POST /api/v1/rag/query`, `POST /api/v1/rag/index` |
 | **Workflow** | `GET /api/v1/workflows/capabilities`, `POST /api/v1/workflows/execute`, `POST /api/v1/workflows/parse`, `GET /api/v1/workflows` |
 | **Config** | `GET/PUT /api/v1/config`, `POST /api/v1/config/reload`, `POST /api/v1/config/rollback`, `GET /api/v1/config/fields`, `GET /api/v1/config/changes` |
+
+Note: Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`, `POST /v1beta/models/{model}:streamGenerateContent`, and Vertex AI paths such as `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` remain provider outbound protocol paths owned by `llm/providers/gemini` / `llm/providers/vendor`, not new inbound HTTP routes in this project.
 
 ---
 
