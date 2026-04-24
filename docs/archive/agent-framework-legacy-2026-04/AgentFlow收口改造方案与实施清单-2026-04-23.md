@@ -326,10 +326,12 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 
 借鉴来源：
 
-- LangGraph
-- Microsoft Agent Framework
-- Google ADK workflow agents
-- Mastra Workflows
+- LangGraph：durable execution、checkpoint、interrupt、time travel
+- Microsoft Agent Framework：Agent / Workflow 硬边界、typed workflow、middleware / telemetry
+- Google ADK workflow agents：Sequential / Parallel / Loop、Session / State / Memory
+- CrewAI：Flow 管状态和控制流，Crew 管自治团队
+- Mastra Workflows：stateful workflow、snapshot、MCP / eval / observability 产品面
+- Dapr Agents：workflow / actor / state store 的 durable 基础设施抽象
 
 ---
 
@@ -344,6 +346,9 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 - [ ] 统一 `RuntimeStreamEvent`、tool event、handoff event、approval event 字段规范
 - [ ] 明确 session / checkpoint / progress / resumable 的公共状态模型
 - [ ] 工具输入输出 schema 尽量标准化，减少“任意 metadata map”蔓延
+- [ ] 参考 PydanticAI / Microsoft Agent Framework 固化 typed input / output / validation error / retry 语义
+- [ ] 参考 OpenAI Agents SDK / LangChain 固化 middleware hooks：before model、before tool、after tool、after output
+- [ ] 参考 Mastra / VoltAgent 把 observability / eval 作为事件消费侧，不反向控制核心执行流
 
 优先受影响文件：
 
@@ -351,9 +356,35 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 - `agent/execution/runtime/request_runtime.go`
 - `api/handlers/agent.go`
 
+
 ---
 
-## 4.6 Slice-5：runtime 大文件继续拆职责
+## 4.7 Slice-6：外部 Agent 框架能力融合边界
+
+目标：
+
+- 把外部框架能力转成 AgentFlow 自己的架构契约，而不是引入新的平行入口。
+- 所有融合都必须落到四个正式入口：`sdk.New(opts).Build(ctx)`、`agent/runtime`、`agent/team`、`workflow/runtime`。
+
+融合清单：
+
+- [ ] OpenAI Agents SDK / PydanticAI：收敛最小 Agent 原语到 `agent/runtime`，包括 `Agent`、`Tool`、`Handoff`、`Session`、`RunConfig`、`RunEvent`
+- [ ] Google ADK / LangGraph / Microsoft Agent Framework：把 `Sequential`、`Parallel`、`Loop`、`Branch`、`HITL`、`Checkpoint` 固化为 `workflow/runtime` primitive
+- [ ] CrewAI / AutoGen / CAMEL / MetaGPT / Agno：把角色协作、多 Agent team、supervisor、handoff 收敛到 `agent/team`，不再外露 `multiagent` registry 心智
+- [ ] LlamaIndex / Haystack：把 RAG / knowledge 能力保持在 `rag/` 与工具/上下文装配层，不让数据索引层吞掉 Agent runtime
+- [ ] Mastra / VoltAgent / BeeAI：借鉴 observability、eval、control-plane 信息架构，但不引入 JS/TS control plane 作为核心依赖
+- [ ] Dapr Agents：只借鉴 durable workflow / actor / state store 抽象，不把 Dapr runtime 设为硬依赖
+- [ ] smolagents / Pi：单独沉淀 CodingAgent Harness，shell/file/diff/browser/subagent 能力不进入通用 Agent API
+
+验收标准：
+
+- [ ] 新增或更新文档时，外部框架概念必须映射到上述四个正式入口之一
+- [ ] 不新增 `crew` / `flow` / `graph` / `society` / `pipeline` 等顶层公开入口
+- [ ] 架构守卫能阻止旧入口、并行入口、跨层依赖重新出现
+
+---
+
+## 4.8 Slice-5：runtime 大文件继续拆职责
 
 目标：
 

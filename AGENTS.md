@@ -73,9 +73,9 @@
 
 涉及 Agent 框架现状、收口方案、自定义框架设计与权限控制系统时，优先参考：
 
-- `docs/architecture/Agent框架现状评估与主流框架调研-2026-04-23.md`
+- `docs/archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md`
   - 当前项目 Agent 框架是否可用、主流框架横向对比、现状判断。
-- `docs/architecture/AgentFlow收口改造方案与实施清单-2026-04-23.md`
+- `docs/archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md`
   - AgentFlow 官方入口收口、`sdk/runtime/team/workflow` 边界、实施切片与验收标准。
 - `docs/architecture/我的Agent框架设计参考-2026-04-23.md`
   - 面向自定义 Agent 框架的设计参考，吸收 OpenAI Agents SDK、Google ADK、Microsoft Agent Framework、LangGraph、PydanticAI、CrewAI、Mastra、Pi 等框架经验。
@@ -126,7 +126,7 @@
 处理相关任务时遵循：
 
 - 先确认**唯一正式入口**和**唯一官方表面**，避免再引入并行入口。
-- 涉及权限控制时，优先复用现有 `ToolApproval` / `PermissionManager` / `HITL` 链路，不重复造轮子。
+- 涉及权限控制时，优先以 `internal/usecase/authorization_service.go` / `AuthorizationService` 为统一入口；`PermissionManager`、approval backend 与 HITL 仅作为其下层构件复用，不重复造轮子。
 <!-- TRELLIS:START -->
 # Trellis Instructions
 

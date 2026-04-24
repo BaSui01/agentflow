@@ -1,62 +1,30 @@
-# ADR-004: Multi-Agent Team Abstraction
+# ADR 004：多 Agent 团队抽象（当前契约）
 
-## Status
+> 状态：已更新为当前 Agent 框架硬切换后的契约。
+> 历史版本已归档到 `docs/archive/agent-framework-legacy-2026-04/ADRs/004-多Agent团队抽象.md`。
 
-Accepted
+## 决策
 
-## Context
+- 多 Agent 对外正式入口统一为 `agent/team`。
+- 单 Agent runtime 对外正式入口统一为 `agent/runtime`。
+- 多 Agent 执行 engine 降级为 `agent/team` 的内部实现细节，后续迁移目标为 `agent/team/internal/engines/*`。
+- team adapter 降级为 `agent/team` 的内部 adapter，后续迁移目标为 `agent/team/internal/adapters/*`。
+- workflow orchestration 只能依赖 `agent/team` contract，不直接依赖具体 engine 实现。
 
-AgentFlow provides three independent multi-agent orchestration mechanisms:
-
-1. **Collaboration** (`agent/collaboration/multiagent/`): Debate, Consensus, Pipeline, Broadcast, Network patterns
-2. **Hierarchical** (`agent/collaboration/hierarchical/`): Supervisor decomposes tasks, workers execute in parallel
-3. **Crew** (`agent/collaboration/team/crew.go`): Role-based task assignment with Sequential/Hierarchical/Consensus processes
-
-Each mechanism has its own entry point, configuration, and execution model. This makes it difficult to:
-
-- Switch between modes without rewriting calling code
-- Compose modes within workflow DAG nodes
-- Build higher-level orchestration (e.g., nested teams)
-
-Additionally, the `ModeDeliberation` and `ModeFederation` entries in the mode registry were placeholder implementations that only executed the first agent.
-
-## Decision
-
-### 1. Unified Team Interface
-
-Introduce a `Team` interface in `agent/execution/runtime/interfaces_runtime.go`:
+## 当前 public surface
 
 ```go
-type Team interface {
-    ID() string
-    Members() []TeamMember
-    Execute(ctx context.Context, task string, opts ...TeamOption) (*TeamResult, error)
-}
+import (
+    agentruntime "github.com/BaSui01/agentflow/agent/runtime"
+    agentteam "github.com/BaSui01/agentflow/agent/team"
+)
+
+var _ agentruntime.Agent
+var _ agentteam.Team
 ```
 
-Adapters in `agent/adapters/teamadapter/` wrap each existing mechanism to satisfy this interface.
+## 约束
 
-### 2. Deliberation Mode
-
-Replace the `primaryModeStrategy` placeholder for `ModeDeliberation` with a real implementation:
-
-- Round 1: All agents produce independent drafts
-- Round 2+: Each agent sees all outputs and self-reflects
-- Convergence detection: early termination when outputs stabilize
-- Final synthesis by first agent
-
-### 3. SharedState
-
-Provide a `SharedState` interface in `agent/collaboration/multiagent/shared_state.go` for agents to share intermediate results via a key-value store with `Watch` capability.
-
-### 4. Workflow Bridge
-
-`OrchestrationStep` in `workflow/steps/orchestration.go` implements `core.StepProtocol`, allowing multi-agent collaboration to be used as a DAG node via DSL `type: orchestration`.
-
-## Consequences
-
-- Calling code can use `Team` interface without knowing the underlying mechanism
-- Workflow DAG can orchestrate multi-agent collaboration as a first-class node type
-- Deliberation mode is now functional with convergence detection
-- SharedState enables richer inter-agent communication beyond MessageHub
-- The `agent/adapters/teamadapter` sub-package avoids circular imports between runtime-facing `Team` contracts and collaboration implementations
+- README / README_EN / AGENTS / docs/en / docs/cn 不得再推荐旧多 Agent 路径。
+- 新代码不得把 engine registry 当作公开入口暴露给调用方。
+- 如需修改 engine / adapter 目录，必须同步更新本 ADR、重构计划和架构守卫。
