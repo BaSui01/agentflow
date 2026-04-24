@@ -186,6 +186,12 @@ func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
 	compatRespRec := httptest.NewRecorder()
 	mux.ServeHTTP(compatRespRec, compatRespReq)
 	assert.NotEqual(t, http.StatusNotFound, compatRespRec.Code)
+
+	compatMessagesReq := httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewBufferString(`{"model":"claude-sonnet-4-20250514","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`))
+	compatMessagesReq.Header.Set("Content-Type", "application/json")
+	compatMessagesRec := httptest.NewRecorder()
+	mux.ServeHTTP(compatMessagesRec, compatMessagesReq)
+	assert.NotEqual(t, http.StatusNotFound, compatMessagesRec.Code)
 }
 
 func TestBuildMetricsServerConfig_DefaultLoopbackBinding(t *testing.T) {

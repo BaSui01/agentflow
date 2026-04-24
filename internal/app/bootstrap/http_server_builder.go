@@ -62,6 +62,7 @@ func RegisterHTTPRoutes(
 			"/api/v1/chat/completions",
 			"/v1/chat/completions",
 			"/v1/responses",
+			"/v1/messages",
 			"/api/v1/agents/*",
 			"/api/v1/providers/*",
 			"/api/v1/tools/*",
