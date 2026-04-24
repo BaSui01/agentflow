@@ -11,42 +11,42 @@ import (
 
 // CheckpointDiff 代表两个检查点版本之间的差异。
 type CheckpointDiff struct {
-	ThreadID     string        `json:"thread_id"`
-	Version1     int           `json:"version1"`
-	Version2     int           `json:"version2"`
-	StateChanged bool          `json:"state_changed"`
+	ThreadID     string          `json:"thread_id"`
+	Version1     int             `json:"version1"`
+	Version2     int             `json:"version2"`
+	StateChanged bool            `json:"state_changed"`
 	OldState     agentcore.State `json:"old_state"`
 	NewState     agentcore.State `json:"new_state"`
-	MessagesDiff string        `json:"messages_diff"`
-	MetadataDiff string        `json:"metadata_diff"`
-	TimeDiff     time.Duration `json:"time_diff"`
+	MessagesDiff string          `json:"messages_diff"`
+	MetadataDiff string          `json:"metadata_diff"`
+	TimeDiff     time.Duration   `json:"time_diff"`
 }
 
 // Checkpoint Agent 执行检查点（基于 LangGraph 2026 标准）。
 type Checkpoint struct {
-	ID                  string              `json:"id"`
-	ThreadID            string              `json:"thread_id"`
-	AgentID             string              `json:"agent_id"`
-	LoopStateID         string              `json:"loop_state_id,omitempty"`
-	RunID               string              `json:"run_id,omitempty"`
-	Goal                string              `json:"goal,omitempty"`
-	AcceptanceCriteria  []string            `json:"acceptance_criteria,omitempty"`
-	UnresolvedItems     []string            `json:"unresolved_items,omitempty"`
-	RemainingRisks      []string            `json:"remaining_risks,omitempty"`
-	CurrentPlanID       string              `json:"current_plan_id,omitempty"`
-	PlanVersion         int                 `json:"plan_version,omitempty"`
-	CurrentStepID       string              `json:"current_step_id,omitempty"`
+	ID                  string                         `json:"id"`
+	ThreadID            string                         `json:"thread_id"`
+	AgentID             string                         `json:"agent_id"`
+	LoopStateID         string                         `json:"loop_state_id,omitempty"`
+	RunID               string                         `json:"run_id,omitempty"`
+	Goal                string                         `json:"goal,omitempty"`
+	AcceptanceCriteria  []string                       `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems     []string                       `json:"unresolved_items,omitempty"`
+	RemainingRisks      []string                       `json:"remaining_risks,omitempty"`
+	CurrentPlanID       string                         `json:"current_plan_id,omitempty"`
+	PlanVersion         int                            `json:"plan_version,omitempty"`
+	CurrentStepID       string                         `json:"current_step_id,omitempty"`
 	ValidationStatus    agentcore.LoopValidationStatus `json:"validation_status,omitempty"`
-	ValidationSummary   string              `json:"validation_summary,omitempty"`
-	ObservationsSummary string              `json:"observations_summary,omitempty"`
-	LastOutputSummary   string              `json:"last_output_summary,omitempty"`
-	LastError           string              `json:"last_error,omitempty"`
-	Version             int                 `json:"version"`
-	State               agentcore.State     `json:"state"`
-	Messages            []CheckpointMessage `json:"messages"`
-	Metadata            map[string]any      `json:"metadata"`
-	CreatedAt           time.Time           `json:"created_at"`
-	ParentID            string              `json:"parent_id,omitempty"`
+	ValidationSummary   string                         `json:"validation_summary,omitempty"`
+	ObservationsSummary string                         `json:"observations_summary,omitempty"`
+	LastOutputSummary   string                         `json:"last_output_summary,omitempty"`
+	LastError           string                         `json:"last_error,omitempty"`
+	Version             int                            `json:"version"`
+	State               agentcore.State                `json:"state"`
+	Messages            []CheckpointMessage            `json:"messages"`
+	Metadata            map[string]any                 `json:"metadata"`
+	CreatedAt           time.Time                      `json:"created_at"`
+	ParentID            string                         `json:"parent_id,omitempty"`
 
 	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
 }
@@ -67,25 +67,25 @@ type CheckpointToolCall struct {
 }
 
 type ExecutionContext struct {
-	WorkflowID          string         `json:"workflow_id,omitempty"`
-	CurrentNode         string         `json:"current_node,omitempty"`
-	NodeResults         map[string]any `json:"node_results,omitempty"`
-	Variables           map[string]any `json:"variables,omitempty"`
-	LoopStateID         string         `json:"loop_state_id,omitempty"`
-	RunID               string         `json:"run_id,omitempty"`
-	AgentID             string         `json:"agent_id,omitempty"`
-	Goal                string         `json:"goal,omitempty"`
-	AcceptanceCriteria  []string       `json:"acceptance_criteria,omitempty"`
-	UnresolvedItems     []string       `json:"unresolved_items,omitempty"`
-	RemainingRisks      []string       `json:"remaining_risks,omitempty"`
-	CurrentPlanID       string         `json:"current_plan_id,omitempty"`
-	PlanVersion         int            `json:"plan_version,omitempty"`
-	CurrentStepID       string         `json:"current_step_id,omitempty"`
+	WorkflowID          string                         `json:"workflow_id,omitempty"`
+	CurrentNode         string                         `json:"current_node,omitempty"`
+	NodeResults         map[string]any                 `json:"node_results,omitempty"`
+	Variables           map[string]any                 `json:"variables,omitempty"`
+	LoopStateID         string                         `json:"loop_state_id,omitempty"`
+	RunID               string                         `json:"run_id,omitempty"`
+	AgentID             string                         `json:"agent_id,omitempty"`
+	Goal                string                         `json:"goal,omitempty"`
+	AcceptanceCriteria  []string                       `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems     []string                       `json:"unresolved_items,omitempty"`
+	RemainingRisks      []string                       `json:"remaining_risks,omitempty"`
+	CurrentPlanID       string                         `json:"current_plan_id,omitempty"`
+	PlanVersion         int                            `json:"plan_version,omitempty"`
+	CurrentStepID       string                         `json:"current_step_id,omitempty"`
 	ValidationStatus    agentcore.LoopValidationStatus `json:"validation_status,omitempty"`
-	ValidationSummary   string         `json:"validation_summary,omitempty"`
-	ObservationsSummary string         `json:"observations_summary,omitempty"`
-	LastOutputSummary   string         `json:"last_output_summary,omitempty"`
-	LastError           string         `json:"last_error,omitempty"`
+	ValidationSummary   string                         `json:"validation_summary,omitempty"`
+	ObservationsSummary string                         `json:"observations_summary,omitempty"`
+	LastOutputSummary   string                         `json:"last_output_summary,omitempty"`
+	LastError           string                         `json:"last_error,omitempty"`
 }
 
 func (c *Checkpoint) LoopContextValues() map[string]any {
@@ -204,11 +204,11 @@ func applyCheckpointPersistenceCore(checkpoint *Checkpoint, data checkpointcore.
 }
 
 type CheckpointVersion struct {
-	Version   int       `json:"version"`
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
+	Version   int             `json:"version"`
+	ID        string          `json:"id"`
+	CreatedAt time.Time       `json:"created_at"`
 	State     agentcore.State `json:"state"`
-	Summary   string    `json:"summary"`
+	Summary   string          `json:"summary"`
 }
 
 // CheckpointStore 检查点存储接口（Agent 层）。

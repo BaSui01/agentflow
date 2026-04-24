@@ -7,7 +7,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
+	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 )
 
 // CapabilityCatalog is a read-only runtime view of the currently wired capabilities.
@@ -36,7 +36,7 @@ type CapabilityMode struct {
 func BuildCapabilityCatalog(
 	toolRegistry *hosted.ToolRegistry,
 	agentRegistry *agent.AgentRegistry,
-	modeRegistry *team.ModeRegistry,
+	modeRegistry *multiagent.ModeRegistry,
 ) *CapabilityCatalog {
 	catalog := &CapabilityCatalog{
 		GeneratedAt: time.Now(),

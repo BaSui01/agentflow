@@ -7,7 +7,7 @@ import (
 	"time"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
+	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"go.uber.org/zap"
 )
@@ -73,7 +73,7 @@ func TestOrchestrationStep_Validate(t *testing.T) {
 			name: "empty agent_ids",
 			step: func() *OrchestrationStep {
 				s := NewOrchestrationStep("s1", resolver, nil, nil)
-				s.Mode = team.ModeReasoning
+				s.Mode = multiagent.ModeReasoning
 				return s
 			}(),
 			wantErr: true,
@@ -82,7 +82,7 @@ func TestOrchestrationStep_Validate(t *testing.T) {
 			name: "valid",
 			step: func() *OrchestrationStep {
 				s := NewOrchestrationStep("s1", resolver, nil, nil)
-				s.Mode = team.ModeReasoning
+				s.Mode = multiagent.ModeReasoning
 				s.AgentIDs = []string{"a1"}
 				return s
 			}(),
@@ -100,8 +100,8 @@ func TestOrchestrationStep_Validate(t *testing.T) {
 }
 
 func TestOrchestrationStep_Execute_ReasoningMode(t *testing.T) {
-	reg := team.NewModeRegistry()
-	if err := team.RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+	reg := multiagent.NewModeRegistry()
+	if err := multiagent.RegisterDefaultModes(reg, zap.NewNop()); err != nil {
 		t.Fatalf("register modes: %v", err)
 	}
 	resolver := &mockAgentResolver{
@@ -110,7 +110,7 @@ func TestOrchestrationStep_Execute_ReasoningMode(t *testing.T) {
 		},
 	}
 	s := NewOrchestrationStep("orch-1", resolver, reg, zap.NewNop())
-	s.Mode = team.ModeReasoning
+	s.Mode = multiagent.ModeReasoning
 	s.AgentIDs = []string{"a1"}
 
 	out, err := s.Execute(context.Background(), core.StepInput{
@@ -125,8 +125,8 @@ func TestOrchestrationStep_Execute_ReasoningMode(t *testing.T) {
 }
 
 func TestOrchestrationStep_Execute_CollaborationMode(t *testing.T) {
-	reg := team.NewModeRegistry()
-	if err := team.RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+	reg := multiagent.NewModeRegistry()
+	if err := multiagent.RegisterDefaultModes(reg, zap.NewNop()); err != nil {
 		t.Fatalf("register modes: %v", err)
 	}
 	resolver := &mockAgentResolver{
@@ -136,7 +136,7 @@ func TestOrchestrationStep_Execute_CollaborationMode(t *testing.T) {
 		},
 	}
 	s := NewOrchestrationStep("orch-1", resolver, reg, zap.NewNop())
-	s.Mode = team.ModeCollaboration
+	s.Mode = multiagent.ModeCollaboration
 	s.AgentIDs = []string{"a1", "a2"}
 
 	out, err := s.Execute(context.Background(), core.StepInput{
@@ -153,7 +153,7 @@ func TestOrchestrationStep_Execute_CollaborationMode(t *testing.T) {
 func TestOrchestrationStep_Execute_ResolverError(t *testing.T) {
 	resolver := &mockAgentResolver{err: errors.New("resolver failed")}
 	s := NewOrchestrationStep("orch-1", resolver, nil, zap.NewNop())
-	s.Mode = team.ModeReasoning
+	s.Mode = multiagent.ModeReasoning
 	s.AgentIDs = []string{"a1"}
 
 	_, err := s.Execute(context.Background(), core.StepInput{})
@@ -167,11 +167,11 @@ func TestOrchestrationStep_Execute_ResolverError(t *testing.T) {
 }
 
 func TestOrchestrationStep_Execute_AgentNotFound(t *testing.T) {
-	reg := team.NewModeRegistry()
-	_ = team.RegisterDefaultModes(reg, zap.NewNop())
+	reg := multiagent.NewModeRegistry()
+	_ = multiagent.RegisterDefaultModes(reg, zap.NewNop())
 	resolver := &mockAgentResolver{agents: map[string]agent.Agent{}}
 	s := NewOrchestrationStep("orch-1", resolver, reg, zap.NewNop())
-	s.Mode = team.ModeReasoning
+	s.Mode = multiagent.ModeReasoning
 	s.AgentIDs = []string{"missing"}
 
 	_, err := s.Execute(context.Background(), core.StepInput{})
@@ -191,8 +191,8 @@ func TestOrchestrationStep_IDAndType(t *testing.T) {
 }
 
 func TestOrchestrationStep_MaxRoundsInContext(t *testing.T) {
-	reg := team.NewModeRegistry()
-	_ = team.RegisterDefaultModes(reg, zap.NewNop())
+	reg := multiagent.NewModeRegistry()
+	_ = multiagent.RegisterDefaultModes(reg, zap.NewNop())
 	resolver := &mockAgentResolver{
 		agents: map[string]agent.Agent{
 			"a1": &mockOrchestrationAgent{id: "a1", out: "ok"},
@@ -200,7 +200,7 @@ func TestOrchestrationStep_MaxRoundsInContext(t *testing.T) {
 		},
 	}
 	s := NewOrchestrationStep("orch-1", resolver, reg, zap.NewNop())
-	s.Mode = team.ModeDeliberation
+	s.Mode = multiagent.ModeDeliberation
 	s.AgentIDs = []string{"a1", "a2"}
 	s.MaxRounds = 2
 
@@ -211,13 +211,13 @@ func TestOrchestrationStep_MaxRoundsInContext(t *testing.T) {
 }
 
 func TestOrchestrationStep_Timeout(t *testing.T) {
-	reg := team.NewModeRegistry()
-	_ = team.RegisterDefaultModes(reg, zap.NewNop())
+	reg := multiagent.NewModeRegistry()
+	_ = multiagent.RegisterDefaultModes(reg, zap.NewNop())
 	resolver := &mockAgentResolver{
 		agents: map[string]agent.Agent{"a1": &mockOrchestrationAgent{id: "a1", out: "ok"}},
 	}
 	s := NewOrchestrationStep("orch-1", resolver, reg, zap.NewNop())
-	s.Mode = team.ModeReasoning
+	s.Mode = multiagent.ModeReasoning
 	s.AgentIDs = []string{"a1"}
 	s.Timeout = 5 * time.Second
 

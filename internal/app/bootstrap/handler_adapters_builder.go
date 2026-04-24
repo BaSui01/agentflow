@@ -9,7 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
+	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -296,7 +296,7 @@ func BuildToolingHandlerBundle(in ToolingHandlerBundleInput) (*ToolingHandlerBun
 		bundle.CapabilityCatalog = BuildCapabilityCatalog(
 			toolingRuntime.Registry,
 			in.AgentRegistry,
-			team.GlobalModeRegistry(),
+			multiagent.GlobalModeRegistry(),
 		)
 		if bundle.CapabilityCatalog != nil {
 			logger.Info("Runtime capability catalog initialized",

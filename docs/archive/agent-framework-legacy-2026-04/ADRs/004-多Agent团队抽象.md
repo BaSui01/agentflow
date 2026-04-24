@@ -8,9 +8,9 @@ Accepted
 
 AgentFlow provides three independent multi-agent orchestration mechanisms:
 
-1. **Collaboration** (`agent/collaboration/multiagent/`): Debate, Consensus, Pipeline, Broadcast, Network patterns
-2. **Hierarchical** (`agent/collaboration/hierarchical/`): Supervisor decomposes tasks, workers execute in parallel
-3. **Crew** (`agent/collaboration/team/crew.go`): Role-based task assignment with Sequential/Hierarchical/Consensus processes
+1. **Collaboration** (`agent/team/engines/multiagent/`): Debate, Consensus, Pipeline, Broadcast, Network patterns
+2. **Hierarchical** (`agent/team/engines/hierarchical/`): Supervisor decomposes tasks, workers execute in parallel
+3. **Crew** (`agent/team/crew.go`): Role-based task assignment with Sequential/Hierarchical/Consensus processes
 
 Each mechanism has its own entry point, configuration, and execution model. This makes it difficult to:
 
@@ -24,7 +24,7 @@ Additionally, the `ModeDeliberation` and `ModeFederation` entries in the mode re
 
 ### 1. Unified Team Interface
 
-Introduce a `Team` interface in `agent/execution/runtime/interfaces_runtime.go`:
+Introduce a `Team` interface in `agent/runtime/interfaces_runtime.go`:
 
 ```go
 type Team interface {
@@ -47,7 +47,7 @@ Replace the `primaryModeStrategy` placeholder for `ModeDeliberation` with a real
 
 ### 3. SharedState
 
-Provide a `SharedState` interface in `agent/collaboration/multiagent/shared_state.go` for agents to share intermediate results via a key-value store with `Watch` capability.
+Provide a `SharedState` interface in `agent/team/engines/multiagent/shared_state.go` for agents to share intermediate results via a key-value store with `Watch` capability.
 
 ### 4. Workflow Bridge
 

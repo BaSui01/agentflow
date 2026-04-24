@@ -116,7 +116,7 @@ func NewSimpleAgentFactory(agentType AgentType) AgentFactory {
 	) (MinimalAgent, error) {
 		// Core layer factory only performs minimal setup.
 		// The actual agent construction should be delegated to the
-		// agent/execution/runtime.Builder or parent package.
+		// agent/runtime.Builder or parent package.
 		return nil, fmt.Errorf("core.AgentFactory: actual agent construction should use runtime.Builder, agent type: %s", agentType)
 	}
 }
@@ -217,7 +217,7 @@ var (
 
 // InitGlobalRegistry initializes the global agent registry singleton.
 // This entry only serves the registry extension flow; regular Agent construction
-// should prefer agent/execution/runtime.Builder.
+// should prefer agent/runtime.Builder.
 // This function is safe to call multiple times - only the first call initializes.
 func InitGlobalRegistry(logger *zap.Logger) {
 	globalRegistryOnce.Do(func() {

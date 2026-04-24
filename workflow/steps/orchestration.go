@@ -6,7 +6,7 @@ import (
 	"time"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"go.uber.org/zap"
 )
@@ -22,16 +22,16 @@ type OrchestrationStep struct {
 	MaxRounds int
 	Timeout   time.Duration
 	resolver  AgentResolver
-	registry  team.ModeExecutor
+	registry  *multiagent.ModeRegistry
 	logger    *zap.Logger
 }
 
-func NewOrchestrationStep(id string, resolver AgentResolver, registry team.ModeExecutor, logger *zap.Logger) *OrchestrationStep {
+func NewOrchestrationStep(id string, resolver AgentResolver, registry *multiagent.ModeRegistry, logger *zap.Logger) *OrchestrationStep {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	if registry == nil {
-		registry = team.GlobalModeExecutor()
+		registry = multiagent.GlobalModeRegistry()
 	}
 	return &OrchestrationStep{
 		id:       id,

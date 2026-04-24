@@ -20,17 +20,17 @@ const (
 
 // MemoryEntry 代表单个内存条目.
 type MemoryEntry struct {
-	ID          string                `json:"id"`
-	Type        MemoryKind `json:"type"`
-	Content     string                `json:"content"`
-	Embedding   []float32             `json:"embedding,omitempty"`
-	Importance  float64               `json:"importance"`
-	AccessCount int                   `json:"access_count"`
-	CreatedAt   time.Time             `json:"created_at"`
-	LastAccess  time.Time             `json:"last_access"`
-	ExpiresAt   *time.Time            `json:"expires_at,omitempty"`
-	Metadata    map[string]any        `json:"metadata,omitempty"`
-	Relations   []string              `json:"relations,omitempty"`
+	ID          string         `json:"id"`
+	Type        MemoryKind     `json:"type"`
+	Content     string         `json:"content"`
+	Embedding   []float32      `json:"embedding,omitempty"`
+	Importance  float64        `json:"importance"`
+	AccessCount int            `json:"access_count"`
+	CreatedAt   time.Time      `json:"created_at"`
+	LastAccess  time.Time      `json:"last_access"`
+	ExpiresAt   *time.Time     `json:"expires_at,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	Relations   []string       `json:"relations,omitempty"`
 }
 
 // EpisodicMemory存储基于事件的经验.

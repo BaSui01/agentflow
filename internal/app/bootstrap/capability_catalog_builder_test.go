@@ -6,7 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
+	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,7 +17,7 @@ func TestBuildCapabilityCatalog_CollectsRuntimeCapabilities(t *testing.T) {
 	toolRegistry.Register(hosted.NewWebSearchTool(hosted.WebSearchConfig{Endpoint: "http://example.com"}))
 
 	agentRegistry := agent.NewAgentRegistry(zap.NewNop())
-	modeRegistry := team.NewModeRegistry()
+	modeRegistry := multiagent.NewModeRegistry()
 	modeRegistry.Register(testModeStrategy{name: "parallel"})
 	modeRegistry.Register(testModeStrategy{name: "review"})
 
