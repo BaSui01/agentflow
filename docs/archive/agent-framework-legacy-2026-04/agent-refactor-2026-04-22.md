@@ -43,7 +43,7 @@
 ## 需要替换的旧路径
 
 - 根包 `agent` → `agent/runtime` 或 `agent/core`（按符号归属拆分）
-- 多 Agent 协作统一改为 `agent/team/engines/multiagent`
+- 多 Agent 协作统一改为 `agent/team/internal/engines/multiagent`
 - 官方团队编排改为 `agent/team`
 - team 适配包装器改为 `agent/adapters/teamadapter`
 - 技能管理改为 `agent/capabilities/tools`
@@ -66,3 +66,4 @@
 - `rtk proxy "cmd.exe /c go test ./agent/... -count=1"`
 - `rtk proxy "cmd.exe /c go build ./..."`
 - `rtk proxy "cmd.exe /c powershell.exe -ExecutionPolicy Bypass -File scripts/arch_guard.ps1"`
+

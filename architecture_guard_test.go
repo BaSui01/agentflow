@@ -722,7 +722,7 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）",
 				"├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）",
 				"├── workflow/                 # Layer 3: 工作流编排层（目录容器；root 无 Go 文件）",
-				"| `workflow/` | 	ypes/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |",
+				"| `workflow/` | `types/`\u3001`llm/`\u3001`agent/`\u3001`rag/`\u3001`pkg/`\u3001`config/` | `api/`\u3001`cmd/`\u3001`internal/`\u3001`agent/persistence` |",
 			},
 		},
 		{
@@ -735,7 +735,7 @@ func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
 				"├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)",
 				"├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)",
 				"├── workflow/                 # Layer 3: Workflow orchestration (directory-only container; no root Go files)",
-				"| `workflow/` | 	ypes/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
+				"| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
 			},
 		},
 	}
@@ -773,7 +773,7 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 			},
 		},
 		{
-			path: "agent/team/engines/multiagent/default_modes.go",
+			path: "agent/team/internal/engines/multiagent/default_modes.go",
 			requiredSnippets: []string{
 				"newHierarchicalModeBaseAgent(",
 				"agentruntime.NewBuilder(gateway, logger).Build(",
@@ -1352,7 +1352,7 @@ func TestWorkflowTeamBoundary(t *testing.T) {
 	}
 	src := string(data)
 
-	if !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team/engines/multiagent"`) {
+	if !strings.Contains(src, `"github.com/BaSui01/agentflow/agent/team"`) {
 		t.Fatal("workflow/steps/orchestration.go must depend on the team-owned mode engine seam")
 	}
 }
@@ -1552,3 +1552,5 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
+
+

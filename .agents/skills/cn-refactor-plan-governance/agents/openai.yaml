@@ -1,4 +1,4 @@
 interface:
-  display_name: "重构计划治理"
-  short_description: "维护中文重构计划文档，强制 TDD 测试计划与严格完成标准闭环验收"
-  default_prompt: "请先用严格门禁校验重构计划格式与状态；如涉及测试计划，必须按 TDD 写出失败测试、转绿条件和回归步骤；每项完成定义都要写验证命令与通过标准，只有全部通过后才允许收尾。优先使用 ./scripts/run_guard.ps1 -RequireTDD -RequireVerifiableCompletion。"
+  display_name: "重构计划：诊断·执行·治理"
+  short_description: "诊断：遍历代码库识别架构问题，生成 TDD 重构计划。执行：按计划逐项改代码、验证、同步更新计划。治理：审核/lint/report/gate/归档。"
+  default_prompt: "先判断模式：诊断（分析/扫描/生成计划）、执行（推进/按计划改）、治理（审核/归档）。诊断：扫描目录结构/依赖方向/重复语义/大文件/公开表面，定级 P0-P3，生成计划到 docs/重构计划/。执行：扫描活跃计划→排优先级→逐项读代码→修改→验证→更新计划→输出报告。治理：跑 lint/report/gate。遵循 CLAUDE.md 架构约束，单轨替换，验证不过不标记完成。"

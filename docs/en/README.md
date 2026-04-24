@@ -44,11 +44,11 @@
 | Layer | Start here | When to use it |
 |------|------------|----------------|
 | Official recent model families | [Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | You need a 12-month official snapshot for chat / image / video / speech families |
-| Unified project overview | [`../模型与媒体端点参考.md`](../模型与媒体端点参考.md) | You need the provider `/models` view plus unified media overview |
-| Current implemented capabilities | [`../多模态能力端点参考.md`](../多模态能力端点参考.md) | You need to know what the codebase actually implements today |
-| Image / video vendor integration | [`../视频与图像厂商及端点说明.md`](../视频与图像厂商及端点说明.md) | You need provider onboarding, shared keys, endpoint, and config details |
+| Unified project overview | [`../multimodal/模型与媒体端点参考.md`](../multimodal/模型与媒体端点参考.md) | You need the provider `/models` view plus unified media overview |
+| Current implemented capabilities | [`../multimodal/能力端点参考.md`](../multimodal/能力端点参考.md) | You need to know what the codebase actually implements today |
+| Image / video vendor integration | [`../multimodal/视频与图像厂商及端点说明.md`](../multimodal/视频与图像厂商及端点说明.md) | You need provider onboarding, shared keys, endpoint, and config details |
 | Hands-on tutorials | [Provider Configuration](./tutorials/02.ProviderConfiguration.md) / [Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | You want examples you can copy quickly |
-| Historical background | [`../多模态实现总结.md`](../多模态实现总结.md) / [`../多模态功能实现报告.md`](../多模态功能实现报告.md) | You need design history and implementation milestones |
+| Historical background | [`../multimodal/README.md`](../multimodal/README.md) | You need design history and implementation milestones |
 
 ---
 

@@ -23,7 +23,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/middleware"

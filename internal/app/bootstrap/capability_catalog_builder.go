@@ -7,7 +7,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 )
 
 // CapabilityCatalog is a read-only runtime view of the currently wired capabilities.

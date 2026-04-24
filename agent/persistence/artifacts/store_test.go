@@ -263,6 +263,17 @@ func TestManager_List(t *testing.T) {
 	assert.Len(t, results, 2)
 }
 
+func TestGenerateArtifactID_UniqueForRapidCreates(t *testing.T) {
+	ids := make(map[string]struct{}, 1000)
+	for i := 0; i < 1000; i++ {
+		id := generateArtifactID()
+		if _, exists := ids[id]; exists {
+			t.Fatalf("duplicate artifact id generated: %s", id)
+		}
+		ids[id] = struct{}{}
+	}
+}
+
 func TestManager_Archive(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()

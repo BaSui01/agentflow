@@ -8,8 +8,7 @@ import (
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/agent/team"
-	"github.com/BaSui01/agentflow/agent/team/engines/hierarchical"
+	"github.com/BaSui01/agentflow/agent/team/internal/engines/hierarchical"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
@@ -223,69 +222,31 @@ func (m *crewModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 	if len(agents) == 0 {
 		return nil, fmt.Errorf("crew mode requires at least one agent")
 	}
-
-	crew := team.NewCrew(team.CrewConfig{
-		Name:    "multiagent-crew-mode",
-		Process: team.ProcessSequential,
-	}, m.logger)
-	for _, ag := range agents {
-		crew.AddMember(&crewAgentAdapter{agent: ag}, team.Role{
-			Name:        ag.Name(),
-			Description: "registered from mode registry",
-			Skills:      []string{"general"},
-		})
-	}
-	crew.AddTask(team.CrewTask{
-		ID:          "multiagent-crew-task",
-		Description: input.Content,
-		Expected:    "task result",
-	})
-
-	result, err := crew.Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
 	content := ""
-	for _, tr := range result.TaskResults {
-		if tr == nil || tr.Output == nil {
-			continue
+	traceID := ""
+	if input != nil {
+		content = input.Content
+		traceID = input.TraceID
+	}
+	var parts []string
+	var totalDuration time.Duration
+	for _, ag := range agents {
+		out, err := ag.Execute(ctx, &agent.Input{Content: content})
+		if err != nil {
+			return nil, err
 		}
-		text := fmt.Sprintf("%v", tr.Output)
-		if strings.TrimSpace(text) != "" {
-			if content != "" {
-				content += "\n"
-			}
-			content += text
+		if strings.TrimSpace(out.Content) != "" {
+			parts = append(parts, fmt.Sprintf("[%s] %s", ag.Name(), out.Content))
 		}
+		totalDuration += out.Duration
+		content = out.Content
 	}
 	return &agent.Output{
-		TraceID:  input.TraceID,
-		Content:  content,
-		Duration: result.Duration,
-		Metadata: map[string]any{"crew_id": result.CrewID, "mode": ModeCrew},
+		TraceID:  traceID,
+		Content:  strings.Join(parts, "\n"),
+		Duration: totalDuration,
+		Metadata: map[string]any{"mode": ModeCrew},
 	}, nil
-}
-
-type crewAgentAdapter struct {
-	agent agent.Agent
-}
-
-func (c *crewAgentAdapter) ID() string { return c.agent.ID() }
-
-func (c *crewAgentAdapter) Execute(ctx context.Context, task team.CrewTask) (*team.TaskResult, error) {
-	output, err := c.agent.Execute(ctx, &agent.Input{Content: task.Description})
-	if err != nil {
-		return nil, err
-	}
-	return &team.TaskResult{
-		TaskID:   task.ID,
-		Output:   output.Content,
-		Duration: output.Duration.Milliseconds(),
-	}, nil
-}
-
-func (c *crewAgentAdapter) Negotiate(_ context.Context, _ team.Proposal) (*team.NegotiationResult, error) {
-	return &team.NegotiationResult{Accepted: true, Counter: nil}, nil
 }
 
 // safeStubProvider provides safe defaults for wrappers that don't directly call provider methods.

@@ -64,7 +64,7 @@ go test . -run "TestAgentUnifiedBuilderEntryPoints|TestPublicUnifiedEntrypointDo
 | `agent/runtime/agent_builder.go` | 2982 |
 | `agent/runtime/interfaces_runtime.go` | 2255 |
 | `agent/runtime/registry_runtime.go` | 1591 |
-| `agent/team/engines/multiagent/multi_agent.go` | 1495 |
+| `agent/team/internal/engines/multiagent/multi_agent.go` | 1495 |
 
 风险：
 
@@ -208,8 +208,8 @@ Multi-Agent Official Surface
   agent/team/
 
 Multi-Agent Internal Engines
-  agent/team/engines/multiagent/
-  agent/team/engines/hierarchical/
+  agent/team/internal/engines/multiagent/
+  agent/team/internal/engines/hierarchical/
   agent/adapters/teamadapter/
 
 Explicit Orchestration
@@ -301,7 +301,7 @@ rg -n 'github.com/BaSui01/agentflow/agent\"|agent/base.go|agent/react.go|agent/c
 
 - `internal/usecase/agent_service.go`
 - `agent/team/*`
-- `agent/team/engines/multiagent/*`
+- `agent/team/internal/engines/multiagent/*`
 
 验收标准：
 
@@ -466,3 +466,4 @@ go test ./sdk ./agent/runtime ./agent/team ./internal/app/bootstrap ./cmd/agentf
 ## 7. 一句话判断
 
 > AgentFlow 当前最需要的不是“再加一个新能力”，而是把 **`sdk` / `runtime` / `team` / `workflow` 四个层面的边界彻底讲清、做硬、测住**。
+

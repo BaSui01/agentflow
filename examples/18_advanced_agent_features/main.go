@@ -26,7 +26,7 @@ import (
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	orchestration "github.com/BaSui01/agentflow/agent/runtime/orchestration"
-	multiagent "github.com/BaSui01/agentflow/agent/team/engines/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
