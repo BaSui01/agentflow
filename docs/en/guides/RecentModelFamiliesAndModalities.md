@@ -73,4 +73,4 @@
 4. When a model family splits into standard vs reasoning variants, keep the routing rule explicit in code and docs.
 5. For new multimodal families, update both:
    - `docs/en/tutorials/02.ProviderConfiguration.md`
-   - `docs/模型与媒体端点参考.md`
+   - `docs/multimodal/模型与媒体端点参考.md`

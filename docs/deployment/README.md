@@ -83,7 +83,7 @@ kubectl get pods -l app.kubernetes.io/name=agentflow
 
 ## 基础设施上线清单
 
-- 基础设施化上线前请先完成并复核 [基础设施上线清单](../基础设施上线清单.md)
+- 基础设施化上线前请先完成并复核 [基础设施上线清单](./上线清单.md)
 - 本仓库当前运行时只暴露 `HTTP(8080)` 与独立 `metrics(9091)` 服务，不提供独立 `gRPC` 服务端口
 - `metrics` 默认仅绑定 loopback，若需要容器外抓取必须显式设置 `AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0`
 - `pprof` 默认关闭，只有显式开启 `AGENTFLOW_SERVER_ENABLE_PPROF=true` 才会注册 `/debug/pprof/*`
