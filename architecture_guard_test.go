@@ -1231,10 +1231,10 @@ func TestTeamAdapterIsInternalized(t *testing.T) {
 
 func TestNonAgentPackagesUseOfficialAgentFrameworkEntrypoints(t *testing.T) {
 	forbidden := []string{
-		"github.com/BaSui01/agentflow/agent/execution/runtime"`,
-		"github.com/BaSui01/agentflow/agent/collaboration/team"`,
-		"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`,
-		"github.com/BaSui01/agentflow/agent/adapters/teamadapter"`,
+		`"github.com/BaSui01/agentflow/agent/execution/runtime"`,
+		`"github.com/BaSui01/agentflow/agent/collaboration/team"`,
+		`"github.com/BaSui01/agentflow/agent/collaboration/multiagent"`,
+		`"github.com/BaSui01/agentflow/agent/adapters/teamadapter"`,
 	}
 	allowedPrefixes := []string{
 		filepath.FromSlash("agent/"),
