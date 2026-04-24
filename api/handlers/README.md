@@ -17,7 +17,7 @@
 路由注册在 `api/routes/routes.go`，统一挂载到 `/api/v1/*`：
 
 - Chat: `/api/v1/chat/capabilities`、`/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
-- OpenAI 兼容入站：`/v1/chat/completions`、`/v1/responses`（协议适配到同一 ChatService/gateway 链路）
+- 兼容入站：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`（分别适配 OpenAI Chat / OpenAI Responses / Anthropic Messages，到同一 ChatService/gateway 链路）
 - Agent: `/api/v1/agents`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/health`
 - RAG: `/api/v1/rag/query`、`/api/v1/rag/index`
 - Workflow: `/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`

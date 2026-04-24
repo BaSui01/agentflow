@@ -29,6 +29,7 @@ func RegisterChat(mux *http.ServeMux, chatHandler *handlers.ChatHandler, logger 
 	mux.HandleFunc("POST /api/v1/chat/completions/stream", chatHandler.HandleStream)
 	mux.HandleFunc("POST /v1/chat/completions", chatHandler.HandleOpenAICompatChatCompletions)
 	mux.HandleFunc("POST /v1/responses", chatHandler.HandleOpenAICompatResponses)
+	mux.HandleFunc("POST /v1/messages", chatHandler.HandleAnthropicCompatMessages)
 	logger.Info("Chat API routes registered")
 }
 
