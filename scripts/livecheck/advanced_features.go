@@ -271,13 +271,13 @@ func runHierarchicalExecution(ctx context.Context, logger *zap.Logger, provider 
 		}
 	}
 
-	hCfg := hierarchical.DefaultHierarchicalConfig()
+	hCfg := team.DefaultHierarchicalConfig()
 	hCfg.MaxWorkers = 4
 	hCfg.WorkerSelection = "round_robin"
 	hCfg.MaxRetries = 1
 	hCfg.TaskTimeout = 90 * time.Second
 
-	hier := hierarchical.NewHierarchicalAgent(base, supervisor, workers, hCfg, logger)
+	hier := team.NewHierarchicalAgent(base, supervisor, workers, hCfg, logger)
 
 	execCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()

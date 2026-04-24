@@ -338,9 +338,21 @@ func TestExecutorWithCustomCheckpointStore(t *testing.T) {
 	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 
 	// Verify ExecutionCheckpoint was saved via the custom store.
-	loaded, err := customStore.LoadCheckpoint(ctx, exec.ID)
-	if err != nil {
-		t.Fatalf("LoadCheckpoint from custom store failed: %v", err)
+	var loaded *Execution
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		loaded, err = customStore.LoadCheckpoint(ctx, exec.ID)
+		if err == nil {
+			break
+		}
+		if !os.IsNotExist(err) {
+			t.Fatalf("LoadCheckpoint from custom store failed: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if loaded == nil {
+		t.Fatalf("LoadCheckpoint from custom store timed out for %s", exec.ID)
 	}
 	if loaded.State != ExecutionStateCompleted {
 		t.Fatalf("expected completed, got %s", loaded.State)
