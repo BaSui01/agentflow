@@ -10,10 +10,10 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/collaboration/hierarchical"
-	"github.com/BaSui01/agentflow/agent/collaboration/multiagent"
+	multiagent "github.com/BaSui01/agentflow/agent/team"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"

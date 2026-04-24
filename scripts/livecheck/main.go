@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	agent "github.com/BaSui01/agentflow/agent/execution/runtime"
-	agentruntime "github.com/BaSui01/agentflow/agent/execution/runtime"
+	agent "github.com/BaSui01/agentflow/agent/runtime"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	embeddingcap "github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
