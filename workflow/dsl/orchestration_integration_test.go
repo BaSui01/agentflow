@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	workflow "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/dsl"
 	"github.com/BaSui01/agentflow/workflow/engine"
@@ -43,10 +43,6 @@ func (r *mockAgentResolver) ResolveAgent(ctx context.Context, agentID string) (a
 }
 
 func TestWorkflowDSL_OrchestrationStep_MultiAgent_SharedState(t *testing.T) {
-	reg := multiagent.NewModeRegistry()
-	if err := multiagent.RegisterDefaultModes(reg, zap.NewNop()); err != nil {
-		t.Fatalf("register modes: %v", err)
-	}
 	resolver := &mockAgentResolver{
 		agents: map[string]agent.Agent{
 			"a1": &mockOrchestrationAgent{id: "a1", out: "agent-one-output"},
@@ -83,7 +79,7 @@ workflow:
 		t.Fatal("workflow is nil")
 	}
 
-	sharedState := multiagent.NewInMemorySharedState()
+	sharedState := team.NewInMemorySharedState()
 	exec := workflow.NewDAGExecutor(nil, zap.NewNop())
 	facade := workflow.NewFacade(exec)
 

@@ -13,7 +13,6 @@ import (
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/team"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -204,30 +203,20 @@ func runMultiAgentCollaboration(ctx context.Context, logger *zap.Logger, provide
 		}
 	}
 
-	debateCfg := multiagent.DefaultMultiAgentConfig()
-	debateCfg.Pattern = multiagent.PatternDebate
-	debateCfg.MaxRounds = 1
-	debateCfg.Timeout = 3 * time.Minute
-	debateSystem := multiagent.NewMultiAgentSystem(agents, debateCfg, logger)
-
 	debateCtx, cancelDebate := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancelDebate()
-	debateOut, err := debateSystem.Execute(debateCtx, &agent.Input{
+	debateOut, err := team.ExecuteAgents(debateCtx, string(team.ExecutionModeCollaboration), agents, &agent.Input{
 		TraceID: "live-multi-debate-trace",
 		Content: "Should a SaaS platform adopt event-driven architecture? Give concise pros/cons and final recommendation.",
+		Context: map[string]any{"max_rounds": 1},
 	})
 	if err != nil {
 		return fmt.Errorf("debate execute: %w", err)
 	}
 
-	broadcastCfg := multiagent.DefaultMultiAgentConfig()
-	broadcastCfg.Pattern = multiagent.PatternBroadcast
-	broadcastCfg.Timeout = 3 * time.Minute
-	broadcastSystem := multiagent.NewMultiAgentSystem(agents, broadcastCfg, logger)
-
 	broadcastCtx, cancelBroadcast := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancelBroadcast()
-	broadcastOut, err := broadcastSystem.Execute(broadcastCtx, &agent.Input{
+	broadcastOut, err := team.ExecuteAgents(broadcastCtx, string(team.ExecutionModeParallel), agents, &agent.Input{
 		TraceID: "live-multi-broadcast-trace",
 		Content: "Evaluate release strategies: canary vs blue-green vs rolling. Provide a short recommendation.",
 	})
@@ -271,19 +260,18 @@ func runHierarchicalExecution(ctx context.Context, logger *zap.Logger, provider 
 		}
 	}
 
-	hCfg := team.DefaultHierarchicalConfig()
-	hCfg.MaxWorkers = 4
-	hCfg.WorkerSelection = "round_robin"
-	hCfg.MaxRetries = 1
-	hCfg.TaskTimeout = 90 * time.Second
-
-	hier := team.NewHierarchicalAgent(base, supervisor, workers, hCfg, logger)
-
 	execCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
-	out, err := hier.Execute(execCtx, &agent.Input{
+	allAgents := append([]agent.Agent{supervisor}, workers...)
+	out, err := team.ExecuteAgents(execCtx, string(team.ExecutionModeHierarchical), allAgents, &agent.Input{
 		TraceID: "live-hier-trace",
 		Content: "Split into exactly 3 independent subtasks and finish: 1) explain MCP role in AgentFlow, 2) explain RAG role in AgentFlow, 3) provide integrated conclusion.",
+		Context: map[string]any{
+			"max_workers":      4,
+			"worker_selection": "round_robin",
+			"max_retries":      1,
+			"task_timeout":     90 * time.Second,
+		},
 	})
 	if err != nil {
 		return err

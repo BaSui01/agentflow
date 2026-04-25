@@ -5,25 +5,25 @@ import (
 	"fmt"
 	"time"
 
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 )
 
-// ModeRegistryExecutor bridges orchestration patterns to unified multiagent mode registry.
+// ModeRegistryExecutor bridges orchestration patterns to the official team execution facade.
 type ModeRegistryExecutor struct {
 	pattern Pattern
 	mode    string
-	reg     *multiagent.ModeRegistry
+	exec    team.ModeExecutor
 }
 
-// NewModeRegistryExecutor creates a pattern executor backed by ModeRegistry.
-func NewModeRegistryExecutor(pattern Pattern, mode string, reg *multiagent.ModeRegistry) *ModeRegistryExecutor {
-	if reg == nil {
-		reg = multiagent.GlobalModeRegistry()
+// NewModeRegistryExecutor creates a pattern executor backed by agent/team's execution facade.
+func NewModeRegistryExecutor(pattern Pattern, mode string, exec team.ModeExecutor) *ModeRegistryExecutor {
+	if exec == nil {
+		exec = team.GlobalModeExecutor()
 	}
 	return &ModeRegistryExecutor{
 		pattern: pattern,
 		mode:    mode,
-		reg:     reg,
+		exec:    exec,
 	}
 }
 
@@ -69,9 +69,9 @@ func (e *ModeRegistryExecutor) Execute(ctx context.Context, task *OrchestrationT
 		return nil, fmt.Errorf("orchestration task/input is nil")
 	}
 	start := time.Now()
-	out, err := e.reg.Execute(ctx, e.mode, task.Agents, task.Input)
+	out, err := e.exec.Execute(ctx, e.mode, task.Agents, task.Input)
 	if err != nil {
-		return nil, fmt.Errorf("mode registry execute failed: %w", err)
+		return nil, fmt.Errorf("team mode execute failed: %w", err)
 	}
 	used := make([]string, 0, len(task.Agents))
 	for _, ag := range task.Agents {

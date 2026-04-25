@@ -4,21 +4,21 @@ import (
 	"context"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	"go.uber.org/zap"
 )
 
 // NewDefaultOrchestrator creates an Orchestrator pre-loaded with default patterns.
-// collaboration/crew/hierarchical are unified through multiagent.ModeRegistry.
+// collaboration/crew/hierarchical are unified through the agent/team execution facade.
 // handoff remains as a dedicated adapter.
 // This is the recommended entry point for wiring orchestration into the agent
 // builder or any top-level API.
 func NewDefaultOrchestrator(config OrchestratorConfig, logger *zap.Logger) *Orchestrator {
 	o := NewOrchestrator(config, logger)
-	reg := multiagent.GlobalModeRegistry()
-	o.RegisterPattern(NewModeRegistryExecutor(PatternCollaboration, multiagent.ModeCollaboration, reg))
-	o.RegisterPattern(NewModeRegistryExecutor(PatternCrew, multiagent.ModeCrew, reg))
-	o.RegisterPattern(NewModeRegistryExecutor(PatternHierarchical, multiagent.ModeHierarchical, reg))
+	exec := team.GlobalModeExecutor()
+	o.RegisterPattern(NewModeRegistryExecutor(PatternCollaboration, string(team.ExecutionModeCollaboration), exec))
+	o.RegisterPattern(NewModeRegistryExecutor(PatternCrew, string(team.ExecutionModeCrew), exec))
+	o.RegisterPattern(NewModeRegistryExecutor(PatternHierarchical, string(team.ExecutionModeHierarchical), exec))
 	o.RegisterPattern(NewHandoffAdapter(logger))
 	return o
 }

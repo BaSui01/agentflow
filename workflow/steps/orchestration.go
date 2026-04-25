@@ -6,7 +6,7 @@ import (
 	"time"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"go.uber.org/zap"
 )
@@ -22,21 +22,21 @@ type OrchestrationStep struct {
 	MaxRounds int
 	Timeout   time.Duration
 	resolver  AgentResolver
-	registry  *multiagent.ModeRegistry
+	executor  team.ModeExecutor
 	logger    *zap.Logger
 }
 
-func NewOrchestrationStep(id string, resolver AgentResolver, registry *multiagent.ModeRegistry, logger *zap.Logger) *OrchestrationStep {
+func NewOrchestrationStep(id string, resolver AgentResolver, executor team.ModeExecutor, logger *zap.Logger) *OrchestrationStep {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	if registry == nil {
-		registry = multiagent.GlobalModeRegistry()
+	if executor == nil {
+		executor = team.GlobalModeExecutor()
 	}
 	return &OrchestrationStep{
 		id:       id,
 		resolver: resolver,
-		registry: registry,
+		executor: executor,
 		logger:   logger,
 	}
 }
@@ -106,7 +106,7 @@ func (s *OrchestrationStep) Execute(ctx context.Context, input core.StepInput) (
 	}
 
 	start := time.Now()
-	out, err := s.registry.Execute(ctx, s.Mode, agents, agentInput)
+	out, err := s.executor.Execute(ctx, s.Mode, agents, agentInput)
 	if err != nil {
 		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeOrchestration, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}

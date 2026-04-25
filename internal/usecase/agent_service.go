@@ -9,7 +9,7 @@ import (
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	agentteam "github.com/BaSui01/agentflow/agent/team"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -224,7 +224,7 @@ func (s *DefaultAgentService) executeWithResolvedAgents(ctx context.Context, req
 	}
 
 	mode := normalizedExecutionMode(req)
-	return multiagent.GlobalModeRegistry().Execute(ctx, mode, agents, input)
+	return agentteam.ExecuteAgents(ctx, mode, agents, input)
 }
 
 func normalizedAgentIDs(req AgentExecuteRequest) []string {
@@ -251,37 +251,15 @@ func normalizedAgentIDs(req AgentExecuteRequest) []string {
 }
 
 func normalizedExecutionMode(req AgentExecuteRequest) string {
-	mode := strings.TrimSpace(req.Mode)
-	if mode == "" {
-		if len(req.AgentIDs) > 0 {
-			return multiagent.ModeParallel
-		}
-		return multiagent.ModeReasoning
-	}
-	return strings.ToLower(mode)
+	return agentteam.NormalizeExecutionMode(req.Mode, len(req.AgentIDs) > 0)
 }
 
 func SupportedExecutionModes() []string {
-	return []string{
-		multiagent.ModeReasoning,
-		multiagent.ModeCollaboration,
-		multiagent.ModeHierarchical,
-		multiagent.ModeCrew,
-		multiagent.ModeDeliberation,
-		multiagent.ModeFederation,
-		multiagent.ModeParallel,
-		multiagent.ModeLoop,
-	}
+	return agentteam.SupportedExecutionModes()
 }
 
 func IsSupportedExecutionMode(mode string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(mode))
-	for _, candidate := range SupportedExecutionModes() {
-		if candidate == normalized {
-			return true
-		}
-	}
-	return false
+	return agentteam.IsSupportedExecutionMode(mode)
 }
 
 func (s *DefaultAgentService) attachRuntimeHandoffTargets(ctx context.Context, req AgentExecuteRequest, sourceAgentID string) (context.Context, *types.Error) {
