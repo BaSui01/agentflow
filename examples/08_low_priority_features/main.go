@@ -7,11 +7,9 @@ import (
 
 	agentcore "github.com/BaSui01/agentflow/agent/core"
 	"github.com/BaSui01/agentflow/agent/observability/monitoring"
-	"github.com/BaSui01/agentflow/agent/persistence"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/team"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
@@ -79,39 +77,35 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 
 	fmt.Printf("创建了 1 个 Supervisor 和 %d 个 Workers\n", len(workers))
 
-	// 3. 创建层次化 Agent
-	fmt.Println("\n3. 创建层次化 Agent")
-	hierarchicalConfig := team.DefaultHierarchicalConfig()
-	hierarchicalConfig.MaxWorkers = 3
-	hierarchicalConfig.WorkerSelection = "round_robin"
+	// 3. 通过官方 TeamBuilder 创建层次化团队
+	fmt.Println("\n3. 创建层次化 Team")
+	builder := team.NewTeamBuilder("hierarchical-demo").
+		WithMode(team.ModeSupervisor).
+		WithMaxRounds(3).
+		WithTimeout(3*time.Minute).
+		AddMember(supervisor, "supervisor")
+	for _, w := range workers {
+		builder.AddMember(w, "worker")
+	}
+	hierarchicalTeam, err := builder.Build(logger)
+	if err != nil {
+		fmt.Printf("层次化 Team 创建失败: %v\n", err)
+		return
+	}
 
-	hierarchicalAgent := team.NewHierarchicalAgent(
-		supervisor,
-		supervisor,
-		workers,
-		hierarchicalConfig,
-		logger,
-	)
-
-	// 4. 打印实际配置（从对象读取，而非硬编码字符串）
-	fmt.Println("层次化 Agent 已创建")
+	// 4. 打印实际配置
+	fmt.Println("层次化 Team 已创建")
 	fmt.Printf("配置:\n")
-	fmt.Printf("  - 最大 Workers: %d\n", hierarchicalConfig.MaxWorkers)
-	fmt.Printf("  - 任务超时: %v\n", hierarchicalConfig.TaskTimeout)
-	fmt.Printf("  - 工作者选择策略: %s\n", hierarchicalConfig.WorkerSelection)
-	fmt.Printf("  - 启用重试: %v\n", hierarchicalConfig.EnableRetry)
+	fmt.Printf("  - Team ID: %s\n", hierarchicalTeam.ID())
+	fmt.Printf("  - 模式: %s\n", team.ModeSupervisor)
+	fmt.Printf("  - 成员数: %d\n", len(hierarchicalTeam.Members()))
+	fmt.Printf("  - 超时: %v\n", 3*time.Minute)
 
 	// 5. 打印 Worker 实际状态
 	fmt.Println("\n5. Worker 实际状态")
 	for _, w := range workers {
 		fmt.Printf("  - %s: 状态=%s\n", w.ID(), w.State())
 	}
-
-	coordinator := team.NewTaskCoordinator(workers, hierarchicalConfig, logger)
-	status := coordinator.GetWorkerStatus()
-	fmt.Printf("  - TaskCoordinator 状态数: %d\n", len(status))
-
-	_ = hierarchicalAgent
 }
 
 func demoMultiAgentCollaboration(logger *zap.Logger) {
@@ -142,116 +136,58 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 	// 2. 展示所有协作模式
 	fmt.Println("\n2. 可用协作模式")
 	patterns := []struct {
-		name    string
-		pattern multiagent.CollaborationPattern
+		name string
+		mode string
 	}{
-		{"辩论模式", multiagent.PatternDebate},
-		{"共识模式", multiagent.PatternConsensus},
-		{"流水线模式", multiagent.PatternPipeline},
-		{"广播模式", multiagent.PatternBroadcast},
-		{"网络模式", multiagent.PatternNetwork},
+		{"协作执行", string(team.ExecutionModeCollaboration)},
+		{"审议执行", string(team.ExecutionModeDeliberation)},
+		{"并行执行", string(team.ExecutionModeParallel)},
+		{"Supervisor 团队", string(team.ModeSupervisor)},
+		{"Round-robin 团队", string(team.ModeRoundRobin)},
 	}
 
 	for i, p := range patterns {
-		fmt.Printf("  %d. %s (%s)\n", i+1, p.name, p.pattern)
+		fmt.Printf("  %d. %s (%s)\n", i+1, p.name, p.mode)
 	}
 
-	// 3. 创建辩论模式系统并打印实际配置
-	fmt.Println("\n3. 创建辩论模式系统")
-	debateConfig := multiagent.DefaultMultiAgentConfig()
-	debateConfig.Pattern = multiagent.PatternDebate
-	debateConfig.MaxRounds = 3
-
-	debateSystem := multiagent.NewMultiAgentSystem(agents, debateConfig, logger)
-
-	fmt.Printf("配置:\n")
-	fmt.Printf("  - 模式: %s\n", debateConfig.Pattern)
-	fmt.Printf("  - 最大轮次: %d\n", debateConfig.MaxRounds)
-	fmt.Printf("  - 共识阈值: %.2f\n", debateConfig.ConsensusThreshold)
-
-	// 4. 创建流水线模式系统
-	fmt.Println("\n4. 创建流水线模式系统")
-	pipelineConfig := multiagent.DefaultMultiAgentConfig()
-	pipelineConfig.Pattern = multiagent.PatternPipeline
-
-	pipelineSystem := multiagent.NewMultiAgentSystem(agents, pipelineConfig, logger)
-	fmt.Printf("  模式: %s\n", pipelineConfig.Pattern)
-
-	// 5. 创建广播模式系统
-	fmt.Println("\n5. 创建广播模式系统")
-	broadcastConfig := multiagent.DefaultMultiAgentConfig()
-	broadcastConfig.Pattern = multiagent.PatternBroadcast
-
-	broadcastSystem := multiagent.NewMultiAgentSystem(agents, broadcastConfig, logger)
-	fmt.Printf("  模式: %s\n", broadcastConfig.Pattern)
-
-	// 注意：实际执行需要真实的 LLM provider
-	// 调用 debateSystem.Execute(ctx, input) 即可启动辩论
-
-	_ = debateSystem
-	_ = pipelineSystem
-	_ = broadcastSystem
-
-	// 6. 角色流水线（RolePipeline）主链调用
-	fmt.Println("\n6. 角色流水线编排")
-	demoRolePipeline(logger)
-}
-
-func demoRolePipeline(logger *zap.Logger) {
-	registry := multiagent.NewRoleRegistry(logger)
-	_ = multiagent.RegisterResearchRoles(registry)
-
-	roles := registry.List()
-	fmt.Printf("  已注册研究角色: %d\n", len(roles))
-
-	collector, ok := registry.Get(multiagent.RoleCollector)
-	if ok {
-		fmt.Printf("  收集者角色: %s\n", collector.Name)
+	fmt.Println("\n3. 创建 Supervisor 协作团队")
+	supervisorTeam := team.NewTeamBuilder("supervisor-collaboration").
+		WithMode(team.ModeSupervisor).
+		WithMaxRounds(3).
+		WithTimeout(2 * time.Minute)
+	for i, a := range agents {
+		role := "worker"
+		if i == 0 {
+			role = "supervisor"
+		}
+		supervisorTeam.AddMember(a, role)
 	}
-
-	pipelineCfg := multiagent.DefaultPipelineConfig()
-	pipelineCfg.Name = "research-role-pipeline-demo"
-	pipelineCfg.MaxConcurrency = 2
-	pipelineCfg.Timeout = 3 * time.Second
-
-	executeFn := func(ctx context.Context, role *multiagent.RoleDefinition, input any) (any, error) {
-		_ = ctx
-		return map[string]any{
-			"role":   role.Type,
-			"input":  input,
-			"output": fmt.Sprintf("%s_done", role.Type),
-		}, nil
-	}
-
-	pipeline := multiagent.NewRolePipeline(pipelineCfg, registry, executeFn, logger).
-		AddStage(multiagent.RoleCollector).
-		AddStage(multiagent.RoleFilter, multiagent.RoleGenerator).
-		AddStage(multiagent.RoleWriter)
-
-	results, err := pipeline.Execute(context.Background(), map[string]any{"topic": "agentflow"})
+	builtSupervisorTeam, err := supervisorTeam.Build(logger)
 	if err != nil {
-		fmt.Printf("  角色流水线执行失败: %v\n", err)
+		fmt.Printf("  创建失败: %v\n", err)
 	} else {
-		fmt.Printf("  角色流水线结果数: %d\n", len(results))
+		fmt.Printf("  Team ID: %s, 成员数: %d\n", builtSupervisorTeam.ID(), len(builtSupervisorTeam.Members()))
 	}
 
-	fmt.Printf("  角色实例数: %d, 转换记录数: %d\n", len(pipeline.GetInstances()), len(pipeline.GetTransitions()))
+	fmt.Println("\n4. 创建 Round-robin 协作团队")
+	roundRobinTeam := team.NewTeamBuilder("round-robin-collaboration").
+		WithMode(team.ModeRoundRobin).
+		WithMaxRounds(3).
+		WithTimeout(2 * time.Minute)
+	for _, a := range agents {
+		roundRobinTeam.AddMember(a, "collaborator")
+	}
+	builtRoundRobinTeam, err := roundRobinTeam.Build(logger)
+	if err != nil {
+		fmt.Printf("  创建失败: %v\n", err)
+	} else {
+		fmt.Printf("  Team ID: %s, 成员数: %d\n", builtRoundRobinTeam.ID(), len(builtRoundRobinTeam.Members()))
+	}
 
-	_ = registry.Unregister(multiagent.RoleWriter)
-
-	// 7. 带持久化的消息中心（覆盖 NewMessageHubWithStore）
-	store := persistence.NewMemoryMessageStore(persistence.StoreConfig{Type: "memory"})
-	hub := multiagent.NewMessageHubWithStore(logger, store)
-	hub.CreateChannel("demo-a")
-	hub.CreateChannel("demo-b")
-	_ = hub.Send(&multiagent.Message{
-		FromID:  "demo-a",
-		ToID:    "demo-b",
-		Type:    multiagent.MessageTypeProposal,
-		Content: "hello from persisted hub",
-	})
-	_, _ = hub.Receive("demo-b", 100*time.Millisecond)
-	_ = hub.Close()
+	fmt.Println("\n5. 执行门面")
+	for _, mode := range team.SupportedExecutionModes() {
+		fmt.Printf("  - %s\n", mode)
+	}
 }
 
 func mustBuildDemoAgent(ctx context.Context, cfg types.AgentConfig, logger *zap.Logger) *agent.BaseAgent {

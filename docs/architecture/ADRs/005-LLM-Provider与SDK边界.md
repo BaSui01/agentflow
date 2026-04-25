@@ -85,6 +85,26 @@ The following contracts must remain stable:
 
 The shared OpenAI-compatible base remains intentionally outside the official-SDK path.
 
+### 6. Protocol Adapter Boundary
+
+Compatibility HTTP adapters exposed by the server remain:
+
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/messages`
+
+These inbound protocol adapters must keep routing through the same startup and execution chain:
+
+- `api/routes -> api/handlers -> internal/usecase -> llm/gateway -> routed provider`
+
+Google Gemini Developer API and Vertex AI endpoint paths such as:
+
+- `POST /v1beta/models/{model}:generateContent`
+- `POST /v1beta/models/{model}:streamGenerateContent`
+- `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent`
+
+remain provider-outbound protocol paths owned by `llm/providers/gemini` and `llm/providers/vendor`, not new project-level inbound HTTP routes.
+
 ## Consequences
 
 ### Positive
@@ -103,4 +123,5 @@ The shared OpenAI-compatible base remains intentionally outside the official-SDK
 
 - composition code must keep using `VendorChatProviderFactory` / `vendor.NewChatProviderFromConfig(...)`
 - public multi-provider docs must demonstrate the vendor factory path instead of legacy ad-hoc registration
+- handler/readme/api docs must keep the distinction between server inbound compatibility routes and provider outbound Gemini / Vertex endpoint paths
 - any future SDK proposal must be accompanied by an ADR update or a new ADR

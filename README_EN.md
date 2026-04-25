@@ -88,6 +88,7 @@ English | [中文](README.md)
 - **Provider Retry Wrapper** - RetryableProvider with exponential backoff, only retries recoverable errors
 - **Provider Factory Functions** - Configuration-driven Provider instantiation (standard chat entry: `llm/providers/vendor.NewChatProviderFromConfig`)
 - **OpenAI Compatibility Layer** - Unified adapter for OpenAI-compatible APIs (9 providers slimmed to ~30 lines)
+- **Protocol-Compatible HTTP Inbounds** - `/v1/chat/completions`, `/v1/responses`, and `/v1/messages` all converge on the same `ChatService -> llm/gateway` chain, while Gemini / Vertex `generateContent` paths remain provider outbound protocols
 - **API Key Pool** - Multi-key rotation, rate limit detection
 
 ### 🎨 Multimodal Capabilities
@@ -598,17 +599,19 @@ agentflow/
 - [Provider Configuration](docs/en/tutorials/02.ProviderConfiguration.md)
 - [Recent Model Families and Multimodal Matrix](docs/en/guides/RecentModelFamiliesAndModalities.md)
 - [Agent Development](docs/en/tutorials/03.AgentDevelopment.md)
+- [Architecture Index](docs/architecture/README.md)
+- [Agent Framework Status and Closure Plan](docs/architecture/Agent框架现状与收口改进计划-2026-04-25.md)
+- [Function Calling Regression Matrix](docs/architecture/FunctionCalling回归矩阵说明-2026-04-25.md)
 - [Tool Integration](docs/en/tutorials/04.ToolIntegration.md)
 - [Workflow Orchestration](docs/en/tutorials/05.WorkflowOrchestration.md)
 - [Multimodal Processing](docs/en/tutorials/06.MultimodalProcessing.md)
-- [Unified Model and Media Endpoints](docs/模型与媒体端点参考.md)
-- [Multimodal Capability Endpoints](docs/多模态能力端点参考.md)
-- [Image and Video Provider Endpoints](docs/视频与图像厂商及端点说明.md)
+- [Unified Model and Media Endpoints](docs/cn/guides/模型与媒体端点参考.md)
+- [Multimodal Capability Endpoints](docs/cn/guides/多模态能力端点参考.md)
+- [Image and Video Provider Endpoints](docs/cn/guides/视频与图像厂商及端点说明.md)
 - [RAG](docs/en/tutorials/07.RAG.md)
 - [Multi-Agent Collaboration](docs/en/tutorials/08.MultiAgentCollaboration.md)
 - [Multimodal Framework API](docs/en/tutorials/21.MultimodalFrameworkAPI.md)
-- [Multimodal Implementation Summary](docs/多模态实现总结.md)
-- [Multimodal Implementation Report](docs/多模态功能实现报告.md)
+- [Archive Guide](docs/archive/归档说明.md)
 
 ## 🔧 Tech Stack
 
@@ -627,7 +630,5 @@ agentflow/
 ## 📄 License
 
 MIT License - See [LICENSE](LICENSE)
-
-
 
 

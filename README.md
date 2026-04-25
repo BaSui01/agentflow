@@ -92,6 +92,7 @@
 - **API Key 池** - 多 Key 轮询、限流检测
 - **Provider 工厂函数** — 配置驱动的 Provider 实例化（标准 chat 入口：`llm/providers/vendor.NewChatProviderFromConfig`）
 - **OpenAI 兼容层** — 统一适配 OpenAI 兼容 API（9 个 provider 瘦身至 ~30 行）
+- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages` 统一收口到同一 `ChatService -> llm/gateway` 主链；Gemini / Vertex `generateContent` 路径保持 provider 出站协议边界
 
 ### 🎨 多模态能力
 
@@ -612,20 +613,22 @@ agentflow/
 - [Provider 配置指南](docs/cn/tutorials/02.Provider配置指南.md)
 - [近12个月主流多模态模型总表](docs/cn/guides/近12个月主流多模态模型总表.md)
 - [Agent 开发教程](docs/cn/tutorials/03.Agent开发教程.md)
+- [架构文档索引](docs/architecture/README.md)
+- [Agent 框架现状与收口改进计划](docs/architecture/Agent框架现状与收口改进计划-2026-04-25.md)
+- [Function Calling 回归矩阵说明](docs/architecture/FunctionCalling回归矩阵说明-2026-04-25.md)
 - [工具集成说明](docs/cn/tutorials/04.工具集成说明.md)
 - [工作流编排](docs/cn/tutorials/05.工作流编排.md)
 - [多模态处理](docs/cn/tutorials/06.多模态处理.md)
-- [模型与媒体端点参考](docs/模型与媒体端点参考.md)
-- [多模态能力端点参考](docs/多模态能力端点参考.md)
-- [视频与图像厂商及端点说明](docs/视频与图像厂商及端点说明.md)
+- [模型与媒体端点参考](docs/cn/guides/模型与媒体端点参考.md)
+- [多模态能力端点参考](docs/cn/guides/多模态能力端点参考.md)
+- [视频与图像厂商及端点说明](docs/cn/guides/视频与图像厂商及端点说明.md)
 - [检索增强 RAG](docs/cn/tutorials/07.检索增强RAG.md)
-- [Team 与 Legacy 多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
+- [Team 多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
 - [Hosted 工具与 MCP](docs/cn/tutorials/09.Hosted工具与MCP.md)
 - [工作流编排进阶](docs/cn/tutorials/10.工作流编排进阶.md)
 - [成本追踪](docs/cn/tutorials/11.成本追踪.md)
 - [多模态框架 API](docs/cn/tutorials/21.多模态框架API.md)
-- [多模态实现总结](docs/多模态实现总结.md)
-- [多模态功能实现报告](docs/多模态功能实现报告.md)
+- [历史归档说明](docs/archive/归档说明.md)
 
 ## 🔧 技术栈
 
@@ -644,7 +647,4 @@ agentflow/
 ## 📄 License
 
 MIT License - 详见 [LICENSE](LICENSE)
-
-
-
 

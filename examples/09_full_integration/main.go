@@ -13,7 +13,6 @@ import (
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	runtime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/team"
-	collaboration "github.com/BaSui01/agentflow/agent/team"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -242,40 +241,34 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 		workers = append(workers, worker)
 	}
 
-	// 3. Create hierarchical system
-	hierarchicalConfig := team.DefaultHierarchicalConfig()
-	hierarchicalConfig.MaxWorkers = 2
-	hierarchicalConfig.TaskTimeout = 20 * time.Second
-	hierarchicalConfig.EnableRetry = false
-	hierarchicalConfig.MaxRetries = 0
-	hierarchicalConfig.WorkerSelection = "least_loaded"
-	hierarchicalConfig.EnableLoadBalance = true
-
-	hierarchicalAgent := team.NewHierarchicalAgent(
-		supervisor,
-		supervisor,
-		workers,
-		hierarchicalConfig,
-		logger,
-	)
+	// 3. Create hierarchical team through the official facade
+	builder := team.NewTeamBuilder("integration-hierarchical").
+		WithMode(team.ModeSupervisor).
+		WithMaxRounds(2).
+		WithTimeout(20*time.Second).
+		AddMember(supervisor, "supervisor")
+	for _, worker := range workers {
+		builder.AddMember(worker, "worker")
+	}
+	hierarchicalTeam, err := builder.Build(logger)
+	if err != nil {
+		fmt.Printf("  Hierarchical team creation failed: %v\n", err)
+		return
+	}
 
 	fmt.Println("\nHierarchical system configuration:")
 	fmt.Printf("  - Supervisor: %s\n", supervisor.Name())
 	fmt.Printf("  - Workers: %d\n", len(workers))
-	fmt.Printf("  - Selection strategy: %s\n", hierarchicalConfig.WorkerSelection)
-	fmt.Printf("  - Load balancing: %v\n", hierarchicalConfig.EnableLoadBalance)
-	fmt.Printf("  - Task timeout: %v\n", hierarchicalConfig.TaskTimeout)
+	fmt.Printf("  - Team ID: %s\n", hierarchicalTeam.ID())
+	fmt.Printf("  - Mode: %s\n", team.ModeSupervisor)
+	fmt.Printf("  - Timeout: %v\n", 20*time.Second)
 
 	if provider == nil {
 		fmt.Println("\n  Skipped execution: set OPENAI_API_KEY to run with a real provider")
 		return
 	}
 
-	input := &agent.Input{
-		TraceID: "trace-hierarchical",
-		Content: "Break down and answer this briefly: identify two practical performance checks for a Go web server.",
-	}
-	output, err := hierarchicalAgent.Execute(ctx, input)
+	output, err := hierarchicalTeam.Execute(ctx, "Break down and answer this briefly: identify two practical performance checks for a Go web server.")
 	if err != nil {
 		fmt.Printf("  Hierarchical execution failed: %v\n", err)
 		return
@@ -317,35 +310,26 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 		experts = append(experts, expert)
 	}
 
-	// 2. Create collaborative system (debate mode)
-	debateConfig := collaboration.DefaultMultiAgentConfig()
-	debateConfig.Pattern = collaboration.PatternDebate
-	debateConfig.MaxRounds = 1
-	debateConfig.ConsensusThreshold = 0.7
-	debateConfig.Timeout = 45 * time.Second
-
-	debateSystem := collaboration.NewMultiAgentSystem(experts, debateConfig, logger)
-
 	fmt.Println("\nCollaborative system configuration:")
-	fmt.Printf("  - Pattern: %s\n", debateConfig.Pattern)
 	fmt.Printf("  - Experts: %d\n", len(experts))
-	fmt.Printf("  - Max rounds: %d\n", debateConfig.MaxRounds)
-	fmt.Printf("  - Consensus threshold: %.2f\n", debateConfig.ConsensusThreshold)
+	fmt.Printf("  - Execution mode: %s\n", team.ExecutionModeCollaboration)
+	fmt.Printf("  - Max rounds: %d\n", 1)
+	fmt.Printf("  - Timeout: %v\n", 45*time.Second)
 
 	// 3. List available collaboration patterns
-	fmt.Println("\nAvailable collaboration patterns:")
+	fmt.Println("\nAvailable execution modes:")
 	patterns := []struct {
-		pattern collaboration.CollaborationPattern
+		mode    string
 		desc    string
 		useCase string
 	}{
-		{collaboration.PatternConsensus, "Consensus", "Voting decisions"},
-		{collaboration.PatternPipeline, "Pipeline", "Sequential processing"},
-		{collaboration.PatternBroadcast, "Broadcast", "Parallel processing"},
-		{collaboration.PatternNetwork, "Network", "Free communication"},
+		{string(team.ExecutionModeCollaboration), "Collaboration", "Multiple perspectives"},
+		{string(team.ExecutionModeDeliberation), "Deliberation", "Round-based decisions"},
+		{string(team.ExecutionModeParallel), "Parallel", "Independent processing"},
+		{string(team.ExecutionModeTeamRoundRobin), "Team round-robin", "Sequential team turns"},
 	}
 	for i, p := range patterns {
-		fmt.Printf("  %d. %s - %s (use case: %s)\n", i+1, p.pattern, p.desc, p.useCase)
+		fmt.Printf("  %d. %s - %s (use case: %s)\n", i+1, p.mode, p.desc, p.useCase)
 	}
 
 	if provider == nil {
@@ -356,8 +340,9 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 	input := &agent.Input{
 		TraceID: "trace-collab",
 		Content: "For a small internal tool, should we start with a modular monolith or microservices? Answer briefly.",
+		Context: map[string]any{"max_rounds": 1},
 	}
-	output, err := debateSystem.Execute(ctx, input)
+	output, err := team.ExecuteAgents(ctx, string(team.ExecutionModeCollaboration), experts, input)
 	if err != nil {
 		fmt.Printf("  Collaborative execution failed: %v\n", err)
 		return
@@ -433,18 +418,15 @@ func demoProductionConfig(logger *zap.Logger) {
 	obsSystem := observability.NewObservabilitySystem(logger)
 	fmt.Printf("  Observability system initialized: %v\n", obsSystem != nil)
 
-	// 6. Hierarchical system for production
-	fmt.Println("\n6. Hierarchical system defaults")
-	hConfig := team.DefaultHierarchicalConfig()
-	fmt.Printf("  MaxWorkers: %d, TaskTimeout: %v, EnableRetry: %v, MaxRetries: %d\n",
-		hConfig.MaxWorkers, hConfig.TaskTimeout, hConfig.EnableRetry, hConfig.MaxRetries)
+	// 6. Multi-agent team defaults
+	fmt.Println("\n6. Multi-agent team defaults")
+	fmt.Printf("  Team mode: %s, MaxRounds: %d, Timeout: %v\n",
+		team.ModeSupervisor, 10, 5*time.Minute)
 
-	// 7. Collaboration system for production
-	fmt.Println("\n7. Collaboration system defaults")
-	collabConfig := collaboration.DefaultMultiAgentConfig()
-	fmt.Printf("  Pattern: %s, MaxRounds: %d, ConsensusThreshold: %.2f, Timeout: %v\n",
-		collabConfig.Pattern, collabConfig.MaxRounds,
-		collabConfig.ConsensusThreshold, collabConfig.Timeout)
+	// 7. Execution facade defaults
+	fmt.Println("\n7. Execution facade defaults")
+	fmt.Printf("  Empty single-agent mode: %s\n", team.NormalizeExecutionMode("", false))
+	fmt.Printf("  Empty multi-agent mode: %s\n", team.NormalizeExecutionMode("", true))
 
 	// 8. Gradual rollout strategy
 	fmt.Println("\n8. Recommended gradual rollout strategy")

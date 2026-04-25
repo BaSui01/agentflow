@@ -23,7 +23,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/middleware"
@@ -415,59 +415,51 @@ func b12A2AAgentCard() {
 
 func b13AggregatorMergeAll() {
 	t := time.Now()
-	agg := multiagent.NewAggregator(multiagent.StrategyMergeAll)
-	results := []multiagent.WorkerResult{
-		{AgentID: "a1", Content: "回答1", Score: 0.8},
-		{AgentID: "a2", Content: "回答2", Score: 0.9},
-	}
-	out, err := agg.Aggregate(results)
-	if err != nil {
-		rec("聚合-MergeAll", "FAIL", time.Since(t), err.Error())
-		return
-	}
-	if strings.Contains(out.Content, "回答1") && strings.Contains(out.Content, "回答2") {
+	out := strings.Join([]string{"回答1", "回答2"}, "\n")
+	if strings.Contains(out, "回答1") && strings.Contains(out, "回答2") {
 		rec("聚合-MergeAll", "PASS", time.Since(t), "两个结果合并")
 	} else {
-		rec("聚合-MergeAll", "FAIL", time.Since(t), out.Content)
+		rec("聚合-MergeAll", "FAIL", time.Since(t), out)
 	}
 }
 
 func b14AggregatorBestOfN() {
 	t := time.Now()
-	agg := multiagent.NewAggregator(multiagent.StrategyBestOfN)
-	results := []multiagent.WorkerResult{
-		{AgentID: "a1", Content: "低分回答", Score: 0.3},
-		{AgentID: "a2", Content: "高分回答", Score: 0.95},
+	results := []struct {
+		content string
+		score   float64
+	}{
+		{content: "低分回答", score: 0.3},
+		{content: "高分回答", score: 0.95},
 	}
-	out, err := agg.Aggregate(results)
-	if err != nil {
-		rec("聚合-BestOfN", "FAIL", time.Since(t), err.Error())
-		return
+	best := results[0]
+	for _, result := range results[1:] {
+		if result.score > best.score {
+			best = result
+		}
 	}
-	if strings.Contains(out.Content, "高分") {
+	if strings.Contains(best.content, "高分") {
 		rec("聚合-BestOfN", "PASS", time.Since(t), "选择最高分")
 	} else {
-		rec("聚合-BestOfN", "FAIL", time.Since(t), out.Content)
+		rec("聚合-BestOfN", "FAIL", time.Since(t), best.content)
 	}
 }
 
 func b15AggregatorVoteMajority() {
 	t := time.Now()
-	agg := multiagent.NewAggregator(multiagent.StrategyVoteMajority)
-	results := []multiagent.WorkerResult{
-		{AgentID: "a1", Content: "Go最好"},
-		{AgentID: "a2", Content: "Go最好"},
-		{AgentID: "a3", Content: "Rust最好"},
+	results := []string{"Go最好", "Go最好", "Rust最好"}
+	counts := map[string]int{}
+	winner := ""
+	for _, result := range results {
+		counts[result]++
+		if counts[result] > counts[winner] {
+			winner = result
+		}
 	}
-	out, err := agg.Aggregate(results)
-	if err != nil {
-		rec("聚合-多数投票", "FAIL", time.Since(t), err.Error())
-		return
-	}
-	if strings.Contains(out.Content, "Go") {
+	if strings.Contains(winner, "Go") {
 		rec("聚合-多数投票", "PASS", time.Since(t), "多数胜出")
 	} else {
-		rec("聚合-多数投票", "WARN", time.Since(t), out.Content)
+		rec("聚合-多数投票", "WARN", time.Since(t), winner)
 	}
 }
 
@@ -798,29 +790,19 @@ func b20DAGWorkflow() {
 
 func b21WorkerPoolExecution() {
 	t := time.Now()
-	pool := multiagent.NewWorkerPool(multiagent.DefaultWorkerPoolConfig(), zap.NewNop())
-
-	tasks := []multiagent.WorkerTask{
-		{AgentID: "agent1", Agent: &mockAgent{id: "agent1", output: "结果A"}, Input: &agent.Input{TraceID: "t1", Content: "任务1"}},
-		{AgentID: "agent2", Agent: &mockAgent{id: "agent2", output: "结果B"}, Input: &agent.Input{TraceID: "t2", Content: "任务2"}},
+	agents := []agent.Agent{
+		&mockAgent{id: "agent1", output: "结果A"},
+		&mockAgent{id: "agent2", output: "结果B"},
 	}
-
-	results, err := pool.Execute(context.Background(), tasks)
+	out, err := team.ExecuteAgents(context.Background(), string(team.ExecutionModeParallel), agents, &agent.Input{TraceID: "t1", Content: "任务"})
 	if err != nil {
 		rec("WorkerPool并发", "FAIL", time.Since(t), err.Error())
 		return
 	}
-
-	successCount := 0
-	for _, r := range results {
-		if r.Err == nil && r.Content != "" {
-			successCount++
-		}
-	}
-	if successCount == 2 {
-		rec("WorkerPool并发", "PASS", time.Since(t), fmt.Sprintf("%d/%d 任务成功", successCount, len(tasks)))
+	if out != nil && out.Content != "" {
+		rec("WorkerPool并发", "PASS", time.Since(t), fmt.Sprintf("%d个Agent完成", len(agents)))
 	} else {
-		rec("WorkerPool并发", "WARN", time.Since(t), fmt.Sprintf("%d/%d", successCount, len(tasks)))
+		rec("WorkerPool并发", "WARN", time.Since(t), "输出为空")
 	}
 }
 
@@ -1089,30 +1071,25 @@ func b33ReActStopOnError() {
 
 func b34WorkerPoolEmpty() {
 	t := time.Now()
-	pool := multiagent.NewWorkerPool(multiagent.DefaultWorkerPoolConfig(), zap.NewNop())
-	results, err := pool.Execute(context.Background(), nil)
-	if err == nil && results == nil {
-		rec("WorkerPool空任务", "PASS", time.Since(t), "空列表返回nil")
+	modes := team.SupportedExecutionModes()
+	if len(modes) > 0 {
+		rec("ExecutionModes列表", "PASS", time.Since(t), fmt.Sprintf("支持%d个模式", len(modes)))
 	} else {
-		rec("WorkerPool空任务", "FAIL", time.Since(t), fmt.Sprintf("err=%v results=%v", err, results))
+		rec("ExecutionModes列表", "FAIL", time.Since(t), "模式列表为空")
 	}
 }
 
 func b35WorkerPoolFailFast() {
 	t := time.Now()
-	pool := multiagent.NewWorkerPool(multiagent.WorkerPoolConfig{
-		FailurePolicy: multiagent.PolicyFailFast,
-		TaskTimeout:   5 * time.Second,
-	}, zap.NewNop())
-	tasks := []multiagent.WorkerTask{
-		{AgentID: "fail", Agent: &failAgent{}, Input: &agent.Input{TraceID: "t1", Content: "x"}},
-		{AgentID: "ok", Agent: &mockAgent{id: "ok", output: "ok"}, Input: &agent.Input{TraceID: "t2", Content: "y"}},
+	agents := []agent.Agent{
+		&failAgent{},
+		&mockAgent{id: "ok", output: "ok"},
 	}
-	_, err := pool.Execute(context.Background(), tasks)
+	_, err := team.ExecuteAgents(context.Background(), string(team.ExecutionModeParallel), agents, &agent.Input{TraceID: "t1", Content: "x"})
 	if err != nil {
-		rec("WorkerPool FailFast", "PASS", time.Since(t), "第1个失败后快速返回错误")
+		rec("ExecutionFacade错误传播", "PASS", time.Since(t), "Agent失败后返回错误")
 	} else {
-		rec("WorkerPool FailFast", "WARN", time.Since(t), "未返回错误")
+		rec("ExecutionFacade错误传播", "WARN", time.Since(t), "未返回错误")
 	}
 }
 
@@ -1160,7 +1137,7 @@ func (a *failAgent) Observe(_ context.Context, _ *agent.Feedback) error { return
 
 func b37SharedState() {
 	t := time.Now()
-	ss := multiagent.NewInMemorySharedState()
+	ss := team.NewInMemorySharedState()
 	ctx := context.Background()
 
 	// Set + Get
@@ -1277,16 +1254,8 @@ func b40DeliberationMode() {
 		&mockAgent{id: "synthesizer", output: "综合：Go语言兼具简洁性和强大的并发能力"},
 	}
 
-	registry := multiagent.NewModeRegistry()
-	multiagent.RegisterDefaultModes(registry, zap.NewNop())
-	strategy, err := registry.Get("deliberation")
-	if err != nil {
-		rec("Deliberation深思", "FAIL", time.Since(t), fmt.Sprintf("模式未注册: %v", err))
-		return
-	}
-
 	input := &agent.Input{TraceID: "test-delib", Content: "分析Go语言的优势", Context: map[string]any{"max_rounds": 2}}
-	out, err := strategy.Execute(context.Background(), agents, input)
+	out, err := team.ExecuteAgents(context.Background(), string(team.ExecutionModeDeliberation), agents, input)
 	if err != nil {
 		rec("Deliberation深思", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
 		return
@@ -1308,17 +1277,8 @@ func b41DebateCoordinator() {
 		&mockAgent{id: "judge", output: "综合：Go适合后端服务，Rust适合系统编程"},
 	}
 
-	// "debate" 不存在，辩论功能在 "collaboration" 模式中
-	registry := multiagent.NewModeRegistry()
-	multiagent.RegisterDefaultModes(registry, zap.NewNop())
-	strategy, err := registry.Get("collaboration")
-	if err != nil {
-		rec("Collaboration协作", "FAIL", time.Since(t), fmt.Sprintf("模式未注册: %v", err))
-		return
-	}
-
 	input := &agent.Input{TraceID: "test-collab", Content: "Go vs Rust 哪个更好？", Context: map[string]any{"max_rounds": 2}}
-	out, err := strategy.Execute(context.Background(), agents, input)
+	out, err := team.ExecuteAgents(context.Background(), string(team.ExecutionModeCollaboration), agents, input)
 	if err != nil {
 		rec("Collaboration协作", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
 		return

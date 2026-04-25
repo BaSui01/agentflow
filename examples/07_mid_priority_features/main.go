@@ -73,12 +73,6 @@ func demoHostedTools(logger *zap.Logger) {
 	_ = fileTool.Schema()
 	_ = fileStore.Index(context.Background(), "f1", []byte("agentflow hosted file search"))
 
-	fileArgs, _ := json.Marshal(map[string]any{
-		"query":       "agentflow",
-		"max_results": 2,
-	})
-	_, _ = registry.Execute(context.Background(), fileTool.Name(), fileArgs)
-
 	searchArgs, _ := json.Marshal(map[string]any{
 		"query":       "Go programming language",
 		"max_results": 3,

@@ -26,7 +26,7 @@ import (
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	orchestration "github.com/BaSui01/agentflow/agent/runtime/orchestration"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	llmbatch "github.com/BaSui01/agentflow/llm/batch"
 	llmcache "github.com/BaSui01/agentflow/llm/cache"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -1057,24 +1057,8 @@ func (p *reasonerProvider) Completion(ctx context.Context, req *llmcore.ChatRequ
 }
 
 func demoMultiAgentModes(logger *zap.Logger) {
-	fmt.Println("11. Multi-Agent Modes & Aggregation")
+	fmt.Println("11. Multi-Agent Modes")
 	fmt.Println("-----------------------------------")
-
-	results := []multiagent.WorkerResult{
-		{AgentID: "a", Content: "answer one", TokensUsed: 20, Cost: 0.01, Duration: 30 * time.Millisecond, Score: 0.7, Weight: 1},
-		{AgentID: "b", Content: "answer one", TokensUsed: 18, Cost: 0.01, Duration: 25 * time.Millisecond, Score: 0.9, Weight: 2},
-		{AgentID: "c", Content: "answer two", TokensUsed: 22, Cost: 0.02, Duration: 35 * time.Millisecond, Score: 0.6, Weight: 1},
-		{AgentID: "d", Err: fmt.Errorf("timeout")},
-	}
-	_, _ = multiagent.NewAggregator(multiagent.StrategyMergeAll).Aggregate(results)
-	_, _ = multiagent.NewAggregator(multiagent.StrategyBestOfN).Aggregate(results)
-	_, _ = multiagent.NewAggregator(multiagent.StrategyVoteMajority).Aggregate(results)
-	_, _ = multiagent.NewAggregator(multiagent.StrategyWeightedMerge).Aggregate(results)
-
-	reg := multiagent.NewModeRegistry()
-	_ = multiagent.RegisterDefaultModes(reg, logger)
-	_ = reg.List()
-	_, _ = reg.Get(multiagent.ModeReasoning)
 
 	agents := []agent.Agent{
 		&demoAgent{id: "supervisor-1", name: "Supervisor"},
@@ -1086,14 +1070,24 @@ func demoMultiAgentModes(logger *zap.Logger) {
 		Content: "Summarize rollout risks",
 		Context: map[string]any{"coordination_type": "consensus"},
 	}
-	_, _ = reg.Execute(context.Background(), multiagent.ModeReasoning, agents, input)
-	_, _ = reg.Execute(context.Background(), multiagent.ModeCollaboration, agents, input)
-	_, _ = reg.Execute(context.Background(), multiagent.ModeHierarchical, agents, input)
-	_, _ = reg.Execute(context.Background(), multiagent.ModeCrew, agents, input)
-	_, _ = reg.Execute(context.Background(), multiagent.ModeDeliberation, agents, input)
-	_, _ = reg.Execute(context.Background(), multiagent.ModeFederation, agents, input)
 
-	_ = multiagent.GlobalModeRegistry()
+	for _, mode := range []team.ExecutionMode{
+		team.ExecutionModeReasoning,
+		team.ExecutionModeCollaboration,
+		team.ExecutionModeHierarchical,
+		team.ExecutionModeCrew,
+		team.ExecutionModeDeliberation,
+		team.ExecutionModeFederation,
+	} {
+		_, _ = team.ExecuteAgents(context.Background(), string(mode), agents, input)
+	}
+	for _, mode := range team.SupportedExecutionModes() {
+		fmt.Printf("   supported: %s\n", mode)
+	}
+
+	sharedState := team.NewInMemorySharedState()
+	_ = sharedState.Set(context.Background(), "demo", "ready")
+	_, _ = sharedState.Get(context.Background(), "demo")
 
 	_ = persistence.DefaultStoreConfig()
 	_ = persistence.DefaultCleanupConfig()
@@ -1104,39 +1098,17 @@ func demoMultiAgentModes(logger *zap.Logger) {
 		_ = ts.Close()
 	}
 
-	retrievalSupervisor := multiagent.NewRetrievalSupervisor(
-		&demoQueryDecomposer{},
-		[]multiagent.RetrievalWorker{&demoRetrievalWorker{}},
-		multiagent.NewDedupResultAggregator(),
-		logger,
-	)
-	_, _ = retrievalSupervisor.Retrieve(context.Background(), "agentflow retrieval collaboration")
-
-	stores := agent.NewPersistenceStores(logger)
-	scopedStores := multiagent.NewScopedStores(stores, "subagent-x", logger)
-	runID := scopedStores.RecordRun(context.Background(), "tenant-a", "trace-1", "input", time.Now())
-	_ = scopedStores.UpdateRunStatus(context.Background(), runID, "completed", &agent.RunOutputDoc{
-		Content: "ok",
-	}, "")
-	scopedStores.PersistConversation(context.Background(), "conv-1", "tenant-a", "user-1", "hello", "world")
-	_ = scopedStores.RestoreConversation(context.Background(), "conv-1")
-	_ = scopedStores.LoadPrompt(context.Background(), "generic", "demo", "tenant-a")
-
-	supervisor := multiagent.NewSupervisor(
-		&multiagent.StaticSplitter{
-			Agents:  agents,
-			Weights: map[string]float64{"worker-1": 1.0, "worker-2": 1.2},
-		},
-		multiagent.DefaultSupervisorConfig(),
-		logger,
-	)
-	_, _ = supervisor.Run(context.Background(), input)
-
-	workerPool := multiagent.NewWorkerPool(multiagent.DefaultWorkerPoolConfig(), logger)
-	_, _ = workerPool.Execute(context.Background(), []multiagent.WorkerTask{
-		{AgentID: "worker-1", Agent: agents[1], Input: input, Weight: 1.0},
-		{AgentID: "worker-2", Agent: agents[2], Input: input, Weight: 1.1},
-	})
+	teamBuilder := team.NewTeamBuilder("advanced-demo").
+		WithMode(team.ModeSupervisor).
+		WithMaxRounds(2).
+		WithTimeout(2*time.Second).
+		AddMember(agents[0], "supervisor").
+		AddMember(agents[1], "worker").
+		AddMember(agents[2], "worker")
+	builtTeam, _ := teamBuilder.Build(logger)
+	if builtTeam != nil {
+		_, _ = builtTeam.Execute(context.Background(), "summarize deployment plan")
+	}
 
 	task := &orchestration.OrchestrationTask{
 		ID:          "orch-task-1",
@@ -1176,8 +1148,8 @@ func demoMultiAgentModes(logger *zap.Logger) {
 	orch := orchestration.NewOrchestrator(orchCfg, logger)
 	modeExec := orchestration.NewModeRegistryExecutor(
 		orchestration.PatternCollaboration,
-		multiagent.ModeCollaboration,
-		reg,
+		string(team.ExecutionModeCollaboration),
+		team.GlobalModeExecutor(),
 	)
 	_ = modeExec.Name()
 	_ = modeExec.CanHandle(task)

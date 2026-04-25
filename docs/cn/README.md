@@ -1,6 +1,6 @@
 ﻿# 📚 AgentFlow 中文文档
 
-> 官方入口：sdk.New(opts).Build(ctx)；单 Agent：gent/runtime；多 Agent：gent/team；显式编排：workflow/runtime。
+> 官方入口：sdk.New(opts).Build(ctx)；单 Agent：agent/runtime；多 Agent：agent/team；显式编排：workflow/runtime。
 
 > 高性能 Go 语言 AI Agent 框架 - 统一 LLM 抽象、智能路由、工具调用、工作流编排
 
@@ -22,6 +22,7 @@
 | [📦 安装与配置](./getting-started/01.安装与配置.md) | 详细安装步骤和配置选项 | 10 分钟 |
 | [🚀 框架入口与快速开始](./getting-started/02.框架入口与快速开始.md) | 官方入口、最小可用示例与并发策略 | 10 分钟 |
 | [🏖️ 沙箱环境配置](./getting-started/03.沙箱环境配置.md) | 启用代码执行与隔离环境 | 10 分钟 |
+| [🧰 SDK 工具注册与编排示例](./getting-started/04.SDK工具注册与编排示例.md) | ToolManager、RetrievalProvider、Team 与 Workflow 官方示例 | 15 分钟 |
 
 ### 📚 教程
 
@@ -35,7 +36,7 @@
 | [🖼️ 多模态处理](./tutorials/06.多模态处理.md) | 图像、音频、视频处理 | ⭐⭐⭐ |
 | [🎬 多模态框架 API](./tutorials/21.多模态框架API.md) | 能力层多模态 HTTP 接口 | ⭐⭐⭐ |
 | [🔍 检索增强 RAG](./tutorials/07.检索增强RAG.md) | 向量存储和知识检索 | ⭐⭐⭐⭐ |
-| [👥 Team 与 Legacy 多 Agent 协作](./tutorials/08.多Agent协作.md) | 官方 team 门面与 legacy 协作面 | ⭐⭐⭐⭐ |
+| [👥 Team 多 Agent 协作](./tutorials/08.多Agent协作.md) | 官方 team 门面与多 Agent 协作模式 | ⭐⭐⭐⭐ |
 | [🔗 Hosted 工具与 MCP](./tutorials/09.Hosted工具与MCP.md) | 托管工具和 MCP 协议集成 | ⭐⭐⭐ |
 | [📊 工作流编排进阶](./tutorials/10.工作流编排进阶.md) | 高级工作流模式与 DSL | ⭐⭐⭐⭐ |
 | [💰 成本追踪](./tutorials/11.成本追踪.md) | Token 计数与成本管理 | ⭐⭐ |
@@ -44,8 +45,10 @@
 
 | 文档 | 描述 | 适用场景 |
 |------|------|----------|
-| [`../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md) | 当前 Agent 框架可用性评估 + 主流框架调研 | 想先判断"现在能不能用"、看外部框架对比 |
-| [`../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md) | AgentFlow 收口路线、实施切片、验收标准 | 想推进 `sdk/runtime/team/workflow` 边界收口 |
+| [`../architecture/README.md`](../architecture/README.md) | 当前架构文档索引与官方入口总览 | 不确定该看哪份架构文档时先看这里 |
+| [`../architecture/Agent框架现状与收口改进计划-2026-04-25.md`](../architecture/Agent框架现状与收口改进计划-2026-04-25.md) | 当前 Agent 框架能力盘点、缺口与收口 checklist | 想判断项目完善程度、安排后续 Agent 框架收口 |
+| [`../architecture/Workflow-Agent与Agentic-Agent现状建议补充-2026-04-25.md`](../architecture/Workflow-Agent与Agentic-Agent现状建议补充-2026-04-25.md) | Workflow Agent / Agentic Agent 完成度与 `[X]` / `[ ]` 补充建议 | 想快速看已完成、未完成和下一步优先级 |
+| [`../architecture/ADRs/004-多Agent团队抽象.md`](../architecture/ADRs/004-多Agent团队抽象.md) | `agent/team` public surface 与多 Agent 边界契约 | 想修改 TeamBuilder、执行模式或多 Agent facade |
 | [`../architecture/我的Agent框架设计参考-2026-04-23.md`](../architecture/我的Agent框架设计参考-2026-04-23.md) | 面向自定义 Agent 框架的设计参考 | 想基于外部框架经验设计自己的 Agent 框架 |
 | [`../architecture/权限控制系统重构与引入方案-2026-04-24.md`](../architecture/权限控制系统重构与引入方案-2026-04-24.md) | 统一鉴权、授权、审批、审计的重构方案 | 想引入权限控制系统或完善工具审批链路 |
 | [`../architecture/权限控制系统详细设计-2026-04-24.md`](../architecture/权限控制系统详细设计-2026-04-24.md) | package / 接口 / 数据结构级权限设计 | 要开始实现权限控制系统时优先阅读 |
@@ -53,16 +56,19 @@
 | [`../architecture/原生Provider与SDK边界说明.md`](../architecture/原生Provider与SDK边界说明.md) | OpenAI / Anthropic / Gemini 原生 SDK 边界 | 想改 Provider 或 SDK 接入边界 |
 | [`../architecture/Provider原生Token计数说明.md`](../architecture/Provider原生Token计数说明.md) | 原生 token counting 约束与预算准入边界 | 想改预算、token counting 或 provider admission |
 | [`../architecture/Provider工具负载映射说明.md`](../architecture/Provider工具负载映射说明.md) | tool payload 在 gateway / provider / sdk 之间的映射规则 | 想改 function calling / tool payload 语义 |
+| [`../architecture/FunctionCalling回归矩阵说明-2026-04-25.md`](../architecture/FunctionCalling回归矩阵说明-2026-04-25.md) | provider tool/function calling 回归矩阵与验收命令 | 想补 OpenAI / Anthropic / Gemini / XML fallback 工具调用回归 |
 | [`../architecture/Channel路由扩展架构说明.md`](../architecture/Channel路由扩展架构说明.md) | channel-based routing 的设计与迁移说明 | 想做渠道路由扩展或替换 `MultiProviderRouter` |
 | [`../architecture/Channel路由外部接入模板-中文版.md`](../architecture/Channel路由外部接入模板-中文版.md) | 外部项目最小接入模板（中文） | 想复用 `ChannelRoutedProvider` 接业务侧 channel/key/mapping 系统 |
-| [`../archive/Gemini官方SDK迁移清理计划.md`](../archive/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移清理计划（已归档） | 追溯 Gemini 迁移历史 |
-| [`../archive/LLM供应商维度重构分析.md`](../archive/LLM供应商维度重构分析.md) | 按供应商维度组织 LLM 能力的重构分析（已归档） | 追溯 vendor profile 重构历史 |
-| [`../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 一次性硬切换总计划（TDD / 删除清单 / DoD） | 想直接推进“我的 Agent 框架”重构实施 |
 
 ### 🗄️ 历史归档
 
 | 文档 | 描述 |
 |------|------|
+| [`../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md) | 历史可用性评估与主流框架调研，不作为当前契约 |
+| [`../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md) | 历史收口路线，不作为当前实施清单 |
+| [`../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 历史硬切换总计划，用于追溯背景 |
+| [`../archive/Gemini官方SDK迁移清理计划.md`](../archive/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移历史 |
+| [`../archive/LLM供应商维度重构分析.md`](../archive/LLM供应商维度重构分析.md) | vendor profile 重构历史 |
 | [`../archive/归档说明.md`](../archive/归档说明.md) | 历史快照与归档文档说明，不作为当前契约真相 |
 
 ### 📘 指南
@@ -71,6 +77,7 @@
 |------|------|------|
 | [🧭 模型厂商与模型中文命名规范](./guides/模型厂商与模型中文命名规范.md) | 统一厂商名、模型名、latest 写法与引用口径 | ⭐ |
 | [🗂️ 近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 统一近 12 个月 chat / image / video / TTS / STT 主流模型口径 | ⭐ |
+| [🧩 模型字段与 Agent 框架接入指南](./guides/模型字段与Agent框架接入指南.md) | 说明上游模型字段如何落到 `Model / Control / Tools` 主面，以及当前实现缺口 | ⭐⭐ |
 | [✅ 最佳实践](./guides/best-practices.md) | AgentFlow 使用建议与常见设计约束 | ⭐⭐ |
 
 ### 🧭 文档分层导航
@@ -78,6 +85,7 @@
 | 层次 | 先看什么 | 适用场景 |
 |------|----------|----------|
 | 官方主流模型 | [近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 需要确认最新一年的主流 chat / image / video / speech 模型 |
+| 字段映射 / 运行时主面 | [模型字段与 Agent 框架接入指南](./guides/模型字段与Agent框架接入指南.md) | 需要把上游模型字段对齐到 `Model / Control / Tools`，或评估当前实现缺口 |
 | 项目统一总览 | [`./guides/模型与媒体端点参考.md`](./guides/模型与媒体端点参考.md) | 需要看 provider `/models`、chat / image / video / speech 总览 |
 | 当前代码能力 | [`./guides/多模态能力端点参考.md`](./guides/多模态能力端点参考.md) | 需要确认项目当前真正已实现哪些多模态能力 |
 | 厂商接入与配置 | [`./guides/视频与图像厂商及端点说明.md`](./guides/视频与图像厂商及端点说明.md) | 需要接入图像 / 视频厂商、看共享 key / endpoint / 配置关系 |
@@ -175,8 +183,6 @@
 
 ```bash
 # 安装 AgentFlow
-
-> 官方入口：sdk.New(opts).Build(ctx)；单 Agent：gent/runtime；多 Agent：gent/team；显式编排：workflow/runtime。
 go get github.com/BaSui01/agentflow
 ```
 
@@ -258,4 +264,3 @@ AgentFlow 采用 [MIT 许可证](../../LICENSE) 开源。
 <p align="center">
   <sub>Made with ❤️ by AgentFlow Team</sub>
 </p>
-

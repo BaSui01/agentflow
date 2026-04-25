@@ -31,7 +31,16 @@
 | [🖼️ Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | Image, audio, video processing | ⭐⭐⭐ |
 | [🎬 Multimodal Framework API](./tutorials/21.MultimodalFrameworkAPI.md) | Capability-layer multimodal HTTP API | ⭐⭐⭐ |
 | [🔍 RAG](./tutorials/07.RAG.md) | Vector storage and knowledge retrieval | ⭐⭐⭐⭐ |
-| [👥 Team & Legacy Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Official team facade plus legacy coordination surfaces | ⭐⭐⭐⭐ |
+| [👥 Team Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Official team facade and multi-agent collaboration modes | ⭐⭐⭐⭐ |
+
+### 🏗️ Architecture
+
+| Document | Description | When to use it |
+|----------|-------------|----------------|
+| [`../architecture/README.md`](../architecture/README.md) | Current architecture index and official entrypoints | Start here when choosing an architecture document |
+| [`../architecture/Agent框架现状与收口改进计划-2026-04-25.md`](../architecture/Agent框架现状与收口改进计划-2026-04-25.md) | Agent framework status, gaps, and closure checklist | Planning Agent framework closure work |
+| [`../architecture/ADRs/004-多Agent团队抽象.md`](../architecture/ADRs/004-多Agent团队抽象.md) | `agent/team` public surface and multi-agent boundary contract | Changing TeamBuilder, execution modes, or the team facade |
+| [`../architecture/FunctionCalling回归矩阵说明-2026-04-25.md`](../architecture/FunctionCalling回归矩阵说明-2026-04-25.md) | Provider tool/function calling regression matrix | Validating OpenAI / Anthropic / Gemini / XML fallback tool calling |
 
 ### 📘 Guides
 

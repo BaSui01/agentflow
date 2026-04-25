@@ -833,25 +833,20 @@ func d13HierarchicalAgent(ctx context.Context, provider llm.Provider, lg *zap.Lo
 		return
 	}
 
-	// 创建 HierarchicalAgent
-	hAgent := team.NewHierarchicalAgent(
-		supervisor,
-		supervisor, // supervisor 同时作为 base 和 supervisor
-		[]agent.Agent{worker1, worker2},
-		team.HierarchicalConfig{
-			MaxWorkers:      2,
-			TaskTimeout:     60 * time.Second,
-			EnableRetry:     true,
-			MaxRetries:      1,
-			WorkerSelection: "round_robin",
-		},
-		lg,
-	)
+	hTeam, err := team.NewTeamBuilder("real-hierarchical-test").
+		WithMode(team.ModeSupervisor).
+		WithMaxRounds(2).
+		WithTimeout(60*time.Second).
+		AddMember(supervisor, "supervisor").
+		AddMember(worker1, "worker").
+		AddMember(worker2, "worker").
+		Build(lg)
+	if err != nil {
+		rec("HierarchicalAgent", "FAIL", time.Since(t), fmt.Sprintf("团队创建失败: %v", err))
+		return
+	}
 
-	output, err := hAgent.Execute(ctx, &agent.Input{
-		TraceID: "test-hierarchical-001",
-		Content: "分析Go语言在云原生领域的应用前景",
-	})
+	output, err := hTeam.Execute(ctx, "分析Go语言在云原生领域的应用前景")
 
 	if err != nil {
 		rec("HierarchicalAgent", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
@@ -859,7 +854,7 @@ func d13HierarchicalAgent(ctx context.Context, provider llm.Provider, lg *zap.Lo
 	}
 
 	if output != nil && output.Content != "" {
-		rec("HierarchicalAgent", "PASS", time.Since(t), fmt.Sprintf("层级执行完成, Token:%d, %s", output.TokensUsed, cut(output.Content, 60)))
+		rec("HierarchicalAgent", "PASS", time.Since(t), fmt.Sprintf("层级团队执行完成, Token:%d, %s", output.TokensUsed, cut(output.Content, 60)))
 	} else {
 		rec("HierarchicalAgent", "WARN", time.Since(t), "输出为空")
 	}

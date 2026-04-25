@@ -45,6 +45,14 @@ This decision applies to Gemini-related runtime calls in:
 
 Shared SDK client construction is centralized in `llm/internal/googlegenai`.
 
+The Gemini / Vertex endpoint paths covered by this ADR are provider-outbound calls, including:
+
+- `POST /v1beta/models/{model}:generateContent`
+- `POST /v1beta/models/{model}:streamGenerateContent`
+- `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent`
+
+They are not project-level inbound HTTP routes and must not be re-exposed from `api/routes` or `api/handlers`.
+
 ## Consequences
 
 ### Positive
@@ -63,4 +71,5 @@ Shared SDK client construction is centralized in `llm/internal/googlegenai`.
 
 - do not add parallel Gemini construction paths outside the existing vendor / factory entrypoints
 - do not leak `genai` types outside `llm/`
+- do not introduce project-level `/v1beta/models/*`, `/v1/projects/*`, or `/v1/google/*` HTTP proxy routes for Gemini / Vertex protocol paths
 - when the SDK cannot represent an AgentFlow field directly, adapt at the provider boundary instead of bypassing the SDK with fresh hand-written HTTP calls

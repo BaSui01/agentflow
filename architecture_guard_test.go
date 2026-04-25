@@ -1005,7 +1005,7 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "docs/cn/README.md",
 			requiredSnippets: []string{
-				"Team 与 Legacy 多 Agent 协作",
+				"Team 多 Agent 协作",
 				"**官方单 Agent 主链**: 默认只走 `react",
 			},
 			forbiddenSnippets: []string{
@@ -1015,7 +1015,7 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "docs/en/README.md",
 			requiredSnippets: []string{
-				"Team & Legacy Multi-Agent Collaboration",
+				"Team Multi-Agent Collaboration",
 				"**Official Agent Path**: `react` is the only default runtime path",
 			},
 			forbiddenSnippets: []string{
@@ -1027,7 +1027,8 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			requiredSnippets: []string{
 				"opts.ReasoningExposure = agent.ReasoningExposureAdvanced",
 				"## Team（官方多 Agent facade）",
-				"## Legacy：多 Agent 协作",
+				"## 多 Agent 进阶模式",
+				"## Legacy：Crews (CrewAI 风格团队)",
 			},
 			forbiddenSnippets: []string{
 				"github.com/BaSui01/agentflow/agent/hierarchical",
@@ -1038,7 +1039,8 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			requiredSnippets: []string{
 				"opts.ReasoningExposure = agent.ReasoningExposureAdvanced",
 				"## Team (Official Multi-Agent Facade)",
-				"## Legacy Multi-Agent Collaboration",
+				"## Advanced Multi-Agent Modes",
+				"## Legacy Crews (CrewAI-Style Teams)",
 			},
 			forbiddenSnippets: []string{
 				"github.com/BaSui01/agentflow/agent/hierarchical",
@@ -1050,7 +1052,8 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			path: "docs/cn/tutorials/08.多Agent协作.md",
 			requiredSnippets: []string{
 				"`agent/team` 是 AgentFlow 的官方多 Agent facade",
-				"## Legacy：多 Agent 系统",
+				"## 官方协作模式",
+				"## Team 统一抽象（官方）",
 			},
 			forbiddenSnippets: []string{
 				"github.com/BaSui01/agentflow/agent/hierarchical",
@@ -1060,7 +1063,8 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 			path: "docs/en/tutorials/08.MultiAgentCollaboration.md",
 			requiredSnippets: []string{
 				"`agent/team` is the official multi-agent facade in AgentFlow",
-				"## Legacy Multi-Agent System",
+				"## Official Collaboration Modes",
+				"## Legacy Crew Pattern",
 			},
 			forbiddenSnippets: []string{
 				"AgentFlow supports multiple collaboration patterns including hierarchical agents, debate, consensus, pipeline, broadcast, and network modes.",
@@ -1070,8 +1074,8 @@ func TestPublicProductSurfaceDocsExamplesConsistency(t *testing.T) {
 		{
 			path: "examples/08_low_priority_features/README.md",
 			requiredSnippets: []string{
-				"legacy 多 Agent surface",
-				"新的多 Agent 接入默认应优先使用 `agent/team",
+				"官方 `agent/team` 多 Agent surface",
+				"内部 engine 不作为示例入口",
 			},
 		},
 		{
@@ -1229,6 +1233,215 @@ func TestTeamAdapterIsInternalized(t *testing.T) {
 	}
 }
 
+func TestUsecaseUsesOfficialTeamExecutionFacade(t *testing.T) {
+	data, err := os.ReadFile(filepath.FromSlash("internal/usecase/agent_service.go"))
+	if err != nil {
+		t.Fatalf("read agent service: %v", err)
+	}
+	src := string(data)
+	for _, forbidden := range []string{
+		"GlobalModeRegistry(",
+		"NewModeRegistry(",
+		"RegisterDefaultModes(",
+	} {
+		if strings.Contains(src, forbidden) {
+			t.Fatalf("internal/usecase must execute multi-agent requests through agent/team facade, found %q", forbidden)
+		}
+	}
+	if !strings.Contains(src, "agentteam.ExecuteAgents(") {
+		t.Fatal("internal/usecase must call agentteam.ExecuteAgents for multi-agent execution")
+	}
+}
+
+func TestNonTeamProductionCodeAvoidsModeRegistryDefaults(t *testing.T) {
+	targetDirs := []string{
+		"internal/usecase",
+		"workflow/steps",
+		"agent/runtime/orchestration",
+		"internal/app/bootstrap",
+	}
+	for _, root := range targetDirs {
+		err := filepath.WalkDir(filepath.FromSlash(root), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			src := string(data)
+			for _, forbidden := range []string{
+				"GlobalModeRegistry(",
+				"NewModeRegistry(",
+				"RegisterDefaultModes(",
+			} {
+				if strings.Contains(src, forbidden) {
+					t.Fatalf("%s must use agent/team facade or ModeExecutor injection instead of %q", filepath.ToSlash(path), forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+}
+
+func TestTutorialsDoNotRecommendTeamInternalPackages(t *testing.T) {
+	targetDirs := []string{
+		"docs/cn/tutorials",
+		"docs/en/tutorials",
+		"docs/cn/getting-started",
+		"docs/en/getting-started",
+	}
+	for _, root := range targetDirs {
+		err := filepath.WalkDir(filepath.FromSlash(root), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(path, ".md") {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			src := string(data)
+			for _, forbidden := range []string{
+				"agent/team/internal",
+				"hierarchical.NewHierarchicalAgent",
+				"collaboration.NewMultiAgentSystem",
+				"collaboration.NewMessageHub",
+			} {
+				if strings.Contains(src, forbidden) {
+					t.Fatalf("%s must recommend agent/team facade instead of %q", filepath.ToSlash(path), forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+}
+
+func TestExamplesDoNotImportTeamInternalPackages(t *testing.T) {
+	err := filepath.WalkDir("examples", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if strings.Contains(string(data), "agent/team/internal") {
+			t.Fatalf("%s must not import or recommend agent/team/internal packages", filepath.ToSlash(path))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk examples: %v", err)
+	}
+}
+
+func TestTeamPublicSurfaceDoesNotReexportInternalEngines(t *testing.T) {
+	targets := []string{
+		"agent/team/team.go",
+		"agent/team/execution.go",
+		"agent/team/shared_state.go",
+	}
+	for _, path := range targets {
+		data, err := os.ReadFile(filepath.FromSlash(path))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(data)
+		for _, forbidden := range []string{
+			"type ModeRegistry =",
+			"type MultiAgentSystem =",
+			"type HierarchicalAgent =",
+			"type WorkerPool =",
+			"type RolePipeline =",
+			"func NewModeRegistry(",
+			"func RegisterDefaultModes(",
+			"func GlobalModeRegistry(",
+			"func NewMultiAgentSystem(",
+			"func NewHierarchicalAgent(",
+			"func NewTaskCoordinator(",
+			"func NewAggregator(",
+			"func NewWorkerPool(",
+			"func NewRolePipeline(",
+			"func NewMessageHub",
+		} {
+			if strings.Contains(src, forbidden) {
+				t.Fatalf("%s must keep internal engine APIs behind the official team facade, found %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestExamplesAndLivecheckUseOfficialTeamFacade(t *testing.T) {
+	targetDirs := []string{
+		"examples",
+		"scripts/livecheck",
+	}
+	for _, root := range targetDirs {
+		err := filepath.WalkDir(filepath.FromSlash(root), func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, ".md") {
+				return nil
+			}
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			src := string(data)
+			for _, forbidden := range []string{
+				"NewModeRegistry(",
+				"RegisterDefaultModes(",
+				"GlobalModeRegistry(",
+				"DefaultHierarchicalConfig(",
+				"NewHierarchicalAgent(",
+				"NewTaskCoordinator(",
+				"DefaultMultiAgentConfig(",
+				"NewMultiAgentSystem(",
+				"NewAggregator(",
+				"NewWorkerPool(",
+				"NewRolePipeline(",
+				"NewMessageHub",
+			} {
+				if strings.Contains(src, forbidden) {
+					t.Fatalf("%s must use TeamBuilder, ExecuteAgents, or SupportedExecutionModes instead of %q", filepath.ToSlash(path), forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+}
+
 func TestNonAgentPackagesUseOfficialAgentFrameworkEntrypoints(t *testing.T) {
 	forbidden := []string{
 		`"github.com/BaSui01/agentflow/agent/execution/runtime"`,
@@ -1323,6 +1536,105 @@ func TestAuthorizationBootstrapFilesDoNotExposeLegacyToolNames(t *testing.T) {
 	}
 }
 
+func TestHostedToolRegistryExecuteStaysBehindAuthorizationAdapters(t *testing.T) {
+	allowedFiles := map[string]struct{}{
+		filepath.ToSlash("internal/app/bootstrap/agent_tooling_runtime_builder.go"):      {},
+		filepath.ToSlash("internal/app/bootstrap/workflow_step_dependencies_builder.go"): {},
+	}
+	hostedImport := `"github.com/BaSui01/agentflow/agent/integration/hosted"`
+	executeSnippets := []string{
+		".registry.Execute(",
+		".Registry.Execute(",
+		"registry.Execute(",
+	}
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		normalized := filepath.ToSlash(path)
+		if d.IsDir() {
+			switch normalized {
+			case ".git", "CC-Source", "docs/claude-code", "vendor":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(normalized, ".go") || strings.HasSuffix(normalized, "_test.go") {
+			return nil
+		}
+
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		src := string(data)
+		if !strings.Contains(src, hostedImport) {
+			return nil
+		}
+		for _, snippet := range executeSnippets {
+			if !strings.Contains(src, snippet) {
+				continue
+			}
+			if _, ok := allowedFiles[normalized]; ok {
+				return nil
+			}
+			t.Fatalf("%s directly executes hosted ToolRegistry via %q; route hosted tool execution through AuthorizationService adapters", normalized, snippet)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk go files: %v", err)
+	}
+}
+
+func TestHighRiskHostedToolConstructorsStayInAuthorizationRuntime(t *testing.T) {
+	allowedFiles := map[string]struct{}{
+		filepath.ToSlash("internal/app/bootstrap/agent_tooling_runtime_builder.go"): {},
+	}
+	constructorSnippets := []string{
+		"hosted.NewShellTool(",
+		"hosted.NewWriteFileTool(",
+		"hosted.NewEditFileTool(",
+	}
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		normalized := filepath.ToSlash(path)
+		if d.IsDir() {
+			switch normalized {
+			case ".git", "CC-Source", "docs/claude-code", "vendor":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(normalized, ".go") || strings.HasSuffix(normalized, "_test.go") {
+			return nil
+		}
+
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		src := string(data)
+		for _, snippet := range constructorSnippets {
+			if !strings.Contains(src, snippet) {
+				continue
+			}
+			if _, ok := allowedFiles[normalized]; ok {
+				return nil
+			}
+			t.Fatalf("%s constructs high-risk hosted tool via %q; register shell/file-write tools only in AgentToolingRuntime so execution stays behind AuthorizationService", normalized, snippet)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk go files: %v", err)
+	}
+}
+
 func TestAuthorizationContracts(t *testing.T) {
 	data, err := os.ReadFile(filepath.FromSlash("types/authz.go"))
 	if err != nil {
@@ -1410,12 +1722,12 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	})
 
 	t.Run("tool_choice_any_stays_out_of_agent_runtime_surface", func(t *testing.T) {
-		requestData, err := os.ReadFile("agent/runtime/request_runtime.go")
+		runConfigData, err := os.ReadFile("types/run_config.go")
 		if err != nil {
-			t.Fatalf("read agent/runtime/request_runtime.go: %v", err)
+			t.Fatalf("read types/run_config.go: %v", err)
 		}
-		if !strings.Contains(string(requestData), "types.ParseToolChoiceString(") {
-			t.Fatal("agent/runtime/request_runtime.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
+		if !strings.Contains(string(runConfigData), "ParseToolChoiceString(") {
+			t.Fatal("types/run_config.go must normalize legacy tool_choice strings into types.ToolChoice before execution")
 		}
 
 		entries, err := os.ReadDir("agent")
@@ -1552,5 +1864,3 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
-
-
