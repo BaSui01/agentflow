@@ -2,10 +2,12 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/runtime"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	channelstore "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
 	"github.com/BaSui01/agentflow/types"
@@ -57,6 +59,18 @@ func (m mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 
 func (m mockProvider) Endpoints() llm.ProviderEndpoints {
 	return llm.ProviderEndpoints{BaseURL: "mock://"}
+}
+
+type sdkToolManager struct {
+	schemas []types.ToolSchema
+}
+
+func (m *sdkToolManager) GetAllowedTools(string) []types.ToolSchema {
+	return append([]types.ToolSchema(nil), m.schemas...)
+}
+
+func (m *sdkToolManager) ExecuteForAgent(context.Context, string, []types.ToolCall) []llmtools.ToolResult {
+	return nil
 }
 
 func TestSDK_Build_BoundaryA(t *testing.T) {
@@ -159,4 +173,45 @@ func TestSDK_Build_RequiresLLMOptions(t *testing.T) {
 	_, err := New(Options{}).Build(ctx)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "Options.LLM")
+}
+
+func TestSDK_Build_AgentOptionsExposeToolManager(t *testing.T) {
+	ctx := context.Background()
+	manager := &sdkToolManager{
+		schemas: []types.ToolSchema{{
+			Type:       types.ToolTypeFunction,
+			Name:       "lookup",
+			Parameters: json.RawMessage(`{"type":"object"}`),
+		}},
+	}
+
+	opts := runtime.DefaultBuildOptions()
+	opts.EnableSkills = false
+	rt, err := New(Options{
+		Logger: zap.NewNop(),
+		LLM: &LLMOptions{
+			Provider: mockProvider{name: "mock"},
+		},
+		Agent: &AgentOptions{
+			BuildOptions: opts,
+			ToolManager:  manager,
+			ToolScope:    []string{"lookup"},
+		},
+	}).Build(ctx)
+	require.NoError(t, err)
+
+	ag, err := rt.NewAgent(ctx, types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "sdk-agent-tools",
+			Name: "SDK Agent Tools",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "mock-model",
+		},
+	})
+	require.NoError(t, err)
+	require.Same(t, manager, ag.Tools())
+	require.Equal(t, []string{"lookup"}, ag.Config().Tools.AllowedTools)
+	require.Equal(t, []string{"lookup"}, ag.Config().Runtime.Tools)
 }

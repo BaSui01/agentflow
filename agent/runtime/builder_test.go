@@ -115,6 +115,9 @@ func TestBuilder_Build_AllDisabled(t *testing.T) {
 	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
+	t.Cleanup(func() {
+		require.NoError(t, ag.Teardown(context.Background()))
+	})
 }
 
 func TestBuilder_Build_WithSubsystems(t *testing.T) {
@@ -148,6 +151,9 @@ func TestBuilder_Build_WithSubsystems(t *testing.T) {
 	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
+	t.Cleanup(func() {
+		require.NoError(t, ag.Teardown(context.Background()))
+	})
 }
 
 func TestBuilder_Build_EnableAll(t *testing.T) {
@@ -169,6 +175,9 @@ func TestBuilder_Build_EnableAll(t *testing.T) {
 	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
+	t.Cleanup(func() {
+		require.NoError(t, ag.Teardown(context.Background()))
+	})
 }
 
 func TestBuilder_Build_WithToolGateway(t *testing.T) {

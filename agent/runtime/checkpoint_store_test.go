@@ -173,6 +173,38 @@ func (m *mockTaskStoreAdapter) UpdateStatus(ctx context.Context, taskID string, 
 	}
 	return nil
 }
+
+type failingCheckpointStore struct {
+	err       error
+	mu        sync.Mutex
+	saveCalls int
+}
+
+func (s *failingCheckpointStore) SaveCheckpoint(_ context.Context, _ *Execution) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saveCalls++
+	return s.err
+}
+
+func (s *failingCheckpointStore) LoadCheckpoint(_ context.Context, execID string) (*Execution, error) {
+	return nil, fmt.Errorf("checkpoint unavailable: %s", execID)
+}
+
+func (s *failingCheckpointStore) ListCheckpoints(_ context.Context) ([]*Execution, error) {
+	return nil, s.err
+}
+
+func (s *failingCheckpointStore) DeleteCheckpoint(_ context.Context, execID string) error {
+	return fmt.Errorf("checkpoint unavailable: %s", execID)
+}
+
+func (s *failingCheckpointStore) saveCallCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveCalls
+}
+
 func TestPersistentCheckpointStore_SaveLoad(t *testing.T) {
 	var mu sync.Mutex
 	records := make(map[string]*TaskRecord)
@@ -359,6 +391,41 @@ func TestExecutorWithCustomCheckpointStore(t *testing.T) {
 	}
 }
 
+func TestExecutor_CheckpointSaveFailureDoesNotFailExecution(t *testing.T) {
+	dir := t.TempDir()
+	cfg := ExecutorConfig{
+		CheckpointInterval: time.Hour,
+		CheckpointDir:      dir,
+		MaxRetries:         0,
+		HeartbeatInterval:  time.Hour,
+		AutoResume:         true,
+	}
+	store := &failingCheckpointStore{err: fmt.Errorf("disk full")}
+	e := NewExecutor(cfg, nil, WithCheckpointStore(store))
+
+	steps := []StepFunc{
+		func(_ context.Context, state any) (any, error) {
+			return state.(int) + 1, nil
+		},
+	}
+	exec := e.CreateExecution("checkpoint-save-failure-test", steps)
+
+	if err := e.Start(context.Background(), exec.ID, 0); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
+
+	if got := store.saveCallCount(); got == 0 {
+		t.Fatal("expected checkpoint save to be attempted")
+	}
+	if len(exec.Checkpoints) == 0 {
+		t.Fatal("expected in-memory checkpoint to be recorded despite store failure")
+	}
+	if exec.Error != "" {
+		t.Fatalf("expected execution error to remain empty, got %q", exec.Error)
+	}
+}
+
 func TestAutoResumeAll(t *testing.T) {
 	dir := t.TempDir()
 	cfg := ExecutorConfig{
@@ -458,4 +525,78 @@ func TestAutoResumeAll_SkipsCompleted(t *testing.T) {
 	if resumed != 0 {
 		t.Fatalf("expected 0 resumed (completed should be skipped), got %d", resumed)
 	}
+}
+
+func TestAutoResumeAll_SkipsUnresumableCheckpointAndContinues(t *testing.T) {
+	dir := t.TempDir()
+	cfg := ExecutorConfig{
+		CheckpointInterval: 50 * time.Millisecond,
+		CheckpointDir:      dir,
+		MaxRetries:         0,
+		HeartbeatInterval:  50 * time.Millisecond,
+		AutoResume:         true,
+	}
+	store := NewFileCheckpointStore(dir, nil)
+	ctx := context.Background()
+
+	badExec := &Execution{
+		ID:          "exec_resume_bad",
+		Name:        "resume-bad-test",
+		State:       ExecutionStatePaused,
+		Progress:    0,
+		CurrentStep: 0,
+		TotalSteps:  1,
+		StepNames:   []string{"missing-step"},
+		StartTime:   time.Now().Add(-time.Minute),
+		LastUpdate:  time.Now(),
+		Checkpoints: []ExecutionCheckpoint{},
+		Metadata:    map[string]any{},
+	}
+	if err := store.SaveCheckpoint(ctx, badExec); err != nil {
+		t.Fatalf("SaveCheckpoint badExec failed: %v", err)
+	}
+
+	goodExec := &Execution{
+		ID:          "exec_resume_good",
+		Name:        "resume-good-test",
+		State:       ExecutionStatePaused,
+		Progress:    50,
+		CurrentStep: 1,
+		TotalSteps:  2,
+		StepNames:   []string{"step-a", "step-b"},
+		StartTime:   time.Now().Add(-time.Minute),
+		LastUpdate:  time.Now(),
+		Checkpoints: []ExecutionCheckpoint{
+			{ID: "cp_good_1", Step: 1, State: "a-done", Timestamp: time.Now()},
+		},
+		Metadata: map[string]any{},
+	}
+	if err := store.SaveCheckpoint(ctx, goodExec); err != nil {
+		t.Fatalf("SaveCheckpoint goodExec failed: %v", err)
+	}
+
+	e := NewExecutor(cfg, nil, WithCheckpointStore(store))
+	e.Registry().Register("step-a", func(_ context.Context, state any) (any, error) {
+		return state, nil
+	})
+	e.Registry().Register("step-b", func(_ context.Context, state any) (any, error) {
+		return state.(string) + "+b-done", nil
+	})
+
+	resumed, err := e.AutoResumeAll(ctx)
+	if err != nil {
+		t.Fatalf("AutoResumeAll failed: %v", err)
+	}
+	if resumed != 1 {
+		t.Fatalf("expected only the valid checkpoint to resume, got %d", resumed)
+	}
+	if _, ok := e.GetExecution(badExec.ID); ok {
+		t.Fatal("expected checkpoint with missing registered step to be skipped")
+	}
+
+	resumedExec, ok := e.GetExecution(goodExec.ID)
+	if !ok {
+		t.Fatal("expected good checkpoint to be registered")
+	}
+	waitForState(t, resumedExec, ExecutionStateCompleted, 5*time.Second)
 }

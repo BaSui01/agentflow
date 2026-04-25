@@ -5,6 +5,7 @@ import (
 	"time"
 
 	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // AgentType 定义 Agent 类型
@@ -122,26 +123,8 @@ const (
 	LoopValidationStatusFailed  LoopValidationStatus = "failed"
 )
 
-// RunConfig provides runtime overrides for Agent execution.
-// All pointer fields use nil to indicate "no override" — only non-nil values
-// are applied, leaving the base Config defaults intact.
-type RunConfig struct {
-	Model              *string           `json:"model,omitempty"`
-	Provider           *string           `json:"provider,omitempty"`
-	RoutePolicy        *string           `json:"route_policy,omitempty"`
-	Temperature        *float32          `json:"temperature,omitempty"`
-	MaxTokens          *int              `json:"max_tokens,omitempty"`
-	TopP               *float32          `json:"top_p,omitempty"`
-	Stop               []string          `json:"stop,omitempty"`
-	ToolChoice         *string           `json:"tool_choice,omitempty"`
-	ToolWhitelist      []string          `json:"tool_whitelist,omitempty"`
-	DisableTools       bool              `json:"disable_tools,omitempty"`
-	Timeout            *time.Duration    `json:"timeout,omitempty"`
-	MaxReActIterations *int              `json:"max_react_iterations,omitempty"`
-	MaxLoopIterations  *int              `json:"max_loop_iterations,omitempty"`
-	Metadata           map[string]string `json:"metadata,omitempty"`
-	Tags               []string          `json:"tags,omitempty"`
-}
+// RunConfig is the shared provider-neutral runtime override contract.
+type RunConfig = types.RunConfig
 
 // LoopState is the single mutable state object for closed-loop execution.
 type LoopState struct {

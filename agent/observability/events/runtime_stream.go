@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 type runtimeStreamEmitterKey struct{}
@@ -92,6 +94,136 @@ type RuntimeStreamEvent struct {
 	StopReason      string                 `json:"stop_reason,omitempty"`
 	CheckpointID    string                 `json:"checkpoint_id,omitempty"`
 	Resumable       bool                   `json:"resumable,omitempty"`
+}
+
+// RunEvent maps the runtime-specific stream event to the shared run event
+// contract without changing the existing runtime stream wire format.
+func (e RuntimeStreamEvent) RunEvent() types.RunEvent {
+	event := types.RunEvent{
+		Type:         runtimeRunEventType(e),
+		Scope:        types.RunScopeAgent,
+		CheckpointID: e.CheckpointID,
+		ToolCallID:   e.ToolCallID,
+		ToolName:     e.ToolName,
+		Timestamp:    e.Timestamp,
+		Data:         e.Data,
+		Metadata:     runtimeRunEventMetadata(e),
+	}
+	if e.ToolCall != nil {
+		event.ToolCall = &types.ToolCall{
+			ID:        e.ToolCall.ID,
+			Name:      e.ToolCall.Name,
+			Arguments: e.ToolCall.Arguments,
+		}
+		if event.ToolCallID == "" {
+			event.ToolCallID = e.ToolCall.ID
+		}
+		if event.ToolName == "" {
+			event.ToolName = e.ToolCall.Name
+		}
+	}
+	if e.ToolResult != nil {
+		result := types.ToolResult{
+			ToolCallID: e.ToolResult.ToolCallID,
+			Name:       e.ToolResult.Name,
+			Result:     e.ToolResult.Result,
+			Error:      e.ToolResult.Error,
+			Duration:   e.ToolResult.Duration,
+		}
+		event.ToolResult = &result
+		if event.ToolCallID == "" {
+			event.ToolCallID = e.ToolResult.ToolCallID
+		}
+		if event.ToolName == "" {
+			event.ToolName = e.ToolResult.Name
+		}
+		if e.ToolResult.Error != "" {
+			event.Error = e.ToolResult.Error
+		}
+	}
+	if e.Token != "" || e.Delta != "" || e.Reasoning != "" || e.CurrentStage != "" ||
+		e.IterationCount != 0 || e.SelectedMode != "" || e.StopReason != "" || e.SteeringContent != "" ||
+		e.Resumable {
+		event.Data = runtimeRunEventData(e)
+	}
+	return event
+}
+
+func runtimeRunEventType(e RuntimeStreamEvent) types.RunEventType {
+	switch e.Type {
+	case RuntimeStreamToken:
+		return types.RunEventLLMChunk
+	case RuntimeStreamReasoning:
+		return types.RunEventReasoning
+	case RuntimeStreamToolCall:
+		return types.RunEventToolCall
+	case RuntimeStreamToolResult:
+		return types.RunEventToolResult
+	case RuntimeStreamToolProgress:
+		return types.RunEventToolProgress
+	case RuntimeStreamApproval:
+		return types.RunEventApproval
+	case RuntimeStreamSession:
+		return types.RunEventSession
+	case RuntimeStreamSteering, RuntimeStreamStopAndSend:
+		return types.RunEventSteering
+	case RuntimeStreamStatus:
+		fallthrough
+	default:
+		return types.RunEventStatus
+	}
+}
+
+func runtimeRunEventMetadata(e RuntimeStreamEvent) map[string]string {
+	metadata := map[string]string{}
+	if e.SDKEventType != "" {
+		metadata["sdk_event_type"] = string(e.SDKEventType)
+	}
+	if e.SDKEventName != "" {
+		metadata["sdk_event_name"] = string(e.SDKEventName)
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func runtimeRunEventData(e RuntimeStreamEvent) map[string]any {
+	data := map[string]any{}
+	if e.Data != nil {
+		data["payload"] = e.Data
+	}
+	if e.Token != "" {
+		data["token"] = e.Token
+	}
+	if e.Delta != "" {
+		data["delta"] = e.Delta
+	}
+	if e.Reasoning != "" {
+		data["reasoning"] = e.Reasoning
+	}
+	if e.SteeringContent != "" {
+		data["steering_content"] = e.SteeringContent
+	}
+	if e.CurrentStage != "" {
+		data["current_stage"] = e.CurrentStage
+	}
+	if e.IterationCount != 0 {
+		data["iteration_count"] = e.IterationCount
+	}
+	if e.SelectedMode != "" {
+		data["selected_reasoning_mode"] = e.SelectedMode
+	}
+	if e.StopReason != "" {
+		data["stop_reason"] = e.StopReason
+	}
+	if e.Resumable {
+		data["resumable"] = e.Resumable
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	return data
 }
 
 // RuntimeStreamEmitter is a callback that receives runtime stream events.

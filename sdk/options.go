@@ -74,6 +74,18 @@ type AgentOptions struct {
 	// Zero value means "use runtime.DefaultBuildOptions()".
 	BuildOptions runtime.BuildOptions
 
+	// ToolManager is the official SDK surface for registering executable tools
+	// used by agents. When set, it overrides BuildOptions.ToolManager.
+	ToolManager runtime.ToolManager
+
+	// RetrievalProvider injects retrieval-backed context for agent execution.
+	// When set, it overrides BuildOptions.RetrievalProvider.
+	RetrievalProvider runtime.RetrievalProvider
+
+	// ToolStateProvider injects persisted tool state into agent prompt context.
+	// When set, it overrides BuildOptions.ToolStateProvider.
+	ToolStateProvider runtime.ToolStateProvider
+
 	// ToolScope optionally restricts the tools available to built agents.
 	// Empty means no restriction.
 	ToolScope []string

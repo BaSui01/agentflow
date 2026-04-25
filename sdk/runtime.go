@@ -150,6 +150,15 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 				buildOpts.EnableSkills = false
 			}
 		}
+		if agentOpts.ToolManager != nil {
+			buildOpts.ToolManager = agentOpts.ToolManager
+		}
+		if agentOpts.RetrievalProvider != nil {
+			buildOpts.RetrievalProvider = agentOpts.RetrievalProvider
+		}
+		if agentOpts.ToolStateProvider != nil {
+			buildOpts.ToolStateProvider = agentOpts.ToolStateProvider
+		}
 
 		ab := runtime.NewBuilder(rt.Gateway, logger).WithOptions(buildOpts)
 		if rt.ToolGateway != nil && rt.ToolGateway != rt.Gateway {

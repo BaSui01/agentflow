@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // Runnable is the common execution interface shared by workflow executable nodes.
@@ -79,6 +81,39 @@ type WorkflowStreamEvent struct {
 	NodeName string                  `json:"node_name,omitempty"`
 	Data     any                     `json:"data,omitempty"`
 	Error    error                   `json:"-"`
+}
+
+// RunEvent maps the workflow-specific stream event to the shared run event
+// contract without changing the existing workflow stream wire format.
+func (e WorkflowStreamEvent) RunEvent() types.RunEvent {
+	event := types.RunEvent{
+		Type:     workflowRunEventType(e.Type),
+		Scope:    types.RunScopeWorkflow,
+		NodeID:   e.NodeID,
+		NodeName: e.NodeName,
+		Data:     e.Data,
+	}
+	if e.Error != nil {
+		event.Error = e.Error.Error()
+	}
+	return event
+}
+
+func workflowRunEventType(typ WorkflowStreamEventType) types.RunEventType {
+	switch typ {
+	case WorkflowEventNodeStart:
+		return types.RunEventWorkflowNodeStart
+	case WorkflowEventNodeComplete:
+		return types.RunEventWorkflowNodeComplete
+	case WorkflowEventNodeError:
+		return types.RunEventWorkflowNodeError
+	case WorkflowEventToken:
+		return types.RunEventLLMChunk
+	case WorkflowEventStepProgress:
+		fallthrough
+	default:
+		return types.RunEventStatus
+	}
 }
 
 // WorkflowStreamEmitter is a callback that receives workflow stream events.
