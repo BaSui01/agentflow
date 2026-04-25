@@ -72,6 +72,12 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	var prevPromptTokens int       // 上一轮的 PromptTokens，用于计算增量
 
 	for i := 0; i < r.config.MaxIterations; i++ {
+		select {
+		case <-ctx.Done():
+			return lastResp, steps, fmt.Errorf("context cancelled: %w", ctx.Err())
+		default:
+		}
+
 		r.logger.Debug("ReAct iteration", zap.Int("iteration", i+1))
 
 		callReq := *req

@@ -439,7 +439,13 @@ func TestGeminiProvider_Stream(t *testing.T) {
 		}
 		chunk2 := geminiResponse{
 			Candidates: []geminiCandidate{{
-				Content:      geminiContent{Role: "model", Parts: []geminiPart{{Text: "world"}}},
+				Content: geminiContent{Role: "model", Parts: []geminiPart{
+					{Text: "world"},
+					{FunctionCall: &geminiFunctionCall{
+						Name: "get_weather",
+						Args: map[string]any{"city": "NYC"},
+					}},
+				}},
 				FinishReason: "STOP",
 				Index:        0,
 			}},
@@ -476,10 +482,16 @@ func TestGeminiProvider_Stream(t *testing.T) {
 	require.GreaterOrEqual(t, len(chunks), 2)
 
 	var content string
+	var toolCalls []types.ToolCall
 	for _, c := range chunks {
 		content += c.Delta.Content
+		toolCalls = append(toolCalls, c.Delta.ToolCalls...)
 	}
 	assert.Equal(t, "Hello world", content)
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "get_weather", toolCalls[0].Name)
+	assert.Contains(t, toolCalls[0].ID, "call_")
+	assert.JSONEq(t, `{"city":"NYC"}`, string(toolCalls[0].Arguments))
 
 	// Check usage in one of the chunks
 	var hasUsage bool

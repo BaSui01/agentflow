@@ -27,20 +27,48 @@ type ToolChoice struct {
 
 // ModelOptions contains provider request parameters that shape model behavior.
 type ModelOptions struct {
-	Provider            string            `json:"provider,omitempty"`
-	Model               string            `json:"model"`
-	RoutePolicy         string            `json:"route_policy,omitempty"`
-	MaxTokens           int               `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int              `json:"max_completion_tokens,omitempty"`
-	Temperature         float32           `json:"temperature,omitempty"`
-	TopP                float32           `json:"top_p,omitempty"`
-	Stop                []string          `json:"stop,omitempty"`
-	ResponseFormat      *ResponseFormat   `json:"response_format,omitempty"`
-	ReasoningEffort     string            `json:"reasoning_effort,omitempty"`
-	ReasoningSummary    string            `json:"reasoning_summary,omitempty"`
-	ReasoningDisplay    string            `json:"reasoning_display,omitempty"`
-	InferenceSpeed      string            `json:"inference_speed,omitempty"`
-	WebSearchOptions    *WebSearchOptions `json:"web_search_options,omitempty"`
+	Provider             string            `json:"provider,omitempty"`
+	Model                string            `json:"model"`
+	RoutePolicy          string            `json:"route_policy,omitempty"`
+	MaxTokens            int               `json:"max_tokens,omitempty"`
+	MaxCompletionTokens  *int              `json:"max_completion_tokens,omitempty"`
+	Temperature          float32           `json:"temperature,omitempty"`
+	TopP                 float32           `json:"top_p,omitempty"`
+	Stop                 []string          `json:"stop,omitempty"`
+	FrequencyPenalty     *float32          `json:"frequency_penalty,omitempty"`
+	PresencePenalty      *float32          `json:"presence_penalty,omitempty"`
+	RepetitionPenalty    *float32          `json:"repetition_penalty,omitempty"`
+	N                    *int              `json:"n,omitempty"`
+	LogProbs             *bool             `json:"logprobs,omitempty"`
+	TopLogProbs          *int              `json:"top_logprobs,omitempty"`
+	User                 string            `json:"user,omitempty"`
+	ResponseFormat       *ResponseFormat   `json:"response_format,omitempty"`
+	StreamOptions        *StreamOptions    `json:"stream_options,omitempty"`
+	ServiceTier          *string           `json:"service_tier,omitempty"`
+	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
+	ReasoningSummary     string            `json:"reasoning_summary,omitempty"`
+	ReasoningDisplay     string            `json:"reasoning_display,omitempty"`
+	ReasoningMode        string            `json:"reasoning_mode,omitempty"`
+	ThinkingType         string            `json:"thinking_type,omitempty"`
+	ThinkingLevel        string            `json:"thinking_level,omitempty"`
+	ThinkingBudget       *int32            `json:"thinking_budget,omitempty"`
+	IncludeThoughts      *bool             `json:"include_thoughts,omitempty"`
+	MediaResolution      string            `json:"media_resolution,omitempty"`
+	InferenceSpeed       string            `json:"inference_speed,omitempty"`
+	Store                *bool             `json:"store,omitempty"`
+	Modalities           []string          `json:"modalities,omitempty"`
+	PromptCacheKey       string            `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string            `json:"prompt_cache_retention,omitempty"`
+	CacheControl         *CacheControl     `json:"cache_control,omitempty"`
+	CachedContent        string            `json:"cached_content,omitempty"`
+	Include              []string          `json:"include,omitempty"`
+	Truncation           string            `json:"truncation,omitempty"`
+	PreviousResponseID   string            `json:"previous_response_id,omitempty"`
+	ConversationID       string            `json:"conversation_id,omitempty"`
+	ThoughtSignatures    []string          `json:"thought_signatures,omitempty"`
+	Verbosity            string            `json:"verbosity,omitempty"`
+	Phase                string            `json:"phase,omitempty"`
+	WebSearchOptions     *WebSearchOptions `json:"web_search_options,omitempty"`
 }
 
 // AgentControlOptions contains runtime loop, validation, and context controls.
@@ -159,20 +187,48 @@ func ParseToolChoiceString(value string) *ToolChoice {
 
 func (o ModelOptions) clone() ModelOptions {
 	return ModelOptions{
-		Provider:            o.Provider,
-		Model:               o.Model,
-		RoutePolicy:         o.RoutePolicy,
-		MaxTokens:           o.MaxTokens,
-		MaxCompletionTokens: cloneExecutionIntPtr(o.MaxCompletionTokens),
-		Temperature:         o.Temperature,
-		TopP:                o.TopP,
-		Stop:                cloneExecutionStrings(o.Stop),
-		ResponseFormat:      cloneResponseFormat(o.ResponseFormat),
-		ReasoningEffort:     o.ReasoningEffort,
-		ReasoningSummary:    o.ReasoningSummary,
-		ReasoningDisplay:    o.ReasoningDisplay,
-		InferenceSpeed:      o.InferenceSpeed,
-		WebSearchOptions:    cloneWebSearchOptions(o.WebSearchOptions),
+		Provider:             o.Provider,
+		Model:                o.Model,
+		RoutePolicy:          o.RoutePolicy,
+		MaxTokens:            o.MaxTokens,
+		MaxCompletionTokens:  cloneExecutionIntPtr(o.MaxCompletionTokens),
+		Temperature:          o.Temperature,
+		TopP:                 o.TopP,
+		Stop:                 cloneExecutionStrings(o.Stop),
+		FrequencyPenalty:     cloneExecutionFloat32Ptr(o.FrequencyPenalty),
+		PresencePenalty:      cloneExecutionFloat32Ptr(o.PresencePenalty),
+		RepetitionPenalty:    cloneExecutionFloat32Ptr(o.RepetitionPenalty),
+		N:                    cloneExecutionIntPtr(o.N),
+		LogProbs:             cloneExecutionBoolPtr(o.LogProbs),
+		TopLogProbs:          cloneExecutionIntPtr(o.TopLogProbs),
+		User:                 o.User,
+		ResponseFormat:       cloneResponseFormat(o.ResponseFormat),
+		StreamOptions:        cloneStreamOptions(o.StreamOptions),
+		ServiceTier:          cloneExecutionStringPtr(o.ServiceTier),
+		ReasoningEffort:      o.ReasoningEffort,
+		ReasoningSummary:     o.ReasoningSummary,
+		ReasoningDisplay:     o.ReasoningDisplay,
+		ReasoningMode:        o.ReasoningMode,
+		ThinkingType:         o.ThinkingType,
+		ThinkingLevel:        o.ThinkingLevel,
+		ThinkingBudget:       cloneExecutionInt32Ptr(o.ThinkingBudget),
+		IncludeThoughts:      cloneExecutionBoolPtr(o.IncludeThoughts),
+		MediaResolution:      o.MediaResolution,
+		InferenceSpeed:       o.InferenceSpeed,
+		Store:                cloneExecutionBoolPtr(o.Store),
+		Modalities:           cloneExecutionStrings(o.Modalities),
+		PromptCacheKey:       o.PromptCacheKey,
+		PromptCacheRetention: o.PromptCacheRetention,
+		CacheControl:         cloneCacheControl(o.CacheControl),
+		CachedContent:        o.CachedContent,
+		Include:              cloneExecutionStrings(o.Include),
+		Truncation:           o.Truncation,
+		PreviousResponseID:   o.PreviousResponseID,
+		ConversationID:       o.ConversationID,
+		ThoughtSignatures:    cloneExecutionStrings(o.ThoughtSignatures),
+		Verbosity:            o.Verbosity,
+		Phase:                o.Phase,
+		WebSearchOptions:     cloneWebSearchOptions(o.WebSearchOptions),
 	}
 }
 
@@ -209,6 +265,46 @@ func (o ToolProtocolOptions) clone() ToolProtocolOptions {
 func (c AgentConfig) hasFormalMainFace() bool {
 	return strings.TrimSpace(c.Model.Model) != "" ||
 		strings.TrimSpace(c.Model.Provider) != "" ||
+		strings.TrimSpace(c.Model.RoutePolicy) != "" ||
+		c.Model.MaxTokens != 0 ||
+		c.Model.MaxCompletionTokens != nil ||
+		c.Model.Temperature != 0 ||
+		c.Model.TopP != 0 ||
+		len(c.Model.Stop) > 0 ||
+		c.Model.FrequencyPenalty != nil ||
+		c.Model.PresencePenalty != nil ||
+		c.Model.RepetitionPenalty != nil ||
+		c.Model.N != nil ||
+		c.Model.LogProbs != nil ||
+		c.Model.TopLogProbs != nil ||
+		strings.TrimSpace(c.Model.User) != "" ||
+		c.Model.ResponseFormat != nil ||
+		c.Model.StreamOptions != nil ||
+		c.Model.ServiceTier != nil ||
+		strings.TrimSpace(c.Model.ReasoningEffort) != "" ||
+		strings.TrimSpace(c.Model.ReasoningSummary) != "" ||
+		strings.TrimSpace(c.Model.ReasoningDisplay) != "" ||
+		strings.TrimSpace(c.Model.ReasoningMode) != "" ||
+		strings.TrimSpace(c.Model.ThinkingType) != "" ||
+		strings.TrimSpace(c.Model.ThinkingLevel) != "" ||
+		c.Model.ThinkingBudget != nil ||
+		c.Model.IncludeThoughts != nil ||
+		strings.TrimSpace(c.Model.MediaResolution) != "" ||
+		strings.TrimSpace(c.Model.InferenceSpeed) != "" ||
+		c.Model.Store != nil ||
+		len(c.Model.Modalities) > 0 ||
+		strings.TrimSpace(c.Model.PromptCacheKey) != "" ||
+		strings.TrimSpace(c.Model.PromptCacheRetention) != "" ||
+		c.Model.CacheControl != nil ||
+		strings.TrimSpace(c.Model.CachedContent) != "" ||
+		len(c.Model.Include) > 0 ||
+		strings.TrimSpace(c.Model.Truncation) != "" ||
+		strings.TrimSpace(c.Model.PreviousResponseID) != "" ||
+		strings.TrimSpace(c.Model.ConversationID) != "" ||
+		len(c.Model.ThoughtSignatures) > 0 ||
+		strings.TrimSpace(c.Model.Verbosity) != "" ||
+		strings.TrimSpace(c.Model.Phase) != "" ||
+		c.Model.WebSearchOptions != nil ||
 		strings.TrimSpace(c.Control.SystemPrompt) != "" ||
 		c.Control.Timeout != 0 ||
 		c.Control.MaxReActIterations != 0 ||
@@ -257,8 +353,35 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 	if len(override.Stop) > 0 {
 		out.Stop = cloneExecutionStrings(override.Stop)
 	}
+	if override.FrequencyPenalty != nil {
+		out.FrequencyPenalty = cloneExecutionFloat32Ptr(override.FrequencyPenalty)
+	}
+	if override.PresencePenalty != nil {
+		out.PresencePenalty = cloneExecutionFloat32Ptr(override.PresencePenalty)
+	}
+	if override.RepetitionPenalty != nil {
+		out.RepetitionPenalty = cloneExecutionFloat32Ptr(override.RepetitionPenalty)
+	}
+	if override.N != nil {
+		out.N = cloneExecutionIntPtr(override.N)
+	}
+	if override.LogProbs != nil {
+		out.LogProbs = cloneExecutionBoolPtr(override.LogProbs)
+	}
+	if override.TopLogProbs != nil {
+		out.TopLogProbs = cloneExecutionIntPtr(override.TopLogProbs)
+	}
+	if strings.TrimSpace(override.User) != "" {
+		out.User = strings.TrimSpace(override.User)
+	}
 	if override.ResponseFormat != nil {
 		out.ResponseFormat = cloneResponseFormat(override.ResponseFormat)
+	}
+	if override.StreamOptions != nil {
+		out.StreamOptions = cloneStreamOptions(override.StreamOptions)
+	}
+	if override.ServiceTier != nil {
+		out.ServiceTier = cloneExecutionStringPtr(override.ServiceTier)
 	}
 	if strings.TrimSpace(override.ReasoningEffort) != "" {
 		out.ReasoningEffort = strings.TrimSpace(override.ReasoningEffort)
@@ -269,8 +392,65 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 	if strings.TrimSpace(override.ReasoningDisplay) != "" {
 		out.ReasoningDisplay = strings.TrimSpace(override.ReasoningDisplay)
 	}
+	if strings.TrimSpace(override.ReasoningMode) != "" {
+		out.ReasoningMode = strings.TrimSpace(override.ReasoningMode)
+	}
+	if strings.TrimSpace(override.ThinkingType) != "" {
+		out.ThinkingType = strings.TrimSpace(override.ThinkingType)
+	}
+	if strings.TrimSpace(override.ThinkingLevel) != "" {
+		out.ThinkingLevel = strings.TrimSpace(override.ThinkingLevel)
+	}
+	if override.ThinkingBudget != nil {
+		out.ThinkingBudget = cloneExecutionInt32Ptr(override.ThinkingBudget)
+	}
+	if override.IncludeThoughts != nil {
+		out.IncludeThoughts = cloneExecutionBoolPtr(override.IncludeThoughts)
+	}
+	if strings.TrimSpace(override.MediaResolution) != "" {
+		out.MediaResolution = strings.TrimSpace(override.MediaResolution)
+	}
 	if strings.TrimSpace(override.InferenceSpeed) != "" {
 		out.InferenceSpeed = strings.TrimSpace(override.InferenceSpeed)
+	}
+	if override.Store != nil {
+		out.Store = cloneExecutionBoolPtr(override.Store)
+	}
+	if len(override.Modalities) > 0 {
+		out.Modalities = cloneExecutionStrings(override.Modalities)
+	}
+	if strings.TrimSpace(override.PromptCacheKey) != "" {
+		out.PromptCacheKey = strings.TrimSpace(override.PromptCacheKey)
+	}
+	if strings.TrimSpace(override.PromptCacheRetention) != "" {
+		out.PromptCacheRetention = strings.TrimSpace(override.PromptCacheRetention)
+	}
+	if override.CacheControl != nil {
+		out.CacheControl = cloneCacheControl(override.CacheControl)
+	}
+	if strings.TrimSpace(override.CachedContent) != "" {
+		out.CachedContent = strings.TrimSpace(override.CachedContent)
+	}
+	if len(override.Include) > 0 {
+		out.Include = cloneExecutionStrings(override.Include)
+	}
+	if strings.TrimSpace(override.Truncation) != "" {
+		out.Truncation = strings.TrimSpace(override.Truncation)
+	}
+	if strings.TrimSpace(override.PreviousResponseID) != "" {
+		out.PreviousResponseID = strings.TrimSpace(override.PreviousResponseID)
+	}
+	if strings.TrimSpace(override.ConversationID) != "" {
+		out.ConversationID = strings.TrimSpace(override.ConversationID)
+	}
+	if len(override.ThoughtSignatures) > 0 {
+		out.ThoughtSignatures = cloneExecutionStrings(override.ThoughtSignatures)
+	}
+	if strings.TrimSpace(override.Verbosity) != "" {
+		out.Verbosity = strings.TrimSpace(override.Verbosity)
+	}
+	if strings.TrimSpace(override.Phase) != "" {
+		out.Phase = strings.TrimSpace(override.Phase)
 	}
 	if override.WebSearchOptions != nil {
 		out.WebSearchOptions = cloneWebSearchOptions(override.WebSearchOptions)
@@ -375,6 +555,30 @@ func cloneExecutionIntPtr(value *int) *int {
 	return &out
 }
 
+func cloneExecutionFloat32Ptr(value *float32) *float32 {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	return &out
+}
+
+func cloneExecutionInt32Ptr(value *int32) *int32 {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	return &out
+}
+
+func cloneExecutionStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	return &out
+}
+
 func cloneExecutionBoolPtr(value *bool) *bool {
 	if value == nil {
 		return nil
@@ -410,6 +614,22 @@ func cloneResponseFormat(value *ResponseFormat) *ResponseFormat {
 		}
 		cloned.JSONSchema = &schema
 	}
+	return &cloned
+}
+
+func cloneStreamOptions(value *StreamOptions) *StreamOptions {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneCacheControl(value *CacheControl) *CacheControl {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
 	return &cloned
 }
 

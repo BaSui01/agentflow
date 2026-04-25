@@ -215,8 +215,21 @@ func minimaxSupportsTools(cfg ChatProviderConfig) *bool {
 	return &supportsTools
 }
 
+// resolveCompatThinkingMode returns the effective thinking mode for compat providers.
+// ThinkingType takes priority over legacy ReasoningMode.
+func resolveCompatThinkingMode(req *llm.ChatRequest) string {
+	if req == nil {
+		return ""
+	}
+	if tt := strings.ToLower(strings.TrimSpace(req.ThinkingType)); tt != "" {
+		return tt
+	}
+	return strings.ToLower(strings.TrimSpace(req.ReasoningMode))
+}
+
 func deepseekRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" {
 		if req.Model == "" {
 			body.Model = "deepseek-reasoner"
 		}
@@ -226,7 +239,8 @@ func deepseekRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRe
 }
 
 func qwenRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" || req.ReasoningMode == "enabled" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" || mode == "enabled" {
 		if req.Model == "" {
 			body.Model = "qwen3-max-2026-01-23"
 		}
@@ -238,7 +252,8 @@ func qwenRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatReques
 }
 
 func glmRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" {
 		if req.Model == "" {
 			body.Model = "glm-z1-flash"
 		}
@@ -246,7 +261,8 @@ func glmRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest
 }
 
 func grokRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" {
 		if req.Model == "" {
 			body.Model = "grok-4.20-reasoning"
 		}
@@ -254,12 +270,13 @@ func grokRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatReques
 }
 
 func kimiRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" || req.ReasoningMode == "enabled" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" || mode == "enabled" {
 		if req.Model == "" {
 			body.Model = "kimi-k2.5"
 		}
 		body.Thinking = &providerbase.Thinking{Type: "enabled"}
-	} else if req.ReasoningMode == "disabled" {
+	} else if mode == "disabled" {
 		if req.Model == "" {
 			body.Model = "kimi-k2.5"
 		}
@@ -268,7 +285,8 @@ func kimiRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatReques
 }
 
 func mistralRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" {
 		if req.Model == "" {
 			body.Model = "magistral-medium-latest"
 		}
@@ -276,8 +294,9 @@ func mistralRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatReq
 }
 
 func doubaoRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode != "" {
-		switch req.ReasoningMode {
+	mode := resolveCompatThinkingMode(req)
+	if mode != "" {
+		switch mode {
 		case "thinking", "enabled":
 			body.Thinking = &providerbase.Thinking{Type: "enabled"}
 		case "disabled":
@@ -289,7 +308,8 @@ func doubaoRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequ
 }
 
 func hunyuanRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
-	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+	mode := resolveCompatThinkingMode(req)
+	if mode == "thinking" || mode == "extended" {
 		if req.Model == "" {
 			body.Model = "hunyuan-t1"
 		}
@@ -396,7 +416,12 @@ func isReasoningModeEnabled(req *llm.ChatRequest) bool {
 	if req == nil {
 		return false
 	}
-	switch strings.ToLower(strings.TrimSpace(req.ReasoningMode)) {
+	// ThinkingType takes priority over legacy ReasoningMode in compat layer.
+	mode := strings.ToLower(strings.TrimSpace(req.ThinkingType))
+	if mode == "" {
+		mode = strings.ToLower(strings.TrimSpace(req.ReasoningMode))
+	}
+	switch mode {
 	case "thinking", "extended", "enabled", "adaptive":
 		return true
 	default:

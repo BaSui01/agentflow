@@ -206,6 +206,70 @@ func TestOpenAIProvider_Completion_ResponsesAPI_MapsWebSearchAndToolChoice(t *te
 	require.Len(t, tools, 2)
 }
 
+func TestOpenAIProvider_ResponsesInput_MapsToolCallsAndResults(t *testing.T) {
+	items := convertMessagesToResponsesInput([]types.Message{
+		{
+			Role: types.RoleAssistant,
+			ToolCalls: []types.ToolCall{
+				{
+					ID:        "call_weather",
+					Type:      types.ToolTypeFunction,
+					Name:      "get_weather",
+					Arguments: json.RawMessage(`{"city":"Hangzhou"}`),
+				},
+				{
+					ID:    "call_code",
+					Type:  types.ToolTypeCustom,
+					Name:  "code_exec",
+					Input: "print('hi')",
+				},
+			},
+		},
+		{
+			Role:       types.RoleTool,
+			ToolCallID: "call_weather",
+			Name:       "get_weather",
+			Content:    `{"temperature":24}`,
+		},
+		{
+			Role:        types.RoleTool,
+			ToolCallID:  "call_code",
+			Name:        "code_exec",
+			Content:     "stdout text",
+			IsToolError: true,
+		},
+		{
+			Role:    types.RoleTool,
+			Content: "missing call id is skipped",
+		},
+	})
+
+	data, err := json.Marshal(items)
+	require.NoError(t, err)
+	var raw []map[string]any
+	require.NoError(t, json.Unmarshal(data, &raw))
+	require.Len(t, raw, 4)
+
+	assert.Equal(t, "function_call", raw[0]["type"])
+	assert.Equal(t, "fc_weather", raw[0]["id"])
+	assert.Equal(t, "fc_weather", raw[0]["call_id"])
+	assert.Equal(t, "get_weather", raw[0]["name"])
+	assert.JSONEq(t, `{"city":"Hangzhou"}`, raw[0]["arguments"].(string))
+
+	assert.Equal(t, "custom_tool_call", raw[1]["type"])
+	assert.Equal(t, "fc_code", raw[1]["call_id"])
+	assert.Equal(t, "code_exec", raw[1]["name"])
+	assert.Equal(t, "print('hi')", raw[1]["input"])
+
+	assert.Equal(t, "function_call_output", raw[2]["type"])
+	assert.Equal(t, "fc_weather", raw[2]["call_id"])
+	assert.Equal(t, `{"temperature":24}`, raw[2]["output"])
+
+	assert.Equal(t, "custom_tool_call_output", raw[3]["type"])
+	assert.Equal(t, "fc_code", raw[3]["call_id"])
+	assert.Equal(t, "stdout text", raw[3]["output"])
+}
+
 func TestOpenAIProvider_Stream_ResponsesAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -221,6 +285,14 @@ func TestOpenAIProvider_Stream_ResponsesAPI(t *testing.T) {
 		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"fc_1\",\"delta\":\"\\\"NYC\\\"}\"}\n\n")
 		_, _ = fmt.Fprintf(w, "event: response.function_call_arguments.done\n")
 		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"fc_1\"}\n\n")
+		_, _ = fmt.Fprintf(w, "event: response.output_item.added\n")
+		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"custom_tool_call\",\"id\":\"ct_1\",\"call_id\":\"call_custom_1\",\"name\":\"code_exec\"}}\n\n")
+		_, _ = fmt.Fprintf(w, "event: response.custom_tool_call_input.delta\n")
+		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.custom_tool_call_input.delta\",\"item_id\":\"ct_1\",\"delta\":\"print\"}\n\n")
+		_, _ = fmt.Fprintf(w, "event: response.custom_tool_call_input.delta\n")
+		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.custom_tool_call_input.delta\",\"item_id\":\"ct_1\",\"delta\":\"('hi')\"}\n\n")
+		_, _ = fmt.Fprintf(w, "event: response.custom_tool_call_input.done\n")
+		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.custom_tool_call_input.done\",\"item_id\":\"ct_1\"}\n\n")
 		_, _ = fmt.Fprintf(w, "event: response.completed\n")
 		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-5.2\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":3,\"total_tokens\":8}}}\n\n")
 	}))
@@ -230,12 +302,14 @@ func TestOpenAIProvider_Stream_ResponsesAPI(t *testing.T) {
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}}})
 	require.NoError(t, err)
 	var sawText, sawTool, sawUsage bool
+	var toolCalls []types.ToolCall
 	for c := range ch {
 		if c.Delta.Content != "" {
 			sawText = true
 		}
 		if len(c.Delta.ToolCalls) > 0 {
 			sawTool = true
+			toolCalls = append(toolCalls, c.Delta.ToolCalls...)
 		}
 		if c.Usage != nil {
 			sawUsage = true
@@ -244,4 +318,13 @@ func TestOpenAIProvider_Stream_ResponsesAPI(t *testing.T) {
 	assert.True(t, sawText)
 	assert.True(t, sawTool)
 	assert.True(t, sawUsage)
+	require.Len(t, toolCalls, 2)
+	assert.Equal(t, "call_1", toolCalls[0].ID)
+	assert.Equal(t, types.ToolTypeFunction, toolCalls[0].Type)
+	assert.Equal(t, "get_weather", toolCalls[0].Name)
+	assert.JSONEq(t, `{"city":"NYC"}`, string(toolCalls[0].Arguments))
+	assert.Equal(t, "call_custom_1", toolCalls[1].ID)
+	assert.Equal(t, types.ToolTypeCustom, toolCalls[1].Type)
+	assert.Equal(t, "code_exec", toolCalls[1].Name)
+	assert.Equal(t, "print('hi')", toolCalls[1].Input)
 }

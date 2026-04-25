@@ -326,8 +326,12 @@ func TestToolTimeout(t *testing.T) {
 
 	// 注册一个会超时的工具
 	slowFunc := func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
-		time.Sleep(2 * time.Second) // 模拟慢操作
-		return json.RawMessage(`{"done": true}`), nil
+		select {
+		case <-time.After(2 * time.Second): // 模拟慢操作
+			return json.RawMessage(`{"done": true}`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
 	metadata := tools.ToolMetadata{

@@ -131,7 +131,8 @@ func TestConvertToClaudeMessages(t *testing.T) {
 		{Role: llm.RoleAssistant, Content: "Hi there", ToolCalls: []types.ToolCall{
 			{ID: "tc_1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)},
 		}},
-		{Role: llm.RoleTool, ToolCallID: "tc_1", Content: "result data"},
+		{Role: llm.RoleTool, ToolCallID: "tc_1", Content: "result data", IsToolError: true},
+		{Role: llm.RoleTool, Content: "missing call id is skipped"},
 	}
 
 	system, claudeMsgs := convertToClaudeMessages(msgs)
@@ -150,13 +151,20 @@ func TestConvertToClaudeMessages(t *testing.T) {
 	require.Len(t, claudeMsgs[1].Content, 2)
 	assert.NotNil(t, claudeMsgs[1].Content[0].OfText)
 	assert.NotNil(t, claudeMsgs[1].Content[1].OfToolUse)
+	assert.Equal(t, "tc_1", claudeMsgs[1].Content[1].OfToolUse.ID)
 	assert.Equal(t, "search", claudeMsgs[1].Content[1].OfToolUse.Name)
+	toolInput, err := json.Marshal(claudeMsgs[1].Content[1].OfToolUse.Input)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"q":"test"}`, string(toolInput))
 
 	// Tool result wrapped as user
 	assert.Equal(t, anthropicsdk.MessageParamRoleUser, claudeMsgs[2].Role)
 	require.Len(t, claudeMsgs[2].Content, 1)
 	assert.NotNil(t, claudeMsgs[2].Content[0].OfToolResult)
 	assert.Equal(t, "tc_1", claudeMsgs[2].Content[0].OfToolResult.ToolUseID)
+	require.Len(t, claudeMsgs[2].Content[0].OfToolResult.Content, 1)
+	assert.Equal(t, "result data", claudeMsgs[2].Content[0].OfToolResult.Content[0].OfText.Text)
+	assert.True(t, claudeMsgs[2].Content[0].OfToolResult.IsError.Value)
 }
 
 // --- convertClaudeToolChoice ---

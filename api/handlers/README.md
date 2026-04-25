@@ -29,6 +29,8 @@
   - Tool Approval: `/api/v1/tools/approvals`、`/api/v1/tools/approvals/{id}`、`/api/v1/tools/approvals/{id}/resolve`
 - Config API: `/api/v1/config*`
 
+补充：Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` 以及 Vertex AI `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` 等路径属于 provider 出站协议，不在 `api/routes` 注册项目级 `/v1beta/models/*`、`/v1/projects/*` 或 `/v1/google/*` HTTP 入站路由。
+
 ## 工具共用与自动生效
 
 - 对外工具注册入口：`/api/v1/tools*`（列表/创建/更新/删除/targets/reload）。
@@ -67,7 +69,7 @@ http.HandleFunc("GET /api/v1/agents", agentHandler.HandleListAgents)
 http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 ```
 
-说明：`AgentHandler` 的执行、流式调用统一走 `AgentService`。单 Agent 请求直接调用目标 agent 的默认闭环 `Execute(...)`；只有 `agent_ids` 多目标请求才进入 `multiagent` 模式注册表。
+说明：`AgentHandler` 的执行、流式调用统一走 `AgentService`。单 Agent 请求直接调用目标 agent 的默认闭环 `Execute(...)`；`agent_ids` 多目标请求通过 `agent/team.ExecuteAgents(...)` 进入官方 team 执行门面，内部模式注册表不是 Handler / usecase 的公开依赖。
 
 多 Agent 执行也走同一入口，不新增旁路 handler：
 

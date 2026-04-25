@@ -569,6 +569,10 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 		}
 	}
 
+	if mr := strings.TrimSpace(req.MediaResolution); mr != "" {
+		cfg.MediaResolution = genai.MediaResolution(strings.ToUpper(mr))
+	}
+
 	if isEmptyGenAIConfig(cfg) {
 		return nil
 	}
@@ -576,16 +580,34 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 }
 
 func applyGeminiThinkingConfig(cfg *genai.GenerateContentConfig, req *llm.ChatRequest) {
-	if cfg == nil || req == nil || strings.TrimSpace(req.ReasoningMode) == "" {
+	if cfg == nil || req == nil {
+		return
+	}
+
+	// Formal main-face fields take priority over legacy ReasoningMode.
+	hasFormalThinking := strings.TrimSpace(req.ThinkingLevel) != "" ||
+		req.ThinkingBudget != nil ||
+		req.IncludeThoughts != nil
+	hasLegacyMode := strings.TrimSpace(req.ReasoningMode) != ""
+
+	if !hasFormalThinking && !hasLegacyMode {
 		return
 	}
 
 	cfg.ThinkingConfig = &genai.ThinkingConfig{}
-	mode := strings.TrimSpace(strings.ToLower(req.ReasoningMode))
 	model := strings.TrimSpace(strings.ToLower(req.Model))
 	if model == "" {
 		model = defaultModel
 	}
+
+	// If formal fields are set, use them directly.
+	if hasFormalThinking {
+		applyFormalThinkingFields(cfg.ThinkingConfig, req)
+		return
+	}
+
+	// Legacy fallback: derive from ReasoningMode.
+	mode := strings.TrimSpace(strings.ToLower(req.ReasoningMode))
 
 	if strings.Contains(model, "gemini-2.5") {
 		applyGemini25ThinkingConfig(cfg.ThinkingConfig, mode, model)
@@ -604,6 +626,42 @@ func applyGeminiThinkingConfig(cfg *genai.GenerateContentConfig, req *llm.ChatRe
 		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelHigh
 	default:
 		cfg.ThinkingConfig.ThinkingLevel = genai.ThinkingLevelMedium
+	}
+}
+
+// applyFormalThinkingFields maps formal main-face thinking fields to genai.ThinkingConfig.
+func applyFormalThinkingFields(cfg *genai.ThinkingConfig, req *llm.ChatRequest) {
+	if cfg == nil {
+		return
+	}
+
+	// IncludeThoughts: explicit bool wins; default true when thinking is requested.
+	if req.IncludeThoughts != nil {
+		cfg.IncludeThoughts = *req.IncludeThoughts
+	} else {
+		cfg.IncludeThoughts = true
+	}
+
+	// ThinkingBudget: pass through directly (Gemini 2.5 style).
+	if req.ThinkingBudget != nil {
+		budget := *req.ThinkingBudget
+		cfg.ThinkingBudget = &budget
+	}
+
+	// ThinkingLevel: map string to genai enum (Gemini 3.x style).
+	if level := strings.TrimSpace(strings.ToLower(req.ThinkingLevel)); level != "" {
+		switch level {
+		case "minimal":
+			cfg.ThinkingLevel = genai.ThinkingLevelMinimal
+		case "low":
+			cfg.ThinkingLevel = genai.ThinkingLevelLow
+		case "medium":
+			cfg.ThinkingLevel = genai.ThinkingLevelMedium
+		case "high":
+			cfg.ThinkingLevel = genai.ThinkingLevelHigh
+		default:
+			cfg.ThinkingLevel = genai.ThinkingLevel(strings.ToUpper(level))
+		}
 	}
 }
 

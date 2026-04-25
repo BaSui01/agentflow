@@ -94,9 +94,16 @@ type ChatRequest struct {
 
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
+	ThinkingType       string   `json:"thinking_type,omitempty"`
+	ThinkingLevel      string   `json:"thinking_level,omitempty"`
+	ThinkingBudget     *int32   `json:"thinking_budget,omitempty"`
+	IncludeThoughts    *bool    `json:"include_thoughts,omitempty"`
+	MediaResolution    string   `json:"media_resolution,omitempty"`
 	PreviousResponseID string   `json:"previous_response_id,omitempty"`
 	ConversationID     string   `json:"conversation_id,omitempty"`
 	ThoughtSignatures  []string `json:"thought_signatures,omitempty"`
+	Verbosity          string   `json:"verbosity,omitempty"`
+	Phase              string   `json:"phase,omitempty"`
 }
 
 // ChatResponse 表示聊天补全响应。

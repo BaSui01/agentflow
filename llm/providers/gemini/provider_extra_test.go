@@ -69,6 +69,7 @@ func TestConvertToGeminiContents_ToolCalls(t *testing.T) {
 		if p.FunctionCall != nil {
 			hasFunctionCall = true
 			assert.Equal(t, "get_weather", p.FunctionCall.Name)
+			assert.Equal(t, "NYC", p.FunctionCall.Args["city"])
 		}
 	}
 	assert.True(t, hasFunctionCall)
@@ -79,9 +80,16 @@ func TestConvertToGeminiContents_ToolCalls(t *testing.T) {
 		if p.FunctionResponse != nil {
 			hasFunctionResponse = true
 			assert.Equal(t, "get_weather", p.FunctionResponse.Name)
+			assert.Equal(t, float64(72), p.FunctionResponse.Response["temp"])
 		}
 	}
 	assert.True(t, hasFunctionResponse)
+
+	_, skipped := convertToGeminiContents([]types.Message{{
+		Role:    llm.RoleTool,
+		Content: "missing call id is skipped",
+	}})
+	assert.Empty(t, skipped)
 }
 
 func TestConvertToGeminiContents_ToolResponseNonJSON(t *testing.T) {

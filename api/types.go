@@ -99,6 +99,16 @@ type ChatRequest struct {
 	ReasoningDisplay string `json:"reasoning_display,omitempty"`
 	// Provider-specific inference speed tier（例如 Anthropic fast）
 	InferenceSpeed string `json:"inference_speed,omitempty"`
+	// Thinking type（enabled/adaptive/disabled，主要用于 Anthropic Claude）
+	ThinkingType string `json:"thinking_type,omitempty"`
+	// Thinking level（minimal/low/medium/high，主要用于 Gemini 3.x）
+	ThinkingLevel string `json:"thinking_level,omitempty"`
+	// Thinking budget token 数（主要用于 Gemini 2.5，-1 表示无限制）
+	ThinkingBudget *int32 `json:"thinking_budget,omitempty"`
+	// 是否在响应中包含 thinking 内容
+	IncludeThoughts *bool `json:"include_thoughts,omitempty"`
+	// 媒体输入分辨率（如 media_resolution_low/medium/high）
+	MediaResolution string `json:"media_resolution,omitempty"`
 	// 是否存储请求
 	Store *bool `json:"store,omitempty"`
 	// 输出模态（如 ["text","audio"]）
@@ -123,6 +133,10 @@ type ChatRequest struct {
 	Include []string `json:"include,omitempty"`
 	// Responses API truncation（auto/disabled）
 	Truncation string `json:"truncation,omitempty"`
+	// Responses API text.verbosity（low/medium/high）
+	Verbosity string `json:"verbosity,omitempty"`
+	// Responses API phase（commentary 等长链阶段标识）
+	Phase string `json:"phase,omitempty"`
 	// 请求超时时长
 	Timeout string `json:"timeout,omitempty" example:"30s"`
 	// 自定义元数据

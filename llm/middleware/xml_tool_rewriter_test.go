@@ -80,6 +80,38 @@ func TestXMLToolRewriter_XMLMode_InjectsSystemPrompt(t *testing.T) {
 	assert.Nil(t, result.ToolChoice)
 }
 
+func TestXMLToolRewriter_XMLMode_PreservesToolResultMessages(t *testing.T) {
+	rw := NewXMLToolRewriter()
+	req := &llmpkg.ChatRequest{
+		ToolCallMode: llmpkg.ToolCallModeXML,
+		Messages: []types.Message{
+			{Role: types.RoleUser, Content: "Weather?"},
+			{
+				Role:       types.RoleTool,
+				ToolCallID: "xml_call_1",
+				Name:       "get_weather",
+				Content:    `{"temperature":24}`,
+			},
+		},
+		Tools: []types.ToolSchema{{
+			Name:        "get_weather",
+			Description: "Get weather",
+			Parameters:  json.RawMessage(`{"type":"object"}`),
+		}},
+		ToolChoice: &types.ToolChoice{Mode: types.ToolChoiceModeRequired},
+	}
+
+	result, err := rw.Rewrite(context.Background(), req)
+	require.NoError(t, err)
+	require.Len(t, result.Messages, 3)
+	assert.Nil(t, result.Tools)
+	assert.Nil(t, result.ToolChoice)
+	assert.Equal(t, types.RoleTool, result.Messages[2].Role)
+	assert.Equal(t, "xml_call_1", result.Messages[2].ToolCallID)
+	assert.Equal(t, "get_weather", result.Messages[2].Name)
+	assert.Equal(t, `{"temperature":24}`, result.Messages[2].Content)
+}
+
 func TestXMLToolRewriter_XMLMode_NoSystemMessage_CreatesOne(t *testing.T) {
 	rw := NewXMLToolRewriter()
 	tools := []types.ToolSchema{

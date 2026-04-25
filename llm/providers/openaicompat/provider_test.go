@@ -118,6 +118,59 @@ func TestSetBuildHeaders(t *testing.T) {
 // Completion
 // ---------------------------------------------------------------------------
 
+func TestProvider_BuildRequestBody_ToolCallingPayload(t *testing.T) {
+	p := New(Config{ProviderName: "test", APIKey: "key"}, zap.NewNop())
+	parallel := true
+	body, err := p.buildRequestBody(&llm.ChatRequest{
+		Model: "gpt-compatible",
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "Weather?"},
+			{
+				Role: llm.RoleAssistant,
+				ToolCalls: []types.ToolCall{{
+					ID:        "call_weather",
+					Type:      types.ToolTypeFunction,
+					Name:      "get_weather",
+					Arguments: json.RawMessage(`{"city":"Hangzhou"}`),
+				}},
+			},
+			{
+				Role:       llm.RoleTool,
+				ToolCallID: "call_weather",
+				Name:       "get_weather",
+				Content:    `{"temperature":24}`,
+			},
+		},
+		Tools: []types.ToolSchema{{
+			Name:        "get_weather",
+			Description: "Get weather",
+			Parameters:  json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`),
+		}},
+		ToolChoice:        &types.ToolChoice{Mode: types.ToolChoiceModeSpecific, ToolName: "get_weather"},
+		ParallelToolCalls: &parallel,
+	}, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, "gpt-compatible", body.Model)
+	require.Len(t, body.Tools, 1)
+	assert.Equal(t, "function", body.Tools[0].Type)
+	require.NotNil(t, body.Tools[0].Function)
+	assert.Equal(t, "get_weather", body.Tools[0].Function.Name)
+	require.NotNil(t, body.ParallelToolCalls)
+	assert.True(t, *body.ParallelToolCalls)
+	require.NotNil(t, body.ToolChoice)
+
+	require.Len(t, body.Messages, 3)
+	require.Len(t, body.Messages[1].ToolCalls, 1)
+	assert.Equal(t, "call_weather", body.Messages[1].ToolCalls[0].ID)
+	require.NotNil(t, body.Messages[1].ToolCalls[0].Function)
+	assert.Equal(t, "get_weather", body.Messages[1].ToolCalls[0].Function.Name)
+	assert.JSONEq(t, `{"city":"Hangzhou"}`, string(body.Messages[1].ToolCalls[0].Function.Arguments))
+	assert.Equal(t, "tool", body.Messages[2].Role)
+	assert.Equal(t, "call_weather", body.Messages[2].ToolCallID)
+	assert.Equal(t, `{"temperature":24}`, body.Messages[2].Content)
+}
+
 func TestProvider_Completion_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
@@ -514,6 +567,7 @@ func TestProvider_Stream_ToolCallDelta(t *testing.T) {
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, "calc", toolCalls[0].Name)
 	assert.Equal(t, "tc1", toolCalls[0].ID)
+	assert.JSONEq(t, `{"x":1}`, string(toolCalls[0].Arguments))
 }
 
 func TestProvider_Stream_WebSearchOptionsForwarded(t *testing.T) {

@@ -1397,6 +1397,10 @@ func buildClaudeReasoningControls(req *llm.ChatRequest, model string) (anthropic
 	}
 
 	mode := strings.ToLower(strings.TrimSpace(req.ReasoningMode))
+	// ThinkingType takes priority over legacy ReasoningMode for Anthropic thinking config.
+	if tt := strings.ToLower(strings.TrimSpace(req.ThinkingType)); tt != "" {
+		mode = tt
+	}
 	if mode == "" || mode == "disabled" {
 		return anthropicsdk.ThinkingConfigParamUnion{}, outputConfig, speed
 	}

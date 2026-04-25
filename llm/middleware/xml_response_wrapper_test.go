@@ -96,6 +96,7 @@ func TestXMLToolCallProvider_Completion_XMLMode_ParsesToolCalls(t *testing.T) {
 	// 工具调用应被提取
 	require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
 	assert.Equal(t, "search", resp.Choices[0].Message.ToolCalls[0].Name)
+	assert.JSONEq(t, `{"query":"golang xml parsing"}`, string(resp.Choices[0].Message.ToolCalls[0].Arguments))
 
 	// 内容应被清理
 	assert.Equal(t, "Let me search for that.", resp.Choices[0].Message.Content)
@@ -188,6 +189,7 @@ func TestXMLToolCallProvider_Stream_XMLMode_ParsesToolCalls(t *testing.T) {
 		if len(c.Delta.ToolCalls) > 0 {
 			hasToolCall = true
 			assert.Equal(t, "weather", c.Delta.ToolCalls[0].Name)
+			assert.JSONEq(t, `{"city":"Tokyo"}`, string(c.Delta.ToolCalls[0].Arguments))
 		}
 		if c.Delta.Content != "" {
 			hasText = true
