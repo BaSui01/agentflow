@@ -3,7 +3,10 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,6 +54,233 @@ func TestBuildAgentToolingRuntime_WithRetrievalTool(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Empty(t, results[0].Error)
 	assert.NotEmpty(t, results[0].Result)
+}
+
+func TestBuildAgentToolingRuntime_ToolManagerUsesAuthorizationService(t *testing.T) {
+	auth := &toolingAuthorizationServiceStub{
+		decision: &types.AuthorizationDecision{
+			Decision: types.DecisionAllow,
+			Reason:   "allowed by test",
+		},
+	}
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		RetrievalStore:       &testVectorStore{},
+		EmbeddingProvider:    &testEmbeddingProvider{},
+		AuthorizationService: auth,
+	}, zap.NewNop())
+	require.NoError(t, err)
+	require.NotNil(t, runtime.AuthorizationService)
+
+	ctx := types.WithTraceID(context.Background(), "trace-1")
+	ctx = types.WithRunID(ctx, "run-1")
+	ctx = types.WithUserID(ctx, "user-1")
+	ctx = types.WithRoles(ctx, []string{"researcher"})
+
+	results := runtime.ToolManager.ExecuteForAgent(ctx, "agent-a", []types.ToolCall{
+		{
+			ID:        "call-authz",
+			Name:      "retrieval",
+			Arguments: json.RawMessage(`{"query":"hello","max_results":2}`),
+		},
+	})
+	require.Len(t, results, 1)
+	assert.Empty(t, results[0].Error)
+
+	requests := auth.snapshot()
+	require.Len(t, requests, 1)
+	req := requests[0]
+	assert.Equal(t, types.PrincipalUser, req.Principal.Kind)
+	assert.Equal(t, "user-1", req.Principal.ID)
+	assert.Equal(t, []string{"researcher"}, req.Principal.Roles)
+	assert.Equal(t, types.ResourceTool, req.ResourceKind)
+	assert.Equal(t, "retrieval", req.ResourceID)
+	assert.Equal(t, types.ActionExecute, req.Action)
+	assert.Equal(t, types.RiskSafeRead, req.RiskTier)
+	assert.Equal(t, "agent-a", req.Context["agent_id"])
+	assert.Equal(t, "trace-1", req.Context["trace_id"])
+	assert.Equal(t, "run-1", req.Context["run_id"])
+	metadata, ok := req.Context["metadata"].(map[string]string)
+	require.True(t, ok)
+	assert.Equal(t, "agent_tooling", metadata["runtime"])
+	assert.Equal(t, "retrieval", metadata["hosted_tool_type"])
+	assert.Equal(t, "safe_read", metadata["hosted_tool_risk"])
+}
+
+func TestBuildAgentToolingRuntime_AuthorizationServiceDeniesBeforeHostedExecution(t *testing.T) {
+	auth := &toolingAuthorizationServiceStub{
+		decision: &types.AuthorizationDecision{
+			Decision: types.DecisionDeny,
+			Reason:   "blocked by policy",
+		},
+	}
+	server := &testMCPServer{
+		tools: []mcpproto.ToolDefinition{
+			{
+				Name:        "echo-tool",
+				Description: "Echo args",
+				InputSchema: map[string]any{
+					"type": "object",
+				},
+			},
+		},
+	}
+
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:            server,
+		EnableMCPTools:       true,
+		AuthorizationService: auth,
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	results := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{
+		{
+			ID:        "call-denied",
+			Name:      "mcp_echo_tool",
+			Arguments: json.RawMessage(`{"text":"ping"}`),
+		},
+	})
+	require.Len(t, results, 1)
+	assert.Contains(t, results[0].Error, "authorization denied")
+	assert.Empty(t, results[0].Result)
+
+	requests := auth.snapshot()
+	require.Len(t, requests, 1)
+	assert.Equal(t, types.ResourceMCPTool, requests[0].ResourceKind)
+	assert.Equal(t, types.RiskNetworkExecution, requests[0].RiskTier)
+}
+
+func TestBuildAgentToolingRuntime_HighRiskShellAndFileWriteRequireAuthorization(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "created.txt")
+	auth := &toolingAuthorizationServiceStub{
+		decision: &types.AuthorizationDecision{
+			Decision: types.DecisionDeny,
+			Reason:   "blocked by policy",
+		},
+	}
+
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		EnableFileOpsTools: true,
+		FileOpsConfig: hosted.FileOpsConfig{
+			AllowedPaths: []string{dir},
+			MaxFileSize:  1024,
+		},
+		ShellConfig: hosted.ShellConfig{
+			Enabled:     true,
+			AllowedCmds: []string{"echo"},
+		},
+		AuthorizationService: auth,
+	}, zap.NewNop())
+	require.NoError(t, err)
+	require.NotNil(t, runtime.ToolManager)
+	assert.Contains(t, runtime.ToolNames, "run_command")
+	assert.Contains(t, runtime.ToolNames, "write_file")
+	assert.Contains(t, runtime.ToolNames, "edit_file")
+
+	results := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{
+		{
+			ID:        "call-shell",
+			Name:      "run_command",
+			Arguments: json.RawMessage(`{"command":"echo ok"}`),
+		},
+		{
+			ID:        "call-write",
+			Name:      "write_file",
+			Arguments: json.RawMessage(`{"path":` + strconv.Quote(target) + `,"content":"blocked"}`),
+		},
+	})
+	require.Len(t, results, 2)
+	assert.Contains(t, results[0].Error, "authorization denied")
+	assert.Contains(t, results[1].Error, "authorization denied")
+	_, statErr := os.Stat(target)
+	assert.True(t, os.IsNotExist(statErr), "write_file must not create files when authorization denies")
+
+	requests := auth.snapshot()
+	require.Len(t, requests, 2)
+	byResource := make(map[string]types.AuthorizationRequest, len(requests))
+	for _, req := range requests {
+		byResource[req.ResourceID] = req
+	}
+	require.Contains(t, byResource, "run_command")
+	require.Contains(t, byResource, "write_file")
+	assert.Equal(t, types.ResourceShell, byResource["run_command"].ResourceKind)
+	assert.Equal(t, types.RiskExecution, byResource["run_command"].RiskTier)
+	assert.Equal(t, types.ResourceFileWrite, byResource["write_file"].ResourceKind)
+	assert.Equal(t, types.RiskMutating, byResource["write_file"].RiskTier)
+}
+
+func TestBuildAgentToolingRuntime_HighRiskAliasesPreserveAuthorizationShape(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "alias-created.txt")
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&hosted.ToolRegistration{}))
+	require.NoError(t, db.AutoMigrate(&hosted.ToolProviderConfig{}))
+	require.NoError(t, db.Create(&hosted.ToolRegistration{
+		Name:    "save_report",
+		Target:  "write_file",
+		Enabled: true,
+	}).Error)
+	require.NoError(t, db.Create(&hosted.ToolRegistration{
+		Name:    "safe_echo",
+		Target:  "run_command",
+		Enabled: true,
+	}).Error)
+	auth := &toolingAuthorizationServiceStub{
+		decision: &types.AuthorizationDecision{
+			Decision: types.DecisionDeny,
+			Reason:   "blocked by policy",
+		},
+	}
+
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		EnableFileOpsTools: true,
+		FileOpsConfig: hosted.FileOpsConfig{
+			AllowedPaths: []string{dir},
+			MaxFileSize:  1024,
+		},
+		ShellConfig: hosted.ShellConfig{
+			Enabled:     true,
+			AllowedCmds: []string{"echo"},
+		},
+		DB:                   db,
+		AuthorizationService: auth,
+	}, zap.NewNop())
+	require.NoError(t, err)
+	require.NotNil(t, runtime.ToolManager)
+	assert.Contains(t, runtime.ToolNames, "save_report")
+	assert.Contains(t, runtime.ToolNames, "safe_echo")
+
+	results := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{
+		{
+			ID:        "call-save",
+			Name:      "save_report",
+			Arguments: json.RawMessage(`{"path":` + strconv.Quote(target) + `,"content":"blocked"}`),
+		},
+		{
+			ID:        "call-echo",
+			Name:      "safe_echo",
+			Arguments: json.RawMessage(`{"command":"echo ok"}`),
+		},
+	})
+	require.Len(t, results, 2)
+	assert.Contains(t, results[0].Error, "authorization denied")
+	assert.Contains(t, results[1].Error, "authorization denied")
+	_, statErr := os.Stat(target)
+	assert.True(t, os.IsNotExist(statErr), "file-write alias must not create files when authorization denies")
+
+	requests := auth.snapshot()
+	require.Len(t, requests, 2)
+	byResource := make(map[string]types.AuthorizationRequest, len(requests))
+	for _, req := range requests {
+		byResource[req.ResourceID] = req
+	}
+	require.Contains(t, byResource, "save_report")
+	require.Contains(t, byResource, "safe_echo")
+	assert.Equal(t, types.ResourceFileWrite, byResource["save_report"].ResourceKind)
+	assert.Equal(t, types.RiskMutating, byResource["save_report"].RiskTier)
+	assert.Equal(t, types.ResourceShell, byResource["safe_echo"].ResourceKind)
+	assert.Equal(t, types.RiskExecution, byResource["safe_echo"].RiskTier)
 }
 
 func TestBuildAgentToolingRuntime_WithMCPTools(t *testing.T) {
@@ -501,6 +731,29 @@ var (
 
 type testMCPServer struct {
 	tools []mcpproto.ToolDefinition
+}
+
+type toolingAuthorizationServiceStub struct {
+	mu       sync.Mutex
+	decision *types.AuthorizationDecision
+	requests []types.AuthorizationRequest
+}
+
+func (s *toolingAuthorizationServiceStub) Authorize(_ context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.requests = append(s.requests, req)
+	if s.decision == nil {
+		return &types.AuthorizationDecision{Decision: types.DecisionAllow}, nil
+	}
+	decision := *s.decision
+	return &decision, nil
+}
+
+func (s *toolingAuthorizationServiceStub) snapshot() []types.AuthorizationRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]types.AuthorizationRequest(nil), s.requests...)
 }
 
 func (s *testMCPServer) GetServerInfo() mcpproto.ServerInfo { return mcpproto.ServerInfo{} }

@@ -199,6 +199,11 @@ func TestCreateAndCancelInterrupt(t *testing.T) {
 
 	// Verify interrupt was removed from pending
 	assert.Empty(t, m.GetPendingInterrupts("wf_2"))
+
+	loaded, err := store.Load(ctx, createdID)
+	require.NoError(t, err)
+	assert.Equal(t, InterruptStatusCanceled, loaded.Status)
+	assert.NotNil(t, loaded.ResolvedAt)
 }
 
 // --- ResolveInterrupt: not found ---
@@ -281,6 +286,53 @@ func TestCreateInterruptTimeout(t *testing.T) {
 
 	// After timeout, pending should be cleaned up
 	assert.Empty(t, m.GetPendingInterrupts("wf_timeout"))
+}
+
+func TestCreatePendingInterruptTimeoutCleansPendingAndPersistsStatus(t *testing.T) {
+	store := NewInMemoryInterruptStore()
+	m := NewInterruptManager(store, nil)
+	ctx := context.Background()
+
+	interrupt, err := m.CreatePendingInterrupt(ctx, InterruptOptions{
+		WorkflowID: "wf_pending_timeout",
+		Type:       InterruptTypeApproval,
+		Timeout:    25 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, interrupt)
+	require.Len(t, m.GetPendingInterrupts("wf_pending_timeout"), 1)
+
+	require.Eventually(t, func() bool {
+		return len(m.GetPendingInterrupts("wf_pending_timeout")) == 0
+	}, time.Second, 5*time.Millisecond)
+
+	loaded, err := store.Load(ctx, interrupt.ID)
+	require.NoError(t, err)
+	assert.Equal(t, InterruptStatusTimeout, loaded.Status)
+	assert.NotNil(t, loaded.ResolvedAt)
+}
+
+func TestCreatePendingInterruptCancelCleansPendingAndPersistsStatus(t *testing.T) {
+	store := NewInMemoryInterruptStore()
+	m := NewInterruptManager(store, nil)
+	ctx := context.Background()
+
+	interrupt, err := m.CreatePendingInterrupt(ctx, InterruptOptions{
+		WorkflowID: "wf_pending_cancel",
+		Type:       InterruptTypeApproval,
+		Timeout:    time.Hour,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, interrupt)
+	require.Len(t, m.GetPendingInterrupts("wf_pending_cancel"), 1)
+
+	require.NoError(t, m.CancelInterrupt(ctx, interrupt.ID))
+	assert.Empty(t, m.GetPendingInterrupts("wf_pending_cancel"))
+
+	loaded, err := store.Load(ctx, interrupt.ID)
+	require.NoError(t, err)
+	assert.Equal(t, InterruptStatusCanceled, loaded.Status)
+	assert.NotNil(t, loaded.ResolvedAt)
 }
 
 // --- Store Save error ---
@@ -583,24 +635,46 @@ func TestCreateInterruptContextCanceled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	done := make(chan struct{})
+	type createResult struct {
+		response *Response
+		err      error
+	}
+	resultCh := make(chan createResult, 1)
+	var createdID string
+
 	go func() {
-		defer close(done)
 		resp, err := m.CreateInterrupt(ctx, InterruptOptions{
 			WorkflowID: "wf_ctx_cancel",
 			Type:       InterruptTypeApproval,
 			Timeout:    10 * time.Second,
 		})
-		// Should get an error due to context cancellation triggering timeout path
-		_ = resp
-		assert.Error(t, err)
+		resultCh <- createResult{response: resp, err: err}
 	}()
 
 	// Wait for pending, then cancel
 	require.Eventually(t, func() bool {
-		return len(m.GetPendingInterrupts("wf_ctx_cancel")) > 0
+		pending := m.GetPendingInterrupts("wf_ctx_cancel")
+		if len(pending) > 0 {
+			createdID = pending[0].ID
+			return true
+		}
+		return false
 	}, 2*time.Second, 10*time.Millisecond)
 
 	cancel()
-	<-done
+
+	var result createResult
+	select {
+	case result = <-resultCh:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for CreateInterrupt to return")
+	}
+	require.Nil(t, result.response)
+	require.ErrorIs(t, result.err, context.Canceled)
+	assert.Empty(t, m.GetPendingInterrupts("wf_ctx_cancel"))
+
+	loaded, err := store.Load(context.Background(), createdID)
+	require.NoError(t, err)
+	assert.Equal(t, InterruptStatusCanceled, loaded.Status)
+	assert.NotNil(t, loaded.ResolvedAt)
 }

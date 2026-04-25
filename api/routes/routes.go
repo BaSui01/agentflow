@@ -97,6 +97,14 @@ func RegisterTools(
 	logger.Info("Tool registry routes registered")
 }
 
+func RegisterAuthorization(mux *http.ServeMux, auditHandler *handlers.AuthorizationAuditHandler, logger *zap.Logger) {
+	if auditHandler == nil {
+		return
+	}
+	mux.HandleFunc("GET /api/v1/authorization/audit", auditHandler.HandleList)
+	logger.Info("Authorization routes registered")
+}
+
 func RegisterMultimodal(mux *http.ServeMux, multimodalHandler *handlers.MultimodalHandler, logger *zap.Logger) {
 	if multimodalHandler == nil {
 		return

@@ -506,7 +506,7 @@ func buildPermissionContext(ctx context.Context, tool HostedTool, args json.RawM
 	}
 	if tool != nil {
 		permCtx.Metadata["hosted_tool_type"] = string(tool.Type())
-		permCtx.Metadata["hosted_tool_risk"] = classifyHostedToolRisk(tool)
+		permCtx.Metadata["hosted_tool_risk"] = ClassifyHostedToolPermissionRisk(tool)
 	}
 
 	if len(args) > 0 && string(args) != "null" {
@@ -519,7 +519,9 @@ func buildPermissionContext(ctx context.Context, tool HostedTool, args json.RawM
 	return permCtx
 }
 
-func classifyHostedToolRisk(tool HostedTool) string {
+// ClassifyHostedToolPermissionRisk returns the stable policy metadata value
+// used by PermissionManager rules.
+func ClassifyHostedToolPermissionRisk(tool HostedTool) string {
 	if tool == nil {
 		return "unknown"
 	}
@@ -547,6 +549,58 @@ func classifyHostedToolRisk(tool HostedTool) string {
 	default:
 		return "unknown"
 	}
+}
+
+// ClassifyHostedToolRiskTier maps hosted tool capability to the shared
+// authorization RiskTier contract.
+func ClassifyHostedToolRiskTier(tool HostedTool) types.RiskTier {
+	switch ClassifyHostedToolPermissionRisk(tool) {
+	case "safe_read":
+		return types.RiskSafeRead
+	case "sensitive_read":
+		return types.RiskSensitiveRead
+	case "mutating":
+		return types.RiskMutating
+	}
+	if tool == nil {
+		return types.RiskExecution
+	}
+	switch tool.Type() {
+	case ToolTypeMCP:
+		return types.RiskNetworkExecution
+	case ToolTypeFileOps:
+		switch strings.TrimSpace(tool.Name()) {
+		case "write_file", "edit_file":
+			return types.RiskMutating
+		}
+		return types.RiskExecution
+	default:
+		return types.RiskExecution
+	}
+}
+
+// ClassifyHostedToolResourceKind maps hosted tools to shared authorization
+// resource kinds so agent, workflow, and MCP hosted paths speak the same policy language.
+func ClassifyHostedToolResourceKind(tool HostedTool) types.ResourceKind {
+	if tool == nil {
+		return types.ResourceTool
+	}
+	switch tool.Type() {
+	case ToolTypeMCP:
+		return types.ResourceMCPTool
+	case ToolTypeShell:
+		return types.ResourceShell
+	case ToolTypeCodeExec:
+		return types.ResourceCodeExec
+	case ToolTypeFileOps:
+		switch strings.TrimSpace(tool.Name()) {
+		case "read_file", "list_directory":
+			return types.ResourceFileRead
+		case "write_file", "edit_file":
+			return types.ResourceFileWrite
+		}
+	}
+	return types.ResourceTool
 }
 
 func classifyAliasRisk(target string) string {

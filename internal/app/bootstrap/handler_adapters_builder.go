@@ -9,7 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
-	multiagent "github.com/BaSui01/agentflow/agent/team"
+	"github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -188,6 +188,7 @@ type ToolingHandlerBundle struct {
 	ToolRegistryHandler *handlers.ToolRegistryHandler
 	ToolProviderHandler *handlers.ToolProviderHandler
 	ToolApprovalHandler *handlers.ToolApprovalHandler
+	AuthAuditHandler    *handlers.AuthorizationAuditHandler
 	ToolApprovalRedis   *redis.Client
 	CapabilityCatalog   *CapabilityCatalog
 }
@@ -228,6 +229,9 @@ func BuildToolingHandlerBundle(in ToolingHandlerBundleInput) (*ToolingHandlerBun
 		EmbeddingProvider:   in.EmbeddingProvider,
 		MCPServer:           in.MCPServer,
 		EnableMCPTools:      true,
+		EnableFileOpsTools:  in.Cfg.HostedTools.FileOps.Enabled,
+		FileOpsConfig:       hostedFileOpsConfig(in.Cfg.HostedTools.FileOps),
+		ShellConfig:         hostedShellConfig(in.Cfg.HostedTools.Shell),
 		DB:                  in.DB,
 		ToolApprovalManager: in.ToolApprovalManager,
 		ToolApprovalConfig:  toolApprovalConfig,
@@ -292,11 +296,19 @@ func BuildToolingHandlerBundle(in ToolingHandlerBundleInput) (*ToolingHandlerBun
 		logger.Info("Tool approval handler initialized")
 	}
 
+	bundle.AuthAuditHandler = handlers.NewAuthorizationAuditHandler(
+		usecase.NewDefaultAuthorizationAuditService(&authorizationAuditHistoryRuntime{
+			history: toolApprovalHistoryStore,
+		}),
+		logger,
+	)
+	logger.Info("Authorization audit handler initialized")
+
 	if toolingRuntime != nil {
 		bundle.CapabilityCatalog = BuildCapabilityCatalog(
 			toolingRuntime.Registry,
 			in.AgentRegistry,
-			multiagent.GlobalModeRegistry(),
+			team.SupportedExecutionModes(),
 		)
 		if bundle.CapabilityCatalog != nil {
 			logger.Info("Runtime capability catalog initialized",
@@ -307,6 +319,21 @@ func BuildToolingHandlerBundle(in ToolingHandlerBundleInput) (*ToolingHandlerBun
 	}
 
 	return bundle, nil
+}
+
+func hostedFileOpsConfig(cfg config.FileOpsToolConfig) hosted.FileOpsConfig {
+	return hosted.FileOpsConfig{
+		AllowedPaths: append([]string(nil), cfg.AllowedPaths...),
+		MaxFileSize:  cfg.MaxFileSize,
+	}
+}
+
+func hostedShellConfig(cfg config.ShellToolConfig) hosted.ShellConfig {
+	return hosted.ShellConfig{
+		Enabled:     cfg.Enabled,
+		Timeout:     cfg.Timeout,
+		BlockedCmds: append([]string(nil), cfg.BlockedCmds...),
+	}
 }
 
 // ReloadedResolverBuildInput defines the dependencies needed to rebuild the
@@ -362,6 +389,7 @@ type ReloadedWorkflowRuntimeBuildInput struct {
 	CheckpointStore         agentcheckpoint.Store
 	WorkflowCheckpointStore workflowcore.CheckpointStore
 	HITLManager             *hitl.InterruptManager
+	AuthorizationService    usecase.AuthorizationService
 
 	Logger *zap.Logger
 }
@@ -377,6 +405,7 @@ func BuildReloadedWorkflowRuntime(in ReloadedWorkflowRuntimeBuildInput) *Workflo
 		CheckpointStore:         in.CheckpointStore,
 		WorkflowCheckpointStore: in.WorkflowCheckpointStore,
 		HITLManager:             in.HITLManager,
+		AuthorizationService:    in.AuthorizationService,
 	}
 	if in.Resolver != nil {
 		opts.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {

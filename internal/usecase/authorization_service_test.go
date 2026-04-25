@@ -11,6 +11,7 @@ import (
 
 type authorizationApprovalBackendStub struct {
 	requested bool
+	checked   bool
 	lastReq   types.AuthorizationRequest
 }
 
@@ -24,8 +25,13 @@ func (s *authorizationApprovalBackendStub) RequestApproval(_ context.Context, re
 	}, nil
 }
 
-func (s *authorizationApprovalBackendStub) CheckApproval(context.Context, string) (*types.AuthorizationDecision, error) {
-	return nil, nil
+func (s *authorizationApprovalBackendStub) CheckApproval(_ context.Context, approvalID string) (*types.AuthorizationDecision, error) {
+	s.checked = true
+	return &types.AuthorizationDecision{
+		Decision:   types.DecisionAllow,
+		Reason:     "approved existing",
+		ApprovalID: approvalID,
+	}, nil
 }
 
 func (s *authorizationApprovalBackendStub) Revoke(context.Context, string) error {
@@ -98,4 +104,66 @@ func TestAuthorizationService_ApprovalToolRequestUsesResolvedPrincipal(t *testin
 	assert.True(t, backend.requested)
 	assert.Equal(t, "user-2", backend.lastReq.Principal.ID)
 	assert.Equal(t, types.DecisionAllow, decision.Decision)
+}
+
+func TestAuthorizationService_ExistingApprovalIDChecksBackendWithoutRequestingAgain(t *testing.T) {
+	backend := &authorizationApprovalBackendStub{}
+	service := NewDefaultAuthorizationService(
+		PolicyEngineFunc(func(_ context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error) {
+			assert.Equal(t, "tool.shell.exec", req.ResourceID)
+			return &types.AuthorizationDecision{
+				Decision:   types.DecisionRequireApproval,
+				Reason:     "pending approval",
+				ApprovalID: "approval_existing",
+			}, nil
+		}),
+		backend,
+		nil,
+	)
+
+	decision, err := service.Authorize(context.Background(), types.AuthorizationRequest{
+		ResourceKind: types.ResourceTool,
+		ResourceID:   "tool.shell.exec",
+		Action:       types.ActionExecute,
+		RiskTier:     types.RiskExecution,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	assert.False(t, backend.requested)
+	assert.True(t, backend.checked)
+	assert.Equal(t, types.DecisionAllow, decision.Decision)
+	assert.Equal(t, "approval_existing", decision.ApprovalID)
+}
+
+func TestAuthorizationService_NoPolicyDeniesHighRiskRequest(t *testing.T) {
+	service := NewDefaultAuthorizationService(nil, nil, nil)
+
+	decision, err := service.Authorize(context.Background(), types.AuthorizationRequest{
+		ResourceKind: types.ResourceCodeExec,
+		ResourceID:   "code_execution",
+		Action:       types.ActionExecute,
+		RiskTier:     types.RiskExecution,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	assert.Equal(t, types.DecisionDeny, decision.Decision)
+	assert.Contains(t, decision.Reason, "policy is not configured")
+}
+
+func TestAuthorizationService_NoPolicyAllowsSafeReadRequest(t *testing.T) {
+	service := NewDefaultAuthorizationService(nil, nil, nil)
+
+	decision, err := service.Authorize(context.Background(), types.AuthorizationRequest{
+		ResourceKind: types.ResourceTool,
+		ResourceID:   "retrieval",
+		Action:       types.ActionExecute,
+		RiskTier:     types.RiskSafeRead,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	assert.Equal(t, types.DecisionAllow, decision.Decision)
+	assert.Contains(t, decision.Reason, "safe request")
 }

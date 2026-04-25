@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
@@ -25,21 +26,26 @@ var toolNameSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 // AgentToolingOptions carries optional dependencies for agent tool wiring.
 type AgentToolingOptions struct {
-	RetrievalStore      core.VectorStore
-	EmbeddingProvider   core.EmbeddingProvider
-	MCPServer           mcpproto.MCPServer
-	EnableMCPTools      bool
-	DB                  *gorm.DB
-	ToolApprovalManager *hitl.InterruptManager
-	ToolApprovalConfig  ToolApprovalConfig
+	RetrievalStore       core.VectorStore
+	EmbeddingProvider    core.EmbeddingProvider
+	MCPServer            mcpproto.MCPServer
+	EnableMCPTools       bool
+	EnableFileOpsTools   bool
+	FileOpsConfig        hosted.FileOpsConfig
+	ShellConfig          hosted.ShellConfig
+	DB                   *gorm.DB
+	ToolApprovalManager  *hitl.InterruptManager
+	ToolApprovalConfig   ToolApprovalConfig
+	AuthorizationService usecase.AuthorizationService
 }
 
 // AgentToolingRuntime groups runtime-managed tools exposed to Agent execution.
 type AgentToolingRuntime struct {
-	Registry    *hosted.ToolRegistry
-	ToolManager agent.ToolManager
-	ToolNames   []string
-	Permissions llmtools.PermissionManager
+	Registry             *hosted.ToolRegistry
+	ToolManager          agent.ToolManager
+	ToolNames            []string
+	Permissions          llmtools.PermissionManager
+	AuthorizationService usecase.AuthorizationService
 
 	db               *gorm.DB
 	logger           *zap.Logger
@@ -166,8 +172,15 @@ func BuildAgentToolingRuntime(opts AgentToolingOptions, logger *zap.Logger) (*Ag
 		logger = zap.NewNop()
 	}
 	permissionManager := newDefaultToolPermissionManager(logger)
+	var approvalBackend usecase.ApprovalBackend
 	if approvalAware, ok := permissionManager.(*llmtools.DefaultPermissionManager); ok && opts.ToolApprovalManager != nil {
-		approvalAware.SetApprovalHandler(newToolApprovalHandler(opts.ToolApprovalManager, opts.ToolApprovalConfig, logger))
+		approvalHandler := newToolApprovalHandler(opts.ToolApprovalManager, opts.ToolApprovalConfig, logger)
+		approvalAware.SetApprovalHandler(approvalHandler)
+		approvalBackend = newToolAuthorizationApprovalBackend(approvalHandler)
+	}
+	authorizationService := opts.AuthorizationService
+	if authorizationService == nil {
+		authorizationService = BuildAuthorizationRuntime(permissionManager, approvalBackend, opts.ToolApprovalConfig.HistoryStore, logger).Service
 	}
 	registry := hosted.NewToolRegistry(logger, hosted.WithPermissionManager(permissionManager))
 
@@ -193,6 +206,25 @@ func BuildAgentToolingRuntime(opts AgentToolingOptions, logger *zap.Logger) (*Ag
 		appendTool(retrievalTool.Name())
 	}
 
+	if opts.EnableFileOpsTools {
+		fileTools := []hosted.HostedTool{
+			hosted.NewReadFileTool(opts.FileOpsConfig),
+			hosted.NewWriteFileTool(opts.FileOpsConfig),
+			hosted.NewEditFileTool(opts.FileOpsConfig),
+			hosted.NewListDirectoryTool(opts.FileOpsConfig),
+		}
+		for _, tool := range fileTools {
+			registry.Register(tool)
+			appendTool(tool.Name())
+		}
+	}
+
+	if opts.ShellConfig.Enabled {
+		shellTool := hosted.NewShellTool(opts.ShellConfig)
+		registry.Register(shellTool)
+		appendTool(shellTool.Name())
+	}
+
 	if opts.EnableMCPTools && opts.MCPServer != nil {
 		tools, err := opts.MCPServer.ListTools(context.Background())
 		if err != nil {
@@ -207,17 +239,18 @@ func BuildAgentToolingRuntime(opts AgentToolingOptions, logger *zap.Logger) (*Ag
 
 	var manager agent.ToolManager
 	if len(registry.List()) > 0 {
-		manager = newHostedToolManager(registry, permissionManager, logger)
+		manager = newHostedToolManager(registry, permissionManager, authorizationService, logger)
 	}
 
 	runtime := &AgentToolingRuntime{
-		Registry:         registry,
-		ToolManager:      manager,
-		Permissions:      permissionManager,
-		db:               opts.DB,
-		logger:           logger.With(zap.String("component", "agent_tooling_runtime")),
-		baseToolNames:    baseToolNames,
-		dynamicToolNames: make(map[string]struct{}, 8),
+		Registry:             registry,
+		ToolManager:          manager,
+		Permissions:          permissionManager,
+		AuthorizationService: authorizationService,
+		db:                   opts.DB,
+		logger:               logger.With(zap.String("component", "agent_tooling_runtime")),
+		baseToolNames:        baseToolNames,
+		dynamicToolNames:     make(map[string]struct{}, 8),
 	}
 	runtime.rebuildToolNamesLocked()
 	if err := runtime.ReloadBindings(context.Background()); err != nil {
@@ -319,6 +352,12 @@ func (t *aliasHostedTool) PermissionRisk() string {
 		return "unknown"
 	}
 }
+func (t *aliasHostedTool) AuthorizationResourceKind() types.ResourceKind {
+	return authorizationResourceKindByHostedTarget(t.target)
+}
+func (t *aliasHostedTool) AuthorizationRiskTier() types.RiskTier {
+	return authorizationRiskTierByHostedTarget(t.target)
+}
 func (t *aliasHostedTool) Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 	if t.registry == nil {
 		return nil, fmt.Errorf("tool registry is not configured")
@@ -326,24 +365,61 @@ func (t *aliasHostedTool) Execute(ctx context.Context, args json.RawMessage) (js
 	return t.registry.Execute(ctx, t.target, args)
 }
 
+func authorizationResourceKindByHostedTarget(target string) types.ResourceKind {
+	switch strings.TrimSpace(target) {
+	case "read_file", "list_directory":
+		return types.ResourceFileRead
+	case "write_file", "edit_file":
+		return types.ResourceFileWrite
+	case "run_command":
+		return types.ResourceShell
+	case "code_execution":
+		return types.ResourceCodeExec
+	default:
+		if strings.HasPrefix(strings.TrimSpace(target), "mcp_") {
+			return types.ResourceMCPTool
+		}
+		return types.ResourceTool
+	}
+}
+
+func authorizationRiskTierByHostedTarget(target string) types.RiskTier {
+	switch strings.TrimSpace(target) {
+	case "web_search", "file_search", "retrieval", "read_file", "list_directory":
+		return types.RiskSafeRead
+	case "write_file", "edit_file":
+		return types.RiskMutating
+	case "run_command", "code_execution":
+		return types.RiskExecution
+	default:
+		if strings.HasPrefix(strings.TrimSpace(target), "mcp_") {
+			return types.RiskNetworkExecution
+		}
+		return types.RiskExecution
+	}
+}
+
 type hostedToolManager struct {
-	registry    *hosted.ToolRegistry
-	permissions llmtools.PermissionManager
-	logger      *zap.Logger
+	registry      *hosted.ToolRegistry
+	permissions   llmtools.PermissionManager
+	authorization usecase.AuthorizationService
+	logger        *zap.Logger
 }
 
 func newHostedToolManager(
 	registry *hosted.ToolRegistry,
 	permissions llmtools.PermissionManager,
+	authorization usecase.AuthorizationService,
 	logger *zap.Logger,
 ) *hostedToolManager {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &hostedToolManager{
-		registry:    registry,
-		permissions: permissions,
-		logger:      logger.With(zap.String("component", "agent_tool_manager")),
+		registry:      registry,
+		permissions:   permissions,
+		authorization: authorization,
+		logger:        logger.With(zap.String("component", "agent_tool_manager")),
 	}
 }
 
@@ -375,6 +451,14 @@ func (m *hostedToolManager) ExecuteForAgent(ctx context.Context, agentID string,
 			}
 
 			callCtx := types.WithAgentID(ctx, agentID)
+			if err := m.authorizeToolCall(callCtx, agentID, c); err != nil {
+				out[idx] = llmtools.ToolResult{
+					ToolCallID: c.ID,
+					Name:       c.Name,
+					Error:      err.Error(),
+				}
+				return
+			}
 
 			start := time.Now()
 			raw, err := m.registry.Execute(callCtx, c.Name, c.Arguments)
@@ -392,6 +476,130 @@ func (m *hostedToolManager) ExecuteForAgent(ctx context.Context, agentID string,
 	}
 	wg.Wait()
 	return out
+}
+
+func (m *hostedToolManager) authorizeToolCall(ctx context.Context, agentID string, call types.ToolCall) error {
+	if m == nil || m.authorization == nil {
+		return nil
+	}
+	tool, ok := m.registry.Get(call.Name)
+	if !ok {
+		return fmt.Errorf("tool not found: %s", call.Name)
+	}
+	args := workflowArgumentsFromRaw(call.Arguments)
+	resourceKind, riskTier, toolType, hostedRisk := workflowHostedToolAuthorizationShape(tool, call.Name)
+	decision, err := m.authorization.Authorize(ctx, toolAuthorizationRequest(
+		ctx,
+		agentID,
+		resourceKind,
+		call.Name,
+		types.ActionExecute,
+		riskTier,
+		map[string]any{
+			"arguments":        args,
+			"args_fingerprint": workflowRawFingerprint(call.Arguments),
+			"tool_call_id":     call.ID,
+			"metadata": map[string]string{
+				"runtime":          "agent_tooling",
+				"agent_id":         agentID,
+				"hosted_tool_type": toolType,
+				"hosted_tool_risk": hostedRisk,
+			},
+		},
+	))
+	if err != nil {
+		return fmt.Errorf("authorize tool %q: %w", call.Name, err)
+	}
+	if decision == nil {
+		return fmt.Errorf("authorize tool %q: empty decision", call.Name)
+	}
+	switch decision.Decision {
+	case types.DecisionAllow:
+		return nil
+	case types.DecisionDeny:
+		return toolAuthorizationDecisionError("authorization denied", call.Name, decision)
+	case types.DecisionRequireApproval:
+		return toolAuthorizationDecisionError("approval required", call.Name, decision)
+	default:
+		return fmt.Errorf("authorize tool %q: unknown decision %q", call.Name, decision.Decision)
+	}
+}
+
+func toolAuthorizationRequest(
+	ctx context.Context,
+	agentID string,
+	resourceKind types.ResourceKind,
+	resourceID string,
+	action types.ActionKind,
+	riskTier types.RiskTier,
+	values map[string]any,
+) types.AuthorizationRequest {
+	authContext := cloneAnyMap(values)
+	if authContext == nil {
+		authContext = make(map[string]any, 8)
+	}
+	metadata := workflowAuthorizationMetadata(authContext)
+	metadata["runtime"] = "agent_tooling"
+	metadata["resource_kind"] = string(resourceKind)
+	metadata["resource_id"] = resourceID
+	metadata["action"] = string(action)
+	metadata["risk_tier"] = string(riskTier)
+
+	var principal types.Principal
+	if existing, ok := types.PrincipalFromContext(ctx); ok {
+		principal = existing
+	}
+	if traceID, ok := types.TraceID(ctx); ok {
+		authContext["trace_id"] = traceID
+		metadata["trace_id"] = traceID
+	}
+	if runID, ok := types.RunID(ctx); ok {
+		authContext["run_id"] = runID
+		authContext["session_id"] = runID
+		metadata["run_id"] = runID
+	}
+	if userID, ok := types.UserID(ctx); ok {
+		authContext["user_id"] = userID
+		metadata["user_id"] = userID
+		if principal.ID == "" {
+			principal.Kind = types.PrincipalUser
+			principal.ID = userID
+		}
+	}
+	if roles, ok := types.Roles(ctx); ok {
+		principal.Roles = append([]string(nil), roles...)
+	}
+	normalizedAgentID := strings.TrimSpace(agentID)
+	if normalizedAgentID == "" {
+		if ctxAgentID, ok := types.AgentID(ctx); ok {
+			normalizedAgentID = ctxAgentID
+		}
+	}
+	if normalizedAgentID != "" {
+		authContext["agent_id"] = normalizedAgentID
+		metadata["agent_id"] = normalizedAgentID
+		if principal.ID == "" {
+			principal.Kind = types.PrincipalAgent
+			principal.ID = normalizedAgentID
+		}
+	}
+	authContext["metadata"] = metadata
+
+	return types.AuthorizationRequest{
+		Principal:    principal,
+		ResourceKind: resourceKind,
+		ResourceID:   resourceID,
+		Action:       action,
+		RiskTier:     riskTier,
+		Context:      authContext,
+	}
+}
+
+func toolAuthorizationDecisionError(prefix string, toolName string, decision *types.AuthorizationDecision) error {
+	if decision.ApprovalID != "" {
+		return fmt.Errorf("%s (ID: %s): %s", prefix, decision.ApprovalID, decision.Reason)
+	}
+	return fmt.Errorf("%s for tool %q: %s", prefix, toolName, decision.Reason)
 }
 
 type ragHostedToolRetrievalStore struct {

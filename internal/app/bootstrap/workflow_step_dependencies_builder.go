@@ -2,8 +2,11 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/capabilities/planning"
@@ -12,6 +15,7 @@ import (
 	agentcheckpoint "github.com/BaSui01/agentflow/agent/persistence/checkpoint"
 	"github.com/BaSui01/agentflow/agent/runtime"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
@@ -34,6 +38,72 @@ type WorkflowRuntimeOptions struct {
 	CheckpointStore         agentcheckpoint.Store
 	WorkflowCheckpointStore workflow.CheckpointStore
 	HITLManager             *hitl.InterruptManager
+	AuthorizationService    usecase.AuthorizationService
+}
+
+const (
+	defaultWorkflowCodeMaxBytes       = 64 * 1024
+	defaultWorkflowCodeTimeoutSeconds = 30
+	defaultWorkflowCodeMaxOutputBytes = 1024 * 1024
+	workflowMaxInt                    = int64(1<<(strconv.IntSize-1) - 1)
+	workflowMinInt                    = -workflowMaxInt - 1
+)
+
+type workflowCodeExecutionPolicy struct {
+	MaxCodeBytes        int
+	DefaultTimeout      time.Duration
+	MaxTimeout          time.Duration
+	MaxOutputBytes      int
+	AllowedLanguages    []runtime.Language
+	AllowedLanguageTags []string
+}
+
+type workflowCodeExecutionRequest struct {
+	Language       string
+	Code           string
+	TimeoutSeconds int
+}
+
+func defaultWorkflowCodeExecutionPolicy() workflowCodeExecutionPolicy {
+	return workflowCodeExecutionPolicy{
+		MaxCodeBytes:   defaultWorkflowCodeMaxBytes,
+		DefaultTimeout: defaultWorkflowCodeTimeoutSeconds * time.Second,
+		MaxTimeout:     defaultWorkflowCodeTimeoutSeconds * time.Second,
+		MaxOutputBytes: defaultWorkflowCodeMaxOutputBytes,
+		AllowedLanguages: []runtime.Language{
+			runtime.LangPython,
+			runtime.LangJavaScript,
+			runtime.LangBash,
+			runtime.LangGo,
+		},
+		AllowedLanguageTags: []string{"python", "javascript", "bash", "go"},
+	}
+}
+
+func (p workflowCodeExecutionPolicy) normalized() workflowCodeExecutionPolicy {
+	defaults := defaultWorkflowCodeExecutionPolicy()
+	if p.MaxCodeBytes <= 0 {
+		p.MaxCodeBytes = defaults.MaxCodeBytes
+	}
+	if p.DefaultTimeout <= 0 {
+		p.DefaultTimeout = defaults.DefaultTimeout
+	}
+	if p.MaxTimeout <= 0 {
+		p.MaxTimeout = defaults.MaxTimeout
+	}
+	if p.DefaultTimeout > p.MaxTimeout {
+		p.DefaultTimeout = p.MaxTimeout
+	}
+	if p.MaxOutputBytes <= 0 {
+		p.MaxOutputBytes = defaults.MaxOutputBytes
+	}
+	if len(p.AllowedLanguages) == 0 {
+		p.AllowedLanguages = append([]runtime.Language(nil), defaults.AllowedLanguages...)
+	}
+	if len(p.AllowedLanguageTags) == 0 {
+		p.AllowedLanguageTags = append([]string(nil), defaults.AllowedLanguageTags...)
+	}
+	return p
 }
 
 func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engine.StepDependencies {
@@ -43,37 +113,46 @@ func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engi
 		hitlManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), logger)
 	}
 	requester := planning.NewHITLInterruptAdapter(hitlManager)
-	_ = ensureAutoApproveHITL(hitlManager, logger)
 	agentExecutor := resolverAgentExecutor{
 		resolver: opts.AgentResolver,
+	}
+	workflowTools := hostedToolRegistryAdapter{
+		registry:      toolRegistry,
+		authorization: opts.AuthorizationService,
 	}
 
 	return engine.StepDependencies{
 		Gateway:       newWorkflowGatewayAdapter(opts.LLMGateway, opts.DefaultModel),
-		ToolRegistry:  hostedToolRegistryAdapter{registry: toolRegistry},
-		ChainRegistry: toolRegistry,
-		HumanHandler:  hitlHumanInputHandler{requester: requester},
+		ToolRegistry:  workflowTools,
+		ChainRegistry: workflowTools,
+		HumanHandler: hitlHumanInputHandler{
+			requester:     requester,
+			authorization: opts.AuthorizationService,
+		},
 		AgentExecutor: agentExecutor,
 		AgentResolver: agentExecutor,
-		CodeHandler:   hostedCodeHandler{tool: codeTool}.Execute,
+		CodeHandler: hostedCodeHandler{
+			tool:          codeTool,
+			authorization: opts.AuthorizationService,
+			policy:        defaultWorkflowCodeExecutionPolicy(),
+		}.Execute,
 	}
 }
 
 func buildHostedWorkflowTools(opts WorkflowRuntimeOptions, logger *zap.Logger) (*hosted.ToolRegistry, *hosted.CodeExecTool) {
 	registry := hosted.NewToolRegistry(logger)
 
+	policy := defaultWorkflowCodeExecutionPolicy()
 	sandboxCfg := runtime.DefaultSandboxConfig()
 	sandboxCfg.Mode = runtime.ModeNative
-	sandboxCfg.AllowedLanguages = []runtime.Language{
-		runtime.LangPython,
-		runtime.LangJavaScript,
-		runtime.LangBash,
-		runtime.LangGo,
-	}
+	sandboxCfg.Timeout = policy.DefaultTimeout
+	sandboxCfg.MaxOutputBytes = policy.MaxOutputBytes
+	sandboxCfg.AllowedLanguages = append([]runtime.Language(nil), policy.AllowedLanguages...)
 	sandbox := runtime.NewSandboxExecutor(sandboxCfg, runtime.NewRealProcessBackend(logger, false), logger)
 	adapter := runtime.NewHostedAdapter(sandbox, logger)
 	codeTool := hosted.NewCodeExecTool(hosted.CodeExecConfig{
 		Executor: adapter,
+		Timeout:  policy.DefaultTimeout,
 		Logger:   logger,
 	})
 	registry.Register(codeTool)
@@ -265,7 +344,8 @@ func (g *workflowGatewayAdapter) Stream(ctx context.Context, req *core.LLMReques
 }
 
 type hostedToolRegistryAdapter struct {
-	registry *hosted.ToolRegistry
+	registry      *hosted.ToolRegistry
+	authorization usecase.AuthorizationService
 }
 
 func (a hostedToolRegistryAdapter) ExecuteTool(ctx context.Context, name string, params map[string]any) (any, error) {
@@ -276,6 +356,10 @@ func (a hostedToolRegistryAdapter) ExecuteTool(ctx context.Context, name string,
 	payload, err := json.Marshal(params)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tool params: %w", err)
+	}
+
+	if err := a.authorize(ctx, name, payload, cloneAnyMap(params)); err != nil {
+		return nil, err
 	}
 
 	raw, err := a.registry.Execute(ctx, name, payload)
@@ -290,14 +374,76 @@ func (a hostedToolRegistryAdapter) ExecuteTool(ctx context.Context, name string,
 	return out, nil
 }
 
+func (a hostedToolRegistryAdapter) Execute(ctx context.Context, name string, args json.RawMessage) (json.RawMessage, error) {
+	if a.registry == nil {
+		return nil, fmt.Errorf("workflow tool registry is not configured")
+	}
+	if err := a.authorize(ctx, name, args, workflowArgumentsFromRaw(args)); err != nil {
+		return nil, err
+	}
+	return a.registry.Execute(ctx, name, args)
+}
+
+func (a hostedToolRegistryAdapter) authorize(ctx context.Context, name string, raw json.RawMessage, args map[string]any) error {
+	if a.authorization == nil {
+		return nil
+	}
+
+	tool, ok := a.registry.Get(name)
+	if !ok {
+		return fmt.Errorf("tool not found: %s", name)
+	}
+	resourceKind, riskTier, toolType, hostedRisk := workflowHostedToolAuthorizationShape(tool, name)
+	authContext := map[string]any{
+		"arguments":        args,
+		"args_fingerprint": workflowRawFingerprint(raw),
+		"metadata": map[string]string{
+			"runtime":          "workflow",
+			"hosted_tool_type": toolType,
+			"hosted_tool_risk": hostedRisk,
+		},
+	}
+	return authorizeWorkflowStep(ctx, a.authorization, workflowAuthorizationRequest(
+		ctx,
+		resourceKind,
+		name,
+		types.ActionExecute,
+		riskTier,
+		authContext,
+	))
+}
+
 type hitlHumanInputHandler struct {
-	requester planning.InterruptRequester
+	requester     planning.InterruptRequester
+	authorization usecase.AuthorizationService
 }
 
 func (h hitlHumanInputHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
 	if h.requester == nil {
 		return nil, fmt.Errorf("workflow hitl requester is not configured")
 	}
+	if err := authorizeWorkflowStep(ctx, h.authorization, workflowAuthorizationRequest(
+		ctx,
+		types.ResourceWorkflow,
+		"human_input",
+		types.ActionApprove,
+		types.RiskMutating,
+		map[string]any{
+			"arguments": map[string]any{
+				"input_type":         inputType,
+				"options_count":      len(options),
+				"prompt_bytes":       len(prompt),
+				"prompt_fingerprint": workflowStringFingerprint(prompt),
+			},
+			"metadata": map[string]string{
+				"runtime":       "workflow",
+				"workflow_step": "human_input",
+			},
+		},
+	)); err != nil {
+		return nil, err
+	}
+
 	hitlOptions := make([]planning.ApprovalOption, 0, len(options))
 	for idx, opt := range options {
 		id := opt
@@ -382,7 +528,9 @@ func (e resolverAgentExecutor) Execute(ctx context.Context, input map[string]any
 }
 
 type hostedCodeHandler struct {
-	tool *hosted.CodeExecTool
+	tool          *hosted.CodeExecTool
+	authorization usecase.AuthorizationService
+	policy        workflowCodeExecutionPolicy
 }
 
 func (h hostedCodeHandler) Execute(ctx context.Context, input core.StepInput) (map[string]any, error) {
@@ -390,18 +538,26 @@ func (h hostedCodeHandler) Execute(ctx context.Context, input core.StepInput) (m
 		return nil, fmt.Errorf("workflow code tool is not configured")
 	}
 
-	language, _ := input.Data["language"].(string)
-	if language == "" {
-		language = "python"
+	req, policy, err := h.codeExecutionRequest(input)
+	if err != nil {
+		return nil, err
 	}
-	code, _ := input.Data["code"].(string)
-	if code == "" {
-		return nil, fmt.Errorf("workflow code step requires input.code")
+
+	if err := authorizeWorkflowStep(ctx, h.authorization, workflowAuthorizationRequest(
+		ctx,
+		types.ResourceCodeExec,
+		h.tool.Name(),
+		types.ActionExecute,
+		types.RiskExecution,
+		h.authorizationContext(req, policy),
+	)); err != nil {
+		return nil, err
 	}
 
 	payload, err := json.Marshal(map[string]any{
-		"language": language,
-		"code":     code,
+		"language":        req.Language,
+		"code":            req.Code,
+		"timeout_seconds": req.TimeoutSeconds,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal code execution request: %w", err)
@@ -423,6 +579,141 @@ func (h hostedCodeHandler) Execute(ctx context.Context, input core.StepInput) (m
 		"exit_code": output.ExitCode,
 		"duration":  output.Duration.String(),
 	}, nil
+}
+
+func (h hostedCodeHandler) codeExecutionRequest(input core.StepInput) (workflowCodeExecutionRequest, workflowCodeExecutionPolicy, error) {
+	policy := h.policy.normalized()
+	language, _ := input.Data["language"].(string)
+	if language == "" {
+		language = "python"
+	}
+	code, _ := input.Data["code"].(string)
+	if code == "" {
+		return workflowCodeExecutionRequest{}, policy, fmt.Errorf("workflow code step requires input.code")
+	}
+	if len(code) > policy.MaxCodeBytes {
+		return workflowCodeExecutionRequest{}, policy, fmt.Errorf("workflow code step input.code exceeds max size: %d > %d bytes", len(code), policy.MaxCodeBytes)
+	}
+
+	timeoutSeconds, err := workflowCodeTimeoutSeconds(input.Data["timeout_seconds"], policy.DefaultTimeout, policy.MaxTimeout)
+	if err != nil {
+		return workflowCodeExecutionRequest{}, policy, err
+	}
+
+	return workflowCodeExecutionRequest{
+		Language:       language,
+		Code:           code,
+		TimeoutSeconds: timeoutSeconds,
+	}, policy, nil
+}
+
+func (h hostedCodeHandler) authorizationContext(req workflowCodeExecutionRequest, policy workflowCodeExecutionPolicy) map[string]any {
+	return map[string]any{
+		"arguments": map[string]any{
+			"language":            req.Language,
+			"code_bytes":          len(req.Code),
+			"code_fingerprint":    workflowStringFingerprint(req.Code),
+			"timeout_seconds":     req.TimeoutSeconds,
+			"max_code_bytes":      policy.MaxCodeBytes,
+			"max_timeout_seconds": int(policy.MaxTimeout.Seconds()),
+			"max_output_bytes":    policy.MaxOutputBytes,
+			"allowed_languages":   append([]string(nil), policy.AllowedLanguageTags...),
+		},
+		"metadata": map[string]string{
+			"runtime":          "workflow",
+			"hosted_tool_type": string(h.tool.Type()),
+			"hosted_tool_risk": "requires_approval",
+		},
+	}
+}
+
+func workflowCodeTimeoutSeconds(value any, defaultTimeout, maxTimeout time.Duration) (int, error) {
+	if defaultTimeout <= 0 {
+		defaultTimeout = defaultWorkflowCodeTimeoutSeconds * time.Second
+	}
+	if maxTimeout <= 0 {
+		maxTimeout = defaultTimeout
+	}
+
+	defaultSeconds := int(defaultTimeout.Seconds())
+	maxSeconds := int(maxTimeout.Seconds())
+	if defaultSeconds > maxSeconds {
+		defaultSeconds = maxSeconds
+	}
+	if value == nil {
+		return defaultSeconds, nil
+	}
+
+	seconds, err := workflowIntegerSeconds(value)
+	if err != nil {
+		return 0, fmt.Errorf("workflow code step timeout_seconds must be an integer: %w", err)
+	}
+	if seconds <= 0 {
+		return 0, fmt.Errorf("workflow code step timeout_seconds must be positive")
+	}
+	if seconds > maxSeconds {
+		return 0, fmt.Errorf("workflow code step timeout_seconds exceeds max: %d > %d", seconds, maxSeconds)
+	}
+	return seconds, nil
+}
+
+func workflowIntegerSeconds(value any) (int, error) {
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case int8:
+		return int(v), nil
+	case int16:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case int64:
+		if v > workflowMaxInt || v < workflowMinInt {
+			return 0, fmt.Errorf("value out of range")
+		}
+		return int(v), nil
+	case uint:
+		if uint64(v) > uint64(workflowMaxInt) {
+			return 0, fmt.Errorf("value out of range")
+		}
+		return int(v), nil
+	case uint8:
+		return int(v), nil
+	case uint16:
+		return int(v), nil
+	case uint32:
+		if uint64(v) > uint64(workflowMaxInt) {
+			return 0, fmt.Errorf("value out of range")
+		}
+		return int(v), nil
+	case uint64:
+		if v > uint64(workflowMaxInt) {
+			return 0, fmt.Errorf("value out of range")
+		}
+		return int(v), nil
+	case float64:
+		if math.Trunc(v) != v || v > float64(workflowMaxInt) || v < float64(workflowMinInt) {
+			return 0, fmt.Errorf("value must be a whole number")
+		}
+		return int(v), nil
+	case float32:
+		f := float64(v)
+		if math.Trunc(f) != f || f > float64(workflowMaxInt) || f < float64(workflowMinInt) {
+			return 0, fmt.Errorf("value must be a whole number")
+		}
+		return int(v), nil
+	case json.Number:
+		i64, err := v.Int64()
+		if err != nil {
+			return 0, err
+		}
+		if i64 > workflowMaxInt || i64 < workflowMinInt {
+			return 0, fmt.Errorf("value out of range")
+		}
+		return int(i64), nil
+	default:
+		return 0, fmt.Errorf("got %T", value)
+	}
 }
 
 type ragHostedRetrievalStore struct {
@@ -487,30 +778,6 @@ func (a checkpointStoreManagerAdapter) SaveCheckpoint(ctx context.Context, cp *w
 	return a.store.Save(ctx, cp)
 }
 
-func ensureAutoApproveHITL(manager *hitl.InterruptManager, logger *zap.Logger) *hitl.InterruptManager {
-	if manager == nil {
-		return nil
-	}
-	registered := manager.RegisterNamedHandler(hitl.InterruptTypeApproval, "workflow_auto_approve", func(ctx context.Context, interrupt *hitl.Interrupt) error {
-		if interrupt == nil {
-			return nil
-		}
-		optionID := "approve"
-		if len(interrupt.Options) > 0 {
-			optionID = interrupt.Options[0].ID
-		}
-		return manager.ResolveInterrupt(ctx, interrupt.ID, &hitl.Response{
-			OptionID: optionID,
-			Comment:  "auto approved by workflow runtime",
-			Approved: true,
-		})
-	})
-	if logger != nil && registered {
-		logger.Debug("workflow HITL auto-approve handler registered")
-	}
-	return manager
-}
-
 func (s ragHostedRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error) {
 	if s.store == nil || s.embedder == nil {
 		return nil, fmt.Errorf("workflow retrieval dependencies are not configured")
@@ -535,4 +802,174 @@ func (s ragHostedRetrievalStore) Retrieve(ctx context.Context, query string, top
 		})
 	}
 	return out, nil
+}
+
+func authorizeWorkflowStep(ctx context.Context, service usecase.AuthorizationService, req types.AuthorizationRequest) error {
+	if service == nil {
+		return nil
+	}
+	decision, err := service.Authorize(ctx, req)
+	if err != nil {
+		return fmt.Errorf("authorize workflow %s %q: %w", req.ResourceKind, req.ResourceID, err)
+	}
+	if decision == nil {
+		return fmt.Errorf("authorize workflow %s %q: empty decision", req.ResourceKind, req.ResourceID)
+	}
+
+	switch decision.Decision {
+	case types.DecisionAllow:
+		return nil
+	case types.DecisionDeny:
+		return workflowAuthorizationDecisionError("authorization denied", req, decision)
+	case types.DecisionRequireApproval:
+		return workflowAuthorizationDecisionError("authorization approval required", req, decision)
+	default:
+		return fmt.Errorf("authorize workflow %s %q: unknown decision %q", req.ResourceKind, req.ResourceID, decision.Decision)
+	}
+}
+
+func workflowAuthorizationDecisionError(prefix string, req types.AuthorizationRequest, decision *types.AuthorizationDecision) error {
+	if decision.ApprovalID != "" {
+		return fmt.Errorf("%s for workflow %s %q (approval_id=%s): %s", prefix, req.ResourceKind, req.ResourceID, decision.ApprovalID, decision.Reason)
+	}
+	return fmt.Errorf("%s for workflow %s %q: %s", prefix, req.ResourceKind, req.ResourceID, decision.Reason)
+}
+
+func workflowAuthorizationRequest(
+	ctx context.Context,
+	resourceKind types.ResourceKind,
+	resourceID string,
+	action types.ActionKind,
+	riskTier types.RiskTier,
+	values map[string]any,
+) types.AuthorizationRequest {
+	authContext := cloneAnyMap(values)
+	if authContext == nil {
+		authContext = make(map[string]any, 8)
+	}
+	metadata := workflowAuthorizationMetadata(authContext)
+	metadata["resource_kind"] = string(resourceKind)
+	metadata["resource_id"] = resourceID
+	metadata["action"] = string(action)
+	metadata["risk_tier"] = string(riskTier)
+
+	var principal types.Principal
+	if existing, ok := types.PrincipalFromContext(ctx); ok {
+		principal = existing
+	}
+	if traceID, ok := types.TraceID(ctx); ok {
+		authContext["trace_id"] = traceID
+		metadata["trace_id"] = traceID
+	}
+	if runID, ok := types.RunID(ctx); ok {
+		authContext["run_id"] = runID
+		authContext["session_id"] = runID
+		metadata["run_id"] = runID
+	}
+	if agentID, ok := types.AgentID(ctx); ok {
+		authContext["agent_id"] = agentID
+		metadata["agent_id"] = agentID
+		if principal.ID == "" {
+			principal.Kind = types.PrincipalAgent
+			principal.ID = agentID
+		}
+	}
+	if userID, ok := types.UserID(ctx); ok {
+		authContext["user_id"] = userID
+		metadata["user_id"] = userID
+		if principal.ID == "" {
+			principal.Kind = types.PrincipalUser
+			principal.ID = userID
+		}
+	}
+	if roles, ok := types.Roles(ctx); ok {
+		principal.Roles = append([]string(nil), roles...)
+	}
+	authContext["metadata"] = metadata
+
+	return types.AuthorizationRequest{
+		Principal:    principal,
+		ResourceKind: resourceKind,
+		ResourceID:   resourceID,
+		Action:       action,
+		RiskTier:     riskTier,
+		Context:      authContext,
+	}
+}
+
+func workflowAuthorizationMetadata(values map[string]any) map[string]string {
+	out := map[string]string{"runtime": "workflow"}
+	if values == nil {
+		return out
+	}
+	switch metadata := values["metadata"].(type) {
+	case map[string]string:
+		for k, v := range metadata {
+			out[k] = v
+		}
+	case map[string]any:
+		for k, v := range metadata {
+			if s, ok := v.(string); ok {
+				out[k] = s
+			}
+		}
+	}
+	return out
+}
+
+func workflowHostedToolAuthorizationShape(tool hosted.HostedTool, name string) (types.ResourceKind, types.RiskTier, string, string) {
+	toolType := ""
+	if tool != nil {
+		toolType = string(tool.Type())
+	}
+	resourceKind := hosted.ClassifyHostedToolResourceKind(tool)
+	if reporter, ok := tool.(interface{ AuthorizationResourceKind() types.ResourceKind }); ok {
+		resourceKind = reporter.AuthorizationResourceKind()
+	}
+	riskTier := hosted.ClassifyHostedToolRiskTier(tool)
+	if reporter, ok := tool.(interface{ AuthorizationRiskTier() types.RiskTier }); ok {
+		riskTier = reporter.AuthorizationRiskTier()
+	}
+	return resourceKind,
+		riskTier,
+		toolType,
+		hosted.ClassifyHostedToolPermissionRisk(tool)
+}
+
+func workflowArgumentsFromRaw(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var args map[string]any
+	if err := json.Unmarshal(raw, &args); err != nil {
+		return nil
+	}
+	return args
+}
+
+func workflowRawFingerprint(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return fmt.Sprintf("%x", sum)
+}
+
+func workflowStringFingerprint(value string) string {
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", sum)
+}
+
+func cloneAnyMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

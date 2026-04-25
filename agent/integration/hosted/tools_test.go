@@ -59,6 +59,21 @@ func (m *mockRetrievalStore) Retrieve(ctx context.Context, query string, topK in
 	return nil, nil
 }
 
+type hostedRiskTestTool struct {
+	typ  HostedToolType
+	name string
+}
+
+func (t hostedRiskTestTool) Type() HostedToolType { return t.typ }
+func (t hostedRiskTestTool) Name() string         { return t.name }
+func (t hostedRiskTestTool) Description() string  { return "risk test tool" }
+func (t hostedRiskTestTool) Schema() types.ToolSchema {
+	return types.ToolSchema{Name: t.name, Parameters: json.RawMessage(`{"type":"object"}`)}
+}
+func (t hostedRiskTestTool) Execute(context.Context, json.RawMessage) (json.RawMessage, error) {
+	return json.RawMessage(`{}`), nil
+}
+
 // --- ToolRegistry tests ---
 
 func TestToolRegistry_RegisterGetList(t *testing.T) {
@@ -153,6 +168,73 @@ func TestToolRegistry_Execute_ApprovalRequiredForWriteFileRisk(t *testing.T) {
 	}
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Fatalf("expected file not written, stat err=%v", statErr)
+	}
+}
+
+func TestClassifyHostedToolAuthorizationContracts(t *testing.T) {
+	cases := []struct {
+		name           string
+		tool           HostedTool
+		wantResource   types.ResourceKind
+		wantTier       types.RiskTier
+		wantPolicyRisk string
+	}{
+		{
+			name:           "web search safe read",
+			tool:           NewWebSearchTool(WebSearchConfig{Endpoint: "http://example.com"}),
+			wantResource:   types.ResourceTool,
+			wantTier:       types.RiskSafeRead,
+			wantPolicyRisk: "safe_read",
+		},
+		{
+			name:           "file read safe read",
+			tool:           NewReadFileTool(FileOpsConfig{}),
+			wantResource:   types.ResourceFileRead,
+			wantTier:       types.RiskSafeRead,
+			wantPolicyRisk: "safe_read",
+		},
+		{
+			name:           "file write mutating",
+			tool:           NewWriteFileTool(FileOpsConfig{}),
+			wantResource:   types.ResourceFileWrite,
+			wantTier:       types.RiskMutating,
+			wantPolicyRisk: "requires_approval",
+		},
+		{
+			name:           "code execution",
+			tool:           NewCodeExecTool(CodeExecConfig{Executor: &mockCodeExecutor{}}),
+			wantResource:   types.ResourceCodeExec,
+			wantTier:       types.RiskExecution,
+			wantPolicyRisk: "requires_approval",
+		},
+		{
+			name:           "shell execution",
+			tool:           NewShellTool(ShellConfig{}),
+			wantResource:   types.ResourceShell,
+			wantTier:       types.RiskExecution,
+			wantPolicyRisk: "requires_approval",
+		},
+		{
+			name:           "mcp network execution",
+			tool:           hostedRiskTestTool{typ: ToolTypeMCP, name: "mcp_write"},
+			wantResource:   types.ResourceMCPTool,
+			wantTier:       types.RiskNetworkExecution,
+			wantPolicyRisk: "requires_approval",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ClassifyHostedToolResourceKind(tc.tool); got != tc.wantResource {
+				t.Fatalf("resource kind = %q, want %q", got, tc.wantResource)
+			}
+			if got := ClassifyHostedToolRiskTier(tc.tool); got != tc.wantTier {
+				t.Fatalf("risk tier = %q, want %q", got, tc.wantTier)
+			}
+			if got := ClassifyHostedToolPermissionRisk(tc.tool); got != tc.wantPolicyRisk {
+				t.Fatalf("permission risk = %q, want %q", got, tc.wantPolicyRisk)
+			}
+		})
 	}
 }
 

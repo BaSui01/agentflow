@@ -63,6 +63,7 @@ type serverHandlerBundle struct {
 	toolRegistryHandler *handlers.ToolRegistryHandler
 	toolProviderHandler *handlers.ToolProviderHandler
 	toolApprovalHandler *handlers.ToolApprovalHandler
+	authAuditHandler    *handlers.AuthorizationAuditHandler
 	ragHandler          *handlers.RAGHandler
 	workflowHandler     *handlers.WorkflowHandler
 	protocolHandler     *handlers.ProtocolHandler

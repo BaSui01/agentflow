@@ -41,15 +41,25 @@ type ToolApprovalGrantView struct {
 }
 
 type ToolApprovalHistoryEntry struct {
-	EventType   string `json:"event_type"`
-	ApprovalID  string `json:"approval_id,omitempty"`
-	Fingerprint string `json:"fingerprint,omitempty"`
-	ToolName    string `json:"tool_name,omitempty"`
-	AgentID     string `json:"agent_id,omitempty"`
-	Status      string `json:"status,omitempty"`
-	Scope       string `json:"scope,omitempty"`
-	Comment     string `json:"comment,omitempty"`
-	Timestamp   string `json:"timestamp"`
+	EventType       string `json:"event_type"`
+	ApprovalID      string `json:"approval_id,omitempty"`
+	Fingerprint     string `json:"fingerprint,omitempty"`
+	ToolName        string `json:"tool_name,omitempty"`
+	AgentID         string `json:"agent_id,omitempty"`
+	PrincipalID     string `json:"principal_id,omitempty"`
+	UserID          string `json:"user_id,omitempty"`
+	RunID           string `json:"run_id,omitempty"`
+	TraceID         string `json:"trace_id,omitempty"`
+	ResourceKind    string `json:"resource_kind,omitempty"`
+	ResourceID      string `json:"resource_id,omitempty"`
+	Action          string `json:"action,omitempty"`
+	RiskTier        string `json:"risk_tier,omitempty"`
+	Decision        string `json:"decision,omitempty"`
+	Status          string `json:"status,omitempty"`
+	Scope           string `json:"scope,omitempty"`
+	Comment         string `json:"comment,omitempty"`
+	ArgsFingerprint string `json:"args_fingerprint,omitempty"`
+	Timestamp       string `json:"timestamp"`
 }
 
 type ToolApprovalService interface {

@@ -26,6 +26,7 @@ func (s *Server) initHandlers() error {
 	s.handlers.toolRegistryHandler = set.ToolRegistryHandler
 	s.handlers.toolProviderHandler = set.ToolProviderHandler
 	s.handlers.toolApprovalHandler = set.ToolApprovalHandler
+	s.handlers.authAuditHandler = set.AuthAuditHandler
 	s.handlers.ragHandler = set.RAGHandler
 	s.handlers.workflowHandler = set.WorkflowHandler
 	s.handlers.protocolHandler = set.ProtocolHandler

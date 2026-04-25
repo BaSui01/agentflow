@@ -88,10 +88,7 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 		req.Principal = principal
 	}
 
-	decision := &types.AuthorizationDecision{
-		Decision: types.DecisionAllow,
-		Reason:   "default allow",
-	}
+	decision := defaultAuthorizationDecision(req)
 	if s.PolicyEngine != nil {
 		evaluated, err := s.PolicyEngine.Evaluate(ctx, req)
 		if err != nil {
@@ -103,12 +100,18 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 	}
 
 	if decision.Decision == types.DecisionRequireApproval && s.ApprovalBackend != nil {
-		approved, err := s.ApprovalBackend.RequestApproval(ctx, req, decision)
+		var approved *types.AuthorizationDecision
+		var err error
+		if decision.ApprovalID != "" {
+			approved, err = s.ApprovalBackend.CheckApproval(ctx, decision.ApprovalID)
+		} else {
+			approved, err = s.ApprovalBackend.RequestApproval(ctx, req, decision)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("request approval: %w", err)
+			return nil, fmt.Errorf("handle approval: %w", err)
 		}
 		if approved != nil {
-			decision = approved
+			decision = mergeAuthorizationApprovalDecision(decision, approved)
 		}
 	}
 
@@ -118,4 +121,64 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 		}
 	}
 	return decision, nil
+}
+
+func mergeAuthorizationApprovalDecision(
+	preliminary *types.AuthorizationDecision,
+	approved *types.AuthorizationDecision,
+) *types.AuthorizationDecision {
+	if approved == nil {
+		return preliminary
+	}
+	if preliminary == nil {
+		return approved
+	}
+	merged := *approved
+	if merged.Reason == "" {
+		merged.Reason = preliminary.Reason
+	}
+	if merged.PolicyID == "" {
+		merged.PolicyID = preliminary.PolicyID
+	}
+	if merged.ApprovalID == "" {
+		merged.ApprovalID = preliminary.ApprovalID
+	}
+	if merged.Scope == "" {
+		merged.Scope = preliminary.Scope
+	}
+	return &merged
+}
+
+func defaultAuthorizationDecision(req types.AuthorizationRequest) *types.AuthorizationDecision {
+	if authorizationRequestRequiresPolicy(req) {
+		return &types.AuthorizationDecision{
+			Decision: types.DecisionDeny,
+			Reason:   "authorization policy is not configured for high-risk request",
+		}
+	}
+	return &types.AuthorizationDecision{
+		Decision: types.DecisionAllow,
+		Reason:   "default allow for safe request",
+	}
+}
+
+func authorizationRequestRequiresPolicy(req types.AuthorizationRequest) bool {
+	switch req.RiskTier {
+	case types.RiskExecution, types.RiskNetworkExecution, types.RiskMutating, types.RiskAdmin, types.RiskSensitiveRead:
+		return true
+	case types.RiskSafeRead:
+		return false
+	}
+
+	switch req.ResourceKind {
+	case types.ResourceShell, types.ResourceCodeExec, types.ResourceFileWrite, types.ResourceAdminAPI, types.ResourceHandoff:
+		return true
+	}
+
+	switch req.Action {
+	case types.ActionExecute, types.ActionWrite, types.ActionDelete, types.ActionManage, types.ActionApprove, types.ActionRoute:
+		return true
+	default:
+		return false
+	}
 }

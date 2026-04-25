@@ -85,6 +85,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		CheckpointStore:         s.workflow.checkpointStore,
 		WorkflowCheckpointStore: s.workflow.workflowCheckpointStore,
 		HITLManager:             s.currentWorkflowHITLManager(),
+		AuthorizationService:    s.currentWorkflowAuthorizationService(),
 		Logger:                  s.logger,
 	})
 
@@ -161,6 +162,16 @@ func (s *Server) currentChatToolManager() agent.ToolManager {
 		return nil
 	}
 	return s.tooling.toolingRuntime.ToolManager
+}
+
+func (s *Server) currentWorkflowAuthorizationService() usecase.AuthorizationService {
+	if s == nil || s.tooling.toolingRuntime == nil {
+		return nil
+	}
+	if s.tooling.toolingRuntime.AuthorizationService != nil {
+		return s.tooling.toolingRuntime.AuthorizationService
+	}
+	return bootstrap.BuildAuthorizationRuntime(s.tooling.toolingRuntime.Permissions, nil, nil, s.logger).Service
 }
 
 func (s *Server) currentWorkflowHITLManager() *hitl.InterruptManager {

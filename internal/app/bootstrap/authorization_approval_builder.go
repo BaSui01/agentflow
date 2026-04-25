@@ -19,6 +19,7 @@ import (
 	"github.com/BaSui01/agentflow/internal/usecase"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -64,15 +65,25 @@ type ToolApprovalGrantStore interface {
 }
 
 type ToolApprovalHistoryEntry struct {
-	EventType   string    `json:"event_type"`
-	ApprovalID  string    `json:"approval_id,omitempty"`
-	Fingerprint string    `json:"fingerprint,omitempty"`
-	ToolName    string    `json:"tool_name,omitempty"`
-	AgentID     string    `json:"agent_id,omitempty"`
-	Status      string    `json:"status,omitempty"`
-	Scope       string    `json:"scope,omitempty"`
-	Comment     string    `json:"comment,omitempty"`
-	Timestamp   time.Time `json:"timestamp"`
+	EventType       string    `json:"event_type"`
+	ApprovalID      string    `json:"approval_id,omitempty"`
+	Fingerprint     string    `json:"fingerprint,omitempty"`
+	ToolName        string    `json:"tool_name,omitempty"`
+	AgentID         string    `json:"agent_id,omitempty"`
+	PrincipalID     string    `json:"principal_id,omitempty"`
+	UserID          string    `json:"user_id,omitempty"`
+	RunID           string    `json:"run_id,omitempty"`
+	TraceID         string    `json:"trace_id,omitempty"`
+	ResourceKind    string    `json:"resource_kind,omitempty"`
+	ResourceID      string    `json:"resource_id,omitempty"`
+	Action          string    `json:"action,omitempty"`
+	RiskTier        string    `json:"risk_tier,omitempty"`
+	Decision        string    `json:"decision,omitempty"`
+	Status          string    `json:"status,omitempty"`
+	Scope           string    `json:"scope,omitempty"`
+	Comment         string    `json:"comment,omitempty"`
+	ArgsFingerprint string    `json:"args_fingerprint,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
 }
 
 type ToolApprovalHistoryStore interface {
@@ -700,6 +711,10 @@ type toolApprovalHandler struct {
 	pending map[string]string
 }
 
+type toolAuthorizationApprovalBackend struct {
+	handler *toolApprovalHandler
+}
+
 func newToolApprovalHandler(
 	manager *hitl.InterruptManager,
 	config ToolApprovalConfig,
@@ -726,6 +741,142 @@ func newToolApprovalHandler(
 	}
 }
 
+func newToolAuthorizationApprovalBackend(handler llmtools.ApprovalHandler) usecase.ApprovalBackend {
+	typed, ok := handler.(*toolApprovalHandler)
+	if !ok || typed == nil {
+		return nil
+	}
+	return &toolAuthorizationApprovalBackend{handler: typed}
+}
+
+func (b *toolAuthorizationApprovalBackend) RequestApproval(
+	ctx context.Context,
+	req types.AuthorizationRequest,
+	preliminary *types.AuthorizationDecision,
+) (*types.AuthorizationDecision, error) {
+	if b == nil || b.handler == nil {
+		return nil, fmt.Errorf("tool approval backend is not configured")
+	}
+	permCtx := authorizationRequestPermissionContext(req)
+	rule := authorizationApprovalRule(preliminary)
+	approvalID, err := b.handler.RequestApproval(ctx, permCtx, rule)
+	if err != nil {
+		return nil, err
+	}
+	return b.approvalDecision(ctx, approvalID, preliminary)
+}
+
+func (b *toolAuthorizationApprovalBackend) CheckApproval(
+	ctx context.Context,
+	approvalID string,
+) (*types.AuthorizationDecision, error) {
+	return b.approvalDecision(ctx, approvalID, nil)
+}
+
+func (b *toolAuthorizationApprovalBackend) Revoke(ctx context.Context, fingerprint string) error {
+	if b == nil || b.handler == nil || b.handler.store == nil {
+		return nil
+	}
+	key := strings.TrimSpace(fingerprint)
+	key = strings.TrimPrefix(key, grantApprovalIDPrefix)
+	if key == "" {
+		return nil
+	}
+	return b.handler.store.Delete(ctx, key)
+}
+
+func (b *toolAuthorizationApprovalBackend) approvalDecision(
+	ctx context.Context,
+	approvalID string,
+	preliminary *types.AuthorizationDecision,
+) (*types.AuthorizationDecision, error) {
+	normalizedID := strings.TrimSpace(approvalID)
+	if normalizedID == "" {
+		return &types.AuthorizationDecision{
+			Decision: types.DecisionRequireApproval,
+			Reason:   approvalDecisionReason(preliminary, "approval required"),
+			PolicyID: approvalDecisionPolicyID(preliminary),
+			Scope:    approvalDecisionScope(preliminary),
+		}, nil
+	}
+	approved, err := b.handler.CheckApprovalStatus(ctx, normalizedID)
+	if err != nil {
+		return nil, err
+	}
+	if approved {
+		return &types.AuthorizationDecision{
+			Decision:   types.DecisionAllow,
+			Reason:     "approval granted: " + normalizedID,
+			PolicyID:   approvalDecisionPolicyID(preliminary),
+			ApprovalID: normalizedID,
+			Scope:      approvalDecisionScope(preliminary),
+		}, nil
+	}
+	return &types.AuthorizationDecision{
+		Decision:   types.DecisionRequireApproval,
+		Reason:     approvalDecisionReason(preliminary, "approval pending"),
+		PolicyID:   approvalDecisionPolicyID(preliminary),
+		ApprovalID: normalizedID,
+		Scope:      approvalDecisionScope(preliminary),
+	}, nil
+}
+
+func authorizationRequestPermissionContext(req types.AuthorizationRequest) *llmtools.PermissionContext {
+	return &llmtools.PermissionContext{
+		AgentID:   stringValue(req.Context, "agent_id"),
+		UserID:    authorizationRequestUserID(req),
+		Roles:     append([]string(nil), req.Principal.Roles...),
+		ToolName:  strings.TrimSpace(req.ResourceID),
+		Arguments: anyMapValue(req.Context, "arguments"),
+		Metadata:  stringMapValue(req.Context, "metadata"),
+		RequestAt: time.Now(),
+		TraceID:   stringValue(req.Context, "trace_id"),
+		SessionID: stringValue(req.Context, "session_id"),
+	}
+}
+
+func authorizationRequestUserID(req types.AuthorizationRequest) string {
+	if userID := stringValue(req.Context, "user_id"); userID != "" {
+		return userID
+	}
+	if req.Principal.Kind == types.PrincipalUser {
+		return strings.TrimSpace(req.Principal.ID)
+	}
+	return ""
+}
+
+func authorizationApprovalRule(decision *types.AuthorizationDecision) *llmtools.PermissionRule {
+	if decision == nil {
+		return nil
+	}
+	return &llmtools.PermissionRule{
+		ID:       strings.TrimSpace(decision.PolicyID),
+		Name:     strings.TrimSpace(decision.PolicyID),
+		Decision: llmtools.PermissionRequireApproval,
+	}
+}
+
+func approvalDecisionReason(decision *types.AuthorizationDecision, fallback string) string {
+	if decision == nil || strings.TrimSpace(decision.Reason) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(decision.Reason)
+}
+
+func approvalDecisionPolicyID(decision *types.AuthorizationDecision) string {
+	if decision == nil {
+		return ""
+	}
+	return strings.TrimSpace(decision.PolicyID)
+}
+
+func approvalDecisionScope(decision *types.AuthorizationDecision) string {
+	if decision == nil {
+		return ""
+	}
+	return strings.TrimSpace(decision.Scope)
+}
+
 func (h *toolApprovalHandler) RequestApproval(
 	ctx context.Context,
 	permCtx *llmtools.PermissionContext,
@@ -739,10 +890,6 @@ func (h *toolApprovalHandler) RequestApproval(
 	}
 
 	key := approvalFingerprint(permCtx, rule, h.config.Scope)
-	if existingID := h.lookupExistingApproval(ctx, key); existingID != "" {
-		return existingID, nil
-	}
-
 	options := []hitl.Option{
 		{ID: "approve", Label: "Approve", IsDefault: true},
 		{ID: "reject", Label: "Reject"},
@@ -751,6 +898,12 @@ func (h *toolApprovalHandler) RequestApproval(
 	toolName := strings.TrimSpace(permCtx.ToolName)
 	if toolName == "" {
 		toolName = "tool"
+	}
+
+	h.mu.Lock()
+	if existingID := h.lookupExistingApprovalLocked(ctx, key); existingID != "" {
+		h.mu.Unlock()
+		return existingID, nil
 	}
 
 	interrupt, err := h.manager.CreatePendingInterrupt(ctx, hitl.InterruptOptions{
@@ -785,12 +938,16 @@ func (h *toolApprovalHandler) RequestApproval(
 		},
 	})
 	if err != nil {
+		h.mu.Unlock()
 		return "", err
 	}
 	if interrupt == nil {
+		h.mu.Unlock()
 		return "", fmt.Errorf("approval interrupt is nil")
 	}
-	h.rememberPending(key, interrupt.ID)
+	h.pending[key] = strings.TrimSpace(interrupt.ID)
+	h.mu.Unlock()
+
 	h.appendHistory(context.Background(), &ToolApprovalHistoryEntry{
 		EventType:   "approval_requested",
 		ApprovalID:  interrupt.ID,
@@ -833,8 +990,12 @@ const grantApprovalIDPrefix = "grant:"
 
 func (h *toolApprovalHandler) lookupExistingApproval(ctx context.Context, key string) string {
 	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.lookupExistingApprovalLocked(ctx, key)
+}
+
+func (h *toolApprovalHandler) lookupExistingApprovalLocked(ctx context.Context, key string) string {
 	interruptID := strings.TrimSpace(h.pending[key])
-	h.mu.Unlock()
 	if interruptID != "" {
 		interrupt, err := h.manager.GetInterrupt(ctx, interruptID)
 		if err == nil && interrupt != nil {
@@ -844,7 +1005,7 @@ func (h *toolApprovalHandler) lookupExistingApproval(ctx context.Context, key st
 			case hitl.InterruptStatusResolved:
 				if interrupt.Response != nil && interrupt.Response.Approved {
 					if err := h.ensureGrantStored(ctx, key, interrupt); err == nil {
-						h.forgetPending(key)
+						delete(h.pending, key)
 						if ok, _ := h.checkPersistedGrant(ctx, key); ok {
 							return grantApprovalIDPrefix + key
 						}
@@ -852,7 +1013,7 @@ func (h *toolApprovalHandler) lookupExistingApproval(ctx context.Context, key st
 				}
 			}
 		}
-		h.forgetPending(key)
+		delete(h.pending, key)
 	}
 
 	ok, err := h.checkPersistedGrant(ctx, key)
@@ -1182,6 +1343,10 @@ type toolApprovalRuntime struct {
 	config  ToolApprovalConfig
 }
 
+type authorizationAuditHistoryRuntime struct {
+	history ToolApprovalHistoryStore
+}
+
 func (r *toolApprovalRuntime) GetInterrupt(ctx context.Context, interruptID string) (*hitl.Interrupt, error) {
 	return r.manager.GetInterrupt(ctx, interruptID)
 }
@@ -1297,10 +1462,22 @@ func (r *toolApprovalRuntime) RevokeGrant(ctx context.Context, fingerprint strin
 }
 
 func (r *toolApprovalRuntime) ListHistory(ctx context.Context, limit int) ([]*usecase.ToolApprovalHistoryEntry, error) {
-	if r.history == nil {
+	return listToolApprovalHistory(ctx, r.history, limit)
+}
+
+func (r *authorizationAuditHistoryRuntime) ListHistory(ctx context.Context, limit int) ([]*usecase.ToolApprovalHistoryEntry, error) {
+	return listToolApprovalHistory(ctx, r.history, limit)
+}
+
+func listToolApprovalHistory(
+	ctx context.Context,
+	history ToolApprovalHistoryStore,
+	limit int,
+) ([]*usecase.ToolApprovalHistoryEntry, error) {
+	if history == nil {
 		return []*usecase.ToolApprovalHistoryEntry{}, nil
 	}
-	rows, err := r.history.List(ctx, limit)
+	rows, err := history.List(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1311,15 +1488,25 @@ func (r *toolApprovalRuntime) ListHistory(ctx context.Context, limit int) ([]*us
 		}
 		cloned := *row
 		out = append(out, &usecase.ToolApprovalHistoryEntry{
-			EventType:   cloned.EventType,
-			ApprovalID:  cloned.ApprovalID,
-			Fingerprint: cloned.Fingerprint,
-			ToolName:    cloned.ToolName,
-			AgentID:     cloned.AgentID,
-			Status:      cloned.Status,
-			Scope:       cloned.Scope,
-			Comment:     cloned.Comment,
-			Timestamp:   cloned.Timestamp.UTC().Format(time.RFC3339),
+			EventType:       cloned.EventType,
+			ApprovalID:      cloned.ApprovalID,
+			Fingerprint:     cloned.Fingerprint,
+			ToolName:        cloned.ToolName,
+			AgentID:         cloned.AgentID,
+			PrincipalID:     cloned.PrincipalID,
+			UserID:          cloned.UserID,
+			RunID:           cloned.RunID,
+			TraceID:         cloned.TraceID,
+			ResourceKind:    cloned.ResourceKind,
+			ResourceID:      cloned.ResourceID,
+			Action:          cloned.Action,
+			RiskTier:        cloned.RiskTier,
+			Decision:        cloned.Decision,
+			Status:          cloned.Status,
+			Scope:           cloned.Scope,
+			Comment:         cloned.Comment,
+			ArgsFingerprint: cloned.ArgsFingerprint,
+			Timestamp:       cloned.Timestamp.UTC().Format(time.RFC3339),
 		})
 	}
 	return out, nil

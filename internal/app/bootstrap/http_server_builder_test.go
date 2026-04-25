@@ -80,6 +80,22 @@ func newToolApprovalHandlerForTest(manager *hitl.InterruptManager) *handlers.Too
 	)
 }
 
+func newAuthorizationAuditHandlerForTest(t *testing.T) *handlers.AuthorizationAuditHandler {
+	t.Helper()
+	history := NewMemoryToolApprovalHistoryStore(10)
+	require.NoError(t, history.Append(context.Background(), &ToolApprovalHistoryEntry{
+		EventType:    usecase.AuthorizationAuditEventType,
+		ToolName:     "run_command",
+		AgentID:      "agent-a",
+		ResourceKind: "shell_command",
+		Decision:     "deny",
+	}))
+	return handlers.NewAuthorizationAuditHandler(
+		usecase.NewDefaultAuthorizationAuditService(&authorizationAuditHistoryRuntime{history: history}),
+		zap.NewNop(),
+	)
+}
+
 func TestToolRegistryHandlerConstruction(t *testing.T) {
 	db := setupToolRegistryTestDB(t)
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
@@ -106,14 +122,21 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	approvalHandler := newToolApprovalHandlerForTest(
 		hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop()),
 	)
+	authAuditHandler := newAuthorizationAuditHandlerForTest(t)
 	require.NotNil(t, toolHandler)
 	require.NotNil(t, providerHandler)
 	require.NotNil(t, approvalHandler)
+	require.NotNil(t, authAuditHandler)
 
 	mux := http.NewServeMux()
 	RegisterHTTPRoutes(
 		mux,
-		HTTPRouteHandlers{Tools: toolHandler, ToolProviders: providerHandler, ToolApprovals: approvalHandler},
+		HTTPRouteHandlers{
+			Tools:         toolHandler,
+			ToolProviders: providerHandler,
+			ToolApprovals: approvalHandler,
+			AuthAudit:     authAuditHandler,
+		},
 		"test-version",
 		"test-build-time",
 		"test-git-commit",
@@ -158,6 +181,12 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	approvalRec := httptest.NewRecorder()
 	mux.ServeHTTP(approvalRec, approvalReq)
 	assert.Equal(t, http.StatusOK, approvalRec.Code)
+
+	auditReq := httptest.NewRequest(http.MethodGet, "/api/v1/authorization/audit?agent_id=agent-a", nil)
+	auditRec := httptest.NewRecorder()
+	mux.ServeHTTP(auditRec, auditReq)
+	assert.Equal(t, http.StatusOK, auditRec.Code)
+	assert.Contains(t, auditRec.Body.String(), "\"tool_name\":\"run_command\"")
 }
 
 func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {

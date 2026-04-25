@@ -23,6 +23,7 @@ func (s *Server) startHTTPServer() error {
 			Tools:         s.handlers.toolRegistryHandler,
 			ToolProviders: s.handlers.toolProviderHandler,
 			ToolApprovals: s.handlers.toolApprovalHandler,
+			AuthAudit:     s.handlers.authAuditHandler,
 			Multimodal:    s.handlers.multimodalHandler,
 			Protocol:      s.handlers.protocolHandler,
 			RAG:           s.handlers.ragHandler,

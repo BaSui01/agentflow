@@ -163,12 +163,32 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 
 	// 等待回应
 	select {
-	case response := <-pending.responseCh:
+	case response, ok := <-pending.responseCh:
+		if !ok {
+			if err := pending.timeoutCtx.Err(); err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("interrupt canceled: %s", pending.interrupt.ID)
+		}
 		return response, nil
 	case <-ctx.Done():
 		_ = m.CancelInterrupt(context.Background(), pending.interrupt.ID)
 		return nil, ctx.Err()
 	case <-pending.timeoutCtx.Done():
+		if pending.timeoutCtx.Err() != context.DeadlineExceeded {
+			select {
+			case response, ok := <-pending.responseCh:
+				if ok {
+					return response, nil
+				}
+			default:
+			}
+			_ = m.CancelInterrupt(context.Background(), pending.interrupt.ID)
+			if err := pending.timeoutCtx.Err(); err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("interrupt canceled: %s", pending.interrupt.ID)
+		}
 		m.handleTimeout(context.Background(), pending.interrupt)
 		return nil, fmt.Errorf("interrupt timeout: %s", pending.interrupt.ID)
 	}

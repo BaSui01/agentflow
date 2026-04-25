@@ -50,6 +50,7 @@ type ServeHandlerSet struct {
 	ToolRegistryHandler *handlers.ToolRegistryHandler
 	ToolProviderHandler *handlers.ToolProviderHandler
 	ToolApprovalHandler *handlers.ToolApprovalHandler
+	AuthAuditHandler    *handlers.AuthorizationAuditHandler
 	RAGHandler          *handlers.RAGHandler
 	WorkflowHandler     *handlers.WorkflowHandler
 	ProtocolHandler     *handlers.ProtocolHandler
@@ -227,8 +228,17 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 		set.ToolRegistryHandler = toolingBundle.ToolRegistryHandler
 		set.ToolProviderHandler = toolingBundle.ToolProviderHandler
 		set.ToolApprovalHandler = toolingBundle.ToolApprovalHandler
+		set.AuthAuditHandler = toolingBundle.AuthAuditHandler
 		set.ToolApprovalRedis = toolingBundle.ToolApprovalRedis
 		set.CapabilityCatalog = toolingBundle.CapabilityCatalog
+	}
+	var authorizationService usecase.AuthorizationService
+	if set.ToolingRuntime != nil {
+		authorizationService = set.ToolingRuntime.AuthorizationService
+		if authorizationService == nil {
+			authorizationRuntime := BuildAuthorizationRuntime(set.ToolingRuntime.Permissions, nil, nil, in.Logger)
+			authorizationService = authorizationRuntime.Service
+		}
 	}
 
 	if llmRuntime != nil && set.Provider != nil {
@@ -300,11 +310,12 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 
 	workflowOpts := WorkflowRuntimeOptions{
-		DefaultModel:      in.Cfg.Agent.Model,
-		HITLManager:       in.WorkflowHITLManager,
-		CheckpointStore:   set.CheckpointStore,
-		RetrievalStore:    set.RAGStore,
-		EmbeddingProvider: set.RAGEmbedding,
+		DefaultModel:         in.Cfg.Agent.Model,
+		HITLManager:          in.WorkflowHITLManager,
+		CheckpointStore:      set.CheckpointStore,
+		RetrievalStore:       set.RAGStore,
+		EmbeddingProvider:    set.RAGEmbedding,
+		AuthorizationService: authorizationService,
 	}
 	if llmRuntime != nil {
 		workflowOpts.LLMGateway = llmRuntime.Gateway
