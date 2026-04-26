@@ -100,9 +100,9 @@ func (h *ChatHandler) HandleAnthropicCompatMessages(w http.ResponseWriter, r *ht
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		writeAnthropicCompatError(w, types.NewInternalError("chat service is not configured"))
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		writeAnthropicCompatError(w, svcErr)
 		return
 	}
 
@@ -149,9 +149,9 @@ func (h *ChatHandler) handleAnthropicCompatMessagesStream(w http.ResponseWriter,
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		writeAnthropicCompatError(w, types.NewInternalError("chat service is not configured"))
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		writeAnthropicCompatError(w, svcErr)
 		return
 	}
 	stream, err := service.Stream(r.Context(), h.converter.ToUsecaseRequest(req))

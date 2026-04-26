@@ -7,13 +7,22 @@ import (
 
 // ToolSchema defines a tool's interface for LLM function calling.
 type ToolSchema struct {
-	Type        string          `json:"type,omitempty"`
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Parameters  json.RawMessage `json:"parameters"`
-	Format      *ToolFormat     `json:"format,omitempty"`
-	Strict      *bool           `json:"strict,omitempty"`
-	Version     string          `json:"version,omitempty"`
+	Type         string          `json:"type,omitempty"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description,omitempty"`
+	Parameters   json.RawMessage `json:"parameters"`
+	ResultSchema json.RawMessage `json:"result_schema,omitempty"`
+	RiskTier     RiskTier        `json:"risk_tier,omitempty"`
+	Format       *ToolFormat     `json:"format,omitempty"`
+	Strict       *bool           `json:"strict,omitempty"`
+	Version      string          `json:"version,omitempty"`
+}
+
+type ToolRetryPolicy struct {
+	MaxRetries     int           `json:"max_retries"`
+	InitialBackoff time.Duration `json:"initial_backoff"`
+	MaxBackoff     time.Duration `json:"max_backoff"`
+	RetryableCodes []ErrorCode   `json:"retryable_codes,omitempty"`
 }
 
 // ToolFormat defines provider-native formatting constraints for custom tools.

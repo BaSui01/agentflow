@@ -83,7 +83,7 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 	if req.Principal.ID == "" && s.PrincipalResolver != nil {
 		principal, err := s.PrincipalResolver.ResolvePrincipal(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("resolve principal: %w", err)
+			return s.failSafeDecision("resolve principal failed"), nil
 		}
 		req.Principal = principal
 	}
@@ -92,7 +92,7 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 	if s.PolicyEngine != nil {
 		evaluated, err := s.PolicyEngine.Evaluate(ctx, req)
 		if err != nil {
-			return nil, fmt.Errorf("evaluate policy: %w", err)
+			return s.failSafeDecision("policy engine error"), nil
 		}
 		if evaluated != nil {
 			decision = evaluated
@@ -108,7 +108,7 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 			approved, err = s.ApprovalBackend.RequestApproval(ctx, req, decision)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("handle approval: %w", err)
+			return s.failSafeDecision("approval backend error"), nil
 		}
 		if approved != nil {
 			decision = mergeAuthorizationApprovalDecision(decision, approved)
@@ -117,10 +117,58 @@ func (s *DefaultAuthorizationService) Authorize(ctx context.Context, req types.A
 
 	if s.AuditSink != nil {
 		if err := s.AuditSink.RecordAuthorization(ctx, req, decision); err != nil {
-			return nil, fmt.Errorf("record authorization audit: %w", err)
+			return s.failSafeDecision("audit sink error"), nil
 		}
+		s.validateAuditIntegrity(req, decision)
 	}
 	return decision, nil
+}
+
+func (s *DefaultAuthorizationService) RevokeGrant(ctx context.Context, fingerprint string) error {
+	if s.ApprovalBackend == nil {
+		return fmt.Errorf("approval backend not configured")
+	}
+	return s.ApprovalBackend.Revoke(ctx, fingerprint)
+}
+
+func (s *DefaultAuthorizationService) failSafeDecision(reason string) *types.AuthorizationDecision {
+	return &types.AuthorizationDecision{
+		Decision: types.DecisionDeny,
+		Reason:   "authorization service error: " + reason,
+		Metadata: map[string]any{"service_error": true},
+	}
+}
+
+func (s *DefaultAuthorizationService) validateAuditIntegrity(req types.AuthorizationRequest, decision *types.AuthorizationDecision) {
+	if decision == nil {
+		return
+	}
+	missing := []string{}
+	if req.Principal.ID == "" {
+		missing = append(missing, "subject")
+	}
+	if req.ResourceID == "" {
+		missing = append(missing, "resource")
+	}
+	if req.Action == "" {
+		missing = append(missing, "action")
+	}
+	if req.AuthzContext.TraceID == "" && (req.Context == nil || req.Context["trace_id"] == nil) {
+		missing = append(missing, "context")
+	}
+	if decision.Decision == "" {
+		missing = append(missing, "decision")
+	}
+	if len(missing) > 0 && s.AuditSink != nil {
+		_ = s.AuditSink.RecordAuthorization(context.Background(), types.AuthorizationRequest{
+			ResourceKind: "admin_api",
+			ResourceID:   "audit_integrity_error",
+			Context:      map[string]any{"missing_fields": missing},
+		}, &types.AuthorizationDecision{
+			Decision: types.DecisionDeny,
+			Reason:   "audit integrity check: missing fields",
+		})
+	}
 }
 
 func mergeAuthorizationApprovalDecision(
@@ -152,8 +200,8 @@ func mergeAuthorizationApprovalDecision(
 func defaultAuthorizationDecision(req types.AuthorizationRequest) *types.AuthorizationDecision {
 	if authorizationRequestRequiresPolicy(req) {
 		return &types.AuthorizationDecision{
-			Decision: types.DecisionDeny,
-			Reason:   "authorization policy is not configured for high-risk request",
+			Decision: types.DecisionRequireApproval,
+			Reason:   "high-risk request requires approval by default",
 		}
 	}
 	return &types.AuthorizationDecision{

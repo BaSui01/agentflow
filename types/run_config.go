@@ -24,6 +24,7 @@ type RunConfig struct {
 	MaxLoopIterations  *int              `json:"max_loop_iterations,omitempty"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
 	Tags               []string          `json:"tags,omitempty"`
+	Budget             *int              `json:"budget,omitempty"`
 }
 
 // Clone returns a detached copy of the runtime override contract.
@@ -46,6 +47,7 @@ func (rc *RunConfig) Clone() *RunConfig {
 	out.MaxLoopIterations = cloneExecutionIntPtr(rc.MaxLoopIterations)
 	out.Metadata = cloneRunConfigMetadata(rc.Metadata)
 	out.Tags = append([]string(nil), rc.Tags...)
+	out.Budget = cloneExecutionIntPtr(rc.Budget)
 	return &out
 }
 
@@ -124,6 +126,15 @@ func (rc *RunConfig) EffectiveMaxReActIterations(defaultVal int) int {
 func (rc *RunConfig) EffectiveMaxLoopIterations(defaultVal int) int {
 	if rc != nil && rc.MaxLoopIterations != nil {
 		return *rc.MaxLoopIterations
+	}
+	return defaultVal
+}
+
+// EffectiveBudget returns the RunConfig budget override if set,
+// otherwise falls back to defaultVal. A value of 0 means unlimited.
+func (rc *RunConfig) EffectiveBudget(defaultVal int) int {
+	if rc != nil && rc.Budget != nil {
+		return *rc.Budget
 	}
 	return defaultVal
 }

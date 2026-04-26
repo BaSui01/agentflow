@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
@@ -27,10 +26,8 @@ const maxTokensUpperBound = 128000
 
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
-	mu        sync.RWMutex
+	BaseHandler[usecase.ChatService]
 	converter ChatConverter
-	service   usecase.ChatService
-	logger    *zap.Logger
 }
 
 // NewChatHandler 创建聊天处理器
@@ -39,31 +36,9 @@ func NewChatHandler(service usecase.ChatService, logger *zap.Logger) *ChatHandle
 		panic("api.ChatHandler: logger is required and cannot be nil")
 	}
 	return &ChatHandler{
-		service:   service,
-		converter: NewDefaultChatConverter(defaultStreamTimeout),
-		logger:    logger,
+		BaseHandler: NewBaseHandler(service, logger),
+		converter:   NewDefaultChatConverter(defaultStreamTimeout),
 	}
-}
-
-// UpdateService swaps the handler's chat service in place so existing HTTP
-// route bindings keep using the latest service after hot reload.
-func (h *ChatHandler) UpdateService(service usecase.ChatService) {
-	if h == nil {
-		return
-	}
-
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.service = service
-}
-
-func (h *ChatHandler) currentService() usecase.ChatService {
-	if h == nil {
-		return nil
-	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.service
 }
 
 // HandleCompletion 处理聊天补全请求
@@ -93,9 +68,9 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -157,9 +132,9 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -311,9 +286,9 @@ func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 

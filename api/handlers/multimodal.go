@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
@@ -45,10 +44,7 @@ type MultimodalHandlerRuntimeDeps struct {
 }
 
 type MultimodalHandler struct {
-	mu sync.RWMutex
-
-	logger  *zap.Logger
-	service usecase.MultimodalService
+	BaseHandler[usecase.MultimodalService]
 
 	defaultImageProvider string
 	defaultVideoProvider string
@@ -69,21 +65,11 @@ func NewMultimodalHandler(service usecase.MultimodalService, logger *zap.Logger)
 		panic("api.MultimodalHandler: logger is required and cannot be nil")
 	}
 	return &MultimodalHandler{
-		logger:           logger.With(zap.String("handler", "multimodal")),
-		service:          service,
+		BaseHandler:      NewBaseHandler(service, logger.With(zap.String("handler", "multimodal"))),
 		referenceMaxSize: defaultReferenceBytes,
 		referenceTTL:     defaultReferenceTTL,
 		referenceStore:   storage.NewMemoryReferenceStore(),
 	}
-}
-
-func (h *MultimodalHandler) UpdateService(service usecase.MultimodalService) {
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.service = service
 }
 
 func (h *MultimodalHandler) ApplyRuntimeDeps(deps MultimodalHandlerRuntimeDeps) {
@@ -117,15 +103,6 @@ func (h *MultimodalHandler) ApplyRuntimeDeps(deps MultimodalHandlerRuntimeDeps) 
 	h.resolveImageProviderFn = deps.ResolveImageProvider
 	h.resolveVideoProviderFn = deps.ResolveVideoProvider
 	h.imageStreamProviderFn = deps.ImageStreamProvider
-}
-
-func (h *MultimodalHandler) currentService() usecase.MultimodalService {
-	if h == nil {
-		return nil
-	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.service
 }
 
 func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -284,9 +261,9 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -327,9 +304,9 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	service := h.currentService()
-	if service == nil {
-		_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{"type": "error", "code": types.ErrServiceUnavailable, "message": "multimodal service is not configured"})
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{"type": "error", "code": svcErr.Code, "message": svcErr.Message})
 		_ = writeMultimodalSSE(w, []byte("data: [DONE]\n\n"))
 		return
 	}
@@ -548,9 +525,9 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -599,9 +576,9 @@ func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -654,9 +631,9 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		messages = []api.Message{{Role: "user", Content: strings.TrimSpace(req.Message)}}
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -11,18 +10,14 @@ import (
 )
 
 type AuthorizationAuditHandler struct {
-	svc    usecase.AuthorizationAuditService
-	logger *zap.Logger
+	BaseHandler[usecase.AuthorizationAuditService]
 }
 
 func NewAuthorizationAuditHandler(service usecase.AuthorizationAuditService, logger *zap.Logger) *AuthorizationAuditHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &AuthorizationAuditHandler{
-		svc:    service,
-		logger: logger,
-	}
+	return &AuthorizationAuditHandler{BaseHandler: NewBaseHandler(service, logger)}
 }
 
 func (h *AuthorizationAuditHandler) HandleList(w http.ResponseWriter, r *http.Request) {
@@ -30,11 +25,16 @@ func (h *AuthorizationAuditHandler) HandleList(w http.ResponseWriter, r *http.Re
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
+	service, svcErr := h.currentServiceOrUnavailable("authorization audit")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
+		return
+	}
 	input, ok := parseAuthorizationAuditListInput(w, r, h.logger)
 	if !ok {
 		return
 	}
-	rows, err := h.svc.List(r.Context(), input)
+	rows, err := service.List(r.Context(), input)
 	if err != nil {
 		logToolRequestWarn(h.logger, r, "authorization_audit", "list", "failed", "authorization audit request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
@@ -66,12 +66,10 @@ func parseAuthorizationAuditListInput(
 		Fingerprint:     strings.TrimSpace(query.Get("fingerprint")),
 		ArgsFingerprint: strings.TrimSpace(query.Get("args_fingerprint")),
 	}
-	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed <= 0 {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "limit must be a positive integer", logger)
-			return input, false
-		}
+	if parsed, err := parsePositiveQueryInt(query.Get("limit"), "limit"); err != nil {
+		WriteError(w, err.WithHTTPStatus(http.StatusBadRequest), logger)
+		return input, false
+	} else if parsed > 0 {
 		input.Limit = parsed
 	}
 	return input, true

@@ -61,6 +61,18 @@ func NewProviderBackedWebSearchHostedTool(cfg ToolProviderConfig, logger *zap.Lo
 			BaseURL: strings.TrimSpace(cfg.BaseURL),
 			Timeout: timeout,
 		})
+	case string(ToolProviderBrave):
+		provider = llmtools.NewBraveSearchProvider(llmtools.BraveConfig{
+			APIKey:  strings.TrimSpace(cfg.APIKey),
+			BaseURL: strings.TrimSpace(cfg.BaseURL),
+			Timeout: timeout,
+		})
+	case string(ToolProviderBing):
+		provider = llmtools.NewBingSearchProvider(llmtools.BingConfig{
+			APIKey:  strings.TrimSpace(cfg.APIKey),
+			BaseURL: strings.TrimSpace(cfg.BaseURL),
+			Timeout: timeout,
+		})
 	default:
 		return nil, fmt.Errorf("unsupported web search provider: %s", cfg.Provider)
 	}

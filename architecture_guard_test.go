@@ -1863,3 +1863,278 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
+
+func TestServiceBackedHandlersUseBaseHandler(t *testing.T) {
+	type handlerExpectation struct {
+		file             string
+		mustContainBase  bool
+		forbiddenSnippet string
+	}
+
+	expectations := []handlerExpectation{
+		{file: "api/handlers/agent.go", mustContainBase: true},
+		{file: "api/handlers/apikey.go", mustContainBase: true},
+		{file: "api/handlers/authorization_audit.go", mustContainBase: true},
+		{file: "api/handlers/chat.go", mustContainBase: true},
+		{file: "api/handlers/cost.go", mustContainBase: true},
+		{file: "api/handlers/multimodal.go", mustContainBase: true},
+		{file: "api/handlers/rag.go", mustContainBase: true},
+		{file: "api/handlers/tool_approval.go", mustContainBase: true},
+		{file: "api/handlers/tool_provider.go", mustContainBase: true},
+		{file: "api/handlers/tool_registry.go", mustContainBase: true},
+		{file: "api/handlers/workflow.go", mustContainBase: true},
+		{file: "api/handlers/health.go", mustContainBase: false},
+		{file: "api/handlers/protocol.go", mustContainBase: false},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.file))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.file, err)
+		}
+		src := string(data)
+		hasBase := strings.Contains(src, "BaseHandler[")
+		if tt.mustContainBase && !hasBase {
+			t.Fatalf("%s must embed BaseHandler for service-backed hot-reload", tt.file)
+		}
+		if !tt.mustContainBase && hasBase {
+			t.Fatalf("%s must stay outside BaseHandler exception policy", tt.file)
+		}
+	}
+}
+
+func TestExecutionModeCatalogSingleSource(t *testing.T) {
+	allowedDefinitions := map[string][]string{
+		"agent/team/execution.go": {
+			"func SupportedExecutionModes()",
+			"func IsSupportedExecutionMode(",
+			"func NormalizeExecutionMode(",
+		},
+		"internal/usecase/agent_execution_modes.go": {
+			"func normalizedExecutionMode(",
+			"func SupportedExecutionModes()",
+			"func IsSupportedExecutionMode(",
+		},
+	}
+
+	definitionSnippets := []string{
+		"func SupportedExecutionModes()",
+		"func IsSupportedExecutionMode(",
+		"func NormalizeExecutionMode(",
+		"func normalizedExecutionMode(",
+	}
+
+	var violations []string
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if !hasPathPrefix(rel, "agent") && !hasPathPrefix(rel, "internal") && !hasPathPrefix(rel, "workflow") && !hasPathPrefix(rel, "api") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		src := string(data)
+		for _, snippet := range definitionSnippets {
+			if !strings.Contains(src, snippet) {
+				continue
+			}
+			allowed := false
+			for _, allowSnippet := range allowedDefinitions[rel] {
+				if allowSnippet == snippet {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				violations = append(violations, rel+" defines "+snippet)
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scan execution mode catalog sources: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		slices.Sort(violations)
+		t.Fatalf("execution mode catalog definitions must stay in agent/team facade or usecase thin wrappers:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestRuntimeFileBudget(t *testing.T) {
+	const maxLines = 1500
+	var violations []string
+
+	runtimeDir := filepath.FromSlash("agent/runtime")
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		t.Fatalf("read runtime dir: %v", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(runtimeDir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		lines := strings.Count(string(data), "\n") + 1
+		if lines > maxLines {
+			violations = append(violations, fmt.Sprintf("%s: %d lines (max %d)", filepath.ToSlash(path), lines, maxLines))
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("runtime files exceed line budget:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestUsecaseDoesNotImportMultiagent(t *testing.T) {
+	forbidden := "agent/team/internal/engines/multiagent"
+	var violations []string
+
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, _ := filepath.Rel(".", path)
+		rel = filepath.ToSlash(rel)
+		if !hasPathPrefix(rel, "internal/usecase") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), "\""+forbidden+"\"") {
+			violations = append(violations, rel+" imports "+forbidden)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scan usecase imports: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		t.Fatalf("usecase must not import multiagent internal package:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestAPIHandlerDoesNotImportNonBuilderRuntime(t *testing.T) {
+	forbiddenPatterns := []string{
+		"agent/runtime\".",
+	}
+	var violations []string
+
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, _ := filepath.Rel(".", path)
+		rel = filepath.ToSlash(rel)
+		if !hasPathPrefix(rel, "api") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		src := string(data)
+		for _, pattern := range forbiddenPatterns {
+			if strings.Contains(src, pattern) {
+				violations = append(violations, rel+" contains "+pattern)
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scan api imports: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		t.Fatalf("api handlers must not import agent/runtime non-Builder constructors:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestNoForbiddenTopLevelPackages(t *testing.T) {
+	forbidden := []string{"crew", "flow", "graph", "society", "pipeline"}
+	for _, pkg := range forbidden {
+		if _, err := os.Stat(pkg); err == nil {
+			t.Fatalf("forbidden top-level package '%s' exists — use sdk/runtime/team/workflow as official entrypoints", pkg)
+		}
+	}
+}
+
+func TestWorkflowTeamBoundaryGuard(t *testing.T) {
+	workflowFiles := map[string]bool{}
+	walkErr := filepath.WalkDir(filepath.FromSlash("workflow/runtime"), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		workflowFiles[path] = true
+		return nil
+	})
+	if walkErr != nil {
+		t.Skipf("workflow/runtime not found: %v", walkErr)
+	}
+
+	forbiddenPatterns := []string{"Handoff", "Supervisor", "Swarm"}
+	var violations []string
+	for path := range workflowFiles {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		src := string(data)
+		for _, pattern := range forbiddenPatterns {
+			if strings.Contains(src, pattern) {
+				rel, _ := filepath.Rel(".", path)
+				violations = append(violations, filepath.ToSlash(rel)+" contains autonomous pattern "+pattern)
+			}
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("workflow/runtime must not contain autonomous collaboration patterns (belongs in agent/team):\n%s", strings.Join(violations, "\n"))
+	}
+}

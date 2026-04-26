@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
@@ -29,9 +27,7 @@ var validAgentID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 // AgentHandler Agent management handler
 type AgentHandler struct {
-	mu         sync.RWMutex
-	service    usecase.AgentService
-	logger     *zap.Logger
+	BaseHandler[usecase.AgentService]
 	sessionMgr *agent.SessionManager
 }
 
@@ -62,39 +58,13 @@ func NewAgentHandlerWithService(service usecase.AgentService, sessionMgr *agent.
 		sessionMgr = agent.NewSessionManager()
 	}
 	return &AgentHandler{
-		service:    service,
-		logger:     logger,
-		sessionMgr: sessionMgr,
+		BaseHandler: NewBaseHandler(service, logger),
+		sessionMgr:  sessionMgr,
 	}
-}
-
-// UpdateService swaps the live AgentService in place so existing HTTP route
-// bindings keep using the latest runtime wiring.
-func (h *AgentHandler) UpdateService(service usecase.AgentService) {
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.service = service
-}
-
-func (h *AgentHandler) currentService() usecase.AgentService {
-	if h == nil {
-		return nil
-	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.service
 }
 
 func (h *AgentHandler) currentServiceOrError() (usecase.AgentService, *types.Error) {
-	service := h.currentService()
-	if service == nil {
-		return nil, types.NewServiceUnavailableError("agent service is not configured").
-			WithHTTPStatus(http.StatusServiceUnavailable)
-	}
-	return service, nil
+	return h.currentServiceOrUnavailable("agent")
 }
 
 // =============================================================================
@@ -115,27 +85,18 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 	page := 1
 	pageSize := 20
 
-	if v := r.URL.Query().Get("page"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-				"page must be a positive integer", h.logger)
-			return
-		}
+	if parsed, err := parsePositiveQueryInt(r.URL.Query().Get("page"), "page"); err != nil {
+		WriteError(w, err.WithHTTPStatus(http.StatusBadRequest), h.logger)
+		return
+	} else if parsed > 0 {
 		page = parsed
 	}
 
-	if v := r.URL.Query().Get("page_size"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-				"page_size must be a positive integer", h.logger)
-			return
-		}
-		pageSize = parsed
-	}
-	if pageSize > 100 {
-		pageSize = 100
+	if parsed, err := parsePositiveQueryInt(r.URL.Query().Get("page_size"), "page_size"); err != nil {
+		WriteError(w, err.WithHTTPStatus(http.StatusBadRequest), h.logger)
+		return
+	} else if parsed > 0 {
+		pageSize = boundedOrDefault(parsed, 20, 100)
 	}
 
 	service, svcErr := h.currentServiceOrError()
@@ -644,22 +605,11 @@ func toAgentInfo(info *discovery.AgentInfo) AgentInfo {
 // extractAgentID extracts the agent ID from the URL path.
 // Supports both /api/v1/agents/{id} (PathValue) and /api/v1/agents/some-id (prefix trim).
 func extractAgentID(r *http.Request) string {
-	// Try Go 1.22+ PathValue first
-	if id := r.PathValue("id"); id != "" {
-		if !validAgentID.MatchString(id) {
-			return ""
-		}
-		return id
+	id := pathStringValue(r, "id", 3)
+	if !validAgentID.MatchString(id) {
+		return ""
 	}
-	// Fallback: extract from URL path by trimming the /api/v1/agents/ prefix
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/")
-	if path != "" && path != r.URL.Path && !strings.Contains(path, "/") {
-		if !validAgentID.MatchString(path) {
-			return ""
-		}
-		return path
-	}
-	return ""
+	return id
 }
 
 func (h *AgentHandler) validateAgentExecuteRequest(req *usecase.AgentExecuteRequest) *types.Error {

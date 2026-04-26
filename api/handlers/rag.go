@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -12,26 +11,14 @@ import (
 
 // RAGHandler handles RAG (Retrieval-Augmented Generation) API requests.
 type RAGHandler struct {
-	service usecase.RAGService
-	logger  *zap.Logger
-}
-
-func asTypesError(err error) *types.Error {
-	if err == nil {
-		return nil
-	}
-	var te *types.Error
-	if ok := errors.As(err, &te); ok && te != nil {
-		return te
-	}
-	return types.NewError(types.ErrInternalError, "internal error").WithCause(err)
+	BaseHandler[usecase.RAGService]
 }
 
 func NewRAGHandler(service usecase.RAGService, logger *zap.Logger) *RAGHandler {
-	return &RAGHandler{
-		service: service,
-		logger:  logger,
+	if logger == nil {
+		logger = zap.NewNop()
 	}
+	return &RAGHandler{BaseHandler: NewBaseHandler(service, logger)}
 }
 
 // ragQueryRequest is the request body for HandleQuery.
@@ -56,38 +43,32 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if !ValidateContentType(w, r, h.logger) {
+	service, svcErr := h.currentServiceOrUnavailable("rag")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
-
 	var req ragQueryRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
-
 	if req.Query == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "query is required", h.logger)
 		return
 	}
-	if req.TopK <= 0 {
-		req.TopK = 5
-	}
-	if req.TopK > 256 {
-		req.TopK = 256
-	}
+	req.TopK = boundedOrDefault(req.TopK, 5, 256)
 
-	queryResponse, err := h.service.Query(r.Context(), usecase.RAGQueryInput{
+	queryResponse, err := service.Query(r.Context(), usecase.RAGQueryInput{
 		Query:      req.Query,
 		TopK:       req.TopK,
 		Strategy:   req.Strategy,
 		Collection: req.Collection,
 	})
 	if err != nil {
-		WriteError(w, asTypesError(err), h.logger)
+		WriteError(w, asTypesAPIError(err, "internal error"), h.logger)
 		return
 	}
 
-	// Convert to response
 	items := make([]ragQueryResult, 0, len(queryResponse.Results))
 	for _, res := range queryResponse.Results {
 		items = append(items, ragQueryResult{
@@ -133,15 +114,15 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if !ValidateContentType(w, r, h.logger) {
+	service, svcErr := h.currentServiceOrUnavailable("rag")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
-
 	var req ragIndexRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
-
 	if len(req.Documents) == 0 {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "documents cannot be empty", h.logger)
 		return
@@ -154,8 +135,7 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	docs := make([]core.Document, len(req.Documents))
 	for i, doc := range req.Documents {
 		if doc.Content == "" {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-				"document content is required", h.logger)
+			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "document content is required", h.logger)
 			return
 		}
 		docs[i] = core.Document{
@@ -164,22 +144,13 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 			Metadata: doc.Metadata,
 		}
 	}
-	if err := h.service.Index(r.Context(), usecase.RAGIndexInput{
-		Documents:  docs,
-		Collection: req.Collection,
-	}); err != nil {
-		WriteError(w, asTypesError(err), h.logger)
+	if err := service.Index(r.Context(), usecase.RAGIndexInput{Documents: docs, Collection: req.Collection}); err != nil {
+		WriteError(w, asTypesAPIError(err, "internal error"), h.logger)
 		return
 	}
 
-	h.logger.Info("rag index completed",
-		zap.Int("documents", len(docs)),
-		zap.String("collection", req.Collection),
-	)
-
-	WriteSuccess(w, map[string]any{
-		"indexed": len(docs),
-	})
+	h.logger.Info("rag index completed", zap.Int("documents", len(docs)), zap.String("collection", req.Collection))
+	WriteSuccess(w, map[string]any{"indexed": len(docs)})
 }
 
 // HandleCapabilities handles GET /api/v1/rag/capabilities
@@ -188,9 +159,14 @@ func (h *RAGHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
+	service, svcErr := h.currentServiceOrUnavailable("rag")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
+		return
+	}
 
 	WriteSuccess(w, map[string]any{
-		"query_strategies": h.service.SupportedStrategies(),
+		"query_strategies": service.SupportedStrategies(),
 		"default_strategy": "auto",
 	})
 }

@@ -28,6 +28,12 @@ type RuntimeHandoffTarget struct {
 	Description string
 }
 
+type HandoffConfig struct {
+	Target   RuntimeHandoffTarget
+	Condition func(ctx context.Context, fromAgent, toAgent Agent) bool
+	Metadata  map[string]string
+}
+
 type runtimeHandoffCallArgs struct {
 	Input   string `json:"input,omitempty"`
 	Task    string `json:"task,omitempty"`
