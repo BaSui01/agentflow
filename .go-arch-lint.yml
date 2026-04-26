@@ -46,6 +46,9 @@ components:
   config:
     in:
       - config
+  pkg_common:
+    in:
+      - pkg/common
   pkg_cache:
     in:
       - pkg/cache
@@ -97,6 +100,8 @@ deps:
     mayDependOn:
       - config
       - types
+  pkg_common:
+    mayDependOn: [pkg_common, types]
   pkg_cache:
     mayDependOn: [pkg_cache, pkg_tlsutil, types]
   pkg_database:

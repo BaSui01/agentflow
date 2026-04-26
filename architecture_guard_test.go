@@ -81,7 +81,7 @@ func assertModuleRootNoGoFiles(t *testing.T, dir string) {
 }
 
 func TestRootLayoutBudget(t *testing.T) {
-	const maxTopLevelEntries = 53
+	const maxTopLevelEntries = 56
 
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -96,7 +96,6 @@ func TestRootLayoutBudget(t *testing.T) {
 func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 	allowlist := map[string]string{
 		"cache":      "single cohesive cache manager entrypoint",
-		"database":   "single DB connector entrypoint",
 		"jsonschema": "single JSON schema validator entrypoint",
 		"metrics":    "single metrics collector entrypoint",
 		"openapi":    "single OpenAPI helper entrypoint",

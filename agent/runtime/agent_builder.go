@@ -525,6 +525,7 @@ func (b *BaseAgent) configuredExecutionOptions() EnhancedExecutionOptions {
 }
 
 // coreExecutor returns the innermost execution function (Reflection or core execution).
+// Merged from loop_executor.go.
 func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc {
 	return func(ctx context.Context, input *Input) (*Output, error) {
 		if err := b.EnsureReady(); err != nil {
@@ -556,6 +557,7 @@ func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc
 		return executor.Execute(ctx, input)
 	}
 }
+// Merged from loop_executor_runtime.go.
 
 // CompletionDecision is the normalized evaluation result for loop execution.
 type CompletionDecision struct {
