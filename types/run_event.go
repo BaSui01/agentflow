@@ -12,10 +12,19 @@ const (
 	RunEventToolCall             RunEventType = "tool_call"
 	RunEventToolResult           RunEventType = "tool_result"
 	RunEventToolProgress         RunEventType = "tool_progress"
-	RunEventHandoff              RunEventType = "handoff"
-	RunEventApproval             RunEventType = "approval"
-	RunEventCheckpoint           RunEventType = "checkpoint"
-	RunEventError                RunEventType = "error"
+
+	// Deprecated: Use RunEventHandoffRequested / RunEventHandoffCompleted instead.
+	RunEventHandoff RunEventType = "handoff"
+
+	// Deprecated: Use RunEventApprovalRequested / RunEventApprovalResolved instead.
+	RunEventApproval RunEventType = "approval"
+
+	// Deprecated: Use RunEventCheckpointSaved instead.
+	RunEventCheckpoint RunEventType = "checkpoint"
+
+	// Deprecated: Use RunEventFailed instead.
+	RunEventError RunEventType = "error"
+
 	RunEventUsage                RunEventType = "usage"
 	RunEventSession              RunEventType = "session"
 	RunEventStatus               RunEventType = "status"
@@ -23,6 +32,15 @@ const (
 	RunEventWorkflowNodeStart    RunEventType = "workflow_node_start"
 	RunEventWorkflowNodeComplete RunEventType = "workflow_node_complete"
 	RunEventWorkflowNodeError    RunEventType = "workflow_node_error"
+
+	RunEventHandoffRequested  RunEventType = "handoff_requested"
+	RunEventHandoffCompleted  RunEventType = "handoff_completed"
+	RunEventApprovalRequested RunEventType = "approval_requested"
+	RunEventApprovalResolved  RunEventType = "approval_resolved"
+	RunEventCheckpointSaved   RunEventType = "checkpoint_saved"
+	RunEventStateChanged      RunEventType = "state_changed"
+	RunEventCompleted         RunEventType = "completed"
+	RunEventFailed            RunEventType = "failed"
 )
 
 // RunEvent carries a normalized execution event. Runtime-specific event

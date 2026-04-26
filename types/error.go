@@ -61,14 +61,59 @@ const (
 	ErrTokenizerError    ErrorCode = "TOKENIZER_ERROR"
 )
 
+// Authorization error codes
+const (
+	ErrAuthzServiceUnavailable ErrorCode = "AUTHZ_SERVICE_UNAVAILABLE"
+	ErrAuthzDenied             ErrorCode = "AUTHZ_DENIED"
+	ErrAuthzMissingContext     ErrorCode = "AUTHZ_MISSING_CONTEXT"
+	ErrApprovalExpired         ErrorCode = "APPROVAL_EXPIRED"
+	ErrApprovalPending         ErrorCode = "APPROVAL_PENDING"
+)
+
+// Tool error codes
+const (
+	ErrToolInvalidArgs      ErrorCode = "TOOL_INVALID_ARGS"
+	ErrToolPermissionDenied ErrorCode = "TOOL_PERMISSION_DENIED"
+	ErrToolExecutionTimeout ErrorCode = "TOOL_EXECUTION_TIMEOUT"
+	ErrToolValidationError  ErrorCode = "TOOL_VALIDATION_ERROR"
+)
+
+// Checkpoint error codes
+const (
+	ErrCheckpointSaveFailed     ErrorCode = "CHECKPOINT_SAVE_FAILED"
+	ErrCheckpointIntegrityError ErrorCode = "CHECKPOINT_INTEGRITY_ERROR"
+)
+
+// Runtime error codes
+const (
+	ErrRuntimeAborted          ErrorCode = "RUNTIME_ABORTED"
+	ErrRuntimeMiddlewareError  ErrorCode = "RUNTIME_MIDDLEWARE_ERROR"
+	ErrRuntimeMiddlewareTimeout ErrorCode = "RUNTIME_MIDDLEWARE_TIMEOUT"
+)
+
+// Workflow error codes
+const (
+	ErrWorkflowNodeFailed  ErrorCode = "WORKFLOW_NODE_FAILED"
+	ErrWorkflowSuspended   ErrorCode = "WORKFLOW_SUSPENDED"
+)
+
+// ErrorContext carries cross-layer identification for error tracing.
+type ErrorContext struct {
+	TraceID   string `json:"trace_id,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	RunID     string `json:"run_id,omitempty"`
+}
+
 // Error represents a structured error with code, message, and metadata.
 type Error struct {
-	Code       ErrorCode `json:"code"`
-	Message    string    `json:"message"`
-	HTTPStatus int       `json:"-"`
-	Retryable  bool      `json:"retryable"`
-	Provider   string    `json:"provider,omitempty"`
-	Cause      error     `json:"-"`
+	Code       ErrorCode    `json:"code"`
+	Message    string       `json:"message"`
+	HTTPStatus int          `json:"-"`
+	Retryable  bool         `json:"retryable"`
+	Provider   string       `json:"provider,omitempty"`
+	Cause      error        `json:"-"`
+	Context    ErrorContext `json:"context,omitempty"`
 }
 
 // Error implements the error interface.
@@ -110,6 +155,12 @@ func (e *Error) WithRetryable(retryable bool) *Error {
 // WithProvider sets the provider name.
 func (e *Error) WithProvider(provider string) *Error {
 	e.Provider = provider
+	return e
+}
+
+// WithContext sets the error context for cross-layer tracing.
+func (e *Error) WithContext(ec ErrorContext) *Error {
+	e.Context = ec
 	return e
 }
 
@@ -231,4 +282,88 @@ func NewTimeoutError(message string) *Error {
 	return NewError(ErrTimeout, message).
 		WithHTTPStatus(http.StatusGatewayTimeout).
 		WithRetryable(true)
+}
+
+// NewAuthzDeniedError creates an authorization denied error.
+func NewAuthzDeniedError(message string) *Error {
+	return NewError(ErrAuthzDenied, message).
+		WithHTTPStatus(http.StatusForbidden).
+		WithRetryable(false)
+}
+
+// NewAuthzServiceUnavailableError creates an authorization service unavailable error.
+func NewAuthzServiceUnavailableError(message string) *Error {
+	return NewError(ErrAuthzServiceUnavailable, message).
+		WithHTTPStatus(http.StatusServiceUnavailable).
+		WithRetryable(true)
+}
+
+// NewToolPermissionDeniedError creates a tool permission denied error.
+func NewToolPermissionDeniedError(message string) *Error {
+	return NewError(ErrToolPermissionDenied, message).
+		WithHTTPStatus(http.StatusForbidden).
+		WithRetryable(false)
+}
+
+// NewToolExecutionTimeoutError creates a tool execution timeout error.
+func NewToolExecutionTimeoutError(message string) *Error {
+	return NewError(ErrToolExecutionTimeout, message).
+		WithHTTPStatus(http.StatusGatewayTimeout).
+		WithRetryable(true)
+}
+
+// NewToolValidationError creates a tool result validation error.
+func NewToolValidationError(message string) *Error {
+	return NewError(ErrToolValidationError, message).
+		WithHTTPStatus(http.StatusUnprocessableEntity).
+		WithRetryable(false)
+}
+
+// NewCheckpointSaveFailedError creates a checkpoint save failed error.
+func NewCheckpointSaveFailedError(message string) *Error {
+	return NewError(ErrCheckpointSaveFailed, message).
+		WithHTTPStatus(http.StatusInternalServerError).
+		WithRetryable(true)
+}
+
+// NewCheckpointIntegrityError creates a checkpoint integrity error.
+func NewCheckpointIntegrityError(message string) *Error {
+	return NewError(ErrCheckpointIntegrityError, message).
+		WithHTTPStatus(http.StatusInternalServerError).
+		WithRetryable(false)
+}
+
+// NewRuntimeAbortedError creates a runtime aborted error.
+func NewRuntimeAbortedError(message string) *Error {
+	return NewError(ErrRuntimeAborted, message).
+		WithHTTPStatus(http.StatusInternalServerError).
+		WithRetryable(false)
+}
+
+// NewRuntimeMiddlewareError creates a runtime middleware error.
+func NewRuntimeMiddlewareError(message string) *Error {
+	return NewError(ErrRuntimeMiddlewareError, message).
+		WithHTTPStatus(http.StatusInternalServerError).
+		WithRetryable(false)
+}
+
+// NewRuntimeMiddlewareTimeoutError creates a runtime middleware timeout error.
+func NewRuntimeMiddlewareTimeoutError(message string) *Error {
+	return NewError(ErrRuntimeMiddlewareTimeout, message).
+		WithHTTPStatus(http.StatusGatewayTimeout).
+		WithRetryable(true)
+}
+
+// NewWorkflowNodeFailedError creates a workflow node failed error.
+func NewWorkflowNodeFailedError(message string) *Error {
+	return NewError(ErrWorkflowNodeFailed, message).
+		WithHTTPStatus(http.StatusInternalServerError).
+		WithRetryable(false)
+}
+
+// NewWorkflowSuspendedError creates a workflow suspended error.
+func NewWorkflowSuspendedError(message string) *Error {
+	return NewError(ErrWorkflowSuspended, message).
+		WithHTTPStatus(http.StatusAccepted).
+		WithRetryable(false)
 }
