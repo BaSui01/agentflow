@@ -1,4 +1,4 @@
-﻿# AgentFlow
+# AgentFlow
 
 > 🚀 Production-grade Go LLM Agent Framework for 2026
 
@@ -45,7 +45,7 @@ English | [中文](README.md)
 ### 🧩 Reasoning Patterns
 - **Official default** - `ReAct` is the only default reasoning/execution chain
 - **Advanced opt-in** - `Reflexion`, `ReWOO`, `Plan-Execute`
-- **Experimental** - `Tree of Thoughts (ToT)`, `Dynamic Planner`, `Iterative Deepening`
+- **Experimental** - `Dynamic Planner`, `Iterative Deepening`
 - **Unified rule** - advanced and experimental strategies are no longer injected into the runtime by default
 
 ### 🔄 Workflow Engine
@@ -81,7 +81,7 @@ English | [中文](README.md)
 
 ### 🎯 Multi-Provider Support
 
-- **13+ Providers** - OpenAI, Anthropic Claude, Google Gemini, DeepSeek, Qwen, GLM, xAI Grok, Mistral, Tencent Hunyuan, Kimi, MiniMax, Doubao, Llama
+- **10+ Independent Providers + 4 Compatible Vendors** - OpenAI, Anthropic Claude, Google Gemini, xAI Grok, GLM, MiniMax, Mistral, Qwen (Tongyi), Doubao (ByteDance) as independent implementations; DeepSeek, Kimi, Tencent Hunyuan, Llama via OpenAI-compatible layer
 - **Smart Routing** - Cost/health/QPS load balancing
 - **A/B Testing Router** - Multi-variant traffic allocation, sticky routing, dynamic weight adjustment, metrics collection
 - **Unified Token Counter** - Tokenizer interface + tiktoken adapter + CJK estimator
@@ -231,11 +231,11 @@ func main() {
     if err != nil {
         panic(err)
     }
-    if err := llm.InitDatabase(db); err != nil {
+
+    // AutoMigrate LLM provider/model tables
+    if err := db.AutoMigrate(&llm.LLMProvider{}, &llm.LLMModel{}, &llm.LLMProviderModel{}, &llm.LLMProviderAPIKey{}); err != nil {
         panic(err)
     }
-
-    // Minimal seed: one provider + one model + mapping + API key.
     p := llm.LLMProvider{Code: "openai", Name: "OpenAI", Status: llm.LLMProviderStatusActive}
     if err := db.Create(&p).Error; err != nil {
         panic(err)
@@ -496,7 +496,6 @@ agentflow/
 │   │   ├── gemini/
 │   │   ├── openaicompat/     # Compat chat base
 │   │   ├── vendor/           # Chat factory + vendor profiles
-│   │   ├── retry_wrapper.go  # Provider retry wrapper (exponential backoff)
 │   │   └── ...               # Multimodal / vendor-specific capability code
 │   ├── runtime/              # Router / policy / compose
 │   ├── gateway/              # Unified capability entry
@@ -511,7 +510,7 @@ agentflow/
 ├── agent/                    # Layer 2: Agent core (directory-only container; no root Go files)
 │   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff)
 │   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
-│   ├── collaboration/        # Collaboration layer (multiagent/team/hierarchical/federation)
+│   ├── collaboration/        # Collaboration layer (federation orchestration)
 │   ├── core/                 # Core layer (registry/helpers/extension contracts)
 │   ├── execution/            # Execution layer (runtime/context/loop/protocol/orchestration)
 │   ├── integration/          # Integration layer (deployment/hosted/k8s/lsp/voice)
@@ -586,8 +585,7 @@ agentflow/
 | [13_new_providers](examples/13_new_providers/) | New Providers |
 | [14_guardrails](examples/14_guardrails/) | Safety Guardrails |
 | [15_structured_output](examples/15_structured_output/) | Structured Output |
-| [16_a2a_protocol](examples/16_a2a_protocol/) | A2A Protocol |
-| [17_high_priority_features](examples/17_high_priority_features/) | High-Priority Features |
+| [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A Protocol          |
 | [18_advanced_agent_features](examples/18_advanced_agent_features/) | Advanced Agent Features |
 | [19_2026_features](examples/19_2026_features/) | 2026 Features |
 | [20_multimodal_providers](examples/20_multimodal_providers/) | Multimodal Providers |
@@ -616,6 +614,7 @@ agentflow/
 ## 🔧 Tech Stack
 
 - **Go 1.24+**
+- **MongoDB** - Conversation/runtime/memory/audit-log persistence
 - **Redis** - Short-term memory/caching
 - **PostgreSQL/MySQL/SQLite** - Metadata (GORM)
 - **Qdrant/Pinecone/Milvus/Weaviate** - Vector storage
@@ -623,7 +622,7 @@ agentflow/
 - **OpenTelemetry** - Distributed tracing
 - **Zap** - Structured logging
 - **tiktoken-go** - OpenAI token counting
-- **nhooyr.io/websocket** - WebSocket client
+- **github.com/coder/websocket** - WebSocket client
 - **golang-migrate** - Database migrations
 - **yaml.v3** - YAML parsing
 

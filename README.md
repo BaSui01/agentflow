@@ -1,4 +1,4 @@
-﻿# AgentFlow
+# AgentFlow
 
 > 🚀 2026 年生产级 Go 语言 LLM Agent 框架
 
@@ -46,7 +46,7 @@
 
 - **官方默认** - `ReAct` 作为唯一默认推理/执行主链
 - **高级显式启用** - `Reflexion`、`ReWOO`、`Plan-Execute`
-- **实验能力** - `Tree of Thoughts (ToT)`、`Dynamic Planner`、`Iterative Deepening`
+- **实验能力** - `Dynamic Planner`、`Iterative Deepening`
 - **统一约束** - 高级与实验模式不再默认注入 runtime，需显式 opt-in
 
 ### 🔄 工作流引擎
@@ -84,7 +84,7 @@
 
 ### 🎯 多提供商支持
 
-- **13+ 提供商** - OpenAI、Anthropic Claude、Google Gemini、DeepSeek、Qwen、GLM、xAI Grok、Mistral、腾讯混元、Kimi、MiniMax、Doubao、Llama
+- **10+ 独立提供商 + 4 个兼容厂商** - OpenAI、Anthropic Claude、Google Gemini、xAI Grok、GLM、MiniMax、Mistral、Qwen（通义千问）、Doubao（豆包）独立实现；DeepSeek、Kimi、腾讯混元、Llama 通过 OpenAI 兼容层接入
 - **智能路由** - 成本/健康/QPS 负载均衡
 - **A/B 测试路由** - 多变体流量分配、粘性路由、动态权重调整、指标收集
 - **统一 Token 计数器** - Tokenizer 接口 + tiktoken 适配器 + CJK 估算器
@@ -242,7 +242,9 @@ func main() {
     if err != nil {
         panic(err)
     }
-    if err := llm.InitDatabase(db); err != nil {
+
+    // AutoMigrate LLM provider/model tables
+    if err := db.AutoMigrate(&llm.LLMProvider{}, &llm.LLMModel{}, &llm.LLMProviderModel{}, &llm.LLMProviderAPIKey{}); err != nil {
         panic(err)
     }
 
@@ -508,7 +510,6 @@ agentflow/
 │   │   ├── gemini/           # Gemini
 │   │   ├── openaicompat/     # Compat Chat 基座
 │   │   ├── vendor/           # Chat factory + vendor profiles
-│   │   ├── retry_wrapper.go  # Provider 重试包装器（指数退避）
 │   │   └── ...               # 多模态 / 厂商特化能力实现
 │   ├── runtime/              # Router / policy / compose
 │   ├── gateway/              # 统一能力入口
@@ -521,7 +522,7 @@ agentflow/
 ├── agent/                    # Layer 2: Agent 核心（目录容器；root 无 Go 文件）
 │   ├── adapters/             # 适配层（chat/declarative/structured/handoff）
 │   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
-│   ├── collaboration/        # 协作层（multiagent/team/hierarchical/federation）
+│   ├── collaboration/        # 协作层（federation 联邦编排）
 │   ├── core/                 # 核心层（registry/helpers/extension contracts）
 │   ├── execution/            # 执行层（runtime/context/loop/protocol/orchestration）
 │   ├── integration/          # 集成层（deployment/hosted/k8s/lsp/voice）
@@ -601,7 +602,6 @@ agentflow/
 | [14_guardrails](examples/14_guardrails/)                   | 安全护栏          |
 | [15_structured_output](examples/15_structured_output/)     | 结构化输出        |
 | [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A 协议          |
-| [17_high_priority_features](examples/17_high_priority_features/) | 高优先级特性 |
 | [18_advanced_agent_features](examples/18_advanced_agent_features/) | 高级 Agent 特性 |
 | [19_2026_features](examples/19_2026_features/)             | 2026 新特性       |
 | [20_multimodal_providers](examples/20_multimodal_providers/) | 多模态提供商    |
@@ -633,6 +633,7 @@ agentflow/
 ## 🔧 技术栈
 
 - **Go 1.24+**
+- **MongoDB** - 对话/运行状态/记忆/审计日志持久化
 - **Redis** - 短期记忆/缓存
 - **PostgreSQL/MySQL/SQLite** - 元数据 (GORM)
 - **Qdrant/Pinecone/Milvus/Weaviate** - 向量存储
@@ -640,7 +641,7 @@ agentflow/
 - **OpenTelemetry** - 分布式追踪
 - **Zap** - 结构化日志
 - **tiktoken-go** - OpenAI Token 计数
-- **nhooyr.io/websocket** - WebSocket 客户端
+- **github.com/coder/websocket** - WebSocket 客户端
 - **golang-migrate** - 数据库迁移
 - **yaml.v3** - YAML 解析
 
