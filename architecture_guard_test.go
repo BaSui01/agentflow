@@ -1976,3 +1976,165 @@ func TestExecutionModeCatalogSingleSource(t *testing.T) {
 		t.Fatalf("execution mode catalog definitions must stay in agent/team facade or usecase thin wrappers:\n%s", strings.Join(violations, "\n"))
 	}
 }
+
+func TestRuntimeFileBudget(t *testing.T) {
+	const maxLines = 1500
+	var violations []string
+
+	runtimeDir := filepath.FromSlash("agent/runtime")
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		t.Fatalf("read runtime dir: %v", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(runtimeDir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		lines := strings.Count(string(data), "\n") + 1
+		if lines > maxLines {
+			violations = append(violations, fmt.Sprintf("%s: %d lines (max %d)", filepath.ToSlash(path), lines, maxLines))
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("runtime files exceed line budget:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestUsecaseDoesNotImportMultiagent(t *testing.T) {
+	forbidden := "agent/team/internal/engines/multiagent"
+	var violations []string
+
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, _ := filepath.Rel(".", path)
+		rel = filepath.ToSlash(rel)
+		if !hasPathPrefix(rel, "internal/usecase") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), "\""+forbidden+"\"") {
+			violations = append(violations, rel+" imports "+forbidden)
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scan usecase imports: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		t.Fatalf("usecase must not import multiagent internal package:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestAPIHandlerDoesNotImportNonBuilderRuntime(t *testing.T) {
+	forbiddenPatterns := []string{
+		"agent/runtime\".",
+	}
+	var violations []string
+
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, _ := filepath.Rel(".", path)
+		rel = filepath.ToSlash(rel)
+		if !hasPathPrefix(rel, "api") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		src := string(data)
+		for _, pattern := range forbiddenPatterns {
+			if strings.Contains(src, pattern) {
+				violations = append(violations, rel+" contains "+pattern)
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scan api imports: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		t.Fatalf("api handlers must not import agent/runtime non-Builder constructors:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestNoForbiddenTopLevelPackages(t *testing.T) {
+	forbidden := []string{"crew", "flow", "graph", "society", "pipeline"}
+	for _, pkg := range forbidden {
+		if _, err := os.Stat(pkg); err == nil {
+			t.Fatalf("forbidden top-level package '%s' exists — use sdk/runtime/team/workflow as official entrypoints", pkg)
+		}
+	}
+}
+
+func TestWorkflowTeamBoundaryGuard(t *testing.T) {
+	workflowFiles := map[string]bool{}
+	walkErr := filepath.WalkDir(filepath.FromSlash("workflow/runtime"), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		workflowFiles[path] = true
+		return nil
+	})
+	if walkErr != nil {
+		t.Skipf("workflow/runtime not found: %v", walkErr)
+	}
+
+	forbiddenPatterns := []string{"Handoff", "Supervisor", "Swarm"}
+	var violations []string
+	for path := range workflowFiles {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		src := string(data)
+		for _, pattern := range forbiddenPatterns {
+			if strings.Contains(src, pattern) {
+				rel, _ := filepath.Rel(".", path)
+				violations = append(violations, filepath.ToSlash(rel)+" contains autonomous pattern "+pattern)
+			}
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("workflow/runtime must not contain autonomous collaboration patterns (belongs in agent/team):\n%s", strings.Join(violations, "\n"))
+	}
+}
