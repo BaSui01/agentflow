@@ -1,8 +1,0 @@
-{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
-{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "API compat route-handler-usecase-provider spans multiple layers"}
-{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Anthropic compat should reuse existing OpenAI compat patterns instead of copying logic blindly"}
-{"file": "docs/architecture/原生Provider与SDK边界说明.md", "reason": "Keep Gemini/Anthropic/OpenAI native transport details inside provider layer"}
-{"file": "docs/architecture/Provider工具负载映射说明.md", "reason": "Tool schema and tool result mapping must stay normalized across protocols"}
-{"file": "api/handlers/README.md", "reason": "Protocol adapters must stay in handler layer and reuse ChatService chain"}
-{"file": "docs/重构计划/API端点兼容与Google端点完善重构计划-2026-04-24.md", "reason": "Execution checklist, TDD phases, route scope, and DoD for this refactor"}

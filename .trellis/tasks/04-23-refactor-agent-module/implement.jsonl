@@ -1,5 +1,0 @@
-{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
-{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
-{"file": ".trellis\\spec\\guides\\cross-layer-thinking-guide.md", "reason": "agent root downsink touches root public surface, runtime execution, and docs guards"}
-{"file": ".trellis\\spec\\guides\\code-reuse-thinking-guide.md", "reason": "refactor must sink existing logic into current subpackages instead of creating duplicate root flows"}
-{"file": "docs\\重构计划\\agent模块架构重构-2026-04-22.md", "reason": "existing phase-6 plan already defines root-to-subpackage sinking targets and acceptance gates"}
