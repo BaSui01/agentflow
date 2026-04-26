@@ -139,7 +139,11 @@ func runSkillsAndMCP(ctx context.Context, logger *zap.Logger, provider llm.Provi
 	}
 
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := agentruntime.NewBuilder(gateway, logger).Build(ctx, cfg)
+	b, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return err
+	}
+	ag, err := b.Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -318,7 +322,11 @@ func runSubAgentDelegation(ctx context.Context, logger *zap.Logger, provider llm
 	}
 
 	parentGateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	parent, err := agentruntime.NewBuilder(parentGateway, logger).WithOptions(agentruntime.BuildOptions{
+	pb, err := agentruntime.NewBuilder(parentGateway, logger)
+	if err != nil {
+		return err
+	}
+	parent, err := pb.WithOptions(agentruntime.BuildOptions{
 		ToolManager: toolMgr,
 	}).Build(ctx, parentCfg)
 	if err != nil {
@@ -397,7 +405,11 @@ func newLiveBaseAgent(id, name, model, systemPrompt string, provider llm.Provide
 		},
 	}
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := agentruntime.NewBuilder(gateway, logger).Build(context.Background(), cfg)
+	lb, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return nil
+	}
+	ag, err := lb.Build(context.Background(), cfg)
 	if err != nil {
 		return nil
 	}

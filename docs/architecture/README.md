@@ -18,6 +18,7 @@ the current public surface.
 
 | Document | Use when |
 |---|---|
+| [AgentFlow全面重构计划-2026-04-26.md](./AgentFlow全面重构计划-2026-04-26.md) | Planning or tracking the full-scope refactoring across all layers. |
 | [Agent框架现状与收口改进计划-2026-04-25.md](./Agent框架现状与收口改进计划-2026-04-25.md) | Checking current Agent framework capability, gaps, and closure checklist. |
 | [Workflow-Agent与Agentic-Agent现状建议补充-2026-04-25.md](./Workflow-Agent与Agentic-Agent现状建议补充-2026-04-25.md) | Checking Workflow Agent and Agentic Agent completion status with `[X]` / `[ ]` checklists. |
 | [运行时状态模型契约-2026-04-25.md](./运行时状态模型契约-2026-04-25.md) | Changing run config, run state, stream events, checkpoint/resume, replay, approval, or audit event semantics. |

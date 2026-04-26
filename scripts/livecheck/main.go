@@ -673,7 +673,11 @@ func runAgentBasic(ctx context.Context, logger *zap.Logger, provider llm.Provide
 	}
 
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := agentruntime.NewBuilder(gateway, logger).Build(ctx, cfg)
+	b, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return err
+	}
+	ag, err := b.Build(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -723,7 +727,11 @@ func runAgentToolLoop(ctx context.Context, logger *zap.Logger, provider llm.Prov
 	}
 
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := agentruntime.NewBuilder(gateway, logger).WithOptions(agentruntime.BuildOptions{
+	tb, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return err
+	}
+	ag, err := tb.WithOptions(agentruntime.BuildOptions{
 		ToolManager: toolMgr,
 	}).Build(ctx, cfg)
 	if err != nil {

@@ -17,7 +17,11 @@ func TestHTTPHandlerSet_Count(t *testing.T) {
 	set.HealthHandler = handlers.NewHealthHandler(logger)
 	assert.Equal(t, 1, set.Count())
 
-	set.ChatHandler = handlers.NewChatHandler(nil, logger)
+	chatHandler, err := handlers.NewChatHandler(nil, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.ChatHandler = chatHandler
 	assert.Equal(t, 2, set.Count())
 }
 

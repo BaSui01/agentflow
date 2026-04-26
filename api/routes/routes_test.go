@@ -13,7 +13,11 @@ import (
 
 func TestCompatibilityEndpointRoutes(t *testing.T) {
 	mux := http.NewServeMux()
-	RegisterChat(mux, handlers.NewChatHandler(nil, zap.NewNop()), zap.NewNop())
+	chatHandler, err := handlers.NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterChat(mux, chatHandler, zap.NewNop())
 
 	tests := []struct {
 		name string

@@ -129,7 +129,10 @@ func (m *mockChatService) DefaultRoutePolicy() string       { return "balanced" 
 func buildServer() *httptest.Server {
 	logger := zap.NewNop()
 	svc := &mockChatService{}
-	chatHandler := handlers.NewChatHandler(svc, logger)
+	chatHandler, err := handlers.NewChatHandler(svc, logger)
+	if err != nil {
+		panic(err)
+	}
 	healthHandler := handlers.NewHealthHandler(logger)
 
 	mux := http.NewServeMux()

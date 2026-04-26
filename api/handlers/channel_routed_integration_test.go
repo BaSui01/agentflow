@@ -30,7 +30,7 @@ func newChatHandlerFromProvider(provider llm.Provider, logger *zap.Logger) *hand
 		Logger:       logger,
 	})
 	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
-	service := usecase.NewDefaultChatService(
+	service, err := usecase.NewDefaultChatService(
 		usecase.ChatRuntime{
 			Gateway:      gateway,
 			ChatProvider: chatProvider,
@@ -38,7 +38,14 @@ func newChatHandlerFromProvider(provider llm.Provider, logger *zap.Logger) *hand
 		handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(30*time.Second)),
 		logger,
 	)
-	return handlers.NewChatHandler(service, logger)
+	if err != nil {
+		panic(err)
+	}
+	handler, err := handlers.NewChatHandler(service, logger)
+	if err != nil {
+		panic(err)
+	}
+	return handler
 }
 
 func TestChatEndpoints_ChannelRoutedProviderCompletion(t *testing.T) {

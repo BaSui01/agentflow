@@ -242,7 +242,11 @@ func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
 
 func mustBuildAgent(ctx context.Context, cfg types.AgentConfig, provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := runtime.NewBuilder(gateway, logger).Build(ctx, cfg)
+	b, err := runtime.NewBuilder(gateway, logger)
+	if err != nil {
+		log.Fatalf("创建 Builder 失败: %v", err)
+	}
+	ag, err := b.Build(ctx, cfg)
 	if err != nil {
 		log.Fatalf("构建 Agent 失败: %v", err)
 	}

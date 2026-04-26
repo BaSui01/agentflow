@@ -109,14 +109,14 @@ func TestCreateExperiment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tester.CreateExperiment(tt.exp)
+			err := tester.CreateExperiment(context.Background(), tt.exp)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
 			} else {
 				require.NoError(t, err)
 				// 验证实验已存储
-				exp, err := tester.GetExperiment(tt.exp.ID)
+				exp, err := tester.GetExperiment(context.Background(), tt.exp.ID)
 				require.NoError(t, err)
 				assert.Equal(t, tt.exp.ID, exp.ID)
 				assert.Equal(t, ExperimentStatusDraft, exp.Status)
@@ -139,37 +139,38 @@ func TestExperimentLifecycle(t *testing.T) {
 	}
 
 	// 创建
-	err := tester.CreateExperiment(exp)
+	ctx := context.Background()
+	err := tester.CreateExperiment(ctx, exp)
 	require.NoError(t, err)
 
 	// 校验草稿状态
-	loaded, err := tester.GetExperiment(exp.ID)
+	loaded, err := tester.GetExperiment(ctx, exp.ID)
 	require.NoError(t, err)
 	assert.Equal(t, ExperimentStatusDraft, loaded.Status)
 
 	// 开始
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(ctx, exp.ID)
 	require.NoError(t, err)
-	loaded, _ = tester.GetExperiment(exp.ID)
+	loaded, _ = tester.GetExperiment(ctx, exp.ID)
 	assert.Equal(t, ExperimentStatusRunning, loaded.Status)
 	assert.False(t, loaded.StartTime.IsZero())
 
 	// 暂停
-	err = tester.PauseExperiment(exp.ID)
+	err = tester.PauseExperiment(ctx, exp.ID)
 	require.NoError(t, err)
-	loaded, _ = tester.GetExperiment(exp.ID)
+	loaded, _ = tester.GetExperiment(ctx, exp.ID)
 	assert.Equal(t, ExperimentStatusPaused, loaded.Status)
 
 	// 恢复( 重新开始)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(ctx, exp.ID)
 	require.NoError(t, err)
-	loaded, _ = tester.GetExperiment(exp.ID)
+	loaded, _ = tester.GetExperiment(ctx, exp.ID)
 	assert.Equal(t, ExperimentStatusRunning, loaded.Status)
 
 	// 完成
-	err = tester.CompleteExperiment(exp.ID)
+	err = tester.CompleteExperiment(ctx, exp.ID)
 	require.NoError(t, err)
-	loaded, _ = tester.GetExperiment(exp.ID)
+	loaded, _ = tester.GetExperiment(ctx, exp.ID)
 	assert.Equal(t, ExperimentStatusComplete, loaded.Status)
 	assert.NotNil(t, loaded.EndTime)
 }
@@ -187,25 +188,25 @@ func TestAssign(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(ctx, exp)
 	require.NoError(t, err)
 
 	// 无法指定非运行中的实验
-	_, err = tester.Assign(exp.ID, "user-1")
+	_, err = tester.Assign(ctx, exp.ID, "user-1")
 	assert.ErrorIs(t, err, ErrExperimentNotActive)
 
 	// 开始实验
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(ctx, exp.ID)
 	require.NoError(t, err)
 
 	// 指定用户
-	variant, err := tester.Assign(exp.ID, "user-1")
+	variant, err := tester.Assign(ctx, exp.ID, "user-1")
 	require.NoError(t, err)
 	assert.NotNil(t, variant)
 	assert.Contains(t, []string{"control", "treatment"}, variant.ID)
 
 	// 同一用户应获得相同的变体(一致性)
-	variant2, err := tester.Assign(exp.ID, "user-1")
+	variant2, err := tester.Assign(ctx, exp.ID, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, variant.ID, variant2.ID)
 }
@@ -223,9 +224,9 @@ func TestAssignConsistency(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 多次指定同一用户
@@ -233,7 +234,7 @@ func TestAssignConsistency(t *testing.T) {
 	var firstVariant *Variant
 
 	for i := 0; i < 100; i++ {
-		variant, err := tester.Assign(exp.ID, userID)
+		variant, err := tester.Assign(context.Background(), exp.ID, userID)
 		require.NoError(t, err)
 
 		if firstVariant == nil {
@@ -294,9 +295,9 @@ func TestTrafficDistribution(t *testing.T) {
 				Variants: tt.variants,
 			}
 
-			err := tester.CreateExperiment(exp)
+			err := tester.CreateExperiment(context.Background(), exp)
 			require.NoError(t, err)
-			err = tester.StartExperiment(exp.ID)
+			err = tester.StartExperiment(context.Background(), exp.ID)
 			require.NoError(t, err)
 
 			// 指派许多用户
@@ -305,7 +306,7 @@ func TestTrafficDistribution(t *testing.T) {
 
 			for i := 0; i < numUsers; i++ {
 				userID := fmt.Sprintf("user-%d", i)
-				variant, err := tester.Assign(exp.ID, userID)
+				variant, err := tester.Assign(context.Background(), exp.ID, userID)
 				require.NoError(t, err)
 				counts[variant.ID]++
 			}
@@ -336,7 +337,7 @@ func TestRecordResult(t *testing.T) {
 		Metrics: []string{"score", "latency"},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
 
 	// 有效变量的记录结果
@@ -347,15 +348,15 @@ func TestRecordResult(t *testing.T) {
 		Metrics: map[string]float64{"latency": 100},
 	}
 
-	err = tester.RecordResult(exp.ID, "control", result)
+	err = tester.RecordResult(context.Background(), exp.ID, "control", result)
 	require.NoError(t, err)
 
 	// 无效变量的记录结果
-	err = tester.RecordResult(exp.ID, "invalid-variant", result)
+	err = tester.RecordResult(context.Background(), exp.ID, "invalid-variant", result)
 	assert.ErrorIs(t, err, ErrVariantNotFound)
 
 	// 无效实验的记录结果
-	err = tester.RecordResult("invalid-exp", "control", result)
+	err = tester.RecordResult(context.Background(), "invalid-exp", "control", result)
 	assert.ErrorIs(t, err, ErrExperimentNotFound)
 }
 
@@ -373,9 +374,9 @@ func TestAnalyze(t *testing.T) {
 		Metrics: []string{"score"},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 控制记录结果( 分数更低)
@@ -386,7 +387,7 @@ func TestAnalyze(t *testing.T) {
 			Score:   0.5 + float64(i%10)*0.01, // 0.50-0.59
 			Metrics: map[string]float64{"score": 0.5 + float64(i%10)*0.01},
 		}
-		err = tester.RecordResult(exp.ID, "control", result)
+		err = tester.RecordResult(context.Background(), exp.ID, "control", result)
 		require.NoError(t, err)
 	}
 
@@ -398,7 +399,7 @@ func TestAnalyze(t *testing.T) {
 			Score:   0.7 + float64(i%10)*0.01, // 0.70-0.79
 			Metrics: map[string]float64{"score": 0.7 + float64(i%10)*0.01},
 		}
-		err = tester.RecordResult(exp.ID, "treatment", result)
+		err = tester.RecordResult(context.Background(), exp.ID, "treatment", result)
 		require.NoError(t, err)
 	}
 
@@ -442,22 +443,22 @@ func TestAnalyzeNoSignificantDifference(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 记录两个变量的类似结果
 	for i := 0; i < 50; i++ {
 		score := 0.5 + float64(i%10)*0.01
 
-		err = tester.RecordResult(exp.ID, "control", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
 			Score:  score,
 		})
 		require.NoError(t, err)
 
-		err = tester.RecordResult(exp.ID, "treatment", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "treatment", &EvalResult{
 			TaskID: fmt.Sprintf("treatment-%d", i),
 			Score:  score + 0.01, // Very small difference
 		})
@@ -487,7 +488,7 @@ func TestListExperiments(t *testing.T) {
 				{ID: "v2", Weight: 0.5},
 			},
 		}
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(t, err)
 	}
 
@@ -508,19 +509,19 @@ func TestDeleteExperiment(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
 
 	// 校验已存在
-	_, err = tester.GetExperiment(exp.ID)
+	_, err = tester.GetExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 删除
-	err = tester.DeleteExperiment(exp.ID)
+	err = tester.DeleteExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 校验已删除
-	_, err = tester.GetExperiment(exp.ID)
+	_, err = tester.GetExperiment(context.Background(), exp.ID)
 	assert.ErrorIs(t, err, ErrExperimentNotFound)
 }
 
@@ -540,15 +541,15 @@ func TestMultiVariantExperiment(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 指定用户并核实所有变体获得流量
 	counts := make(map[string]int)
 	for i := 0; i < 1000; i++ {
-		variant, err := tester.Assign(exp.ID, fmt.Sprintf("user-%d", i))
+		variant, err := tester.Assign(context.Background(), exp.ID, fmt.Sprintf("user-%d", i))
 		require.NoError(t, err)
 		counts[variant.ID]++
 	}
@@ -587,13 +588,13 @@ func TestVariantConfig(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 获取变体并校验配置
-	variant, err := tester.Assign(exp.ID, "test-user")
+	variant, err := tester.Assign(context.Background(), exp.ID, "test-user")
 	require.NoError(t, err)
 	assert.NotNil(t, variant.Config)
 	assert.Contains(t, variant.Config, "model")
@@ -613,16 +614,16 @@ func TestConcurrentAssignment(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 并行任务
 	done := make(chan bool)
 	for i := 0; i < 100; i++ {
 		go func(userID string) {
-			_, err := tester.Assign(exp.ID, userID)
+			_, err := tester.Assign(context.Background(), exp.ID, userID)
 			assert.NoError(t, err)
 			done <- true
 		}(fmt.Sprintf("user-%d", i))
@@ -748,11 +749,11 @@ func TestExperimentDuration(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
 
 	// 开始实验
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 等一会
@@ -765,7 +766,7 @@ func TestExperimentDuration(t *testing.T) {
 	assert.Greater(t, result.Duration, time.Duration(0))
 
 	// 完整的实验
-	err = tester.CompleteExperiment(exp.ID)
+	err = tester.CompleteExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 再次分析
@@ -789,22 +790,22 @@ func TestAutoSelectWinner(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 记录显著不同的结果
 	for i := 0; i < 100; i++ {
 		// 控制:分数较低(0.40-0.49)
-		err = tester.RecordResult(exp.ID, "control", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
 			Score:  0.4 + float64(i%10)*0.01,
 		})
 		require.NoError(t, err)
 
 		// 治疗:分数较高(0.80-0.89)
-		err = tester.RecordResult(exp.ID, "treatment", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "treatment", &EvalResult{
 			TaskID: fmt.Sprintf("treatment-%d", i),
 			Score:  0.8 + float64(i%10)*0.01,
 		})
@@ -832,21 +833,21 @@ func TestAutoSelectWinnerNoSignificance(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 记录类似结果
 	for i := 0; i < 50; i++ {
 		score := 0.5 + float64(i%10)*0.01
-		err = tester.RecordResult(exp.ID, "control", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
 			Score:  score,
 		})
 		require.NoError(t, err)
 
-		err = tester.RecordResult(exp.ID, "treatment", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "treatment", &EvalResult{
 			TaskID: fmt.Sprintf("treatment-%d", i),
 			Score:  score + 0.005, // Very small difference
 		})
@@ -877,21 +878,21 @@ func TestGenerateReport(t *testing.T) {
 		Metrics: []string{"score", "latency"},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 记录结果明显不同
 	for i := 0; i < 100; i++ {
-		err = tester.RecordResult(exp.ID, "control", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "control", &EvalResult{
 			TaskID:  fmt.Sprintf("control-%d", i),
 			Score:   0.5 + float64(i%10)*0.01,
 			Metrics: map[string]float64{"latency": 100 + float64(i%20)},
 		})
 		require.NoError(t, err)
 
-		err = tester.RecordResult(exp.ID, "treatment", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "treatment", &EvalResult{
 			TaskID:  fmt.Sprintf("treatment-%d", i),
 			Score:   0.75 + float64(i%10)*0.01,
 			Metrics: map[string]float64{"latency": 80 + float64(i%20)},
@@ -955,14 +956,14 @@ func TestGenerateReportInsufficientData(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 只记录几个结果
 	for i := 0; i < 10; i++ {
-		err = tester.RecordResult(exp.ID, "control", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
 			Score:  0.5,
 		})
@@ -991,26 +992,26 @@ func TestGenerateReportMultiVariant(t *testing.T) {
 		},
 	}
 
-	err := tester.CreateExperiment(exp)
+	err := tester.CreateExperiment(context.Background(), exp)
 	require.NoError(t, err)
-	err = tester.StartExperiment(exp.ID)
+	err = tester.StartExperiment(context.Background(), exp.ID)
 	require.NoError(t, err)
 
 	// 记录结果
 	for i := 0; i < 100; i++ {
-		err = tester.RecordResult(exp.ID, "control", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
 			Score:  0.5,
 		})
 		require.NoError(t, err)
 
-		err = tester.RecordResult(exp.ID, "variant-a", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "variant-a", &EvalResult{
 			TaskID: fmt.Sprintf("variant-a-%d", i),
 			Score:  0.6,
 		})
 		require.NoError(t, err)
 
-		err = tester.RecordResult(exp.ID, "variant-b", &EvalResult{
+		err = tester.RecordResult(context.Background(), exp.ID, "variant-b", &EvalResult{
 			TaskID: fmt.Sprintf("variant-b-%d", i),
 			Score:  0.7,
 		})

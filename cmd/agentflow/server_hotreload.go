@@ -22,7 +22,7 @@ func (s *Server) initHotReloadManager() error {
 
 	bootstrap.RegisterHotReloadCallbacks(s.ops.hotReloadManager, s.logger, func(_old, newConfig *config.Config) {
 		if err := s.reloadLLMRuntime(newConfig); err != nil {
-			panic(err)
+			s.logger.Fatal("LLM hot reload failed", zap.Error(err))
 		}
 		s.cfg = newConfig
 	})
@@ -100,7 +100,8 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	previousChatService := s.text.chatService
 	var chatService usecase.ChatService
 	if llmRuntime != nil {
-		chatService = bootstrap.BuildChatService(bootstrap.ChatServiceBuildInput{
+		var buildErr error
+		chatService, buildErr = bootstrap.BuildChatService(bootstrap.ChatServiceBuildInput{
 			Provider:            provider,
 			PolicyManager:       llmRuntime.PolicyManager,
 			Ledger:              ledger,
@@ -108,9 +109,13 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 			ExistingChatService: s.text.chatService,
 			Logger:              s.logger,
 		})
+		if buildErr != nil {
+			s.logger.Error("Failed to build chat service", zap.Error(buildErr))
+			return buildErr
+		}
 	}
 
-	bindings := bootstrap.ApplyReloadedTextRuntimeBindings(bootstrap.ReloadedTextRuntimeBindingsInput{
+	bindings, err := bootstrap.ApplyReloadedTextRuntimeBindings(bootstrap.ReloadedTextRuntimeBindingsInput{
 		Logger:              s.logger,
 		ExistingChatService: previousChatService,
 		ChatService:         chatService,
@@ -124,6 +129,10 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		WorkflowHandler:     s.handlers.workflowHandler,
 		HTTPRoutesBound:     s.ops.httpManager != nil,
 	})
+	if err != nil {
+		s.logger.Error("Failed to apply reloaded text runtime bindings", zap.Error(err))
+		return err
+	}
 	s.text.chatService = bindings.ChatService
 	s.handlers.chatHandler = bindings.ChatHandler
 	s.handlers.costHandler = bindings.CostHandler

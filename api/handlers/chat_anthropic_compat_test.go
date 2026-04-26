@@ -49,7 +49,10 @@ func TestChatHandler_AnthropicCompatMessages(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"claude-sonnet-4-20250514",
@@ -237,7 +240,10 @@ func TestChatHandler_AnthropicCompatMessages_Stream(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"claude-sonnet-4-20250514",
@@ -261,7 +267,10 @@ func TestChatHandler_AnthropicCompatMessages_Stream(t *testing.T) {
 }
 
 func TestChatHandler_AnthropicCompatMessages_Error(t *testing.T) {
-	handler := NewChatHandler(&openAICompatServiceStub{}, zap.NewNop())
+	handler, err := NewChatHandler(&openAICompatServiceStub{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"claude-sonnet-4-20250514",

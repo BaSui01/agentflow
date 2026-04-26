@@ -23,7 +23,7 @@ func newChatServiceUnderTest(
 	chatProvider llmcore.Provider,
 	toolManager agent.ToolManager,
 ) usecase.ChatService {
-	return usecase.NewDefaultChatService(
+	service, err := usecase.NewDefaultChatService(
 		usecase.ChatRuntime{
 			Gateway:      gateway,
 			ChatProvider: chatProvider,
@@ -32,6 +32,10 @@ func newChatServiceUnderTest(
 		newUsecaseChatConverter(NewDefaultChatConverter(defaultStreamTimeout)),
 		zap.NewNop(),
 	)
+	if err != nil {
+		panic(err)
+	}
+	return service
 }
 
 type chatGatewayStub struct {

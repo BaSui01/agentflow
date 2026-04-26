@@ -775,7 +775,7 @@ func TestAgentUnifiedBuilderEntryPoints(t *testing.T) {
 			path: "agent/team/internal/engines/multiagent/default_modes.go",
 			requiredSnippets: []string{
 				"newHierarchicalModeBaseAgent(",
-				"agentruntime.NewBuilder(gateway, logger).Build(",
+				"agentruntime.NewBuilder(gateway, logger)",
 			},
 			forbiddenSnippets: []string{
 				"agent.BuildBaseAgent(types.AgentConfig{",
@@ -1670,15 +1670,22 @@ func TestWorkflowTeamBoundary(t *testing.T) {
 
 func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
-		data, err := os.ReadFile("agent/runtime/agent_builder.go")
-		if err != nil {
-			t.Fatalf("read agent/runtime/agent_builder.go: %v", err)
+		candidates := []string{
+			"agent/runtime/agent_builder.go",
+			"agent/runtime/agent_builder_features.go",
 		}
-		src := string(data)
+		var src string
+		for _, f := range candidates {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			src += string(data) + "\n"
+		}
 		start := strings.Index(src, "// Merged from loop_executor.go.")
 		end := strings.Index(src, "// Merged from loop_executor_runtime.go.")
 		if start == -1 || end == -1 || end <= start {
-			t.Fatal("agent/builder.go must keep explicit merged loop executor section markers")
+			t.Fatal("agent_builder/agent_builder_features must keep explicit merged loop executor section markers")
 		}
 		src = src[start:end]
 		for _, needle := range []string{
@@ -1687,7 +1694,7 @@ func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
 			"topLevelLoopBudget(",
 		} {
 			if strings.Contains(src, needle) {
-				t.Fatalf("agent/runtime/agent_builder.go must not depend on legacy control fallback %q", needle)
+				t.Fatalf("agent/runtime must not depend on legacy control fallback %q", needle)
 			}
 		}
 	})

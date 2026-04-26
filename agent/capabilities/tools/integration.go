@@ -104,7 +104,7 @@ func (i *AgentDiscoveryIntegration) Start(ctx context.Context) error {
 
 	// 开始负载报告循环
 	i.wg.Add(1)
-	go i.loadReportLoop()
+	go i.loadReportLoop(ctx)
 
 	i.running = true
 	i.logger.Info("agent discovery integration started")
@@ -295,8 +295,7 @@ func (i *AgentDiscoveryIntegration) createAgentInfo(agent AgentCapabilityProvide
 	}
 }
 
-// 载入 ReportLoop 定期报告代理载荷。
-func (i *AgentDiscoveryIntegration) loadReportLoop() {
+func (i *AgentDiscoveryIntegration) loadReportLoop(ctx context.Context) {
 	defer i.wg.Done()
 
 	ticker := time.NewTicker(i.config.LoadReportInterval)
@@ -305,15 +304,14 @@ func (i *AgentDiscoveryIntegration) loadReportLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			i.reportLoads()
+			i.reportLoads(ctx)
 		case <-i.done:
 			return
 		}
 	}
 }
 
-// 报告LOADs报告所有注册代理的装入量。
-func (i *AgentDiscoveryIntegration) reportLoads() {
+func (i *AgentDiscoveryIntegration) reportLoads(ctx context.Context) {
 	i.loadReportersMu.RLock()
 	reporters := make(map[string]func() float64)
 	for id, reporter := range i.loadReporters {
@@ -321,7 +319,6 @@ func (i *AgentDiscoveryIntegration) reportLoads() {
 	}
 	i.loadReportersMu.RUnlock()
 
-	ctx := context.Background()
 	for agentID, reporter := range reporters {
 		load := reporter()
 		if err := i.service.Registry().UpdateAgentLoad(ctx, agentID, load); err != nil {

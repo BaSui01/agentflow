@@ -126,10 +126,9 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start protocol: %w", err)
 	}
 
-	// 如果启用自动注册, 启动心跳
 	if s.config.EnableAutoRegistration {
 		s.wg.Add(1)
-		go s.heartbeatLoop()
+		go s.heartbeatLoop(ctx)
 	}
 
 	s.logger.Info("discovery service started")
@@ -186,21 +185,17 @@ func (s *DiscoveryService) UnregisterAgent(ctx context.Context, agentID string) 
 	return s.registry.UnregisterAgent(ctx, agentID)
 }
 
-// 注册本地代理 注册本地代理自动心跳。
-func (s *DiscoveryService) RegisterLocalAgent(info *AgentInfo) error {
+func (s *DiscoveryService) RegisterLocalAgent(ctx context.Context, info *AgentInfo) error {
 	s.localMu.Lock()
 	defer s.localMu.Unlock()
 
 	info.IsLocal = true
 	s.localAgent = info
 
-	// 立即登记
-	ctx := context.Background()
 	return s.RegisterAgent(ctx, info)
 }
 
-// 更新本地代理Load 更新本地代理的负载 。
-func (s *DiscoveryService) UpdateLocalAgentLoad(load float64) error {
+func (s *DiscoveryService) UpdateLocalAgentLoad(ctx context.Context, load float64) error {
 	s.localMu.RLock()
 	agent := s.localAgent
 	s.localMu.RUnlock()
@@ -209,7 +204,6 @@ func (s *DiscoveryService) UpdateLocalAgentLoad(load float64) error {
 		return fmt.Errorf("no local agent registered")
 	}
 
-	ctx := context.Background()
 	return s.registry.UpdateAgentLoad(ctx, agent.Card.Name, load)
 }
 
@@ -300,8 +294,7 @@ func (s *DiscoveryService) RegisterExclusiveGroup(capabilities []string) {
 	}
 }
 
-// 心跳Loop为本地代理发送定期心跳.
-func (s *DiscoveryService) heartbeatLoop() {
+func (s *DiscoveryService) heartbeatLoop(ctx context.Context) {
 	defer s.wg.Done()
 
 	ticker := time.NewTicker(s.config.HeartbeatInterval)
@@ -310,15 +303,14 @@ func (s *DiscoveryService) heartbeatLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			s.sendHeartbeat()
+			s.sendHeartbeat(ctx)
 		case <-s.done:
 			return
 		}
 	}
 }
 
-// 让Heartbeat为本地特工发送心跳
-func (s *DiscoveryService) sendHeartbeat() {
+func (s *DiscoveryService) sendHeartbeat(ctx context.Context) {
 	s.localMu.RLock()
 	agent := s.localAgent
 	s.localMu.RUnlock()
@@ -327,7 +319,6 @@ func (s *DiscoveryService) sendHeartbeat() {
 		return
 	}
 
-	ctx := context.Background()
 	if reg, ok := s.registry.(*CapabilityRegistry); ok {
 		if err := reg.Heartbeat(ctx, agent.Card.Name); err != nil {
 			s.logger.Warn("failed to send heartbeat", zap.Error(err))

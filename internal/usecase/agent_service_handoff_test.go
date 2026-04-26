@@ -25,7 +25,7 @@ func testGatewayFromProvider(provider llmcore.Provider) llmcore.Gateway {
 func TestDefaultAgentService_ExecuteAgent_InjectsRuntimeHandoffTargets(t *testing.T) {
 	var sawHandoffTool bool
 
-	source := agent.BuildBaseAgent(testAgentConfigForUsecase("source-agent", "Source", "gpt-4o-mini"), testGatewayFromProvider(&usecaseTestProvider{
+	source, err := agent.BuildBaseAgent(testAgentConfigForUsecase("source-agent", "Source", "gpt-4o-mini"), testGatewayFromProvider(&usecaseTestProvider{
 		name:           "source",
 		supportsNative: true,
 		completionFn: func(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
@@ -50,10 +50,16 @@ func TestDefaultAgentService_ExecuteAgent_InjectsRuntimeHandoffTargets(t *testin
 			}, nil
 		},
 	}), nil, nil, nil, zap.NewNop(), nil)
-	target := agent.BuildBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := agent.BuildBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
 		name:           "target",
 		supportsNative: true,
 	}), nil, nil, nil, zap.NewNop(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := source.Init(context.Background()); err != nil {
 		t.Fatalf("source init failed: %v", err)
@@ -93,7 +99,7 @@ func TestDefaultAgentService_ExecuteAgent_InjectsConfigLevelHandoffTargets(t *te
 
 	sourceCfg := testAgentConfigForUsecase("source-agent", "Source", "gpt-4o-mini")
 	sourceCfg.Runtime.Handoffs = []string{"target-agent", "target-agent"}
-	source := agent.BuildBaseAgent(sourceCfg, testGatewayFromProvider(&usecaseTestProvider{
+	source, err := agent.BuildBaseAgent(sourceCfg, testGatewayFromProvider(&usecaseTestProvider{
 		name:           "source",
 		supportsNative: true,
 		completionFn: func(ctx context.Context, req *llmcore.ChatRequest) (*llmcore.ChatResponse, error) {
@@ -115,10 +121,16 @@ func TestDefaultAgentService_ExecuteAgent_InjectsConfigLevelHandoffTargets(t *te
 			}, nil
 		},
 	}), nil, nil, nil, zap.NewNop(), nil)
-	target := agent.BuildBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := agent.BuildBaseAgent(testAgentConfigForUsecase("target-agent", "Target", "gpt-4.1"), testGatewayFromProvider(&usecaseTestProvider{
 		name:           "target",
 		supportsNative: true,
 	}), nil, nil, nil, zap.NewNop(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := source.Init(context.Background()); err != nil {
 		t.Fatalf("source init failed: %v", err)

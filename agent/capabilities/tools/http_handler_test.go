@@ -151,16 +151,16 @@ func TestProcessMulticastAnnouncement(t *testing.T) {
 	proto := NewDiscoveryProtocol(&ProtocolConfig{EnableLocal: true}, reg, zap.NewNop())
 
 	t.Run("nil info", func(t *testing.T) {
-		proto.processMulticastAnnouncement(nil)
+		proto.processMulticastAnnouncement(context.Background(), nil)
 	})
 
 	t.Run("nil card", func(t *testing.T) {
-		proto.processMulticastAnnouncement(&AgentInfo{})
+		proto.processMulticastAnnouncement(context.Background(), &AgentInfo{})
 	})
 
 	t.Run("valid announcement", func(t *testing.T) {
 		card := a2a.NewAgentCard("remote-agent", "Remote", "http://remote", "1.0")
-		proto.processMulticastAnnouncement(&AgentInfo{Card: card, Status: AgentStatusOnline})
+		proto.processMulticastAnnouncement(context.Background(), &AgentInfo{Card: card, Status: AgentStatusOnline})
 	})
 }
 

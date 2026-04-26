@@ -110,16 +110,16 @@ type Builder struct {
 
 var defaultRuntimeReasoningModes = []string{}
 
-// NewBuilder 创建 runtime builder。logger 为必选参数，nil 时 panic。
-func NewBuilder(gateway llmcore.Gateway, logger *zap.Logger) *Builder {
+// NewBuilder 创建 runtime builder。logger 为必选参数，nil 时返回 error。
+func NewBuilder(gateway llmcore.Gateway, logger *zap.Logger) (*Builder, error) {
 	if logger == nil {
-		panic("runtime.Builder: logger is required and cannot be nil")
+		return nil, fmt.Errorf("runtime.Builder: logger is required and cannot be nil")
 	}
 	return &Builder{
 		gateway: gateway,
 		logger:  logger,
 		options: BuildOptions{},
-	}
+	}, nil
 }
 
 // WithOptions 设置构建选项。
@@ -153,7 +153,7 @@ func (b *Builder) WithToolScope(toolNames []string) *Builder {
 func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*BaseAgent, error) {
 	opts := b.options
 	if b.logger == nil {
-		panic("runtime.Builder.Build: logger is required and cannot be nil")
+		return nil, fmt.Errorf("runtime.Builder.Build: logger is required and cannot be nil")
 	}
 	if b.gateway == nil {
 		return nil, ErrProviderNotSet
@@ -182,7 +182,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*BaseAgent,
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
 	}
 
-	ag := BuildBaseAgent(
+	ag, err := BuildBaseAgent(
 		cfg2,
 		b.gateway,
 		opts.MemoryManager,
@@ -191,6 +191,9 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*BaseAgent,
 		b.logger,
 		b.ledger,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("build base agent: %w", err)
+	}
 	if b.toolGateway != nil {
 		ag.SetToolGateway(b.toolGateway)
 	}

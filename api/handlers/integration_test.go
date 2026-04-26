@@ -75,7 +75,10 @@ func newTestMux(t *testing.T) (*http.ServeMux, *mockChatService) {
 	t.Helper()
 	logger := zap.NewNop()
 	svc := &mockChatService{}
-	chatHandler := handlers.NewChatHandler(svc, logger)
+	chatHandler, err := handlers.NewChatHandler(svc, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
 	healthHandler := handlers.NewHealthHandler(logger)
 
 	mux := http.NewServeMux()

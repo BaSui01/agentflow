@@ -169,7 +169,10 @@ func BuildMultimodalRuntime(
 		},
 	)
 
-	handler := handlers.NewMultimodalHandler(service, logger)
+	handler, err := handlers.NewMultimodalHandler(service, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create multimodal handler: %w", err)
+	}
 	handler.ApplyRuntimeDeps(handlers.MultimodalHandlerRuntimeDeps{
 		DefaultImageProvider: defaultImageProvider,
 		DefaultVideoProvider: defaultVideoProvider,

@@ -144,7 +144,9 @@ func buildSandboxE2EAgent(t *testing.T, agentID string) agent.Agent {
 		ChatProvider: mocks.NewSuccessProvider("tool reasoning"),
 		Logger:       logger,
 	})
-	agBuilder := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger}), logger).
+	agBuilder, err := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger}), logger)
+	require.NoError(t, err)
+	agBuilder = agBuilder.
 		WithToolGateway(toolGateway).
 		WithOptions(agentruntime.BuildOptions{
 			ToolManager: &simpleToolManager{tool: tool},

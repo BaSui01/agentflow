@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	mcpproto "github.com/BaSui01/agentflow/agent/execution/protocol/mcp"
@@ -50,7 +51,7 @@ type ChatServiceBuildInput struct {
 
 // BuildChatService builds the handler-facing ChatService and reuses an existing
 // DefaultChatService instance when possible by swapping its runtime in place.
-func BuildChatService(in ChatServiceBuildInput) usecase.ChatService {
+func BuildChatService(in ChatServiceBuildInput) (usecase.ChatService, error) {
 	var runtime usecase.ChatRuntime
 	if in.Provider != nil {
 		gateway := llmgateway.New(llmgateway.Config{
@@ -70,10 +71,10 @@ func BuildChatService(in ChatServiceBuildInput) usecase.ChatService {
 
 	if existing, ok := in.ExistingChatService.(*usecase.DefaultChatService); ok {
 		existing.UpdateRuntime(runtime)
-		return existing
+		return existing, nil
 	}
 	if in.Provider == nil {
-		return nil
+		return nil, nil
 	}
 
 	converter := handlers.NewUsecaseChatConverter(handlers.NewDefaultChatConverter(defaultServeChatServiceTimeout))
@@ -115,7 +116,7 @@ type ReloadedTextRuntimeBindingsResult struct {
 
 // ApplyReloadedTextRuntimeBindings keeps hot-reload handler/service rebinding out
 // of cmd by applying the rebuilt text runtime to existing HTTP handler surfaces.
-func ApplyReloadedTextRuntimeBindings(in ReloadedTextRuntimeBindingsInput) ReloadedTextRuntimeBindingsResult {
+func ApplyReloadedTextRuntimeBindings(in ReloadedTextRuntimeBindingsInput) (ReloadedTextRuntimeBindingsResult, error) {
 	logger := in.Logger
 	if logger == nil {
 		logger = zap.NewNop()
@@ -137,7 +138,11 @@ func ApplyReloadedTextRuntimeBindings(in ReloadedTextRuntimeBindingsInput) Reloa
 			in.ChatHandler.UpdateService(chatService)
 		}
 	} else if chatService != nil && !in.HTTPRoutesBound {
-		result.ChatHandler = handlers.NewChatHandler(chatService, logger)
+		chatHandler, err := handlers.NewChatHandler(chatService, logger)
+		if err != nil {
+			return result, fmt.Errorf("failed to create chat handler: %w", err)
+		}
+		result.ChatHandler = chatHandler
 	} else if chatService != nil {
 		result.ChatRouteRequiresRestart = true
 	}
@@ -162,7 +167,7 @@ func ApplyReloadedTextRuntimeBindings(in ReloadedTextRuntimeBindingsInput) Reloa
 		in.WorkflowHandler.UpdateService(usecase.NewDefaultWorkflowService(in.WorkflowRuntime.Facade, in.WorkflowRuntime.Parser))
 	}
 
-	return result
+	return result, nil
 }
 
 // ToolingHandlerBundleInput defines the dependencies needed to assemble the

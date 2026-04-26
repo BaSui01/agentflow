@@ -81,7 +81,10 @@ func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -162,7 +165,10 @@ func TestChatHandler_OpenAICompatChatCompletions_Stream(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -212,7 +218,10 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -388,7 +397,10 @@ func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -426,7 +438,10 @@ func TestChatHandler_OpenAICompatResponses_WebSearchToolFilters(t *testing.T) {
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"gpt-5.2",
@@ -472,7 +487,10 @@ func TestChatHandler_OpenAICompatResponses_InputReasoningRoundTrip(t *testing.T)
 			},
 		},
 	}
-	handler := NewChatHandler(svc, zap.NewNop())
+	handler, err := NewChatHandler(svc, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body := []byte(`{
 		"model":"gpt-5.2",

@@ -132,7 +132,11 @@ func runFaultTimeout(ctx context.Context, logger *zap.Logger) error {
 	}
 
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := agentruntime.NewBuilder(gateway, logger).Build(ctx, cfg)
+	fb, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return fmt.Errorf("create runtime builder: %w", err)
+	}
+	ag, err := fb.Build(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("build timeout fault agent: %w", err)
 	}

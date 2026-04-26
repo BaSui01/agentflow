@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
@@ -83,10 +84,10 @@ func BuildBaseAgent(
 	bus EventBus,
 	logger *zap.Logger,
 	ledger observability.Ledger,
-) *BaseAgent {
+) (*BaseAgent, error) {
 	ensureAgentType(&cfg)
 	if logger == nil {
-		panic("agent.BaseAgent: logger is required and cannot be nil")
+		return nil, fmt.Errorf("agent.BaseAgent: logger is required and cannot be nil")
 	}
 	agentLogger := logger.With(zap.String("agent_id", cfg.Core.ID), zap.String("agent_type", cfg.Core.Type))
 
@@ -125,7 +126,7 @@ func BuildBaseAgent(
 		ba.initGuardrails(ba.runtimeGuardrailsCfg)
 	}
 
-	return ba
+	return ba, nil
 }
 // CompletionDecision is the normalized evaluation result for loop execution.
 type CompletionDecision struct {

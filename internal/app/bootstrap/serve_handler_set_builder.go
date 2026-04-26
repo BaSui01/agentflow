@@ -72,7 +72,9 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	if err != nil {
 		return nil, err
 	}
-	buildServeChatHandler(set, in, llmRuntime)
+	if err := buildServeChatHandler(set, in, llmRuntime); err != nil {
+		return nil, err
+	}
 	if err := buildServeAgentHandler(set, in, llmRuntime); err != nil {
 		return nil, err
 	}
