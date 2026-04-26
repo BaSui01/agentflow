@@ -1,6 +1,0 @@
-{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
-{"file": ".claude/commands/trellis/check.md", "reason": "Code quality check spec"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review route-handler-usecase-provider boundary integrity"}
-{"file": "docs/architecture/原生Provider与SDK边界说明.md", "reason": "Review that handler/doc changes do not leak SDK/provider details upward"}
-{"file": "api/handlers/README.md", "reason": "Review handler boundary and documented route inventory"}
-{"file": "docs/重构计划/API端点兼容与Google端点完善重构计划-2026-04-24.md", "reason": "Review implementation against plan checklist and update progress evidence"}
