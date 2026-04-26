@@ -91,10 +91,31 @@ docker run -d \
   -p 8080:8080 \
   -p 9091:9091 \
   -e AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0 \
+  -e AGENTFLOW_SERVER_ALLOW_NO_AUTH=false \
   -e AGENTFLOW_LLM_API_KEY=your_api_key \
   -e AGENTFLOW_REDIS_ADDR=your_redis:6379 \
   agentflow:latest
 ```
+
+### 多模态配置示例
+
+```bash
+docker run -d \
+  --name agentflow \
+  -p 8080:8080 \
+  -e AGENTFLOW_LLM_API_KEY=your_openai_key \
+  # 图像生成
+  -e AGENTFLOW_MULTIMODAL_IMAGE_OPENAI_API_KEY=your_openai_key \
+  -e AGENTFLOW_MULTIMODAL_IMAGE_GEMINI_API_KEY=your_gemini_key \
+  # 视频生成
+  -e AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_API_KEY=your_runway_key \
+  -e AGENTFLOW_MULTIMODAL_VIDEO_KLING_API_KEY=your_kling_key \
+  # Redis（检查点/缓存）
+  -e AGENTFLOW_REDIS_ADDR=redis:6379 \
+  agentflow:latest
+```
+
+> ⚠️ **安全警告**: 生产环境必须设置 `ALLOW_NO_AUTH=false`（默认值），否则启动会被拒绝。
 
 ### 使用配置文件
 

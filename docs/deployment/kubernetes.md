@@ -46,10 +46,75 @@ kubectl create namespace agentflow
 ### 3. 创建 Secret（API Key）
 
 ```bash
+# 基础配置（必需）
 kubectl create secret generic agentflow-secrets \
   --namespace agentflow \
   --from-literal=AGENTFLOW_LLM_API_KEY=your_api_key_here \
   --from-literal=AGENTFLOW_SERVER_JWT_SECRET=replace-with-32-byte-secret
+```
+
+#### Secret 环境变量键完整列表
+
+| 环境变量键 | 说明 | 必需 |
+|-----------|------|------|
+| `AGENTFLOW_LLM_API_KEY` | 主 LLM API Key（OpenAI 等） | 是 |
+| `AGENTFLOW_SERVER_JWT_SECRET` | JWT HMAC 签名密钥（32 字节） | 二选一 |
+| `AGENTFLOW_SERVER_JWT_PUBLIC_KEY` | JWT RSA 公钥（PEM 格式） | 二选一 |
+| `AGENTFLOW_DATABASE_PASSWORD` | PostgreSQL 密码 | 使用数据库时 |
+| `AGENTFLOW_REDIS_PASSWORD` | Redis 密码 | 使用 Redis 时 |
+| `AGENTFLOW_MONGODB_PASSWORD` | MongoDB 密码 | 使用 MongoDB 时 |
+
+#### 多模态提供商密钥
+
+启用多模态功能时，需配置对应提供商的 API Key：
+
+| 环境变量键 | 提供商 | 类型 |
+|-----------|--------|------|
+| `AGENTFLOW_MULTIMODAL_IMAGE_OPENAI_API_KEY` | OpenAI DALL-E | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_GEMINI_API_KEY` | Google Gemini | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_FLUX_API_KEY` | Flux | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_STABILITY_API_KEY` | Stability AI | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_IDEOGRAM_API_KEY` | Ideogram | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_TONGYI_API_KEY` | 通义万象 | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_ZHIPU_API_KEY` | 智谱 CogView | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_BAIDU_API_KEY` | 百度文心一格 | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_BAIDU_SECRET_KEY` | 百度文心一格 | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_DOUBAO_API_KEY` | 豆包 | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_TENCENT_SECRET_ID` | 腾讯混元 | 图像 |
+| `AGENTFLOW_MULTIMODAL_IMAGE_TENCENT_SECRET_KEY` | 腾讯混元 | 图像 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_GOOGLE_API_KEY` | Google Veo | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_API_KEY` | Runway | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_VEO_API_KEY` | Google Veo | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_SORA_API_KEY` | OpenAI Sora | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_KLING_API_KEY` | 可灵 | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_LUMA_API_KEY` | Luma | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_MINIMAX_API_KEY` | MiniMax | 视频 |
+| `AGENTFLOW_MULTIMODAL_VIDEO_SEEDANCE_API_KEY` | Seedance | 视频 |
+
+#### 工具提供商密钥
+
+启用外部工具集成时，需配置对应提供商的 API Key：
+
+| 环境变量键 | 提供商 | 说明 |
+|-----------|--------|------|
+| `AGENTFLOW_TOOLS_TAVILY_API_KEY` | Tavily | 网络搜索（推荐） |
+| `AGENTFLOW_TOOLS_JINA_API_KEY` | Jina Reader | 网页抓取（可选，免费可用） |
+| `AGENTFLOW_TOOLS_FIRECRAWL_API_KEY` | Firecrawl | 搜索+抓取 |
+
+#### 完整 Secret 示例
+
+```bash
+# 完整配置示例
+kubectl create secret generic agentflow-secrets \
+  --namespace agentflow \
+  --from-literal=AGENTFLOW_LLM_API_KEY=sk-xxx \
+  --from-literal=AGENTFLOW_SERVER_JWT_SECRET=$(openssl rand -base64 32) \
+  --from-literal=AGENTFLOW_DATABASE_PASSWORD=db_password \
+  --from-literal=AGENTFLOW_REDIS_PASSWORD=redis_password \
+  --from-literal=AGENTFLOW_MONGODB_PASSWORD=mongo_password \
+  --from-literal=AGENTFLOW_MULTIMODAL_IMAGE_OPENAI_API_KEY=sk-xxx \
+  --from-literal=AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_API_KEY=xxx \
+  --from-literal=AGENTFLOW_TOOLS_TAVILY_API_KEY=tvly-xxx
 ```
 
 ### 4. 安装 AgentFlow
@@ -85,6 +150,54 @@ kubectl port-forward -n agentflow svc/agentflow 8080:8080
 
 # 健康检查
 curl http://localhost:8080/health
+```
+
+#### 健康检查端点说明
+
+AgentFlow 提供两个健康检查端点，用途不同：
+
+| 端点 | 用途 | 检查内容 |
+|------|------|---------|
+| `/health` | 存活探针（liveness） | 进程存活状态，始终返回 200 |
+| `/ready` | 就绪探针（readiness） | 依赖连接状态（数据库、Redis 等） |
+
+**Kubernetes 探针配置**（Helm Chart 默认配置）：
+
+| 探针类型 | 端点 | 初始延迟 | 检查间隔 | 超时 | 失败阈值 |
+|---------|------|---------|---------|------|---------|
+| `livenessProbe` | `/health` | 15s | 30s | 5s | 3 |
+| `readinessProbe` | `/ready` | 10s | 15s | 5s | 3 |
+| `startupProbe` | `/health` | - | 10s | 5s | 18（最多 3 分钟） |
+
+**`/ready` 检查的依赖项**：
+
+- 数据库连接（PostgreSQL/MongoDB，如配置）
+- Redis 连接（如配置）
+- 向量存储连接（Qdrant/Weaviate/Milvus，如配置）
+
+当任一依赖不可用时，`/ready` 返回 503，Pod 将从 Service 端点中移除，但不触发重启。
+
+**自定义探针配置**：
+
+```yaml
+# values.yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
 ```
 
 ## Helm Chart 配置
@@ -166,15 +279,77 @@ helm install agentflow ./deployments/helm/agentflow \
 | `replicaCount` | Pod 副本数 | 1 |
 | `image.repository` | 镜像仓库 | agentflow |
 | `image.tag` | 镜像标签 | Chart appVersion |
-| `server.environment` | 运行环境 | `production` |
+| `server.environment` | 运行环境（development/test/production） | `production` |
 | `server.allowNoAuth` | 是否允许无认证启动 | `false` |
 | `server.apiKeys` | 通过 YAML 配置的 HTTP API keys | `[]` |
+| `server.metricsBindAddress` | Metrics 端口监听地址 | `127.0.0.1` |
+| `server.enablePprof` | 启用 pprof 诊断端点 | `false` |
 | `agent.model` | 默认模型 | gpt-4 |
 | `agent.maxIterations` | 最大迭代次数 | 10 |
+| `multimodal.enabled` | 启用多模态 API 路由 | `false` |
+| `multimodal.defaultImageProvider` | 默认图像提供商 | - |
+| `multimodal.defaultVideoProvider` | 默认视频提供商 | - |
 | `metrics.service.enabled` | 是否创建 metrics Service | false |
 | `serviceMonitor.enabled` | 是否创建 ServiceMonitor | false |
 | `autoscaling.enabled` | 启用 HPA | false |
 | `ingress.enabled` | 启用 Ingress | false |
+
+#### 关键配置说明
+
+##### `server.allowNoAuth`
+
+控制是否允许在无认证配置（无 API keys、无 JWT）时启动服务。
+
+- **默认值**：`false`
+- **生产环境**：**强制为 false**，当 `server.environment=production` 时，若配置为 `true` 会在启动阶段直接报错拒绝启动
+- **开发/测试环境**：可设为 `true` 便于快速验证，但绝不建议在生产环境使用
+
+```yaml
+# 仅允许在 development/test 环境开启
+server:
+  environment: development
+  allowNoAuth: true  # 仅开发环境可用
+```
+
+##### `server.metricsBindAddress`
+
+Metrics 端口（默认 9091）的监听地址。
+
+- **默认值**：`127.0.0.1`（仅允许本地访问）
+- **外部抓取**：若 Prometheus 需从 Pod 外部抓取指标，需设为 `0.0.0.0`
+
+```yaml
+server:
+  metricsPort: 9091
+  metricsBindAddress: "0.0.0.0"  # 允许外部抓取
+```
+
+##### `server.enablePprof`
+
+是否在 Metrics 端口暴露 pprof 诊断端点。
+
+- **默认值**：`false`
+- **生产环境**：建议关闭，避免暴露性能分析数据
+- **调试场景**：临时开启用于性能诊断
+
+```yaml
+server:
+  enablePprof: true  # 临时开启用于调试
+```
+
+##### 多模态配置
+
+启用图像/视频生成能力需要配置对应提供商的 API Key。详见下方 Secret 配置章节。
+
+```yaml
+multimodal:
+  enabled: true
+  defaultImageProvider: openai
+  defaultVideoProvider: runway
+  referenceStoreBackend: redis
+  referenceMaxSizeBytes: 8388608  # 8MB
+  referenceTTL: 2h
+```
 
 ## 高可用部署
 
@@ -245,21 +420,63 @@ secrets:
   existingSecret: agentflow-secrets
 ```
 
-`agentflow-secrets` 至少应提供以下环境变量键：
-
-- `AGENTFLOW_LLM_API_KEY`
-- `AGENTFLOW_SERVER_JWT_SECRET` 或 `AGENTFLOW_SERVER_JWT_PUBLIC_KEY`
-- `AGENTFLOW_DATABASE_PASSWORD`
-- `AGENTFLOW_REDIS_PASSWORD`
-- `AGENTFLOW_MONGODB_PASSWORD`
+`agentflow-secrets` 环境变量键列表请参考上方「Secret 环境变量键完整列表」章节。
 
 说明：
 
 - chart 当前通过挂载 `/app/config/config.yaml` 注入非敏感配置，因此 `server.api_keys` 走 values / YAML；
 - 如果你不希望 API key 出现在 ConfigMap 中，生产环境优先改用 JWT，并通过 Secret 提供 `AGENTFLOW_SERVER_JWT_SECRET` 或 `AGENTFLOW_SERVER_JWT_PUBLIC_KEY`；
-- `server.apiKeys` 仍可用于内网、短期测试或配合加密 values 文件的场景。
+- `server.apiKeys` 仍可用于内网、短期测试或配合加密 values 文件的场景；
+- 多模态提供商密钥和工具提供商密钥按需配置，未配置的提供商相关 API 将不可用。
 
 ## 安全配置
+
+### 认证与授权
+
+#### `allow_no_auth` 强制拒绝说明
+
+AgentFlow 在启动时会对 `server.allow_no_auth` 配置进行安全校验：
+
+| 环境 | `allow_no_auth=true` | `allow_no_auth=false` |
+|------|---------------------|----------------------|
+| `development` | 允许（用于本地调试） | 正常启动，需配置认证 |
+| `test` | 允许（用于自动化测试） | 正常启动，需配置认证 |
+| `production` | **直接报错拒绝启动** | 正常启动，需配置认证 |
+
+**生产环境强制要求**：
+
+- `server.environment=production` 时，`allow_no_auth=true` 会触发启动错误
+- 必须配置至少一种认证方式：
+  - `server.api_keys`（ConfigMap/YAML 配置，适合简单场景）
+  - `AGENTFLOW_SERVER_JWT_SECRET`（HMAC 签名，推荐）
+  - `AGENTFLOW_SERVER_JWT_PUBLIC_KEY`（RSA 公钥验证，适合企业集成）
+
+```yaml
+# 生产环境配置示例
+server:
+  environment: production
+  allowNoAuth: false  # 强制要求，即使不配置也会默认 false
+  jwt:
+    issuer: "agentflow"
+    audience: "api"
+    expiration: "1h"
+```
+
+#### 配置热重载安全说明
+
+AgentFlow 支持部分配置的热重载（无需重启 Pod），但有以下安全注意事项：
+
+| 配置项 | 热重载支持 | 安全建议 |
+|--------|-----------|---------|
+| 工具注册绑定 | 是 | 仅重载工具别名和参数模板，不涉及认证变更 |
+| Web 搜索提供商优先级 | 是 | 从数据库读取，需确保数据库访问权限安全 |
+| API Keys / JWT 密钥 | 否 | 需重启 Pod 生效，建议通过 Secret 管理并滚动更新 |
+
+**最佳实践**：
+
+1. 敏感配置（密钥、密码）统一通过 Kubernetes Secret 管理
+2. 使用 External Secrets Operator 从外部密钥管理系统同步
+3. 密钥轮换时，先更新 Secret，再执行 `kubectl rollout restart` 滚动更新 Pod
 
 ### Pod 安全上下文
 

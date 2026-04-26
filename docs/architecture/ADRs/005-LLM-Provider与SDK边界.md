@@ -10,6 +10,7 @@ AgentFlow is a multi-provider framework, not an application tied to a single LLM
 
 - a unified `llm.Provider` contract for text chat, streaming, health checks, and model discovery
 - native provider implementations for OpenAI, Anthropic, and Gemini
+- OpenAI-compatible providers: DeepSeek, Qwen, GLM, Grok, Kimi, Mistral, Hunyuan, MiniMax, Doubao, Llama (via `llm/providers/vendor`)
 - a shared `openaicompat` base for OpenAI-compatible providers
 - a config-driven chat provider entry via `llm/providers/vendor.NewChatProviderFromConfig(...)`
 - vendor-aligned capability aggregation via `llm/providers/vendor.Profile`
