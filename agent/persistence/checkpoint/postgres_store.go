@@ -7,36 +7,18 @@ import (
 	"time"
 
 	agentcore "github.com/BaSui01/agentflow/agent/core"
+	"github.com/BaSui01/agentflow/pkg/database"
 	"go.uber.org/zap"
 )
 
 // PostgreSQLCheckpointStore persists agent checkpoints in PostgreSQL.
 type PostgreSQLCheckpointStore struct {
-	db     PostgreSQLClient
+	db     database.PostgreSQLClient
 	logger *zap.Logger
 }
 
-// PostgreSQLClient captures the SQL operations required by PostgreSQLCheckpointStore.
-type PostgreSQLClient interface {
-	Exec(ctx context.Context, query string, args ...any) error
-	QueryRow(ctx context.Context, query string, args ...any) Row
-	Query(ctx context.Context, query string, args ...any) (Rows, error)
-}
-
-// Row abstracts a single database row.
-type Row interface {
-	Scan(dest ...any) error
-}
-
-// Rows abstracts a database row iterator.
-type Rows interface {
-	Next() bool
-	Scan(dest ...any) error
-	Close() error
-}
-
 // NewPostgreSQLCheckpointStore creates a PostgreSQL-backed agent checkpoint store.
-func NewPostgreSQLCheckpointStore(db PostgreSQLClient, logger *zap.Logger) *PostgreSQLCheckpointStore {
+func NewPostgreSQLCheckpointStore(db database.PostgreSQLClient, logger *zap.Logger) *PostgreSQLCheckpointStore {
 	return &PostgreSQLCheckpointStore{
 		db:     db,
 		logger: checkpointLogger(logger, "postgresql_checkpoint"),

@@ -143,9 +143,9 @@ func ApplyReloadedTextRuntimeBindings(in ReloadedTextRuntimeBindingsInput) Reloa
 	}
 
 	if in.CostHandler != nil {
-		in.CostHandler.UpdateTracker(in.CostTracker)
+		in.CostHandler.UpdateService(NewCostQueryService(in.CostTracker))
 	} else if in.CostTracker != nil && !in.HTTPRoutesBound {
-		result.CostHandler = handlers.NewCostHandler(in.CostTracker, logger)
+		result.CostHandler = handlers.NewCostHandler(NewCostQueryService(in.CostTracker), logger)
 	} else if in.CostTracker != nil {
 		result.CostRouteRequiresRestart = true
 	}

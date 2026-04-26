@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/database"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -50,48 +51,13 @@ func (c redisClientAdapter) ZRemRangeByScore(ctx context.Context, key string, mi
 	return c.client.ZRemRangeByScore(ctx, key, min, max).Err()
 }
 
-type postgreSQLClientAdapter struct {
-	db *sql.DB
-}
-
-type sqlRowAdapter struct {
-	row *sql.Row
-}
-
-func (r sqlRowAdapter) Scan(dest ...any) error { return r.row.Scan(dest...) }
-
-type sqlRowsAdapter struct {
-	rows *sql.Rows
-}
-
-func (r sqlRowsAdapter) Next() bool             { return r.rows.Next() }
-func (r sqlRowsAdapter) Scan(dest ...any) error { return r.rows.Scan(dest...) }
-func (r sqlRowsAdapter) Close() error           { return r.rows.Close() }
-
-// NewPostgreSQLClientAdapter adapts *sql.DB to the checkpoint PostgreSQLClient contract.
-func NewPostgreSQLClientAdapter(db *sql.DB) PostgreSQLClient {
-	return postgreSQLClientAdapter{db: db}
-}
-
-func (c postgreSQLClientAdapter) Exec(ctx context.Context, query string, args ...any) error {
-	_, err := c.db.ExecContext(ctx, query, args...)
-	return err
-}
-
-func (c postgreSQLClientAdapter) QueryRow(ctx context.Context, query string, args ...any) Row {
-	return sqlRowAdapter{row: c.db.QueryRowContext(ctx, query, args...)}
-}
-
-func (c postgreSQLClientAdapter) Query(ctx context.Context, query string, args ...any) (Rows, error) {
-	rows, err := c.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return sqlRowsAdapter{rows: rows}, nil
+// NewPostgreSQLClientAdapter adapts *sql.DB to the database.PostgreSQLClient contract.
+func NewPostgreSQLClientAdapter(db *sql.DB) database.PostgreSQLClient {
+	return database.NewSQLDBAdapter(db)
 }
 
 // EnsurePostgreSQLSchema provisions the agent checkpoint table and indexes.
-func EnsurePostgreSQLSchema(ctx context.Context, db PostgreSQLClient) error {
+func EnsurePostgreSQLSchema(ctx context.Context, db database.PostgreSQLClient) error {
 	const createTable = `
 CREATE TABLE IF NOT EXISTS agent_checkpoints (
 	id TEXT PRIMARY KEY,

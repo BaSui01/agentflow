@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/database"
 )
 
-type DBClient interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+// DBClient 数据库客户端接口，使用 pkg/database 中的统一定义。
+// 保留类型别名以确保现有调用方的兼容性。
+type DBClient = database.DBClient
 
 const createCheckpointsTable = `
 CREATE TABLE IF NOT EXISTS workflow_checkpoints (

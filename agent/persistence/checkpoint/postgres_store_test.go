@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -71,7 +72,7 @@ func (c *mockPostgresClient) Exec(_ context.Context, query string, args ...any) 
 	}
 }
 
-func (c *mockPostgresClient) QueryRow(_ context.Context, query string, args ...any) Row {
+func (c *mockPostgresClient) QueryRow(_ context.Context, query string, args ...any) database.Row {
 	switch {
 	case strings.Contains(query, "WHERE id = $1"):
 		id := args[0].(string)
@@ -100,7 +101,7 @@ func (c *mockPostgresClient) QueryRow(_ context.Context, query string, args ...a
 	}
 }
 
-func (c *mockPostgresClient) Query(_ context.Context, query string, args ...any) (Rows, error) {
+func (c *mockPostgresClient) Query(_ context.Context, query string, args ...any) (database.Rows, error) {
 	switch {
 	case strings.Contains(query, "SELECT data FROM agent_checkpoints"):
 		threadID := args[0].(string)

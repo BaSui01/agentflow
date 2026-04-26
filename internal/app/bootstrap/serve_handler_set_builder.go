@@ -125,7 +125,7 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 		set.CostTracker = llmRuntime.CostTracker
 		set.LLMCache = llmRuntime.Cache
 		set.LLMMetrics = llmRuntime.Metrics
-		set.CostHandler = handlers.NewCostHandler(llmRuntime.CostTracker, in.Logger)
+		set.CostHandler = handlers.NewCostHandler(NewCostQueryService(llmRuntime.CostTracker), in.Logger)
 	}
 
 	set.DiscoveryRegistry, set.AgentRegistry = BuildAgentRegistries(in.Logger)
