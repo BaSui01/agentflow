@@ -787,7 +787,9 @@ func writeAPIJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_, _ = w.Write(buf)
+	if _, err := w.Write(buf); err != nil {
+		fmt.Fprintf(os.Stderr, "config api: writeAPIJSON write failed: %v\n", err)
+	}
 }
 
 // handleCORS 处理 CORS 预检请求

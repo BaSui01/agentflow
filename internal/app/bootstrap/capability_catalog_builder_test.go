@@ -12,7 +12,14 @@ import (
 
 func TestBuildCapabilityCatalog_CollectsRuntimeCapabilities(t *testing.T) {
 	toolRegistry := hosted.NewToolRegistry(zap.NewNop())
-	toolRegistry.Register(hosted.NewWebSearchTool(hosted.WebSearchConfig{Endpoint: "http://example.com"}))
+	webSearchTool, err := hosted.NewProviderBackedWebSearchHostedTool(hosted.ToolProviderConfig{
+		Provider:       string(hosted.ToolProviderDuckDuckGo),
+		TimeoutSeconds: 15,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("failed to create web search tool: %v", err)
+	}
+	toolRegistry.Register(webSearchTool)
 
 	agentRegistry := agent.NewAgentRegistry(zap.NewNop())
 
@@ -23,7 +30,7 @@ func TestBuildCapabilityCatalog_CollectsRuntimeCapabilities(t *testing.T) {
 	assert.Contains(t, catalog.Tools, CapabilityTool{
 		Name:        "web_search",
 		Type:        string(hosted.ToolTypeWebSearch),
-		Description: "Search the web for current information",
+		Description: "Search the web for information. Returns a list of relevant results with titles, URLs, and snippets.",
 	})
 	assert.Contains(t, catalog.AgentTypes, CapabilityAgentType{Name: string(agent.TypeAssistant)})
 	assert.Contains(t, catalog.Modes, CapabilityMode{Name: "parallel"})

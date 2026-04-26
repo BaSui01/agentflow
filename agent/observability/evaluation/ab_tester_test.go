@@ -178,6 +178,7 @@ func TestExperimentLifecycle(t *testing.T) {
 func TestAssign(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	tester := NewABTester(store, zap.NewNop())
+	ctx := context.Background()
 
 	exp := &Experiment{
 		ID:   "assign-test",

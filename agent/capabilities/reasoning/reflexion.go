@@ -201,7 +201,11 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 		}
 	}
 
-	trial.Score, _, _ = r.evaluateTrial(ctx, task, trial)
+	var evalErr error
+	trial.Score, _, evalErr = r.evaluateTrial(ctx, task, trial)
+	if evalErr != nil {
+		r.logger.Warn("reflexion trial evaluation failed", zap.Error(evalErr))
+	}
 	return trial, resp.Usage.TotalTokens, nil
 }
 

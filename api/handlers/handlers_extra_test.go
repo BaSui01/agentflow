@@ -771,9 +771,9 @@ func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
 		},
 	}
 
-	err = handler.validateChatRequest(req)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Message, "role must be one of")
+	vErr := handler.validateChatRequest(req)
+	assert.NotNil(t, vErr)
+	assert.Contains(t, vErr.Message, "role must be one of")
 }
 
 func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
@@ -811,9 +811,9 @@ func TestChatHandler_ValidateChatRequest_NegativeMaxTokens(t *testing.T) {
 		MaxTokens: -1,
 	}
 
-	err = handler.validateChatRequest(req)
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Message, "max_tokens")
+	vErr := handler.validateChatRequest(req)
+	assert.NotNil(t, vErr)
+	assert.Contains(t, vErr.Message, "max_tokens")
 }
 
 // =============================================================================

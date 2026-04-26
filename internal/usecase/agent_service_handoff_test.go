@@ -79,15 +79,15 @@ func TestDefaultAgentService_ExecuteAgent_InjectsRuntimeHandoffTargets(t *testin
 		}
 	})
 
-	_, _, err := svc.ExecuteAgent(context.Background(), AgentExecuteRequest{
+	_, _, execErr := svc.ExecuteAgent(context.Background(), AgentExecuteRequest{
 		AgentID: "source-agent",
 		Content: "delegate if needed",
 		Context: map[string]any{
 			"handoff_agents": []any{"target-agent"},
 		},
 	}, "trace-1")
-	if err != nil {
-		t.Fatalf("ExecuteAgent returned error: %v", err)
+	if execErr != nil {
+		t.Fatalf("ExecuteAgent returned error: %v", execErr)
 	}
 	if !sawHandoffTool {
 		t.Fatalf("expected synthetic handoff tool to be injected into ChatRequest")
@@ -150,12 +150,12 @@ func TestDefaultAgentService_ExecuteAgent_InjectsConfigLevelHandoffTargets(t *te
 		}
 	})
 
-	_, _, err := svc.ExecuteAgent(context.Background(), AgentExecuteRequest{
+	_, _, execErr := svc.ExecuteAgent(context.Background(), AgentExecuteRequest{
 		AgentID: "source-agent",
 		Content: "delegate if needed",
 	}, "trace-2")
-	if err != nil {
-		t.Fatalf("ExecuteAgent returned error: %v", err)
+	if execErr != nil {
+		t.Fatalf("ExecuteAgent returned error: %v", execErr)
 	}
 	if !sawHandoffTool {
 		t.Fatalf("expected config-level handoff target to be injected into ChatRequest")

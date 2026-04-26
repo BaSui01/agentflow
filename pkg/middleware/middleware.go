@@ -669,7 +669,9 @@ func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, me
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(statusCode)
-	_, _ = w.Write(buf)
+	if _, err := w.Write(buf); err != nil {
+		log.Printf("[middleware] writeMiddlewareError write failed: %v", err)
+	}
 }
 
 type middlewareErrorResponse struct {

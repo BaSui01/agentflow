@@ -23,6 +23,14 @@ func testGateway(provider llmcore.Provider) llmcore.Gateway {
 	return llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: zap.NewNop()})
 }
 
+func mustNewBuilder(gateway llmcore.Gateway, logger *zap.Logger) *Builder {
+	b, err := NewBuilder(gateway, logger)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func testGatewayProvider(gateway llmcore.Gateway) llmcore.Provider {
 	type providerBackedGateway interface {
 		ChatProvider() llmcore.Provider
@@ -86,7 +94,8 @@ func TestBuilder_Build_NilProvider(t *testing.T) {
 	}
 	opts := BuildOptions{} // all disabled
 
-	builder := NewBuilder(nil, zap.NewNop()).WithOptions(opts)
+	builder := mustNewBuilder(nil, zap.NewNop())
+	builder = builder.WithOptions(opts)
 	_, err := builder.Build(context.Background(), cfg)
 	require.Error(t, err)
 }
@@ -94,7 +103,7 @@ func TestBuilder_Build_NilProvider(t *testing.T) {
 func TestBuilder_Build_NilLogger(t *testing.T) {
 	// O-004: NewBuilder panics when logger is nil
 	require.Panics(t, func() {
-		NewBuilder(nil, nil)
+		mustNewBuilder(nil, nil)
 	})
 }
 
@@ -112,7 +121,7 @@ func TestBuilder_Build_AllDisabled(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	opts := BuildOptions{} // all disabled
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 	t.Cleanup(func() {
@@ -148,7 +157,7 @@ func TestBuilder_Build_WithSubsystems(t *testing.T) {
 		LSPServerVersion:     "0.1.0",
 	}
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 	t.Cleanup(func() {
@@ -172,7 +181,7 @@ func TestBuilder_Build_EnableAll(t *testing.T) {
 	opts.InitAgent = false
 	opts.SkillsDirectory = t.TempDir()
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).WithOptions(opts).Build(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 	t.Cleanup(func() {
@@ -194,7 +203,7 @@ func TestBuilder_Build_WithToolGateway(t *testing.T) {
 	mainProvider := mocks.NewSuccessProvider("main")
 	toolProvider := mocks.NewSuccessProvider("tool")
 
-	ag, err := NewBuilder(testGateway(mainProvider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(mainProvider), zap.NewNop()).
 		WithToolGateway(testGateway(toolProvider)).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
@@ -226,7 +235,7 @@ func TestBuilder_Build_UnwrapsGatewayBackedProviders(t *testing.T) {
 		Logger:       zap.NewNop(),
 	})
 
-	ag, err := NewBuilder(mainGateway, zap.NewNop()).
+	ag, err := mustNewBuilder(mainGateway, zap.NewNop()).
 		WithToolGateway(toolGateway).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
@@ -249,7 +258,7 @@ func TestBuilder_Build_PassesThroughMaxLoopIterations(t *testing.T) {
 	}
 	provider := mocks.NewSuccessProvider("hello")
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{MaxLoopIterations: 6}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -271,7 +280,7 @@ func TestBuilder_Build_WithToolScope(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	toolScope := []string{"search", "calculator"}
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithToolScope(toolScope).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
@@ -293,7 +302,7 @@ func TestBuilder_Build_InjectsDefaultReasoningRegistryWhenUnset(t *testing.T) {
 	}
 	provider := mocks.NewSuccessProvider("hello")
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -324,7 +333,7 @@ func TestBuilder_Build_MatchesRegistryUnifiedCoreForBuiltinFactory(t *testing.T)
 	require.True(t, ok)
 	require.NotNil(t, registryAgent.ReasoningRegistry())
 
-	runtimeAgent, err := NewBuilder(testGateway(provider), logger).
+	runtimeAgent, err := mustNewBuilder(testGateway(provider), logger).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), registryAgent.Config())
 	require.NoError(t, err)
@@ -357,7 +366,7 @@ func TestBuilder_Build_UsesExplicitReasoningRegistry(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	explicitRegistry := reasoning.NewPatternRegistry()
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{ReasoningRegistry: explicitRegistry}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -451,7 +460,7 @@ func TestBuilder_Build_InjectsCheckpointManagerWhenProvided(t *testing.T) {
 	provider := mocks.NewSuccessProvider("hello")
 	checkpointManager := &CheckpointManager{}
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{CheckpointManager: checkpointManager}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -475,7 +484,7 @@ func TestBuilder_Build_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
 	}
 	provider := &captureRuntimeProvider{content: "hello"}
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{}).
 		Build(context.Background(), cfg)
 	require.NoError(t, err)
@@ -592,7 +601,7 @@ func TestBuilder_Build_WiresCustomRuntimeComponents(t *testing.T) {
 	}
 	provider := &captureRuntimeProvider{content: "hello"}
 
-	ag, err := NewBuilder(testGateway(provider), zap.NewNop()).
+	ag, err := mustNewBuilder(testGateway(provider), zap.NewNop()).
 		WithOptions(BuildOptions{
 			ExecutionOptionsResolver: builderResolverStub{
 				options: types.ExecutionOptions{
