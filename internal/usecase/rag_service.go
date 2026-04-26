@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -31,17 +32,49 @@ type DefaultRAGService struct {
 	hybridRetriever     *rag.HybridRetriever
 	bm25Retriever       *rag.HybridRetriever
 	contextualRetriever *rag.ContextualRetrieval
+
+	webRetriever     *rag.WebRetriever
+	webSearchEnabled bool
+	logger           *zap.Logger
 }
 
-func NewDefaultRAGService(store core.VectorStore, embedding core.EmbeddingProvider) *DefaultRAGService {
+func NewDefaultRAGService(store core.VectorStore, embedding core.EmbeddingProvider, opts ...RAGServiceOption) *DefaultRAGService {
 	service := &DefaultRAGService{
 		store:     store,
 		embedding: embedding,
 		executors: make(map[string]ragStrategyExecutor),
+		logger:    zap.NewNop(),
+	}
+
+	for _, opt := range opts {
+		opt(service)
 	}
 
 	service.bootstrapExecutors()
 	return service
+}
+
+type RAGServiceOption func(*DefaultRAGService)
+
+func WithWebRetriever(wr *rag.WebRetriever) RAGServiceOption {
+	return func(s *DefaultRAGService) {
+		s.webRetriever = wr
+		s.webSearchEnabled = true
+	}
+}
+
+func WithWebSearchEnabled(enabled bool) RAGServiceOption {
+	return func(s *DefaultRAGService) {
+		s.webSearchEnabled = enabled
+	}
+}
+
+func WithLogger(logger *zap.Logger) RAGServiceOption {
+	return func(s *DefaultRAGService) {
+		if logger != nil {
+			s.logger = logger
+		}
+	}
 }
 
 func (s *DefaultRAGService) Query(ctx context.Context, input RAGQueryInput) (*RAGQueryOutput, error) {
@@ -54,6 +87,35 @@ func (s *DefaultRAGService) Query(ctx context.Context, input RAGQueryInput) (*RA
 	effectiveStrategy, err := s.resolveStrategy(ctx, input.Query, requestedStrategy)
 	if err != nil {
 		return nil, err
+	}
+
+	if s.webSearchEnabled && s.webRetriever != nil {
+		results, webErr := s.executeWithWebSearch(ctx, input.Query, queryEmbedding, effectiveStrategy, input.TopK)
+		if webErr != nil {
+			s.logger.Warn("web search failed, falling back to local retrieval",
+				zap.String("strategy", effectiveStrategy),
+				zap.Error(webErr))
+			executor, ok := s.executors[effectiveStrategy]
+			if !ok {
+				return nil, types.NewError(types.ErrInvalidRequest, fmt.Sprintf("unsupported strategy: %s", effectiveStrategy))
+			}
+			localResults, localErr := executor(ctx, input.Query, queryEmbedding, input.TopK)
+			if localErr != nil {
+				return nil, types.NewError(types.ErrInternalError, "rag query failed").WithCause(localErr)
+			}
+			return &RAGQueryOutput{
+				Results:           localResults,
+				RequestedStrategy: requestedStrategy,
+				EffectiveStrategy: effectiveStrategy,
+				Collection:        input.Collection,
+			}, nil
+		}
+		return &RAGQueryOutput{
+			Results:           results,
+			RequestedStrategy: requestedStrategy,
+			EffectiveStrategy: effectiveStrategy,
+			Collection:        input.Collection,
+		}, nil
 	}
 
 	executor, ok := s.executors[effectiveStrategy]
@@ -279,4 +341,125 @@ func (s *DefaultRAGService) defaultStrategy() string {
 		}
 	}
 	return ragStrategyVector
+}
+
+func (s *DefaultRAGService) executeWithWebSearch(ctx context.Context, query string, queryEmbedding []float64, strategy string, topK int) ([]core.VectorSearchResult, error) {
+	var localResults []core.RetrievalResult
+	var webResults []core.RetrievalResult
+
+	switch strategy {
+	case ragStrategyHybrid:
+		if s.hybridRetriever == nil {
+			return nil, fmt.Errorf("hybrid retriever not initialized")
+		}
+		retrievalResults, err := s.hybridRetriever.Retrieve(ctx, query, queryEmbedding)
+		if err != nil {
+			return nil, err
+		}
+		localResults = retrievalResults
+	case ragStrategyBM25:
+		if s.bm25Retriever == nil {
+			return nil, fmt.Errorf("bm25 retriever not initialized")
+		}
+		retrievalResults, err := s.bm25Retriever.Retrieve(ctx, query, queryEmbedding)
+		if err != nil {
+			return nil, err
+		}
+		localResults = retrievalResults
+	case ragStrategyContextual:
+		if s.contextualRetriever == nil {
+			return nil, fmt.Errorf("contextual retriever not initialized")
+		}
+		retrievalResults, err := s.contextualRetriever.Retrieve(ctx, query, queryEmbedding)
+		if err != nil {
+			return nil, err
+		}
+		localResults = retrievalResults
+	default:
+		if s.store == nil {
+			return nil, fmt.Errorf("vector store not initialized")
+		}
+		searchResults, err := s.store.Search(ctx, queryEmbedding, topK)
+		if err != nil {
+			return nil, err
+		}
+		for i := range searchResults {
+			localResults = append(localResults, core.RetrievalResult{
+				Document:   searchResults[i].Document,
+				VectorScore: searchResults[i].Score,
+				HybridScore: searchResults[i].Score,
+				FinalScore:  searchResults[i].Score,
+			})
+		}
+	}
+
+	webRetrievalResults, webErr := s.webRetriever.Retrieve(ctx, query, queryEmbedding)
+	if webErr != nil {
+		return nil, webErr
+	}
+	webResults = webRetrievalResults
+
+	merged := mergeResults(localResults, webResults, topK)
+	return merged, nil
+}
+
+func mergeResults(local, web []core.RetrievalResult, topK int) []core.VectorSearchResult {
+	seen := make(map[string]bool)
+	merged := make([]core.VectorSearchResult, 0, len(local)+len(web))
+
+	for _, r := range local {
+		key := dedupKey(r.Document.ID, r.Document.Content)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		score := r.FinalScore
+		if score == 0 {
+			score = r.HybridScore
+		}
+		if score == 0 {
+			score = r.VectorScore
+		}
+		merged = append(merged, core.VectorSearchResult{
+			Document: r.Document,
+			Score:    score,
+		})
+	}
+
+	for _, r := range web {
+		key := dedupKey(r.Document.ID, r.Document.Content)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		score := r.FinalScore
+		if score == 0 {
+			score = r.HybridScore
+		}
+		if score == 0 {
+			score = r.VectorScore
+		}
+		merged = append(merged, core.VectorSearchResult{
+			Document: r.Document,
+			Score:    score,
+		})
+	}
+
+	sort.Slice(merged, func(i, j int) bool {
+		return merged[i].Score > merged[j].Score
+	})
+
+	if topK > 0 && len(merged) > topK {
+		merged = merged[:topK]
+	}
+
+	return merged
+}
+
+func dedupKey(id, content string) string {
+	if id != "" {
+		return id
+	}
+	h := sha256.Sum256([]byte(content))
+	return fmt.Sprintf("%x", h[:8])
 }

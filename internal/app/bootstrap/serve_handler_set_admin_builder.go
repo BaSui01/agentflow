@@ -45,7 +45,14 @@ func buildServeRAGHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput) er
 		return nil
 	}
 
-	set.RAGHandler = handlers.NewRAGHandler(usecase.NewDefaultRAGService(ragRuntime.Store, ragRuntime.EmbeddingProvider), in.Logger)
+	var opts []usecase.RAGServiceOption
+	if ragRuntime.WebSearchEnabled && ragRuntime.WebRetriever != nil {
+		opts = append(opts, usecase.WithWebRetriever(ragRuntime.WebRetriever))
+		in.Logger.Info("RAG web search enabled")
+	}
+	opts = append(opts, usecase.WithLogger(in.Logger))
+
+	set.RAGHandler = handlers.NewRAGHandler(usecase.NewDefaultRAGService(ragRuntime.Store, ragRuntime.EmbeddingProvider, opts...), in.Logger)
 	set.RAGStore = ragRuntime.Store
 	set.RAGEmbedding = ragRuntime.EmbeddingProvider
 	in.Logger.Info("RAG handler initialized (in-memory store, embedding provider ready)", zap.String("provider", ragRuntime.EmbeddingProvider.Name()))

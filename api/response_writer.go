@@ -33,5 +33,7 @@ func WriteJSONResponse(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_, _ = w.Write(buf)
+	if _, err := w.Write(buf); err != nil {
+		fmt.Fprintf(os.Stderr, "api: writeJSONResponse write failed: %v\n", err)
+	}
 }

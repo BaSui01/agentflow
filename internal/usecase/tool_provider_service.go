@@ -129,10 +129,10 @@ func (s *DefaultToolProviderService) Reload() *types.Error {
 func normalizeAndValidateProvider(provider string) (string, *types.Error) {
 	p := strings.ToLower(strings.TrimSpace(provider))
 	switch hosted.ToolProviderName(p) {
-	case hosted.ToolProviderTavily, hosted.ToolProviderFirecrawl, hosted.ToolProviderDuckDuckGo, hosted.ToolProviderSearXNG:
+	case hosted.ToolProviderTavily, hosted.ToolProviderFirecrawl, hosted.ToolProviderDuckDuckGo, hosted.ToolProviderSearXNG, hosted.ToolProviderBrave, hosted.ToolProviderBing:
 		return p, nil
 	default:
-		return "", types.NewError(types.ErrInvalidRequest, "provider must be one of: tavily, firecrawl, duckduckgo, searxng")
+		return "", types.NewError(types.ErrInvalidRequest, "provider must be one of: tavily, firecrawl, duckduckgo, searxng, brave, bing")
 	}
 }
 
@@ -145,9 +145,9 @@ func validateUpsertToolProviderRequest(provider string, req UpsertToolProviderIn
 	}
 
 	switch hosted.ToolProviderName(provider) {
-	case hosted.ToolProviderTavily, hosted.ToolProviderFirecrawl:
+	case hosted.ToolProviderTavily, hosted.ToolProviderFirecrawl, hosted.ToolProviderBrave, hosted.ToolProviderBing:
 		if strings.TrimSpace(req.APIKey) == "" {
-			return types.NewError(types.ErrInvalidRequest, "api_key is required for tavily/firecrawl")
+			return types.NewError(types.ErrInvalidRequest, "api_key is required for "+provider)
 		}
 	case hosted.ToolProviderSearXNG:
 		if strings.TrimSpace(req.BaseURL) == "" {

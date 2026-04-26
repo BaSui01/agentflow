@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -104,11 +102,10 @@ func TestToolRegistry_RegisterGetList(t *testing.T) {
 func TestToolRegistry_GetSchemas(t *testing.T) {
 	reg := NewToolRegistry(nil)
 	reg.Register(NewFileSearchTool(&mockFileSearchStore{}, 5))
-	reg.Register(NewWebSearchTool(WebSearchConfig{Endpoint: "http://example.com"}))
 
 	schemas := reg.GetSchemas()
-	if len(schemas) != 2 {
-		t.Errorf("got %d schemas, want 2", len(schemas))
+	if len(schemas) != 1 {
+		t.Errorf("got %d schemas, want 1", len(schemas))
 	}
 }
 
@@ -172,6 +169,14 @@ func TestToolRegistry_Execute_ApprovalRequiredForWriteFileRisk(t *testing.T) {
 }
 
 func TestClassifyHostedToolAuthorizationContracts(t *testing.T) {
+	webSearchTool, webSearchErr := NewProviderBackedWebSearchHostedTool(ToolProviderConfig{
+		Provider:       string(ToolProviderDuckDuckGo),
+		TimeoutSeconds: 15,
+	}, zap.NewNop())
+	if webSearchErr != nil {
+		t.Fatalf("failed to create provider-backed web search tool: %v", webSearchErr)
+	}
+
 	cases := []struct {
 		name           string
 		tool           HostedTool
@@ -181,7 +186,7 @@ func TestClassifyHostedToolAuthorizationContracts(t *testing.T) {
 	}{
 		{
 			name:           "web search safe read",
-			tool:           NewWebSearchTool(WebSearchConfig{Endpoint: "http://example.com"}),
+			tool:           webSearchTool,
 			wantResource:   types.ResourceTool,
 			wantTier:       types.RiskSafeRead,
 			wantPolicyRisk: "safe_read",
@@ -235,70 +240,6 @@ func TestClassifyHostedToolAuthorizationContracts(t *testing.T) {
 				t.Fatalf("permission risk = %q, want %q", got, tc.wantPolicyRisk)
 			}
 		})
-	}
-}
-
-// --- WebSearchTool tests ---
-
-func TestWebSearchTool_Execute_Success(t *testing.T) {
-	results := []WebSearchResult{
-		{Title: "Result 1", URL: "http://example.com/1", Snippet: "snippet 1"},
-		{Title: "Result 2", URL: "http://example.com/2", Snippet: "snippet 2"},
-	}
-	body, err := json.Marshal(results)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("q") != "test query" {
-			t.Errorf("unexpected query: %s", r.URL.Query().Get("q"))
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(body)
-	}))
-	defer srv.Close()
-
-	tool := NewWebSearchTool(WebSearchConfig{Endpoint: srv.URL})
-	args, _ := json.Marshal(WebSearchArgs{Query: "test query"})
-
-	result, err := tool.Execute(context.Background(), args)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var got []WebSearchResult
-	if err := json.Unmarshal(result, &got); err != nil {
-		t.Fatalf("failed to unmarshal result: %v", err)
-	}
-	if len(got) != 2 {
-		t.Errorf("got %d results, want 2", len(got))
-	}
-}
-
-func TestWebSearchTool_Execute_NonOKStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = w.Write([]byte("rate limited"))
-	}))
-	defer srv.Close()
-
-	tool := NewWebSearchTool(WebSearchConfig{Endpoint: srv.URL})
-	args, _ := json.Marshal(WebSearchArgs{Query: "test"})
-
-	_, err := tool.Execute(context.Background(), args)
-	if err == nil {
-		t.Fatal("expected error for non-200 status")
-	}
-}
-
-func TestWebSearchTool_Execute_EmptyQuery(t *testing.T) {
-	tool := NewWebSearchTool(WebSearchConfig{Endpoint: "http://example.com"})
-	args, _ := json.Marshal(WebSearchArgs{Query: ""})
-
-	_, err := tool.Execute(context.Background(), args)
-	if err == nil {
-		t.Fatal("expected error for empty query")
 	}
 }
 

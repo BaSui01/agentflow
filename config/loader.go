@@ -95,6 +95,9 @@ type Config struct {
 
 	// WorkflowCheckpoint Workflow 检查点配置
 	WorkflowCheckpoint WorkflowCheckpointConfig `yaml:"workflow_checkpoint" env:"WORKFLOW_CHECKPOINT"`
+
+	// RAG RAG 检索配置
+	RAG RAGConfig `yaml:"rag" env:"RAG"`
 }
 
 // ServerConfig 服务器配置
@@ -497,6 +500,10 @@ type ToolsConfig struct {
 	DuckDuckGo DuckDuckGoToolConfig `yaml:"duckduckgo" env:"DUCKDUCKGO"`
 	// SearXNG 搜索配置（自托管，无需 API Key）
 	SearXNG SearXNGToolConfig `yaml:"searxng" env:"SEARXNG"`
+	// Brave 搜索配置（需要 API Key）
+	Brave BraveToolConfig `yaml:"brave" env:"BRAVE"`
+	// Bing 搜索配置（需要 API Key）
+	Bing BingToolConfig `yaml:"bing" env:"BING"`
 	// HTTP 抓取配置（纯 HTTP，无需 API Key）
 	HTTPScrape HTTPScrapeToolConfig `yaml:"http_scrape" env:"HTTP_SCRAPE"`
 }
@@ -549,6 +556,26 @@ type SearXNGToolConfig struct {
 type HTTPScrapeToolConfig struct {
 	// 自定义 User-Agent
 	UserAgent string `yaml:"user_agent" env:"USER_AGENT"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// BraveToolConfig Brave 搜索工具配置
+type BraveToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_BRAVE_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://api.search.brave.com）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// BingToolConfig Bing 搜索工具配置
+type BingToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_BING_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://api.bing.microsoft.com）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
 	// 请求超时
 	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
 }
@@ -985,4 +1012,22 @@ type BudgetConfig struct {
 	AutoThrottle bool `yaml:"auto_throttle" env:"AUTO_THROTTLE"`
 	// 自动节流持续时间
 	ThrottleDelay time.Duration `yaml:"throttle_delay" env:"THROTTLE_DELAY"`
+}
+
+// RAGConfig RAG 检索配置
+type RAGConfig struct {
+	// WebSearch 网络检索增强配置
+	WebSearch RAGWebSearchConfig `yaml:"web_search" env:"WEB_SEARCH"`
+}
+
+// RAGWebSearchConfig RAG 网络检索增强配置
+type RAGWebSearchConfig struct {
+	// 是否启用网络检索增强
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 网络搜索超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	// 缓存最大条目数
+	MaxCacheEntries int `yaml:"max_cache_entries" env:"MAX_CACHE_ENTRIES"`
+	// 缓存 TTL
+	CacheTTL time.Duration `yaml:"cache_ttl" env:"CACHE_TTL"`
 }

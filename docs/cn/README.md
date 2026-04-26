@@ -64,12 +64,8 @@
 
 | 文档 | 描述 |
 |------|------|
-| [`../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/Agent框架现状评估与主流框架调研-2026-04-23.md) | 历史可用性评估与主流框架调研，不作为当前契约 |
-| [`../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md`](../archive/agent-framework-legacy-2026-04/AgentFlow收口改造方案与实施清单-2026-04-23.md) | 历史收口路线，不作为当前实施清单 |
-| [`../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md`](../archive/refactor-plans-2026-04/我的Agent框架一次性硬切换重构计划-2026-04-24.md) | 历史硬切换总计划，用于追溯背景 |
-| [`../archive/Gemini官方SDK迁移清理计划.md`](../archive/Gemini官方SDK迁移清理计划.md) | Gemini 官方 SDK 迁移历史 |
-| [`../archive/LLM供应商维度重构分析.md`](../archive/LLM供应商维度重构分析.md) | vendor profile 重构历史 |
 | [`../archive/归档说明.md`](../archive/归档说明.md) | 历史快照与归档文档说明，不作为当前契约真相 |
+| [`../archive/2026-04-26批次重构归档.md`](../archive/2026-04-26批次重构归档.md) | 2026-04-26 批次重构变更归档 |
 
 ### 📘 指南
 

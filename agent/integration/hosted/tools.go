@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/pkg/metrics"
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -139,124 +135,6 @@ func (r *ToolRegistry) GetSchemas() []types.ToolSchema {
 		schemas = append(schemas, t.Schema())
 	}
 	return schemas
-}
-
-// WebSearchTool执行网络搜索功能.
-type WebSearchTool struct {
-	httpClient *http.Client
-	apiKey     string
-	endpoint   string
-	maxResults int
-}
-
-// WebSearchConfig 配置了网络搜索工具.
-type WebSearchConfig struct {
-	APIKey     string
-	Endpoint   string
-	MaxResults int
-	Timeout    time.Duration
-}
-
-// 新WebSearchTooll创建了新的网络搜索工具.
-func NewWebSearchTool(config WebSearchConfig) *WebSearchTool {
-	timeout := config.Timeout
-	if timeout == 0 {
-		timeout = 30 * time.Second
-	}
-	maxResults := config.MaxResults
-	if maxResults == 0 {
-		maxResults = 10
-	}
-	return &WebSearchTool{
-		httpClient: tlsutil.SecureHTTPClient(timeout),
-		apiKey:     config.APIKey,
-		endpoint:   config.Endpoint,
-		maxResults: maxResults,
-	}
-}
-
-func (t *WebSearchTool) Type() HostedToolType { return ToolTypeWebSearch }
-func (t *WebSearchTool) Name() string         { return "web_search" }
-func (t *WebSearchTool) Description() string  { return "Search the web for current information" }
-
-func (t *WebSearchTool) Schema() types.ToolSchema {
-	params, err := json.Marshal(map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"query":       map[string]any{"type": "string", "description": "Search query"},
-			"max_results": map[string]any{"type": "integer", "description": "Maximum results"},
-		},
-		"required": []string{"query"},
-	})
-	if err != nil {
-		params = []byte("{}")
-	}
-	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
-}
-
-// WebSearchArgs 代表网络搜索参数.
-type WebSearchArgs struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results,omitempty"`
-}
-
-// WebSearchResult代表搜索结果.
-type WebSearchResult struct {
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Snippet string `json:"snippet"`
-}
-
-func (t *WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
-	var searchArgs WebSearchArgs
-	if err := json.Unmarshal(args, &searchArgs); err != nil {
-		return nil, fmt.Errorf("invalid arguments: %w", err)
-	}
-
-	if searchArgs.Query == "" {
-		return nil, fmt.Errorf("query is required")
-	}
-
-	maxResults := searchArgs.MaxResults
-	if maxResults == 0 {
-		maxResults = t.maxResults
-	}
-
-	// Build search URL
-	searchURL := fmt.Sprintf("%s?q=%s&max=%d", t.endpoint, url.QueryEscape(searchArgs.Query), maxResults)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	if t.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+t.apiKey)
-	}
-
-	resp, err := t.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("search request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Enforce 1MB response size limit
-	limitedReader := io.LimitReader(resp.Body, maxResponseSize)
-	body, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("search API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Parse response into structured results
-	var results []WebSearchResult
-	if err := json.Unmarshal(body, &results); err != nil {
-		return nil, fmt.Errorf("failed to parse search results: %w", err)
-	}
-
-	return json.Marshal(results)
 }
 
 // FileSearchTool 执行文件搜索功能.

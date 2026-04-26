@@ -30,8 +30,9 @@ type WebRetrieverConfig struct {
 	DeduplicateByURL bool    `json:"deduplicate_by_url"` // Remove duplicate URLs
 
 	// 缓存
-	EnableCache bool          `json:"enable_cache"` // Cache web results
-	CacheTTL    time.Duration `json:"cache_ttl"`    // Cache time-to-live
+	EnableCache   bool          `json:"enable_cache"`    // Cache web results
+	CacheTTL      time.Duration `json:"cache_ttl"`       // Cache time-to-live
+	MaxCacheEntry int           `json:"max_cache_entry"` // Maximum cache entries (LRU eviction)
 }
 
 // 默认WebRetrieverConfig 返回合理的默认值 。
@@ -47,6 +48,7 @@ func DefaultWebRetrieverConfig() WebRetrieverConfig {
 		DeduplicateByURL: true,
 		EnableCache:      true,
 		CacheTTL:         30 * time.Minute,
+		MaxCacheEntry:    1000,
 	}
 }
 
@@ -57,6 +59,7 @@ type WebRetriever struct {
 	webSearchFn    WebSearchFunc    // Web search function
 	cache          *webResultCache  // Result cache
 	logger         *zap.Logger
+	cancelCtx      context.CancelFunc
 }
 
 // 新WebRetriever创建了新的网络增强检索器.
@@ -78,10 +81,24 @@ func NewWebRetriever(
 	}
 
 	if config.EnableCache {
-		wr.cache = newWebResultCache(config.CacheTTL)
+		maxEntries := config.MaxCacheEntry
+		if maxEntries <= 0 {
+			maxEntries = 1000
+		}
+		wr.cache = newWebResultCache(config.CacheTTL, maxEntries)
+		ctx, cancel := context.WithCancel(context.Background())
+		wr.cancelCtx = cancel
+		wr.cache.startCleanup(ctx)
 	}
 
 	return wr
+}
+
+// Close 停止缓存清理 goroutine，释放资源。
+func (wr *WebRetriever) Close() {
+	if wr.cancelCtx != nil {
+		wr.cancelCtx()
+	}
 }
 
 // 检索为给定查询执行混合本地+网络检索.
@@ -259,32 +276,70 @@ func (wr *WebRetriever) mergeResults(localResults []RetrievalResult, webResults 
 // ============================================================================
 
 type webResultCache struct {
-	entries map[string]*webCacheEntry
-	ttl     time.Duration
-	mu      sync.RWMutex
+	entries    map[string]*webCacheEntry
+	ttl        time.Duration
+	maxEntries int
+	mu         sync.RWMutex
 }
 
 type webCacheEntry struct {
-	results   []WebRetrievalResult
-	expiresAt time.Time
+	results    []WebRetrievalResult
+	expiresAt  time.Time
+	lastAccess time.Time
 }
 
-func newWebResultCache(ttl time.Duration) *webResultCache {
+func newWebResultCache(ttl time.Duration, maxEntries int) *webResultCache {
 	return &webResultCache{
-		entries: make(map[string]*webCacheEntry),
-		ttl:     ttl,
+		entries:    make(map[string]*webCacheEntry),
+		ttl:        ttl,
+		maxEntries: maxEntries,
+	}
+}
+
+func (c *webResultCache) startCleanup(ctx context.Context) {
+	cleanupInterval := c.ttl
+	if cleanupInterval < time.Minute {
+		cleanupInterval = time.Minute
+	}
+	ticker := time.NewTicker(cleanupInterval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.evictExpired()
+			}
+		}
+	}()
+}
+
+func (c *webResultCache) evictExpired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	for k, entry := range c.entries {
+		if now.After(entry.expiresAt) {
+			delete(c.entries, k)
+		}
 	}
 }
 
 func (c *webResultCache) get(query string) ([]WebRetrievalResult, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	key := strings.ToLower(strings.TrimSpace(query))
 	entry, ok := c.entries[key]
 	if !ok || time.Now().After(entry.expiresAt) {
+		if ok {
+			delete(c.entries, key)
+		}
 		return nil, false
 	}
+	entry.lastAccess = time.Now()
 	return entry.results, true
 }
 
@@ -293,9 +348,31 @@ func (c *webResultCache) set(query string, results []WebRetrievalResult) {
 	defer c.mu.Unlock()
 
 	key := strings.ToLower(strings.TrimSpace(query))
+
+	if _, exists := c.entries[key]; !exists && len(c.entries) >= c.maxEntries {
+		c.evictLRU()
+	}
+
 	c.entries[key] = &webCacheEntry{
-		results:   results,
-		expiresAt: time.Now().Add(c.ttl),
+		results:    results,
+		expiresAt:  time.Now().Add(c.ttl),
+		lastAccess: time.Now(),
+	}
+}
+
+func (c *webResultCache) evictLRU() {
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for k, entry := range c.entries {
+		if first || entry.lastAccess.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = entry.lastAccess
+			first = false
+		}
+	}
+	if oldestKey != "" {
+		delete(c.entries, oldestKey)
 	}
 }
 

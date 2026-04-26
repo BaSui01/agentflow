@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -449,7 +450,9 @@ func (s *MemoryMessageStore) cleanupLoop(interval time.Duration) {
 			return
 		}
 
-		_, _ = s.Cleanup(context.Background(), s.config.Cleanup.MessageRetention)
+		if _, err := s.Cleanup(context.Background(), s.config.Cleanup.MessageRetention); err != nil {
+			log.Printf("[memory_message_store] cleanup failed: %v", err)
+		}
 	}
 }
 

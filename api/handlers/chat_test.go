@@ -310,7 +310,10 @@ func TestChatHandler_HandleStream(t *testing.T) {
 
 func TestChatHandler_ValidateChatRequest(t *testing.T) {
 	logger := zap.NewNop()
-	handler := NewChatHandler(nil, logger)
+	handler, err := NewChatHandler(nil, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name    string
@@ -428,7 +431,10 @@ func TestChatHandler_ValidateChatRequest(t *testing.T) {
 
 func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	logger := zap.NewNop()
-	handler := NewChatHandler(nil, logger)
+	handler, err := NewChatHandler(nil, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
 	strict := true
 	includeServerSide := true
 	format := &api.ToolFormat{Type: "grammar", Syntax: "lark", Definition: "start: WORD"}
@@ -564,7 +570,10 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 }
 
 func TestChatHandler_HandleCapabilities(t *testing.T) {
-	handler := NewChatHandler(&openAICompatServiceStub{}, zap.NewNop())
+	handler, err := NewChatHandler(&openAICompatServiceStub{}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/chat/capabilities", nil)
@@ -572,7 +581,7 @@ func TestChatHandler_HandleCapabilities(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var resp Response
-	err := json.NewDecoder(w.Body).Decode(&resp)
+	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 }
