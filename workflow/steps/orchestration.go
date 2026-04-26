@@ -70,34 +70,7 @@ func (s *OrchestrationStep) Execute(ctx context.Context, input core.StepInput) (
 		}
 		agents = append(agents, a)
 	}
-
-	content := ""
-	if input.Data != nil {
-		if c, ok := input.Data["content"].(string); ok {
-			content = c
-		} else if c, ok := input.Data["input"].(string); ok {
-			content = c
-		} else if c, ok := input.Data["result"].(string); ok {
-			content = c
-		} else if c, ok := input.Data["prompt"].(string); ok {
-			content = c
-		}
-	}
-	agentInput := &agent.Input{
-		TraceID: input.Metadata["trace_id"],
-		Content: content,
-		Context: map[string]any{},
-	}
-	if s.MaxRounds > 0 {
-		agentInput.Context["max_rounds"] = s.MaxRounds
-	}
-	if input.Data != nil {
-		for k, v := range input.Data {
-			if k != "content" && k != "input" && k != "result" && k != "prompt" {
-				agentInput.Context[k] = v
-			}
-		}
-	}
+	agentInput := buildOrchestrationAgentInput(input, s.MaxRounds)
 
 	if s.Timeout > 0 {
 		var cancel context.CancelFunc

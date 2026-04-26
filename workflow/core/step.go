@@ -65,3 +65,17 @@ type AgentExecutionMetadata struct {
 	Duration     time.Duration `json:"duration,omitempty"`
 	FinishReason string        `json:"finish_reason,omitempty"`
 }
+
+type CheckpointSnapshot struct {
+	StepID   string         `json:"step_id"`
+	Version  int            `json:"version"`
+	State    map[string]any `json:"state"`
+	Checksum string         `json:"checksum,omitempty"`
+}
+
+type OrchestrationPrimitive interface {
+	StepProtocol
+	Checkpoint() *CheckpointSnapshot
+	Resume(ctx context.Context, snapshot *CheckpointSnapshot) error
+	TraceID() string
+}

@@ -2,12 +2,16 @@ package core
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // EnhancedCheckpoint represents a workflow checkpoint with full state.
@@ -26,6 +30,7 @@ type EnhancedCheckpoint struct {
 	ParentID       string         `json:"parent_id,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
 	Snapshot       *GraphSnapshot `json:"snapshot,omitempty"`
+	Checksum       string         `json:"checksum,omitempty"`
 }
 
 // GraphSnapshot captures the complete graph state.
@@ -61,6 +66,36 @@ type CheckpointStore interface {
 	LoadVersion(ctx context.Context, threadID string, version int) (*EnhancedCheckpoint, error)
 	ListVersions(ctx context.Context, threadID string) ([]*EnhancedCheckpoint, error)
 	Delete(ctx context.Context, checkpointID string) error
+}
+
+func (cp *EnhancedCheckpoint) ComputeChecksum() string {
+	cp.Checksum = ""
+	data, err := json.Marshal(cp)
+	if err != nil {
+		return ""
+	}
+	h := sha256.Sum256(data)
+	cp.Checksum = hex.EncodeToString(h[:])
+	return cp.Checksum
+}
+
+func (cp *EnhancedCheckpoint) ValidateIntegrity() error {
+	if cp.Checksum == "" {
+		return nil
+	}
+	saved := cp.Checksum
+	cp.Checksum = ""
+	data, err := json.Marshal(cp)
+	cp.Checksum = saved
+	if err != nil {
+		return types.NewCheckpointIntegrityError(fmt.Sprintf("checkpoint %s: marshal failed: %v", cp.ID, err))
+	}
+	h := sha256.Sum256(data)
+	computed := hex.EncodeToString(h[:])
+	if computed != saved {
+		return types.NewCheckpointIntegrityError(fmt.Sprintf("checkpoint %s: checksum mismatch (saved=%s, computed=%s)", cp.ID, saved[:8], computed[:8]))
+	}
+	return nil
 }
 
 // EnhancedCheckpointManager manages workflow checkpoints with time-travel.
