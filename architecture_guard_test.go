@@ -1863,3 +1863,116 @@ func shouldSkipDir(path string) bool {
 		return false
 	}
 }
+
+func TestServiceBackedHandlersUseBaseHandler(t *testing.T) {
+	type handlerExpectation struct {
+		file             string
+		mustContainBase  bool
+		forbiddenSnippet string
+	}
+
+	expectations := []handlerExpectation{
+		{file: "api/handlers/agent.go", mustContainBase: true},
+		{file: "api/handlers/apikey.go", mustContainBase: true},
+		{file: "api/handlers/authorization_audit.go", mustContainBase: true},
+		{file: "api/handlers/chat.go", mustContainBase: true},
+		{file: "api/handlers/cost.go", mustContainBase: true},
+		{file: "api/handlers/multimodal.go", mustContainBase: true},
+		{file: "api/handlers/rag.go", mustContainBase: true},
+		{file: "api/handlers/tool_approval.go", mustContainBase: true},
+		{file: "api/handlers/tool_provider.go", mustContainBase: true},
+		{file: "api/handlers/tool_registry.go", mustContainBase: true},
+		{file: "api/handlers/workflow.go", mustContainBase: true},
+		{file: "api/handlers/health.go", mustContainBase: false},
+		{file: "api/handlers/protocol.go", mustContainBase: false},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.file))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.file, err)
+		}
+		src := string(data)
+		hasBase := strings.Contains(src, "BaseHandler[")
+		if tt.mustContainBase && !hasBase {
+			t.Fatalf("%s must embed BaseHandler for service-backed hot-reload", tt.file)
+		}
+		if !tt.mustContainBase && hasBase {
+			t.Fatalf("%s must stay outside BaseHandler exception policy", tt.file)
+		}
+	}
+}
+
+func TestExecutionModeCatalogSingleSource(t *testing.T) {
+	allowedDefinitions := map[string][]string{
+		"agent/team/execution.go": {
+			"func SupportedExecutionModes()",
+			"func IsSupportedExecutionMode(",
+			"func NormalizeExecutionMode(",
+		},
+		"internal/usecase/agent_execution_modes.go": {
+			"func normalizedExecutionMode(",
+			"func SupportedExecutionModes()",
+			"func IsSupportedExecutionMode(",
+		},
+	}
+
+	definitionSnippets := []string{
+		"func SupportedExecutionModes()",
+		"func IsSupportedExecutionMode(",
+		"func NormalizeExecutionMode(",
+		"func normalizedExecutionMode(",
+	}
+
+	var violations []string
+	walkErr := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if shouldSkipDir(path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if !hasPathPrefix(rel, "agent") && !hasPathPrefix(rel, "internal") && !hasPathPrefix(rel, "workflow") && !hasPathPrefix(rel, "api") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		src := string(data)
+		for _, snippet := range definitionSnippets {
+			if !strings.Contains(src, snippet) {
+				continue
+			}
+			allowed := false
+			for _, allowSnippet := range allowedDefinitions[rel] {
+				if allowSnippet == snippet {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				violations = append(violations, rel+" defines "+snippet)
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("scan execution mode catalog sources: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		slices.Sort(violations)
+		t.Fatalf("execution mode catalog definitions must stay in agent/team facade or usecase thin wrappers:\n%s", strings.Join(violations, "\n"))
+	}
+}
