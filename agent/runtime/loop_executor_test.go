@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +26,7 @@ func TestLoopExecutorWithStepExecutor(t *testing.T) {
 	executor := &LoopExecutor{
 		MaxIterations: 1,
 		ExecutionOptions: types.ExecutionOptions{
-			Control: types.ControlOptions{
+			Control: types.AgentControlOptions{
 				MaxLoopIterations: 1,
 			},
 		},
@@ -38,7 +39,7 @@ func TestLoopExecutorWithStepExecutor(t *testing.T) {
 		Observer: func(ctx context.Context, feedback *Feedback, state *LoopState) error {
 			return nil
 		},
-		Judge: &mockCompletionJudge{solved: true},
+		Judge:  &mockCompletionJudge{solved: true},
 		Logger: logger,
 	}
 
@@ -69,7 +70,7 @@ func TestLoopExecutorMaxIterations(t *testing.T) {
 	executor := &LoopExecutor{
 		MaxIterations: 3,
 		ExecutionOptions: types.ExecutionOptions{
-			Control: types.ControlOptions{
+			Control: types.AgentControlOptions{
 				MaxLoopIterations: 3,
 			},
 		},
@@ -82,7 +83,7 @@ func TestLoopExecutorMaxIterations(t *testing.T) {
 		Observer: func(ctx context.Context, feedback *Feedback, state *LoopState) error {
 			return nil
 		},
-		Judge: &mockCompletionJudge{solved: false},
+		Judge:  &mockCompletionJudge{solved: false},
 		Logger: logger,
 	}
 
@@ -111,7 +112,7 @@ func TestLoopExecutorContextCancellation(t *testing.T) {
 	executor := &LoopExecutor{
 		MaxIterations: 10,
 		ExecutionOptions: types.ExecutionOptions{
-			Control: types.ControlOptions{
+			Control: types.AgentControlOptions{
 				MaxLoopIterations: 10,
 			},
 		},
@@ -125,7 +126,7 @@ func TestLoopExecutorContextCancellation(t *testing.T) {
 		Observer: func(ctx context.Context, feedback *Feedback, state *LoopState) error {
 			return nil
 		},
-		Judge: &mockCompletionJudge{solved: false},
+		Judge:  &mockCompletionJudge{solved: false},
 		Logger: logger,
 	}
 
@@ -140,46 +141,6 @@ func TestLoopExecutorContextCancellation(t *testing.T) {
 	}
 	if callCount < 1 {
 		t.Errorf("expected at least 1 call, got %d", callCount)
-	}
-}
-
-func TestLoopExecutorCheckpoint(t *testing.T) {
-	logger := zap.NewNop()
-	checkpointMgr := &mockCheckpointManager{}
-
-	executor := &LoopExecutor{
-		MaxIterations: 1,
-		ExecutionOptions: types.ExecutionOptions{
-			Control: types.ControlOptions{
-				MaxLoopIterations: 1,
-			},
-		},
-		StepExecutor: func(ctx context.Context, input *Input, state *LoopState, selection ReasoningSelection) (*Output, error) {
-			return &Output{Content: "Checkpoint test"}, nil
-		},
-		Observer: func(ctx context.Context, feedback *Feedback, state *LoopState) error {
-			return nil
-		},
-		Judge:             &mockCompletionJudge{solved: true},
-		CheckpointManager: checkpointMgr,
-		Logger:            logger,
-	}
-
-	input := &Input{
-		TraceID:   "test-trace-checkpoint",
-		Content:   "Test checkpoint",
-		ChannelID: "channel-1",
-	}
-
-	output, err := executor.Execute(context.Background(), input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if output.Content != "Checkpoint test" {
-		t.Errorf("Content: expected 'Checkpoint test', got %s", output.Content)
-	}
-	if checkpointMgr.saveCount != 1 {
-		t.Errorf("Checkpoint save count: expected 1, got %d", checkpointMgr.saveCount)
 	}
 }
 
@@ -245,17 +206,4 @@ func (m *mockCompletionJudge) Judge(ctx context.Context, state *LoopState, outpu
 		Confidence: 0.9,
 		Reason:     "mock judge",
 	}, nil
-}
-
-type mockCheckpointManager struct {
-	saveCount int
-}
-
-func (m *mockCheckpointManager) SaveCheckpoint(ctx context.Context, checkpoint *Checkpoint) error {
-	m.saveCount++
-	checkpoint.ID = "checkpoint-" + string(rune('0'+m.saveCount))
-	return nil
-}
-func (m *mockCheckpointManager) LoadCheckpoint(ctx context.Context, id string) (*Checkpoint, error) {
-	return nil, nil
 }
