@@ -10,18 +10,14 @@ import (
 )
 
 type ToolProviderHandler struct {
-	svc    usecase.ToolProviderService
-	logger *zap.Logger
+	BaseHandler[usecase.ToolProviderService]
 }
 
 func NewToolProviderHandler(service usecase.ToolProviderService, logger *zap.Logger) *ToolProviderHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &ToolProviderHandler{
-		svc:    service,
-		logger: logger,
-	}
+	return &ToolProviderHandler{BaseHandler: NewBaseHandler(service, logger)}
 }
 
 type upsertToolProviderRequest struct {
@@ -37,7 +33,12 @@ func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	rows, err := h.svc.List()
+	service := h.currentService()
+	if service == nil {
+		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+		return
+	}
+	rows, err := service.List()
 	if err != nil {
 		logToolRequestWarn(h.logger, r, "tool_provider", "list", "failed", "tool provider request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
@@ -52,7 +53,9 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if !ValidateContentType(w, r, h.logger) {
+	service := h.currentService()
+	if service == nil {
+		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
 		return
 	}
 	provider := extractToolProviderName(r)
@@ -62,7 +65,7 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 	}
 
 	var req upsertToolProviderRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
 	if req.TimeoutSeconds == 0 {
@@ -72,7 +75,7 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 		req.Priority = 100
 	}
 
-	row, svcErr := h.svc.Upsert(provider, usecase.UpsertToolProviderInput{
+	row, svcErr := service.Upsert(provider, usecase.UpsertToolProviderInput{
 		APIKey:         req.APIKey,
 		BaseURL:        req.BaseURL,
 		TimeoutSeconds: req.TimeoutSeconds,
@@ -80,7 +83,7 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 		Enabled:        req.Enabled,
 	})
 	if svcErr != nil {
-		logToolRequestWarn(h.logger, r, "tool_provider", "upsert", "failed", "tool provider request completed", zap.Error(svcErr))
+		logToolRequestWarn(h.logger, r, "tool_provider", "upsert", "failed", "tool provider request completed", zap.Error(svcErr), zap.String("provider", provider))
 		WriteError(w, svcErr, h.logger)
 		return
 	}
@@ -93,12 +96,17 @@ func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
+	service := h.currentService()
+	if service == nil {
+		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+		return
+	}
 	provider := extractToolProviderName(r)
 	if strings.TrimSpace(provider) == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "provider is required", h.logger)
 		return
 	}
-	if err := h.svc.Delete(provider); err != nil {
+	if err := service.Delete(provider); err != nil {
 		logToolRequestWarn(h.logger, r, "tool_provider", "delete", "failed", "tool provider request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
@@ -112,7 +120,12 @@ func (h *ToolProviderHandler) HandleReload(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if err := h.svc.Reload(); err != nil {
+	service := h.currentService()
+	if service == nil {
+		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+		return
+	}
+	if err := service.Reload(); err != nil {
 		logToolRequestWarn(h.logger, r, "tool_provider", "reload", "failed", "tool provider request completed", zap.Error(err))
 		WriteError(w, err, h.logger)
 		return
@@ -122,14 +135,5 @@ func (h *ToolProviderHandler) HandleReload(w http.ResponseWriter, r *http.Reques
 }
 
 func extractToolProviderName(r *http.Request) string {
-	p := strings.TrimSpace(r.PathValue("provider"))
-	if p != "" {
-		return p
-	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	// /api/v1/tools/providers/{provider}
-	if len(parts) >= 5 {
-		return strings.TrimSpace(parts[4])
-	}
-	return ""
+	return pathStringValue(r, "provider", 4)
 }

@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
@@ -11,9 +10,7 @@ import (
 )
 
 type CostHandler struct {
-	mu      sync.RWMutex
-	service usecase.CostQueryService
-	logger  *zap.Logger
+	BaseHandler[usecase.CostQueryService]
 }
 
 func NewCostHandler(service usecase.CostQueryService, logger *zap.Logger) *CostHandler {
@@ -21,28 +18,8 @@ func NewCostHandler(service usecase.CostQueryService, logger *zap.Logger) *CostH
 		logger = zap.NewNop()
 	}
 	return &CostHandler{
-		service: service,
-		logger:  logger,
+		BaseHandler: NewBaseHandler(service, logger),
 	}
-}
-
-// UpdateService swaps the live cost query service in place.
-func (h *CostHandler) UpdateService(service usecase.CostQueryService) {
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.service = service
-}
-
-func (h *CostHandler) currentService() usecase.CostQueryService {
-	if h == nil {
-		return nil
-	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.service
 }
 
 func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {

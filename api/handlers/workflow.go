@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"sync"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
@@ -11,31 +10,11 @@ import (
 
 // WorkflowHandler handles workflow API requests.
 type WorkflowHandler struct {
-	mu      sync.RWMutex
-	service usecase.WorkflowService
-	logger  *zap.Logger
+	BaseHandler[usecase.WorkflowService]
 }
 
 func NewWorkflowHandler(service usecase.WorkflowService, logger *zap.Logger) *WorkflowHandler {
-	return &WorkflowHandler{service: service, logger: logger}
-}
-
-func (h *WorkflowHandler) UpdateService(service usecase.WorkflowService) {
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.service = service
-}
-
-func (h *WorkflowHandler) currentService() usecase.WorkflowService {
-	if h == nil {
-		return nil
-	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.service
+	return &WorkflowHandler{BaseHandler: NewBaseHandler(service, logger)}
 }
 
 // workflowExecuteRequest is the request body for HandleExecute.
