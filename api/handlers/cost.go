@@ -5,44 +5,44 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 type CostHandler struct {
 	mu      sync.RWMutex
-	tracker *observability.CostTracker
+	service usecase.CostQueryService
 	logger  *zap.Logger
 }
 
-func NewCostHandler(tracker *observability.CostTracker, logger *zap.Logger) *CostHandler {
+func NewCostHandler(service usecase.CostQueryService, logger *zap.Logger) *CostHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &CostHandler{
-		tracker: tracker,
+		service: service,
 		logger:  logger,
 	}
 }
 
-// UpdateTracker swaps the live cost tracker in place.
-func (h *CostHandler) UpdateTracker(tracker *observability.CostTracker) {
+// UpdateService swaps the live cost query service in place.
+func (h *CostHandler) UpdateService(service usecase.CostQueryService) {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.tracker = tracker
+	h.service = service
 }
 
-func (h *CostHandler) currentTracker() *observability.CostTracker {
+func (h *CostHandler) currentService() usecase.CostQueryService {
 	if h == nil {
 		return nil
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return h.tracker
+	return h.service
 }
 
 func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
@@ -50,19 +50,17 @@ func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	tracker := h.currentTracker()
-	if tracker == nil {
+	service := h.currentService()
+	if service == nil {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
-	WriteSuccess(w, map[string]any{
-		"total_cost":  tracker.TotalCost(),
-		"by_provider": tracker.CostByProvider(),
-		"by_model":    tracker.CostByModel(),
-		"by_agent":    tracker.CostByAgent(),
-		"by_session":  tracker.CostBySession(),
-		"by_tool":     tracker.CostByTool(),
-	})
+	summary, err := service.GetSummary()
+	if err != nil {
+		WriteError(w, err, h.logger)
+		return
+	}
+	WriteSuccess(w, summary)
 }
 
 func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
@@ -70,8 +68,8 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	tracker := h.currentTracker()
-	if tracker == nil {
+	service := h.currentService()
+	if service == nil {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
@@ -96,31 +94,12 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 		}
 		offset = parsed
 	}
-	records := tracker.Records()
-	total := len(records)
-	if offset > total {
-		offset = total
+	result, err := service.GetRecords(limit, offset)
+	if err != nil {
+		WriteError(w, err, h.logger)
+		return
 	}
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	page := records[offset:end]
-	out := make([]map[string]any, len(page))
-	for i, rec := range page {
-		out[i] = map[string]any{
-			"provider":      rec.Provider,
-			"model":         rec.Model,
-			"agent_id":      rec.AgentID,
-			"session_id":    rec.SessionID,
-			"tool_name":     rec.ToolName,
-			"input_tokens":  rec.InputTokens,
-			"output_tokens": rec.OutputTokens,
-			"cost":          rec.Cost,
-			"timestamp":     rec.Timestamp,
-		}
-	}
-	WriteSuccess(w, map[string]any{"records": out, "total": total, "limit": limit, "offset": offset})
+	WriteSuccess(w, result)
 }
 
 func (h *CostHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
@@ -128,11 +107,14 @@ func (h *CostHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	tracker := h.currentTracker()
-	if tracker == nil {
+	service := h.currentService()
+	if service == nil {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
-	tracker.Reset()
+	if err := service.Reset(); err != nil {
+		WriteError(w, err, h.logger)
+		return
+	}
 	WriteSuccess(w, map[string]string{"message": "cost records reset"})
 }
