@@ -10,6 +10,8 @@ const (
 	ToolProviderFirecrawl  ToolProviderName = "firecrawl"
 	ToolProviderDuckDuckGo ToolProviderName = "duckduckgo"
 	ToolProviderSearXNG    ToolProviderName = "searxng"
+	ToolProviderBrave      ToolProviderName = "brave"
+	ToolProviderBing       ToolProviderName = "bing"
 )
 
 // ToolProviderConfig stores DB-managed provider configuration for hosted tools.
