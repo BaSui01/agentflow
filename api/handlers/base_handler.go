@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"reflect"
 	"sync"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -51,6 +53,29 @@ func (h *BaseHandler[S]) currentService() S {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.service
+}
+
+func serviceIsNil(value any) bool {
+	if value == nil {
+		return true
+	}
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
+// currentServiceOrUnavailable returns the current service or a typed service-unavailable error.
+func (h *BaseHandler[S]) currentServiceOrUnavailable(component string) (S, *types.Error) {
+	service := h.currentService()
+	if serviceIsNil(any(service)) {
+		var zero S
+		return zero, serviceUnavailableError(component)
+	}
+	return service, nil
 }
 
 // Logger returns the handler's logger.

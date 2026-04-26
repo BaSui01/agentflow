@@ -35,3 +35,12 @@ func TestParsePositiveQueryInt_AndBoundedOrDefault(t *testing.T) {
 	assert.Equal(t, 50, boundedOrDefault(0, 50, 200))
 	assert.Equal(t, 200, boundedOrDefault(500, 50, 200))
 }
+
+func TestParseNonNegativeQueryInt(t *testing.T) {
+	parsed, err := parseNonNegativeQueryInt("0", "offset")
+	require.Nil(t, err)
+	assert.Equal(t, 0, parsed)
+
+	_, err = parseNonNegativeQueryInt("-1", "offset")
+	require.NotNil(t, err)
+}

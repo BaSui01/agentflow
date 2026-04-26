@@ -43,9 +43,9 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("rag"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("rag")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	var req ragQueryRequest
@@ -114,9 +114,9 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("rag"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("rag")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	var req ragIndexRequest
@@ -159,9 +159,9 @@ func (h *RAGHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("rag"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("rag")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 

@@ -3,7 +3,9 @@ package handlers
 import (
 	"testing"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -44,4 +46,18 @@ func TestBaseHandler_NilService(t *testing.T) {
 	h := NewBaseHandler((*int)(nil), logger)
 
 	assert.Nil(t, h.currentService())
+}
+
+func TestBaseHandler_CurrentServiceOrUnavailable(t *testing.T) {
+	logger := zap.NewNop()
+	h := NewBaseHandler((*int)(nil), logger)
+	_, err := h.currentServiceOrUnavailable("demo")
+	require.NotNil(t, err)
+	assert.Equal(t, types.ErrServiceUnavailable, err.Code)
+
+	v := 42
+	h.UpdateService(&v)
+	service, err := h.currentServiceOrUnavailable("demo")
+	require.Nil(t, err)
+	assert.Equal(t, 42, *service)
 }

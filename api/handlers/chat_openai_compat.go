@@ -291,9 +291,9 @@ func (h *ChatHandler) HandleOpenAICompatChatCompletions(w http.ResponseWriter, r
 		writeOpenAICompatError(w, types.NewError(types.ErrInvalidRequest, "method not allowed").WithHTTPStatus(http.StatusMethodNotAllowed))
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		writeOpenAICompatError(w, types.NewInternalError("chat service is not configured"))
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		writeOpenAICompatError(w, svcErr)
 		return
 	}
 
@@ -333,9 +333,9 @@ func (h *ChatHandler) HandleOpenAICompatResponses(w http.ResponseWriter, r *http
 		writeOpenAICompatError(w, types.NewError(types.ErrInvalidRequest, "method not allowed").WithHTTPStatus(http.StatusMethodNotAllowed))
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		writeOpenAICompatError(w, types.NewInternalError("chat service is not configured"))
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		writeOpenAICompatError(w, svcErr)
 		return
 	}
 
@@ -382,9 +382,9 @@ func (h *ChatHandler) handleOpenAICompatChatCompletionsStream(w http.ResponseWri
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		writeOpenAICompatError(w, types.NewInternalError("chat service is not configured"))
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		writeOpenAICompatError(w, svcErr)
 		return
 	}
 	stream, err := service.Stream(r.Context(), h.converter.ToUsecaseRequest(req))
@@ -437,9 +437,9 @@ func (h *ChatHandler) handleOpenAICompatResponsesStream(w http.ResponseWriter, r
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		writeOpenAICompatError(w, types.NewInternalError("chat service is not configured"))
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		writeOpenAICompatError(w, svcErr)
 		return
 	}
 	stream, err := service.Stream(r.Context(), h.converter.ToUsecaseRequest(req))

@@ -51,6 +51,18 @@ func parsePositiveQueryInt(raw string, field string) (int, *types.Error) {
 	return parsed, nil
 }
 
+func parseNonNegativeQueryInt(raw string, field string) (int, *types.Error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0, types.NewInvalidRequestError(field + " must be a non-negative integer")
+	}
+	return parsed, nil
+}
+
 func boundedOrDefault(value int, defaultValue int, maxValue int) int {
 	if value <= 0 {
 		value = defaultValue

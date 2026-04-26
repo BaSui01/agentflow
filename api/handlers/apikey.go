@@ -46,9 +46,9 @@ func (h *APIKeyHandler) HandleListProviders(w http.ResponseWriter, r *http.Reque
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("api key"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("api key")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -116,9 +116,9 @@ func (h *APIKeyHandler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("api key"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("api key")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	providerID, ok := extractProviderID(r)
@@ -152,9 +152,9 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("api key"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("api key")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	providerID, ok := extractProviderID(r)
@@ -201,9 +201,9 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("api key"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("api key")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	providerID, ok := extractProviderID(r)
@@ -242,9 +242,9 @@ func (h *APIKeyHandler) HandleDeleteAPIKey(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("api key"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("api key")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	providerID, ok := extractProviderID(r)
@@ -270,9 +270,9 @@ func (h *APIKeyHandler) HandleAPIKeyStats(w http.ResponseWriter, r *http.Request
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("api key"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("api key")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	providerID, ok := extractProviderID(r)

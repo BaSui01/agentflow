@@ -50,7 +50,11 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrUnavailable("workflow")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
+		return
+	}
 	wf, source, apiErr := service.BuildDAGWorkflow(usecase.WorkflowBuildInput{
 		DSL:     req.DSL,
 		DSLFile: req.DSLFile,
@@ -118,7 +122,11 @@ func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := h.currentService()
+	service, svcErr := h.currentServiceOrUnavailable("workflow")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
+		return
+	}
 	result := service.ValidateDSL(req.DSL)
 	WriteSuccess(w, map[string]any{
 		"valid":  result.Valid,

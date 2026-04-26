@@ -32,9 +32,9 @@ func (h *ToolApprovalHandler) HandleList(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	rows, err := service.List(r.Context(), r.URL.Query().Get("status"))
@@ -52,9 +52,9 @@ func (h *ToolApprovalHandler) HandleGet(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	id := extractToolApprovalID(r)
@@ -77,9 +77,9 @@ func (h *ToolApprovalHandler) HandleResolve(w http.ResponseWriter, r *http.Reque
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	id := extractToolApprovalID(r)
@@ -111,9 +111,9 @@ func (h *ToolApprovalHandler) HandleStats(w http.ResponseWriter, r *http.Request
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	stats, err := service.Stats(r.Context())
@@ -131,9 +131,9 @@ func (h *ToolApprovalHandler) HandleCleanup(w http.ResponseWriter, r *http.Reque
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	removed, err := service.Cleanup(r.Context())
@@ -151,9 +151,9 @@ func (h *ToolApprovalHandler) HandleHistory(w http.ResponseWriter, r *http.Reque
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	limit := boundedOrDefault(0, 50, 200)
@@ -178,9 +178,9 @@ func (h *ToolApprovalHandler) HandleListGrants(w http.ResponseWriter, r *http.Re
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	rows, err := service.ListGrants(r.Context())
@@ -198,9 +198,9 @@ func (h *ToolApprovalHandler) HandleRevokeGrant(w http.ResponseWriter, r *http.R
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool approval"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool approval")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	fingerprint := extractToolApprovalGrantFingerprint(r)

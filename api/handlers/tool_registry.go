@@ -45,9 +45,9 @@ func (h *ToolRegistryHandler) HandleList(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool registry"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool registry")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	rows, err := service.List()
@@ -65,9 +65,9 @@ func (h *ToolRegistryHandler) HandleListTargets(w http.ResponseWriter, r *http.R
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool registry"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool registry")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	targets, err := service.ListTargets()
@@ -85,9 +85,9 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool registry"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool registry")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	var req createToolRegistrationRequest
@@ -119,9 +119,9 @@ func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool registry"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool registry")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	id, ok := extractToolRegistrationID(r)
@@ -154,9 +154,9 @@ func (h *ToolRegistryHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool registry"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool registry")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	id, ok := extractToolRegistrationID(r)
@@ -178,9 +178,9 @@ func (h *ToolRegistryHandler) HandleReload(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool registry"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool registry")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	if err := service.Reload(); err != nil {

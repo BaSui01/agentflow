@@ -25,9 +25,9 @@ func (h *AuthorizationAuditHandler) HandleList(w http.ResponseWriter, r *http.Re
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("authorization audit"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("authorization audit")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	input, ok := parseAuthorizationAuditListInput(w, r, h.logger)

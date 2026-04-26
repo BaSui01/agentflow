@@ -64,12 +64,7 @@ func NewAgentHandlerWithService(service usecase.AgentService, sessionMgr *agent.
 }
 
 func (h *AgentHandler) currentServiceOrError() (usecase.AgentService, *types.Error) {
-	service := h.currentService()
-	if service == nil {
-		return nil, types.NewServiceUnavailableError("agent service is not configured").
-			WithHTTPStatus(http.StatusServiceUnavailable)
-	}
-	return service, nil
+	return h.currentServiceOrUnavailable("agent")
 }
 
 // =============================================================================

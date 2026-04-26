@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
@@ -27,9 +26,9 @@ func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("cost tracker")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	summary, err := service.GetSummary()
@@ -45,30 +44,26 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("cost tracker")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	limit := 100
-	if v := r.URL.Query().Get("limit"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 0 {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "limit must be a non-negative integer", h.logger)
-			return
-		}
+	if parsed, err := parseNonNegativeQueryInt(r.URL.Query().Get("limit"), "limit"); err != nil {
+		WriteError(w, err.WithHTTPStatus(http.StatusBadRequest), h.logger)
+		return
+	} else if parsed > 0 {
 		limit = parsed
 	}
 	if limit > 1000 {
 		limit = 1000
 	}
 	offset := 0
-	if v := r.URL.Query().Get("offset"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 0 {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "offset must be a non-negative integer", h.logger)
-			return
-		}
+	if parsed, err := parseNonNegativeQueryInt(r.URL.Query().Get("offset"), "offset"); err != nil {
+		WriteError(w, err.WithHTTPStatus(http.StatusBadRequest), h.logger)
+		return
+	} else {
 		offset = parsed
 	}
 	result, err := service.GetRecords(limit, offset)
@@ -84,9 +79,9 @@ func (h *CostHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("cost tracker")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	if err := service.Reset(); err != nil {

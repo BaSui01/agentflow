@@ -33,9 +33,9 @@ func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool provider")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	rows, err := service.List()
@@ -53,9 +53,9 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool provider")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	provider := extractToolProviderName(r)
@@ -96,9 +96,9 @@ func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool provider")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	provider := extractToolProviderName(r)
@@ -120,9 +120,9 @@ func (h *ToolProviderHandler) HandleReload(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, serviceUnavailableError("tool provider"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("tool provider")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 	if err := service.Reload(); err != nil {

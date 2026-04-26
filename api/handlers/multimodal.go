@@ -261,9 +261,9 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -304,9 +304,9 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	service := h.currentService()
-	if service == nil {
-		_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{"type": "error", "code": types.ErrServiceUnavailable, "message": "multimodal service is not configured"})
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		_ = writeMultimodalSSEEventJSON(w, "error", map[string]any{"type": "error", "code": svcErr.Code, "message": svcErr.Message})
 		_ = writeMultimodalSSE(w, []byte("data: [DONE]\n\n"))
 		return
 	}
@@ -525,9 +525,9 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -576,9 +576,9 @@ func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -631,9 +631,9 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		messages = []api.Message{{Role: "user", Content: strings.TrimSpace(req.Message)}}
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "multimodal service is not configured", h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("multimodal")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 

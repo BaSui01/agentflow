@@ -68,9 +68,9 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -132,9 +132,9 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -286,9 +286,9 @@ func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	service := h.currentService()
-	if service == nil {
-		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+	service, svcErr := h.currentServiceOrUnavailable("chat")
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
