@@ -185,7 +185,11 @@ func newHierarchicalModeBaseAgent(supervisor agent.Agent, gateway llmcore.Gatewa
 		}
 	}
 
-	return agentruntime.NewBuilder(gateway, logger).Build(context.Background(), types.AgentConfig{
+	b, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return nil, fmt.Errorf("create runtime builder: %w", err)
+	}
+	return b.Build(context.Background(), types.AgentConfig{
 		Core: types.CoreConfig{
 			ID:   "multiagent-hierarchical-mode",
 			Name: "multiagent-hierarchical-mode",

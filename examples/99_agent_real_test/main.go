@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -83,7 +84,11 @@ func buildRuntimeAgent(
 		configure(&opts)
 	}
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	return agentruntime.NewBuilder(gateway, logger).WithOptions(opts).Build(ctx, cfg)
+	b, err := agentruntime.NewBuilder(gateway, logger)
+	if err != nil {
+		return nil, err
+	}
+	return b.WithOptions(opts).Build(ctx, cfg)
 }
 
 // ─── 工具管理器 ────────────────────────────────────
@@ -782,7 +787,11 @@ func d12RealtimeCoordinator(ctx context.Context, provider llm.Provider, lg *zap.
 	mgr := agent.NewSubagentManager(lg)
 	defer mgr.Close()
 
-	bus := agent.NewEventBus(lg)
+	bus, err := agent.NewEventBus(lg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "NewEventBus error: %v\n", err)
+		return
+	}
 	coordinator := agent.NewRealtimeCoordinator(mgr, bus, lg)
 
 	output, err := coordinator.CoordinateSubagents(ctx, []agent.Agent{a1, a2}, &agent.Input{

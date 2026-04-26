@@ -124,7 +124,9 @@ func buildE2EAgent(t *testing.T, agentID string, maxConcurrency int) agent.Agent
 		},
 	}
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, err := agentruntime.NewBuilder(gateway, logger).WithOptions(agentruntime.BuildOptions{
+	b, err := agentruntime.NewBuilder(gateway, logger)
+	require.NoError(t, err)
+	ag, err := b.WithOptions(agentruntime.BuildOptions{
 		MaxConcurrency: maxConcurrency,
 	}).Build(context.Background(), cfg)
 	require.NoError(t, err)

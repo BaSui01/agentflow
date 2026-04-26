@@ -403,7 +403,10 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	b.ensureBuildLogger()
 
 	// 创建基础 Agent
-	agent := b.newBaseAgent()
+	agent, err := b.newBaseAgent()
+	if err != nil {
+		return nil, fmt.Errorf("build base agent: %w", err)
+	}
 	agent.SetGateway(b.gateway)
 
 	// 设置工具专用 Gateway（双模型模式）
@@ -444,7 +447,7 @@ func (b *AgentBuilder) ensureBuildLogger() {
 	}
 }
 
-func (b *AgentBuilder) newBaseAgent() *BaseAgent {
+func (b *AgentBuilder) newBaseAgent() (*BaseAgent, error) {
 	return BuildBaseAgent(
 		b.config,
 		b.gateway,

@@ -54,10 +54,10 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err, "CreateExperiment should not return error")
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err, "StartExperiment should not return error")
 
 		// 执行许多分配
@@ -66,7 +66,7 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 
 		for i := 0; i < numAllocations; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			variant, err := tester.Assign(experimentID, userID)
+			variant, err := tester.Assign(context.Background(), experimentID, userID)
 			require.NoError(rt, err, "Assign should not return error")
 			counts[variant.ID]++
 		}
@@ -125,10 +125,10 @@ func TestProperty_ABTest_TrafficAllocation_TwoVariants(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 执行分配
@@ -137,7 +137,7 @@ func TestProperty_ABTest_TrafficAllocation_TwoVariants(t *testing.T) {
 
 		for i := 0; i < numAllocations; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			variant, err := tester.Assign(experimentID, userID)
+			variant, err := tester.Assign(context.Background(), experimentID, userID)
 			require.NoError(rt, err)
 			counts[variant.ID]++
 		}
@@ -187,10 +187,10 @@ func TestProperty_ABTest_TrafficAllocation_EqualWeights(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 执行分配
@@ -199,7 +199,7 @@ func TestProperty_ABTest_TrafficAllocation_EqualWeights(t *testing.T) {
 
 		for i := 0; i < numAllocations; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			variant, err := tester.Assign(experimentID, userID)
+			variant, err := tester.Assign(context.Background(), experimentID, userID)
 			require.NoError(rt, err)
 			counts[variant.ID]++
 		}
@@ -257,10 +257,10 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 执行分配
@@ -269,7 +269,7 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 
 		for i := 0; i < numAllocations; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			variant, err := tester.Assign(experimentID, userID)
+			variant, err := tester.Assign(context.Background(), experimentID, userID)
 			require.NoError(rt, err)
 			counts[variant.ID]++
 		}
@@ -323,10 +323,10 @@ func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 生成随机用户ID
@@ -336,7 +336,7 @@ func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 		// 第一次通过:记录初始任务
 		for i := 0; i < numUsers; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			variant, err := tester.Assign(experimentID, userID)
+			variant, err := tester.Assign(context.Background(), experimentID, userID)
 			require.NoError(rt, err)
 			userAssignments[userID] = variant.ID
 		}
@@ -345,7 +345,7 @@ func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 		numChecks := rapid.IntRange(3, 10).Draw(rt, "numChecks")
 		for check := 0; check < numChecks; check++ {
 			for userID, expectedVariantID := range userAssignments {
-				variant, err := tester.Assign(experimentID, userID)
+				variant, err := tester.Assign(context.Background(), experimentID, userID)
 				require.NoError(rt, err)
 				assert.Equal(rt, expectedVariantID, variant.ID,
 					"User %s should consistently get variant %s, but got %s on check %d",
@@ -380,10 +380,10 @@ func TestProperty_ABTest_TrafficAllocation_DifferentExperiments(t *testing.T) {
 				Status:   ExperimentStatusRunning,
 			}
 
-			err := tester.CreateExperiment(exp)
+			err := tester.CreateExperiment(context.Background(), exp)
 			require.NoError(rt, err)
 
-			err = tester.StartExperiment(experimentID)
+			err = tester.StartExperiment(context.Background(), experimentID)
 			require.NoError(rt, err)
 
 			experiments[i] = exp
@@ -394,7 +394,7 @@ func TestProperty_ABTest_TrafficAllocation_DifferentExperiments(t *testing.T) {
 		assignments := make(map[string]string)
 
 		for _, exp := range experiments {
-			variant, err := tester.Assign(exp.ID, userID)
+			variant, err := tester.Assign(context.Background(), exp.ID, userID)
 			require.NoError(rt, err)
 			assignments[exp.ID] = variant.ID
 		}
@@ -447,10 +447,10 @@ func TestProperty_ABTest_TrafficAllocation_LargeScale(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 执行大量拨款
@@ -459,7 +459,7 @@ func TestProperty_ABTest_TrafficAllocation_LargeScale(t *testing.T) {
 
 		for i := 0; i < numAllocations; i++ {
 			userID := fmt.Sprintf("user-%d", i)
-			variant, err := tester.Assign(experimentID, userID)
+			variant, err := tester.Assign(context.Background(), experimentID, userID)
 			require.NoError(rt, err)
 			counts[variant.ID]++
 		}
@@ -527,10 +527,10 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err, "CreateExperiment should not return error")
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err, "StartExperiment should not return error")
 
 		// 生成每个变体的随机样本数(有意义的统计数据至少为10个)
@@ -553,13 +553,13 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 					Metrics: metricValues,
 				}
 
-				err := tester.RecordResult(experimentID, variant.ID, result)
+				err := tester.RecordResult(context.Background(), experimentID, variant.ID, result)
 				require.NoError(rt, err, "RecordResult should not return error")
 			}
 		}
 
 		// 完成实验
-		err = tester.CompleteExperiment(experimentID)
+		err = tester.CompleteExperiment(context.Background(), experimentID)
 		require.NoError(rt, err, "CompleteExperiment should not return error")
 
 		// 分析实验
@@ -655,10 +655,10 @@ func TestProperty_ABTest_StatisticalAnalysis_EmptyVariants(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 只记录控制结果, 留空处理
@@ -669,7 +669,7 @@ func TestProperty_ABTest_StatisticalAnalysis_EmptyVariants(t *testing.T) {
 				Success: true,
 				Score:   rapid.Float64Range(0.0, 1.0).Draw(rt, fmt.Sprintf("score_%d", i)),
 			}
-			err := tester.RecordResult(experimentID, "control", result)
+			err := tester.RecordResult(context.Background(), experimentID, "control", result)
 			require.NoError(rt, err)
 		}
 
@@ -727,10 +727,10 @@ func TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 记录两种变式的所有计量结果
@@ -748,7 +748,7 @@ func TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency(t *testing.T) {
 					Score:   rapid.Float64Range(0.0, 1.0).Draw(rt, fmt.Sprintf("score_%s_%d", variant.ID, i)),
 					Metrics: metricValues,
 				}
-				err := tester.RecordResult(experimentID, variant.ID, result)
+				err := tester.RecordResult(context.Background(), experimentID, variant.ID, result)
 				require.NoError(rt, err)
 			}
 		}
@@ -806,10 +806,10 @@ func TestProperty_ABTest_StatisticalAnalysis_ValidStatistics(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 记录已知值范围的结果
@@ -832,7 +832,7 @@ func TestProperty_ABTest_StatisticalAnalysis_ValidStatistics(t *testing.T) {
 						"accuracy": accuracy,
 					},
 				}
-				err := tester.RecordResult(experimentID, variant.ID, result)
+				err := tester.RecordResult(context.Background(), experimentID, variant.ID, result)
 				require.NoError(rt, err)
 			}
 		}
@@ -925,10 +925,10 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 所有变量的记录结果
@@ -943,13 +943,13 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 						"latency": rapid.Float64Range(50.0, 500.0).Draw(rt, fmt.Sprintf("latency_%s_%d", variant.ID, i)),
 					},
 				}
-				err := tester.RecordResult(experimentID, variant.ID, result)
+				err := tester.RecordResult(context.Background(), experimentID, variant.ID, result)
 				require.NoError(rt, err)
 			}
 		}
 
 		// 完成和分析
-		err = tester.CompleteExperiment(experimentID)
+		err = tester.CompleteExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		ctx := t.Context()
@@ -1006,10 +1006,10 @@ func TestProperty_ABTest_StatisticalAnalysis_ReportGeneration(t *testing.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		err := tester.CreateExperiment(exp)
+		err := tester.CreateExperiment(context.Background(), exp)
 		require.NoError(rt, err)
 
-		err = tester.StartExperiment(experimentID)
+		err = tester.StartExperiment(context.Background(), experimentID)
 		require.NoError(rt, err)
 
 		// 记录结果
@@ -1021,7 +1021,7 @@ func TestProperty_ABTest_StatisticalAnalysis_ReportGeneration(t *testing.T) {
 					Success: true,
 					Score:   rapid.Float64Range(0.0, 1.0).Draw(rt, fmt.Sprintf("score_%s_%d", variant.ID, i)),
 				}
-				err := tester.RecordResult(experimentID, variant.ID, result)
+				err := tester.RecordResult(context.Background(), experimentID, variant.ID, result)
 				require.NoError(rt, err)
 			}
 		}

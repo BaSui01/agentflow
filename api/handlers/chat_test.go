@@ -67,7 +67,7 @@ func newChatHandlerForProvider(provider llm.Provider, logger *zap.Logger) *ChatH
 		Logger:       logger,
 	})
 	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
-	service := usecase.NewDefaultChatService(
+	service, err := usecase.NewDefaultChatService(
 		usecase.ChatRuntime{
 			Gateway:      gateway,
 			ChatProvider: chatProvider,
@@ -75,7 +75,14 @@ func newChatHandlerForProvider(provider llm.Provider, logger *zap.Logger) *ChatH
 		newUsecaseChatConverter(NewDefaultChatConverter(defaultStreamTimeout)),
 		logger,
 	)
-	return NewChatHandler(service, logger)
+	if err != nil {
+		panic(err)
+	}
+	handler, err := NewChatHandler(service, logger)
+	if err != nil {
+		panic(err)
+	}
+	return handler
 }
 
 // =============================================================================

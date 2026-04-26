@@ -38,22 +38,31 @@ func buildServeAgentRegistries(set *ServeHandlerSet, logger *zap.Logger) {
 	set.DiscoveryRegistry, set.AgentRegistry = BuildAgentRegistries(logger)
 }
 
-func buildServeChatHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput, llmRuntime *LLMHandlerRuntime) {
+func buildServeChatHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput, llmRuntime *LLMHandlerRuntime) error {
 	if llmRuntime == nil || set.Provider == nil {
-		return
+		return nil
 	}
 	mainProviderMode := config.NormalizeLLMMainProviderMode(in.Cfg.LLM.MainProviderMode)
-	set.ChatService = BuildChatService(ChatServiceBuildInput{
+	chatService, err := BuildChatService(ChatServiceBuildInput{
 		Provider:       llmRuntime.Provider,
 		PolicyManager:  llmRuntime.PolicyManager,
 		Ledger:         llmRuntime.Ledger,
 		ToolingRuntime: set.ToolingRuntime,
 		Logger:         in.Logger,
 	})
-	set.ChatHandler = handlers.NewChatHandler(set.ChatService, in.Logger)
+	if err != nil {
+		return fmt.Errorf("failed to build chat service: %w", err)
+	}
+	set.ChatService = chatService
+	chatHandler, err := handlers.NewChatHandler(set.ChatService, in.Logger)
+	if err != nil {
+		return fmt.Errorf("failed to create chat handler: %w", err)
+	}
+	set.ChatHandler = chatHandler
 	in.Logger.Info("Chat handler initialized with middleware chain",
 		zap.String("mode", mainProviderMode),
 		zap.String("provider", in.Cfg.LLM.DefaultProvider))
+	return nil
 }
 
 func buildServeAgentHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput, llmRuntime *LLMHandlerRuntime) error {

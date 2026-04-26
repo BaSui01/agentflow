@@ -140,9 +140,8 @@ func (p *DiscoveryProtocol) Start(ctx context.Context) error {
 		}
 	}
 
-	// 启用后启动多播收听器
 	if p.config.EnableMulticast {
-		if err := p.startMulticast(); err != nil {
+		if err := p.startMulticast(ctx); err != nil {
 			p.logger.Warn("failed to start multicast", zap.Error(err))
 			// 如果多播失败, 不要失败
 		}
@@ -464,8 +463,7 @@ func (p *DiscoveryProtocol) writeProtocolInternalError(w http.ResponseWriter, me
 	p.writeProtocolError(w, http.StatusInternalServerError, internalProtocolErrMsg)
 }
 
-// 启动多收听器。
-func (p *DiscoveryProtocol) startMulticast() error {
+func (p *DiscoveryProtocol) startMulticast(ctx context.Context) error {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", p.config.MulticastAddress, p.config.MulticastPort))
 	if err != nil {
 		return fmt.Errorf("failed to resolve multicast address: %w", err)
@@ -486,7 +484,7 @@ func (p *DiscoveryProtocol) startMulticast() error {
 
 	// 开始收听器
 	p.wg.Add(1)
-	go p.multicastListener()
+	go p.multicastListener(ctx)
 
 	p.logger.Info("multicast discovery started",
 		zap.String("address", p.config.MulticastAddress),
@@ -496,8 +494,7 @@ func (p *DiscoveryProtocol) startMulticast() error {
 	return nil
 }
 
-// 多播听众收听多播公告.
-func (p *DiscoveryProtocol) multicastListener() {
+func (p *DiscoveryProtocol) multicastListener(ctx context.Context) {
 	defer p.wg.Done()
 
 	buf := make([]byte, 65536)
@@ -527,7 +524,7 @@ func (p *DiscoveryProtocol) multicastListener() {
 			}
 
 			// 进程通知
-			p.processMulticastAnnouncement(&info)
+			p.processMulticastAnnouncement(ctx, &info)
 		}
 	}
 }
@@ -547,8 +544,7 @@ func (p *DiscoveryProtocol) announceMulticast(info *AgentInfo) error {
 	return err
 }
 
-// 处理多播通知。
-func (p *DiscoveryProtocol) processMulticastAnnouncement(info *AgentInfo) {
+func (p *DiscoveryProtocol) processMulticastAnnouncement(ctx context.Context, info *AgentInfo) {
 	if info == nil || info.Card == nil {
 		return
 	}
@@ -563,7 +559,6 @@ func (p *DiscoveryProtocol) processMulticastAnnouncement(info *AgentInfo) {
 
 	// 向登记册登记
 	if p.registry != nil {
-		ctx := context.Background()
 		if err := p.registry.RegisterAgent(ctx, info); err != nil {
 			// 尝试更新
 			if updateErr := p.registry.UpdateAgent(ctx, info); updateErr != nil {

@@ -106,7 +106,8 @@ func buildBenchAgent(agentID string, maxConcurrency int) agent.Agent {
 		LLM:  types.LLMConfig{Model: "test-model"},
 	}
 	gateway := llmgateway.New(llmgateway.Config{ChatProvider: provider, Logger: logger})
-	ag, _ := agentruntime.NewBuilder(gateway, logger).WithOptions(agentruntime.BuildOptions{
+	b, _ := agentruntime.NewBuilder(gateway, logger)
+	ag, _ := b.WithOptions(agentruntime.BuildOptions{
 		MaxConcurrency: maxConcurrency,
 	}).Build(context.Background(), cfg)
 	_ = ag.Init(context.Background())

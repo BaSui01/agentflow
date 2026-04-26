@@ -60,16 +60,16 @@ type MultimodalHandler struct {
 	imageStreamProviderFn  func(string) (image.StreamingProvider, bool)
 }
 
-func NewMultimodalHandler(service usecase.MultimodalService, logger *zap.Logger) *MultimodalHandler {
+func NewMultimodalHandler(service usecase.MultimodalService, logger *zap.Logger) (*MultimodalHandler, error) {
 	if logger == nil {
-		panic("api.MultimodalHandler: logger is required and cannot be nil")
+		return nil, fmt.Errorf("api.MultimodalHandler: logger is required and cannot be nil")
 	}
 	return &MultimodalHandler{
 		BaseHandler:      NewBaseHandler(service, logger.With(zap.String("handler", "multimodal"))),
 		referenceMaxSize: defaultReferenceBytes,
 		referenceTTL:     defaultReferenceTTL,
 		referenceStore:   storage.NewMemoryReferenceStore(),
-	}
+	}, nil
 }
 
 func (h *MultimodalHandler) ApplyRuntimeDeps(deps MultimodalHandlerRuntimeDeps) {

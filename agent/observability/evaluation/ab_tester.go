@@ -119,9 +119,7 @@ func NewABTester(store ExperimentStore, logger *zap.Logger) *ABTester {
 	}
 }
 
-// CreateExperiment 创建实验
-// 审定:所需经费11.1
-func (t *ABTester) CreateExperiment(exp *Experiment) error {
+func (t *ABTester) CreateExperiment(ctx context.Context, exp *Experiment) error {
 	if exp == nil {
 		return errors.New("experiment cannot be nil")
 	}
@@ -147,7 +145,7 @@ func (t *ABTester) CreateExperiment(exp *Experiment) error {
 	t.mu.Unlock()
 
 	// 持久化到存储
-	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+	if err := t.store.SaveExperiment(ctx, exp); err != nil {
 		t.logger.Warn("failed to save experiment to store", zap.Error(err))
 	}
 
@@ -174,8 +172,7 @@ func (t *ABTester) validateWeights(variants []Variant) error {
 	return nil
 }
 
-// GetExperiment 获取实验
-func (t *ABTester) GetExperiment(experimentID string) (*Experiment, error) {
+func (t *ABTester) GetExperiment(ctx context.Context, experimentID string) (*Experiment, error) {
 	t.mu.RLock()
 	exp, ok := t.experiments[experimentID]
 	t.mu.RUnlock()
@@ -185,7 +182,7 @@ func (t *ABTester) GetExperiment(experimentID string) (*Experiment, error) {
 	}
 
 	// 尝试从存储加载
-	exp, err := t.store.LoadExperiment(context.Background(), experimentID)
+	exp, err := t.store.LoadExperiment(ctx, experimentID)
 	if err != nil {
 		return nil, ErrExperimentNotFound
 	}
@@ -195,9 +192,8 @@ func (t *ABTester) GetExperiment(experimentID string) (*Experiment, error) {
 	return exp, nil
 }
 
-// StartExperiment 启动实验
-func (t *ABTester) StartExperiment(experimentID string) error {
-	exp, err := t.GetExperiment(experimentID)
+func (t *ABTester) StartExperiment(ctx context.Context, experimentID string) error {
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return err
 	}
@@ -207,7 +203,7 @@ func (t *ABTester) StartExperiment(experimentID string) error {
 	exp.StartTime = time.Now()
 	t.mu.Unlock()
 
-	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+	if err := t.store.SaveExperiment(ctx, exp); err != nil {
 		t.logger.Warn("failed to save experiment status", zap.Error(err))
 	}
 
@@ -215,9 +211,8 @@ func (t *ABTester) StartExperiment(experimentID string) error {
 	return nil
 }
 
-// PauseExperiment 暂停实验
-func (t *ABTester) PauseExperiment(experimentID string) error {
-	exp, err := t.GetExperiment(experimentID)
+func (t *ABTester) PauseExperiment(ctx context.Context, experimentID string) error {
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return err
 	}
@@ -226,7 +221,7 @@ func (t *ABTester) PauseExperiment(experimentID string) error {
 	exp.Status = ExperimentStatusPaused
 	t.mu.Unlock()
 
-	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+	if err := t.store.SaveExperiment(ctx, exp); err != nil {
 		t.logger.Warn("failed to save experiment status", zap.Error(err))
 	}
 
@@ -234,9 +229,8 @@ func (t *ABTester) PauseExperiment(experimentID string) error {
 	return nil
 }
 
-// CompleteExperiment 完成实验
-func (t *ABTester) CompleteExperiment(experimentID string) error {
-	exp, err := t.GetExperiment(experimentID)
+func (t *ABTester) CompleteExperiment(ctx context.Context, experimentID string) error {
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return err
 	}
@@ -247,7 +241,7 @@ func (t *ABTester) CompleteExperiment(experimentID string) error {
 	exp.EndTime = &now
 	t.mu.Unlock()
 
-	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+	if err := t.store.SaveExperiment(ctx, exp); err != nil {
 		t.logger.Warn("failed to save experiment status", zap.Error(err))
 	}
 
@@ -255,11 +249,8 @@ func (t *ABTester) CompleteExperiment(experimentID string) error {
 	return nil
 }
 
-// Assign 分配变体
-// 使用一致性哈希确保同一用户始终分配到同一变体
-// 审定:所需经费11.2
-func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
-	exp, err := t.GetExperiment(experimentID)
+func (t *ABTester) Assign(ctx context.Context, experimentID, userID string) (*Variant, error) {
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +260,7 @@ func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
 	}
 
 	// 检查是否已有分配
-	if variantID, err := t.store.GetAssignment(context.Background(), experimentID, userID); err == nil && variantID != "" {
+	if variantID, err := t.store.GetAssignment(ctx, experimentID, userID); err == nil && variantID != "" {
 		for i := range exp.Variants {
 			if exp.Variants[i].ID == variantID {
 				return &exp.Variants[i], nil
@@ -281,7 +272,7 @@ func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
 	variant := t.assignByHash(exp.Variants, experimentID, userID)
 
 	// 记录分配
-	if err := t.store.RecordAssignment(context.Background(), experimentID, userID, variant.ID); err != nil {
+	if err := t.store.RecordAssignment(ctx, experimentID, userID, variant.ID); err != nil {
 		t.logger.Warn("failed to record assignment", zap.Error(err))
 	}
 
@@ -323,10 +314,8 @@ func (t *ABTester) assignByHash(variants []Variant, experimentID, userID string)
 	return &variants[len(variants)-1]
 }
 
-// RecordResult 记录结果
-// 核证:所需经费 11.3
-func (t *ABTester) RecordResult(experimentID, variantID string, result *EvalResult) error {
-	exp, err := t.GetExperiment(experimentID)
+func (t *ABTester) RecordResult(ctx context.Context, experimentID, variantID string, result *EvalResult) error {
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return err
 	}
@@ -344,7 +333,7 @@ func (t *ABTester) RecordResult(experimentID, variantID string, result *EvalResu
 	}
 
 	// 持久化结果
-	if err := t.store.RecordResult(context.Background(), experimentID, variantID, result); err != nil {
+	if err := t.store.RecordResult(ctx, experimentID, variantID, result); err != nil {
 		return fmt.Errorf("failed to record result: %w", err)
 	}
 
@@ -356,10 +345,8 @@ func (t *ABTester) RecordResult(experimentID, variantID string, result *EvalResu
 	return nil
 }
 
-// Analyze 分析实验结果
-// 审定: 所需经费 11.3, 11.4
 func (t *ABTester) Analyze(ctx context.Context, experimentID string) (*ExperimentResult, error) {
-	exp, err := t.GetExperiment(experimentID)
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return nil, err
 	}
@@ -556,13 +543,12 @@ func (t *ABTester) ListExperiments() []*Experiment {
 	return experiments
 }
 
-// DeleteExperiment 删除实验
-func (t *ABTester) DeleteExperiment(experimentID string) error {
+func (t *ABTester) DeleteExperiment(ctx context.Context, experimentID string) error {
 	t.mu.Lock()
 	delete(t.experiments, experimentID)
 	t.mu.Unlock()
 
-	if err := t.store.DeleteExperiment(context.Background(), experimentID); err != nil {
+	if err := t.store.DeleteExperiment(ctx, experimentID); err != nil {
 		return fmt.Errorf("failed to delete experiment from store: %w", err)
 	}
 
@@ -594,8 +580,7 @@ func (t *ABTester) AutoSelectWinner(ctx context.Context, experimentID string, mi
 			result.Confidence*100, minConfidence*100)
 	}
 
-	// 让实验找到胜利的变体
-	exp, err := t.GetExperiment(experimentID)
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return nil, err
 	}
@@ -652,10 +637,8 @@ type VariantComparison struct {
 	Significant    map[string]bool    `json:"significant"` // at 95% level
 }
 
-// 生成报告生成一份全面的统计意义分析报告
-// 审定:所需经费 11.4
 func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*StatisticalReport, error) {
-	exp, err := t.GetExperiment(experimentID)
+	exp, err := t.GetExperiment(ctx, experimentID)
 	if err != nil {
 		return nil, err
 	}

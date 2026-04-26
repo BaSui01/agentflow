@@ -172,7 +172,7 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 		}
 		return response, nil
 	case <-ctx.Done():
-		_ = m.CancelInterrupt(context.Background(), pending.interrupt.ID)
+		_ = m.CancelInterrupt(ctx, pending.interrupt.ID)
 		return nil, ctx.Err()
 	case <-pending.timeoutCtx.Done():
 		if pending.timeoutCtx.Err() != context.DeadlineExceeded {
@@ -183,13 +183,13 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 				}
 			default:
 			}
-			_ = m.CancelInterrupt(context.Background(), pending.interrupt.ID)
+			_ = m.CancelInterrupt(ctx, pending.interrupt.ID)
 			if err := pending.timeoutCtx.Err(); err != nil {
 				return nil, err
 			}
 			return nil, fmt.Errorf("interrupt canceled: %s", pending.interrupt.ID)
 		}
-		m.handleTimeout(context.Background(), pending.interrupt)
+		m.handleTimeout(ctx, pending.interrupt)
 		return nil, fmt.Errorf("interrupt timeout: %s", pending.interrupt.ID)
 	}
 }
@@ -238,7 +238,7 @@ func (m *InterruptManager) createPendingInterrupt(
 		return nil, fmt.Errorf("failed to save interrupt: %w", err)
 	}
 
-	timeoutParent := context.Background()
+	timeoutParent := ctx
 	if bindToParent {
 		timeoutParent = ctx
 	}
@@ -258,13 +258,13 @@ func (m *InterruptManager) createPendingInterrupt(
 	m.notifyHandlers(ctx, interrupt)
 
 	if !bindToParent {
-		go func(waitCtx context.Context, interrupt *Interrupt) {
+		go func(waitCtx context.Context, interrupt *Interrupt, parentCtx context.Context) {
 			<-waitCtx.Done()
 			if waitCtx.Err() != context.DeadlineExceeded {
 				return
 			}
-			m.handleTimeout(context.Background(), interrupt)
-		}(interruptCtx, interrupt)
+			m.handleTimeout(parentCtx, interrupt)
+		}(interruptCtx, interrupt, ctx)
 	}
 
 	return pending, nil

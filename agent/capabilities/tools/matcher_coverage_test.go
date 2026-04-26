@@ -124,7 +124,7 @@ func TestAgentDiscoveryIntegration_ReportLoads(t *testing.T) {
 	integration.SetLoadReporter("agent1", func() float64 { return 0.5 })
 
 	// Call reportLoads directly
-	integration.reportLoads()
+	integration.reportLoads(context.Background())
 }
 
 // --- Composer: Compose full path ---

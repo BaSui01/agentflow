@@ -723,7 +723,10 @@ func newMultimodalHandlerForTest(cfg multimodalHandlerTestConfig) *MultimodalHan
 		},
 	)
 
-	handler := NewMultimodalHandler(service, logger)
+	handler, err := NewMultimodalHandler(service, logger)
+	if err != nil {
+		panic(err)
+	}
 	handler.ApplyRuntimeDeps(MultimodalHandlerRuntimeDeps{
 		DefaultImageProvider: defaultImage,
 		DefaultVideoProvider: defaultVideo,

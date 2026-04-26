@@ -394,7 +394,10 @@ func TestRedisHealthCheck_Error(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_HandleProviderError_TypedError(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	w := httptest.NewRecorder()
 	typedErr := types.NewError(types.ErrRateLimit, "too many requests")
@@ -404,7 +407,10 @@ func TestChatHandler_HandleProviderError_TypedError(t *testing.T) {
 }
 
 func TestChatHandler_HandleProviderError_GenericError(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	w := httptest.NewRecorder()
 	handler.handleProviderError(w, errors.New("unknown error"))
@@ -527,7 +533,10 @@ func TestConvertStreamUsage_NonNil(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ConvertToLLMRequest_WithImages(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	apiReq := &api.ChatRequest{
 		Model: "gpt-4",
@@ -550,7 +559,10 @@ func TestChatHandler_ConvertToLLMRequest_WithImages(t *testing.T) {
 }
 
 func TestChatHandler_ConvertToLLMRequest_InvalidTimeout(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	apiReq := &api.ChatRequest{
 		Model: "gpt-4",
@@ -566,7 +578,10 @@ func TestChatHandler_ConvertToLLMRequest_InvalidTimeout(t *testing.T) {
 }
 
 func TestChatHandler_ConvertToLLMRequest_WithExtendedMessageFields(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	reasoning := "internal reasoning"
 	refusal := "cannot comply"
@@ -654,7 +669,10 @@ func TestChatHandler_HandleCompletion_ProviderError(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_HandleCompletion_WrongContentType(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -741,7 +759,10 @@ func TestChatHandler_HandleStream_StreamErrorChunk(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -750,13 +771,16 @@ func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
 		},
 	}
 
-	err := handler.validateChatRequest(req)
+	err = handler.validateChatRequest(req)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Message, "role must be one of")
 }
 
 func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -765,7 +789,7 @@ func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
 		},
 	}
 
-	err := handler.validateChatRequest(req)
+	err = handler.validateChatRequest(req)
 	assert.Nil(t, err)
 }
 
@@ -774,7 +798,10 @@ func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ValidateChatRequest_NegativeMaxTokens(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler, err := NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -784,7 +811,7 @@ func TestChatHandler_ValidateChatRequest_NegativeMaxTokens(t *testing.T) {
 		MaxTokens: -1,
 	}
 
-	err := handler.validateChatRequest(req)
+	err = handler.validateChatRequest(req)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Message, "max_tokens")
 }

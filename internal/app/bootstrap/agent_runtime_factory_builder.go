@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 
 	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/runtime"
@@ -57,7 +58,11 @@ func RegisterDefaultRuntimeAgentFactory(
 			runtimeGateway = gateway
 		}
 
-		builder := runtime.NewBuilder(runtimeGateway, factoryLogger).WithOptions(opts)
+		builder, err := runtime.NewBuilder(runtimeGateway, factoryLogger)
+		if err != nil {
+			return nil, fmt.Errorf("create runtime builder: %w", err)
+		}
+		builder = builder.WithOptions(opts)
 		if toolGateway != nil {
 			builder = builder.WithToolGateway(toolGateway)
 		}

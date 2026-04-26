@@ -432,8 +432,8 @@ func demoDiscoverySubsystem(ctx context.Context, logger *zap.Logger) {
 	service.Unsubscribe(subID)
 	annSubID := service.SubscribeToAnnouncements(func(agent *discovery.AgentInfo) {})
 	service.UnsubscribeFromAnnouncements(annSubID)
-	_ = service.RegisterLocalAgent(info)
-	_ = service.UpdateLocalAgentLoad(0.3)
+	_ = service.RegisterLocalAgent(ctx, info)
+	_ = service.UpdateLocalAgentLoad(ctx, 0.3)
 	_, _ = service.Registry(), service.Matcher()
 	_, _ = service.Composer(), service.Protocol()
 
@@ -611,12 +611,12 @@ func demoEvaluationSubsystem(ctx context.Context, logger *zap.Logger) {
 		},
 		Metrics: []string{"accuracy"},
 	}
-	_ = tester.CreateExperiment(exp)
-	_, _ = tester.GetExperiment(exp.ID)
-	_ = tester.StartExperiment(exp.ID)
-	assigned, _ := tester.Assign(exp.ID, "user-1")
+	_ = tester.CreateExperiment(ctx, exp)
+	_, _ = tester.GetExperiment(ctx, exp.ID)
+	_ = tester.StartExperiment(ctx, exp.ID)
+	assigned, _ := tester.Assign(ctx, exp.ID, "user-1")
 	if assigned != nil {
-		_ = tester.RecordResult(exp.ID, assigned.ID, &evaluation.EvalResult{
+		_ = tester.RecordResult(ctx, exp.ID, assigned.ID, &evaluation.EvalResult{
 			TaskID:  "t1",
 			Success: true,
 			Output:  "ok",
@@ -624,14 +624,14 @@ func demoEvaluationSubsystem(ctx context.Context, logger *zap.Logger) {
 			Metrics: map[string]float64{"accuracy": 0.95},
 		})
 	}
-	_ = tester.RecordResult(exp.ID, "control", &evaluation.EvalResult{
+	_ = tester.RecordResult(ctx, exp.ID, "control", &evaluation.EvalResult{
 		TaskID:  "t2",
 		Success: true,
 		Output:  "ok",
 		Score:   0.80,
 		Metrics: map[string]float64{"accuracy": 0.80},
 	})
-	_ = tester.RecordResult(exp.ID, "treatment", &evaluation.EvalResult{
+	_ = tester.RecordResult(ctx, exp.ID, "treatment", &evaluation.EvalResult{
 		TaskID:  "t3",
 		Success: true,
 		Output:  "ok",
@@ -642,9 +642,9 @@ func demoEvaluationSubsystem(ctx context.Context, logger *zap.Logger) {
 	_ = tester.ListExperiments()
 	_, _ = tester.GenerateReport(ctx, exp.ID)
 	_, _ = tester.AutoSelectWinner(ctx, exp.ID, 0.90)
-	_ = tester.PauseExperiment(exp.ID)
-	_ = tester.CompleteExperiment(exp.ID)
-	_ = tester.DeleteExperiment(exp.ID)
+	_ = tester.PauseExperiment(ctx, exp.ID)
+	_ = tester.CompleteExperiment(ctx, exp.ID)
+	_ = tester.DeleteExperiment(ctx, exp.ID)
 
 	_, _ = expStore.ListExperiments(ctx)
 	_ = expStore.RecordAssignment(ctx, "exp-2", "user-2", "control")

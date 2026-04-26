@@ -702,7 +702,11 @@ func demoAsyncExecution(logger *zap.Logger) {
 	}
 	fmt.Printf("   Parallel subagent result length: %d chars\n", len(combined.Content))
 
-	eventBus := agent.NewEventBus(logger)
+	eventBus, err := agent.NewEventBus(logger)
+	if err != nil {
+		fmt.Printf("   NewEventBus error: %v\n\n", err)
+		return
+	}
 	subID := eventBus.Subscribe(agent.EventSubagentCompleted, func(event agent.Event) {
 		if completed, ok := event.(*agent.SubagentCompletedEvent); ok {
 			fmt.Printf("   Event: subagent completed (%s)\n", completed.AgentID)
@@ -850,7 +854,8 @@ func demoRunConfigHelpers() {
 		return
 	}
 	effectiveMaxIter := retrieved.EffectiveMaxReActIterations(10)
-	_ = agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: &demoProvider{}, Logger: zap.NewNop()}), zap.NewNop()).WithToolScope([]string{"demo_tool"})
+	sb, _ := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{ChatProvider: &demoProvider{}, Logger: zap.NewNop()}), zap.NewNop())
+	_ = sb.WithToolScope([]string{"demo_tool"})
 
 	fmt.Printf("   Request model: %s\n", req.Model)
 	fmt.Printf("   Request temperature: %.1f\n", req.Temperature)
@@ -960,7 +965,11 @@ func demoRegistryReachability(logger *zap.Logger) {
 		opts.MemoryManager = memory
 		opts.ToolManager = toolManager
 		opts.EventBus = bus
-		return agentruntime.NewBuilder(gateway, logger).WithOptions(opts).Build(context.Background(), cfg)
+		rb, err := agentruntime.NewBuilder(gateway, logger)
+		if err != nil {
+			return nil, err
+		}
+		return rb.WithOptions(opts).Build(context.Background(), cfg)
 	})
 	fmt.Printf("   Custom type registered: %v\n", reg.IsRegistered(customType))
 	reg.Unregister(customType)

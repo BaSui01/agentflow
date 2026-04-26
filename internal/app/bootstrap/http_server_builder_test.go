@@ -190,7 +190,10 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 }
 
 func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
-	chatHandler := handlers.NewChatHandler(nil, zap.NewNop())
+	chatHandler, err := handlers.NewChatHandler(nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 	require.NotNil(t, chatHandler)
 
 	mux := http.NewServeMux()

@@ -195,7 +195,11 @@ func mustBuildDemoAgent(ctx context.Context, cfg types.AgentConfig, logger *zap.
 		ChatProvider: noopProvider{},
 		Logger:       logger,
 	})
-	ag, err := runtime.NewBuilder(gateway, logger).Build(ctx, cfg)
+	b, err := runtime.NewBuilder(gateway, logger)
+	if err != nil {
+		panic(fmt.Sprintf("create builder failed: %v", err))
+	}
+	ag, err := b.Build(ctx, cfg)
 	if err != nil {
 		panic(fmt.Sprintf("build demo agent %s failed: %v", cfg.Core.ID, err))
 	}

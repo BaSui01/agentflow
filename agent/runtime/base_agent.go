@@ -833,12 +833,12 @@ type SimpleEventBus struct {
 	panicErrChanMu sync.RWMutex
 }
 
-func NewEventBus(logger ...*zap.Logger) EventBus {
+func NewEventBus(logger ...*zap.Logger) (EventBus, error) {
 	var l *zap.Logger
 	if len(logger) > 0 && logger[0] != nil {
 		l = logger[0]
 	} else {
-		panic("agent.EventBus: logger is required and cannot be nil")
+		return nil, fmt.Errorf("agent.EventBus: logger is required and cannot be nil")
 	}
 	bus := &SimpleEventBus{
 		handlers:     make(map[EventType]map[string]EventHandler),
@@ -848,7 +848,7 @@ func NewEventBus(logger ...*zap.Logger) EventBus {
 		logger:       l,
 	}
 	go bus.processEvents()
-	return bus
+	return bus, nil
 }
 
 func (b *SimpleEventBus) Publish(event Event) {

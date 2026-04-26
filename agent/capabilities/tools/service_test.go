@@ -74,7 +74,7 @@ func TestDiscoveryService_RegisterLocalAgent(t *testing.T) {
 	card.AddCapability("code_review", "Review code", a2a.CapabilityTypeTask)
 	info := AgentInfoFromCard(card, true)
 
-	err := svc.RegisterLocalAgent(info)
+	err := svc.RegisterLocalAgent(ctx, info)
 	require.NoError(t, err)
 
 	// Verify agent is registered
@@ -97,17 +97,17 @@ func TestDiscoveryService_UpdateLocalAgentLoad(t *testing.T) {
 	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	// No local agent registered yet
-	err := svc.UpdateLocalAgentLoad(0.5)
+	err := svc.UpdateLocalAgentLoad(ctx, 0.5)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no local agent")
 
 	// Register local agent
 	card := a2a.NewAgentCard("load-agent", "Load Agent", "http://localhost:9090", "1.0.0")
 	info := AgentInfoFromCard(card, true)
-	require.NoError(t, svc.RegisterLocalAgent(info))
+	require.NoError(t, svc.RegisterLocalAgent(ctx, info))
 
 	// Now update load
-	err = svc.UpdateLocalAgentLoad(0.75)
+	err = svc.UpdateLocalAgentLoad(ctx, 0.75)
 	require.NoError(t, err)
 }
 

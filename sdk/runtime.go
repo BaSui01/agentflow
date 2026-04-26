@@ -160,7 +160,11 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 			buildOpts.ToolStateProvider = agentOpts.ToolStateProvider
 		}
 
-		ab := runtime.NewBuilder(rt.Gateway, logger).WithOptions(buildOpts)
+		ab, err := runtime.NewBuilder(rt.Gateway, logger)
+		if err != nil {
+			return nil, fmt.Errorf("create runtime builder: %w", err)
+		}
+		ab = ab.WithOptions(buildOpts)
 		if rt.ToolGateway != nil && rt.ToolGateway != rt.Gateway {
 			ab = ab.WithToolGateway(rt.ToolGateway)
 		}

@@ -123,11 +123,15 @@ func (p *BingSearchProvider) Search(ctx context.Context, query string, opts WebS
 	if bingResp.WebPages != nil {
 		results = make([]WebSearchResult, 0, len(bingResp.WebPages.Value))
 		for _, r := range bingResp.WebPages.Value {
+			publishedAt := ""
+			if len(r.DateLastCrawled) >= 10 {
+				publishedAt = r.DateLastCrawled[:10]
+			}
 			results = append(results, WebSearchResult{
 				Title:       r.Name,
 				URL:         r.URL,
 				Snippet:     r.Snippet,
-				PublishedAt: r.DateLastCrawled[:10],
+				PublishedAt: publishedAt,
 				Metadata: map[string]any{
 					"display_url":    r.DisplayURL,
 					"deep_links":     len(r.DeepLinks),

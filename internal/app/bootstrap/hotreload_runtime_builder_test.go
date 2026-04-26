@@ -42,10 +42,12 @@ func TestHotReload_DoesNotChangeRuntimeDefaultReasoningWiring(t *testing.T) {
 	}
 
 	RegisterHotReloadCallbacks(manager, zap.NewNop(), func(oldConfig, newConfig *config.Config) {
-		builder := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{
+		builder, err := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{
 			ChatProvider: provider,
 			Logger:       zap.NewNop(),
-		}), zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
+		}), zap.NewNop())
+		require.NoError(t, err)
+		builder = builder.WithOptions(agentruntime.BuildOptions{})
 		ag, err := builder.Build(t.Context(), cfg)
 		require.NoError(t, err)
 		require.NotNil(t, ag.ReasoningRegistry())
@@ -71,10 +73,12 @@ func TestHotReload_PreservesFormalControlLoopBudget(t *testing.T) {
 	}
 
 	RegisterHotReloadCallbacks(manager, zap.NewNop(), func(oldConfig, newConfig *config.Config) {
-		builder := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{
+		builder, err := agentruntime.NewBuilder(llmgateway.New(llmgateway.Config{
 			ChatProvider: provider,
 			Logger:       zap.NewNop(),
-		}), zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
+		}), zap.NewNop())
+		require.NoError(t, err)
+		builder = builder.WithOptions(agentruntime.BuildOptions{})
 		ag, err := builder.Build(context.Background(), cfg)
 		require.NoError(t, err)
 		require.Equal(t, 8, ag.Config().Control.MaxLoopIterations)

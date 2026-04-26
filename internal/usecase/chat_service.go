@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -58,15 +59,15 @@ func NewDefaultChatService(
 	runtime ChatRuntime,
 	converter ChatConverter,
 	logger *zap.Logger,
-) ChatService {
+) (ChatService, error) {
 	if logger == nil {
-		panic("usecase.ChatService: logger is required and cannot be nil")
+		return nil, fmt.Errorf("usecase.ChatService: logger is required and cannot be nil")
 	}
 	return &DefaultChatService{
 		runtimeRef: NewAtomicRuntimeRef(runtime),
 		converter:  converter,
 		logger:     logger,
-	}
+	}, nil
 }
 
 // UpdateRuntime swaps the service runtime in place.

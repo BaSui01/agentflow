@@ -31,14 +31,14 @@ type ChatHandler struct {
 }
 
 // NewChatHandler 创建聊天处理器
-func NewChatHandler(service usecase.ChatService, logger *zap.Logger) *ChatHandler {
+func NewChatHandler(service usecase.ChatService, logger *zap.Logger) (*ChatHandler, error) {
 	if logger == nil {
-		panic("api.ChatHandler: logger is required and cannot be nil")
+		return nil, fmt.Errorf("api.ChatHandler: logger is required and cannot be nil")
 	}
 	return &ChatHandler{
 		BaseHandler: NewBaseHandler(service, logger),
 		converter:   NewDefaultChatConverter(defaultStreamTimeout),
-	}
+	}, nil
 }
 
 // HandleCompletion 处理聊天补全请求
