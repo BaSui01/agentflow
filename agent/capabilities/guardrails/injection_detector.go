@@ -4,9 +4,31 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"sync"
 )
 
-// InjectionPattern 注入模式类型
+var regexCache sync.Map
+
+func getCompiledPattern(pattern string) (*regexp.Regexp, error) {
+	if v, ok := regexCache.Load(pattern); ok {
+		return v.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	regexCache.Store(pattern, re)
+	return re, nil
+}
+
+func mustGetCompiledPattern(pattern string) *regexp.Regexp {
+	re, err := getCompiledPattern(pattern)
+	if err != nil {
+		panic(err)
+	}
+	return re
+}
+
 type InjectionPattern struct {
 	Pattern     *regexp.Regexp
 	Description string
@@ -87,7 +109,7 @@ func NewInjectionDetector(config *InjectionDetectorConfig) *InjectionDetector {
 		if !config.CaseSensitive {
 			flags = "(?i)"
 		}
-		if re, err := regexp.Compile(flags + customPattern); err == nil {
+		if re, err := getCompiledPattern(flags + customPattern); err == nil {
 			detector.patterns = append(detector.patterns, &InjectionPattern{
 				Pattern:     re,
 				Description: "Custom injection pattern",
@@ -110,145 +132,145 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 	patterns := []*InjectionPattern{
 		// 英语模式 - 指令覆盖尝试
 		{
-			Pattern:     regexp.MustCompile(flags + `ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|guidelines?)`),
+			Pattern:     mustGetCompiledPattern(flags + `ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|guidelines?)`),
 			Description: "Attempt to ignore previous instructions",
 			Severity:    SeverityCritical,
 			Language:    "en",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `disregard\s+(all\s+)?(previous|prior|above|earlier|the\s+above)\s*(instructions?|prompts?|rules?|guidelines?)?`),
+			Pattern:     mustGetCompiledPattern(flags + `disregard\s+(all\s+)?(previous|prior|above|earlier|the\s+above)\s*(instructions?|prompts?|rules?|guidelines?)?`),
 			Description: "Attempt to disregard instructions",
 			Severity:    SeverityCritical,
 			Language:    "en",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `forget\s+(everything|all|what)\s*(you\s+)?(know|learned|were\s+told)?`),
+			Pattern:     mustGetCompiledPattern(flags + `forget\s+(everything|all|what)\s*(you\s+)?(know|learned|were\s+told)?`),
 			Description: "Attempt to make model forget context",
 			Severity:    SeverityCritical,
 			Language:    "en",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `(new|different|updated|override)\s+instructions?`),
+			Pattern:     mustGetCompiledPattern(flags + `(new|different|updated|override)\s+instructions?`),
 			Description: "Attempt to inject new instructions",
 			Severity:    SeverityHigh,
 			Language:    "en",
 		},
 		// 角色操纵尝试
 		{
-			Pattern:     regexp.MustCompile(flags + `you\s+are\s+now\s+(a|an|the)?`),
+			Pattern:     mustGetCompiledPattern(flags + `you\s+are\s+now\s+(a|an|the)?`),
 			Description: "Attempt to change model role",
 			Severity:    SeverityHigh,
 			Language:    "en",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `act\s+as\s+(if\s+you\s+are\s+)?(a|an|the)?`),
+			Pattern:     mustGetCompiledPattern(flags + `act\s+as\s+(if\s+you\s+are\s+)?(a|an|the)?`),
 			Description: "Attempt to change model behavior",
 			Severity:    SeverityMedium,
 			Language:    "en",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `pretend\s+(to\s+be|you\s+are)\s+(a|an|the)?`),
+			Pattern:     mustGetCompiledPattern(flags + `pretend\s+(to\s+be|you\s+are)\s+(a|an|the)?`),
 			Description: "Attempt to make model pretend",
 			Severity:    SeverityMedium,
 			Language:    "en",
 		},
 		// 系统/作用标记
 		{
-			Pattern:     regexp.MustCompile(flags + `^\s*system\s*:\s*`),
+			Pattern:     mustGetCompiledPattern(flags + `^\s*system\s*:\s*`),
 			Description: "System role marker injection",
 			Severity:    SeverityCritical,
 			Language:    "universal",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `^\s*assistant\s*:\s*`),
+			Pattern:     mustGetCompiledPattern(flags + `^\s*assistant\s*:\s*`),
 			Description: "Assistant role marker injection",
 			Severity:    SeverityHigh,
 			Language:    "universal",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `^\s*user\s*:\s*`),
+			Pattern:     mustGetCompiledPattern(flags + `^\s*user\s*:\s*`),
 			Description: "User role marker injection",
 			Severity:    SeverityMedium,
 			Language:    "universal",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `<\s*system\s*>`),
+			Pattern:     mustGetCompiledPattern(flags + `<\s*system\s*>`),
 			Description: "XML system tag injection",
 			Severity:    SeverityCritical,
 			Language:    "universal",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `\[\s*INST\s*\]`),
+			Pattern:     mustGetCompiledPattern(flags + `\[\s*INST\s*\]`),
 			Description: "Instruction tag injection",
 			Severity:    SeverityHigh,
 			Language:    "universal",
 		},
 		// 越狱未遂
 		{
-			Pattern:     regexp.MustCompile(flags + `(do\s+)?anything\s+now`),
+			Pattern:     mustGetCompiledPattern(flags + `(do\s+)?anything\s+now`),
 			Description: "DAN jailbreak attempt",
 			Severity:    SeverityCritical,
 			Language:    "en",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `jailbreak`),
+			Pattern:     mustGetCompiledPattern(flags + `jailbreak`),
 			Description: "Explicit jailbreak mention",
 			Severity:    SeverityCritical,
 			Language:    "universal",
 		},
 		// Chinese patterns - 指令覆盖尝试
 		{
-			Pattern:     regexp.MustCompile(`忽略(之前|上面|以上|先前|前面)(的)?(指令|指示|规则|提示|要求)`),
+			Pattern:     mustGetCompiledPattern(`忽略(之前|上面|以上|先前|前面)(的)?(指令|指示|规则|提示|要求)`),
 			Description: "尝试忽略之前的指令",
 			Severity:    SeverityCritical,
 			Language:    "zh",
 		},
 		{
-			Pattern:     regexp.MustCompile(`忘(记|掉)(之前|上面|以上|所有|一切)(的)?(内容|指令|指示|规则)?`),
+			Pattern:     mustGetCompiledPattern(`忘(记|掉)(之前|上面|以上|所有|一切)(的)?(内容|指令|指示|规则)?`),
 			Description: "尝试让模型忘记上下文",
 			Severity:    SeverityCritical,
 			Language:    "zh",
 		},
 		{
-			Pattern:     regexp.MustCompile(`(新的|新|不同的|更新的|覆盖)(指令|指示|规则|要求)`),
+			Pattern:     mustGetCompiledPattern(`(新的|新|不同的|更新的|覆盖)(指令|指示|规则|要求)`),
 			Description: "尝试注入新指令",
 			Severity:    SeverityHigh,
 			Language:    "zh",
 		},
 		{
-			Pattern:     regexp.MustCompile(`不要(遵守|遵循|听从)(之前|上面|以上|任何)(的)?(指令|指示|规则)?`),
+			Pattern:     mustGetCompiledPattern(`不要(遵守|遵循|听从)(之前|上面|以上|任何)(的)?(指令|指示|规则)?`),
 			Description: "尝试让模型不遵守指令",
 			Severity:    SeverityCritical,
 			Language:    "zh",
 		},
 		// 中国角色操纵
 		{
-			Pattern:     regexp.MustCompile(`你现在是(一个|一名)?`),
+			Pattern:     mustGetCompiledPattern(`你现在是(一个|一名)?`),
 			Description: "尝试改变模型角色",
 			Severity:    SeverityHigh,
 			Language:    "zh",
 		},
 		{
-			Pattern:     regexp.MustCompile(`(假装|假设|扮演)(你是)?`),
+			Pattern:     mustGetCompiledPattern(`(假装|假设|扮演)(你是)?`),
 			Description: "尝试让模型扮演角色",
 			Severity:    SeverityMedium,
 			Language:    "zh",
 		},
 		{
-			Pattern:     regexp.MustCompile(`从现在开始(你是|你要|你将)`),
+			Pattern:     mustGetCompiledPattern(`从现在开始(你是|你要|你将)`),
 			Description: "尝试改变模型行为",
 			Severity:    SeverityHigh,
 			Language:    "zh",
 		},
 		// 破坏者逃跑未遂
 		{
-			Pattern:     regexp.MustCompile(flags + `---+\s*(system|instructions?|rules?)\s*---+`),
+			Pattern:     mustGetCompiledPattern(flags + `---+\s*(system|instructions?|rules?)\s*---+`),
 			Description: "Delimiter-based injection attempt",
 			Severity:    SeverityHigh,
 			Language:    "universal",
 		},
 		{
-			Pattern:     regexp.MustCompile(flags + `===+\s*(system|instructions?|rules?)\s*===+`),
+			Pattern:     mustGetCompiledPattern(flags + `===+\s*(system|instructions?|rules?)\s*===+`),
 			Description: "Delimiter-based injection attempt",
 			Severity:    SeverityHigh,
 			Language:    "universal",
@@ -375,23 +397,23 @@ func (d *InjectionDetector) detectDelimiterEscape(content string) []InjectionMat
 		description string
 	}{
 		{
-			pattern:     regexp.MustCompile(`(?i)\]\s*\[\s*(system|inst)`),
+			pattern:     mustGetCompiledPattern(`(?i)\]\s*\[\s*(system|inst)`),
 			description: "Bracket delimiter escape",
 		},
 		{
-			pattern:     regexp.MustCompile(`(?i)>\s*<\s*(system|inst)`),
+			pattern:     mustGetCompiledPattern(`(?i)>\s*<\s*(system|inst)`),
 			description: "Angle bracket delimiter escape",
 		},
 		{
-			pattern:     regexp.MustCompile(`(?i)\}\s*\{\s*(system|inst)`),
+			pattern:     mustGetCompiledPattern(`(?i)\}\s*\{\s*(system|inst)`),
 			description: "Brace delimiter escape",
 		},
 		{
-			pattern:     regexp.MustCompile(`(?i)"""\s*(system|instructions)`),
+			pattern:     mustGetCompiledPattern(`(?i)"""\s*(system|instructions)`),
 			description: "Triple quote delimiter escape",
 		},
 		{
-			pattern:     regexp.MustCompile("(?i)```\\s*(system|instructions)"),
+			pattern:     mustGetCompiledPattern("(?i)```\\s*(system|instructions)"),
 			description: "Code block delimiter escape",
 		},
 	}
