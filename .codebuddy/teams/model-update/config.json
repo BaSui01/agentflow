@@ -1,0 +1,44 @@
+{
+  "name": "model-update",
+  "leadAgentId": "cac93aae43cc4772b826152d3721ea88",
+  "workspacePath": "d:/code/agentflow",
+  "createdAt": "2026-04-27T17:43:20.839Z",
+  "options": {
+    "workspacePath": "d:/code/agentflow",
+    "isAutoTeam": false
+  },
+  "members": [
+    {
+      "memberId": "team-lead@model-update",
+      "name": "team-lead",
+      "role": "Team Lead - coordinates the team and interacts with the user"
+    },
+    {
+      "memberId": "p0a-reasoning@model-update",
+      "name": "p0a-reasoning",
+      "role": "P0a: reasoning默认模型"
+    },
+    {
+      "memberId": "p0b-internal@model-update",
+      "name": "p0b-internal",
+      "role": "P0b: internal默认模型"
+    },
+    {
+      "memberId": "p1-context-tokenizer@model-update",
+      "name": "p1-context-tokenizer",
+      "role": "P1: context+tokenizer"
+    },
+    {
+      "memberId": "p2-deploy-api@model-update",
+      "name": "p2-deploy-api",
+      "role": "P2: deploy+API schema"
+    }
+  ],
+  "isAutoTeam": false
+}p4-examples-docs@model-update",
+      "name": "p3p4-examples-docs",
+      "role": "P3+P4: examples+docs"
+    }
+  ],
+  "isAutoTeam": false
+}
