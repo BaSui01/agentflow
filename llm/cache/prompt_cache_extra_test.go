@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	pkgcache "github.com/BaSui01/agentflow/pkg/cache"
+
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -88,7 +90,7 @@ func TestMultiLevelCache_SetAndGet_WithRedis(t *testing.T) {
 func TestMultiLevelCache_Get_CacheMiss(t *testing.T) {
 	c, _ := newTestMultiLevelCache(t, nil)
 	_, err := c.Get(context.Background(), "nonexistent")
-	assert.ErrorIs(t, err, ErrCacheMiss)
+	assert.ErrorIs(t, err, pkgcache.ErrCacheMiss)
 }
 
 func TestMultiLevelCache_Delete_WithRedis(t *testing.T) {
@@ -100,7 +102,7 @@ func TestMultiLevelCache_Delete_WithRedis(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = c.Get(ctx, "k1")
-	assert.ErrorIs(t, err, ErrCacheMiss)
+	assert.ErrorIs(t, err, pkgcache.ErrCacheMiss)
 }
 
 func TestMultiLevelCache_GenerateKey_NonChatRequest(t *testing.T) {
