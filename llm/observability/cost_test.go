@@ -17,18 +17,18 @@ func TestCostCalculator_Calculate(t *testing.T) {
 		wantMax      float64
 	}{
 		{
-			name:         "gpt-4o",
+			name:         "gpt-5.4",
 			provider:     "openai",
-			model:        "gpt-4o",
+			model:        "gpt-5.4",
 			tokensInput:  1000,
 			tokensOutput: 500,
 			wantMin:      0.01,
 			wantMax:      0.02,
 		},
 		{
-			name:         "gpt-3.5-turbo",
+			name:         "gpt-5.4-nano",
 			provider:     "openai",
-			model:        "gpt-3.5-turbo",
+			model:        "gpt-5.4-nano",
 			tokensInput:  1000,
 			tokensOutput: 500,
 			wantMin:      0.0001,

@@ -1141,6 +1141,8 @@ func normalizeRoutePolicy(raw string) llmcore.RoutePolicy {
 		return llmcore.RoutePolicyLatencyFirst
 	case "balanced":
 		return llmcore.RoutePolicyBalanced
+	case "quality", "quality_first":
+		return llmcore.RoutePolicyQualityFirst
 	default:
 		return ""
 	}

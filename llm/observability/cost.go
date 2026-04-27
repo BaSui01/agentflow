@@ -30,28 +30,43 @@ func NewCostCalculator() *CostCalculator {
 // loadDefaultPrices 加载默认价格（可从配置/数据库覆盖）
 func (c *CostCalculator) loadDefaultPrices() {
 	defaults := []ModelPrice{
-		// OpenAI 首选模型
+		// OpenAI GPT-5.x 系列（2026-04 定价，$/1K tokens）
+		{Provider: "openai", Model: "gpt-5.5", PriceInput: 0.005, PriceOutput: 0.03},
+		{Provider: "openai", Model: "gpt-5.5-pro", PriceInput: 0.03, PriceOutput: 0.18},
+		{Provider: "openai", Model: "gpt-5.4", PriceInput: 0.0025, PriceOutput: 0.015},
+		{Provider: "openai", Model: "gpt-5.4-mini", PriceInput: 0.00075, PriceOutput: 0.0045},
+		{Provider: "openai", Model: "gpt-5.4-nano", PriceInput: 0.0002, PriceOutput: 0.00125},
+		// OpenAI 旧模型（仍可用于回退）
 		{Provider: "openai", Model: "gpt-4o", PriceInput: 0.005, PriceOutput: 0.015},
 		{Provider: "openai", Model: "gpt-4o-mini", PriceInput: 0.00015, PriceOutput: 0.0006},
-		{Provider: "openai", Model: "gpt-4-turbo", PriceInput: 0.01, PriceOutput: 0.03},
-		{Provider: "openai", Model: "gpt-3.5-turbo", PriceInput: 0.0005, PriceOutput: 0.0015},
-		// Anthropic Claude
-		{Provider: "claude", Model: "claude-3-5-sonnet-20241022", PriceInput: 0.003, PriceOutput: 0.015},
-		{Provider: "claude", Model: "claude-3-opus-20240229", PriceInput: 0.015, PriceOutput: 0.075},
-		{Provider: "claude", Model: "claude-3-haiku-20240307", PriceInput: 0.00025, PriceOutput: 0.00125},
-		// Google Gemini
-		{Provider: "gemini", Model: "gemini-1.5-pro", PriceInput: 0.00125, PriceOutput: 0.005},
-		{Provider: "gemini", Model: "gemini-1.5-flash", PriceInput: 0.000075, PriceOutput: 0.0003},
-		// 通义千问
-		{Provider: "qwen", Model: "qwen-turbo", PriceInput: 0.0008, PriceOutput: 0.002},
-		{Provider: "qwen", Model: "qwen-plus", PriceInput: 0.004, PriceOutput: 0.012},
-		{Provider: "qwen", Model: "qwen-max", PriceInput: 0.02, PriceOutput: 0.06},
-		// 文心一言
-		{Provider: "ernie", Model: "ernie-4.0-8k", PriceInput: 0.017, PriceOutput: 0.017},
-		{Provider: "ernie", Model: "ernie-3.5-8k", PriceInput: 0.0017, PriceOutput: 0.0017},
-		// 智谱 GLM
+		// Anthropic Claude 4.x 系列（2026-04 定价）
+		{Provider: "anthropic", Model: "claude-opus-4-7", PriceInput: 0.005, PriceOutput: 0.025},
+		{Provider: "anthropic", Model: "claude-sonnet-4-6", PriceInput: 0.003, PriceOutput: 0.015},
+		{Provider: "anthropic", Model: "claude-haiku-4-5", PriceInput: 0.001, PriceOutput: 0.005},
+		// Google Gemini 系列（2026-04 定价）
+		{Provider: "gemini", Model: "gemini-3.1-pro", PriceInput: 0.002, PriceOutput: 0.012},
+		{Provider: "gemini", Model: "gemini-3.1-flash-lite", PriceInput: 0.00025, PriceOutput: 0.0015},
+		{Provider: "gemini", Model: "gemini-2.5-pro", PriceInput: 0.00125, PriceOutput: 0.01},
+		{Provider: "gemini", Model: "gemini-2.5-flash", PriceInput: 0.00015, PriceOutput: 0.0006},
+		// DeepSeek V4 系列（2026-04 定价）
+		{Provider: "deepseek", Model: "deepseek-v4-pro", PriceInput: 0.00174, PriceOutput: 0.00348},
+		{Provider: "deepseek", Model: "deepseek-v4-flash", PriceInput: 0.00014, PriceOutput: 0.00028},
+		// 通义千问 Qwen 系列
+		{Provider: "qwen", Model: "qwen3-max-2026-01-23", PriceInput: 0.00036, PriceOutput: 0.00143},
+		{Provider: "qwen", Model: "qwen-plus", PriceInput: 0.00012, PriceOutput: 0.00029},
+		{Provider: "qwen", Model: "qwen3-coder-next", PriceInput: 0.0002, PriceOutput: 0.0015},
+		// 智谱 GLM 系列
+		{Provider: "glm", Model: "glm-5.1", PriceInput: 0.00174, PriceOutput: 0.00696},
 		{Provider: "glm", Model: "glm-4", PriceInput: 0.014, PriceOutput: 0.014},
 		{Provider: "glm", Model: "glm-4-flash", PriceInput: 0.0001, PriceOutput: 0.0001},
+		// xAI Grok 系列
+		{Provider: "grok", Model: "grok-4.20", PriceInput: 0.005, PriceOutput: 0.015},
+		// MiniMax 系列
+		{Provider: "minimax", Model: "MiniMax-M2.7", PriceInput: 0.0003, PriceOutput: 0.0009},
+		// Mistral 系列
+		{Provider: "mistral", Model: "mistral-large-latest", PriceInput: 0.002, PriceOutput: 0.006},
+		// 字节豆包系列
+		{Provider: "doubao", Model: "Doubao-1.5-pro-256k", PriceInput: 0.0008, PriceOutput: 0.002},
 	}
 
 	for _, p := range defaults {

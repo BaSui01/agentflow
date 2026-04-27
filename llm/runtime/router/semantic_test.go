@@ -88,7 +88,7 @@ func TestSemanticRouter_Route_Success(t *testing.T) {
 
 	codeProvider := newTestProvider("code-provider")
 	providers := map[string]llm.Provider{
-		"claude-3-5-sonnet": codeProvider,
+		"claude-opus-4-7": codeProvider,
 	}
 
 	cfg := DefaultSemanticRouterConfig()
@@ -109,7 +109,8 @@ func TestSemanticRouter_Route_ClassifierFails_UsesDefault(t *testing.T) {
 
 	defaultProvider := newTestProvider("default")
 	providers := map[string]llm.Provider{
-		"gpt-4o": defaultProvider,
+		"gpt-5.4": defaultProvider,
+		"claude-sonnet-4-6": newTestProvider("sonnet"),
 	}
 
 	cfg := DefaultSemanticRouterConfig()
@@ -138,7 +139,7 @@ func TestSemanticRouter_Route_AllProvidersFail(t *testing.T) {
 	}
 
 	providers := map[string]llm.Provider{
-		"gpt-4o": failProvider,
+		"gpt-5.4-mini": failProvider,
 	}
 
 	cfg := DefaultSemanticRouterConfig()
@@ -240,11 +241,20 @@ func TestExtractUserMessage_Empty(t *testing.T) {
 }
 
 func TestMatchesProvider(t *testing.T) {
-	assert.True(t, matchesProvider("gpt-4o", "openai"))
-	assert.True(t, matchesProvider("claude-3", "anthropic"))
-	assert.True(t, matchesProvider("gemini-2.0", "gemini"))
-	assert.True(t, matchesProvider("deepseek-v3", "deepseek"))
-	assert.False(t, matchesProvider("gpt-4o", "anthropic"))
+	assert.True(t, matchesProvider("gpt-5.4", "openai"))
+	assert.True(t, matchesProvider("o3-mini", "openai"))
+	assert.True(t, matchesProvider("o4-mini", "openai"))
+	assert.True(t, matchesProvider("claude-opus-4-7", "anthropic"))
+	assert.True(t, matchesProvider("gemini-2.5-pro", "gemini"))
+	assert.True(t, matchesProvider("deepseek-v4-pro", "deepseek"))
+	assert.True(t, matchesProvider("qwen3-max", "qwen"))
+	assert.True(t, matchesProvider("qwq-32b", "qwen"))
+	assert.True(t, matchesProvider("grok-4.20", "grok"))
+	assert.True(t, matchesProvider("glm-5.1", "glm"))
+	assert.True(t, matchesProvider("MiniMax-M2.7", "minimax"))
+	assert.True(t, matchesProvider("mistral-large", "mistral"))
+	assert.True(t, matchesProvider("magistral-medium", "mistral"))
+	assert.False(t, matchesProvider("gpt-5.4", "anthropic"))
 	assert.False(t, matchesProvider("unknown-model", "openai"))
 }
 

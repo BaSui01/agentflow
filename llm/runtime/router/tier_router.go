@@ -73,9 +73,9 @@ type TierConfig struct {
 func DefaultTierConfig() TierConfig {
 	return TierConfig{
 		Enabled:           false,
-		NanoModels:        []string{"gpt-4o-mini", "claude-haiku", "gemini-flash"},
-		StandardModels:    []string{"gpt-4o", "claude-sonnet", "gemini-pro"},
-		FrontierModels:    []string{"gpt-4.5", "claude-opus", "gemini-ultra"},
+		NanoModels:        []string{"gpt-5.4-nano", "claude-haiku-4-5", "gemini-2.5-flash", "deepseek-v4-flash"},
+		StandardModels:    []string{"gpt-5.4", "claude-sonnet-4-6", "gemini-2.5-pro", "glm-5.1"},
+		FrontierModels:    []string{"gpt-5.5", "claude-opus-4-7", "gemini-3.1-pro", "deepseek-v4-pro"},
 		NanoThreshold:     30,
 		FrontierThreshold: 70,
 		Weights:           DefaultScoringWeights(),
@@ -258,7 +258,7 @@ func (t *TierRouter) ResolveModel(req *ChatRequest) string {
 
 func extractFamily(model string) string {
 	lower := strings.ToLower(model)
-	families := []string{"gpt", "claude", "gemini", "deepseek", "qwen", "glm", "grok", "kimi", "mistral", "minimax", "llama"}
+	families := []string{"gpt", "claude", "gemini", "deepseek", "qwen", "glm", "grok", "kimi", "mistral", "minimax", "doubao", "llama"}
 	for _, f := range families {
 		if strings.Contains(lower, f) {
 			return f

@@ -40,26 +40,25 @@ func TestCostTracker_CostByProvider(t *testing.T) {
 	calc := NewCostCalculator()
 	tracker := NewCostTracker(calc)
 
-	tracker.Record("openai", "gpt-4o", "", 1000, 500)
-	tracker.Record("openai", "gpt-4o", "", 1000, 500)
-	tracker.Record("claude", "claude-3-haiku-20240307", "", 1000, 500)
+	tracker.Record("openai", "gpt-5.4", "", 1000, 500)
+	tracker.Record("anthropic", "claude-haiku-4-5", "", 1000, 500)
 
 	byProvider := tracker.CostByProvider()
 	assert.Len(t, byProvider, 2)
 	assert.True(t, byProvider["openai"] > 0)
-	assert.True(t, byProvider["claude"] > 0)
+	assert.True(t, byProvider["anthropic"] > 0)
 }
 
 func TestCostTracker_CostByModel(t *testing.T) {
 	calc := NewCostCalculator()
 	tracker := NewCostTracker(calc)
 
-	tracker.Record("openai", "gpt-4o", "", 1000, 500)
-	tracker.Record("openai", "gpt-3.5-turbo", "", 1000, 500)
+	tracker.Record("openai", "gpt-5.4", "", 1000, 500)
+	tracker.Record("openai", "gpt-5.4-mini", "", 1000, 500)
 
 	byModel := tracker.CostByModel()
-	assert.True(t, byModel["openai:gpt-4o"] > 0)
-	assert.True(t, byModel["openai:gpt-3.5-turbo"] > 0)
+	assert.True(t, byModel["openai:gpt-5.4"] > 0)
+	assert.True(t, byModel["openai:gpt-5.4-mini"] > 0)
 }
 
 func TestCostTracker_CostByAgent(t *testing.T) {

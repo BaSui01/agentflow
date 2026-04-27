@@ -27,6 +27,7 @@ const (
 	RoutePolicyHealthFirst  RoutePolicy = "health_first"
 	RoutePolicyLatencyFirst RoutePolicy = "latency_first"
 	RoutePolicyBalanced     RoutePolicy = "balanced"
+	RoutePolicyQualityFirst RoutePolicy = "quality_first" // 质量优先（倾向低幻觉模型）
 )
 
 // Gateway 定义 LLM 统一入口。
