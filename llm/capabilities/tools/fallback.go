@@ -112,7 +112,13 @@ func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg
 		switch strategy {
 		case FallbackRetry:
 			if attempt < e.config.MaxRetries {
-				time.Sleep(time.Duration(e.config.RetryDelayMs) * time.Millisecond)
+				select {
+				case <-time.After(time.Duration(e.config.RetryDelayMs) * time.Millisecond):
+				case <-ctx.Done():
+					result.Error = ctx.Err().Error()
+					result.Duration = time.Since(start)
+					return result
+				}
 				continue
 			}
 			// 重试次数用尽，尝试备用工具

@@ -116,40 +116,87 @@ type SemanticRouterConfig struct {
 // 默认Semantic Router Config 返回合理的默认值 。
 func DefaultSemanticRouterConfig() SemanticRouterConfig {
 	return SemanticRouterConfig{
-		ClassifierModel: "gpt-4o-mini",
+		ClassifierModel: "gpt-5.4-mini",
 		DefaultRoute: RouteConfig{
-			PreferredModels: []string{"gpt-4o"},
+			PreferredModels: []string{"gpt-5.4", "claude-sonnet-4-6"},
 			MaxTokens:       4096,
 			Temperature:     0.7,
 		},
 		Routes: map[IntentType]RouteConfig{
 			IntentCodeGeneration: {
 				Intent:          IntentCodeGeneration,
-				PreferredModels: []string{"claude-3-5-sonnet", "gpt-4o"},
+				PreferredModels: []string{"claude-opus-4-7", "gpt-5.5", "glm-5.1"},
+				FallbackModels:  []string{"claude-sonnet-4-6", "gpt-5.4"},
+				MaxTokens:       16384,
+				Temperature:     0.2,
+			},
+			IntentCodeReview: {
+				Intent:          IntentCodeReview,
+				PreferredModels: []string{"claude-opus-4-7", "gpt-5.4"},
+				FallbackModels:  []string{"claude-sonnet-4-6", "deepseek-v4-pro"},
 				MaxTokens:       8192,
 				Temperature:     0.2,
 			},
 			IntentReasoning: {
 				Intent:          IntentReasoning,
-				PreferredModels: []string{"o1", "claude-3-5-sonnet"},
+				PreferredModels: []string{"gpt-5.5-pro", "claude-opus-4-7", "deepseek-v4-pro"},
+				FallbackModels:  []string{"gpt-5.5", "gemini-3.1-pro"},
 				MaxTokens:       16384,
 				Temperature:     0.1,
 			},
 			IntentMath: {
 				Intent:          IntentMath,
-				PreferredModels: []string{"o1", "gpt-4o"},
+				PreferredModels: []string{"gpt-5.5-pro", "deepseek-v4-pro", "claude-opus-4-7"},
+				FallbackModels:  []string{"gpt-5.4", "gemini-3.1-pro"},
 				MaxTokens:       4096,
 				Temperature:     0.0,
 			},
 			IntentCreativeWriting: {
 				Intent:          IntentCreativeWriting,
-				PreferredModels: []string{"claude-3-5-sonnet", "gpt-4o"},
+				PreferredModels: []string{"claude-opus-4-7", "gpt-5.5"},
+				FallbackModels:  []string{"claude-sonnet-4-6", "MiniMax-M2.7"},
 				MaxTokens:       8192,
 				Temperature:     0.9,
 			},
+			IntentDataAnalysis: {
+				Intent:          IntentDataAnalysis,
+				PreferredModels: []string{"gpt-5.4", "gemini-2.5-pro", "claude-sonnet-4-6"},
+				FallbackModels:  []string{"deepseek-v4-pro", "gpt-5.4-mini"},
+				MaxTokens:       8192,
+				Temperature:     0.3,
+			},
+			IntentQA: {
+				Intent:          IntentQA,
+				PreferredModels: []string{"gemini-3.1-pro", "claude-opus-4-7"},
+				FallbackModels:  []string{"gpt-5.4", "gemini-2.5-pro"},
+				MaxTokens:       4096,
+				Temperature:     0.5,
+			},
+			IntentSummarization: {
+				Intent:          IntentSummarization,
+				PreferredModels: []string{"gpt-5.4-mini", "claude-sonnet-4-6", "gemini-2.5-flash"},
+				FallbackModels:  []string{"deepseek-v4-flash", "gpt-5.4-nano"},
+				MaxTokens:       4096,
+				Temperature:     0.3,
+			},
+			IntentTranslation: {
+				Intent:          IntentTranslation,
+				PreferredModels: []string{"gpt-5.4", "claude-sonnet-4-6"},
+				FallbackModels:  []string{"deepseek-v4-flash", "gpt-5.4-mini"},
+				MaxTokens:       4096,
+				Temperature:     0.3,
+			},
+			IntentChat: {
+				Intent:          IntentChat,
+				PreferredModels: []string{"gpt-5.4-mini", "claude-haiku-4-5", "gemini-2.5-flash"},
+				FallbackModels:  []string{"gpt-5.4-nano", "deepseek-v4-flash"},
+				MaxTokens:       4096,
+				Temperature:     0.7,
+			},
 			IntentToolUse: {
 				Intent:           IntentToolUse,
-				PreferredModels:  []string{"gpt-4o", "claude-3-5-sonnet"},
+				PreferredModels:  []string{"gpt-5.5", "claude-sonnet-4-6", "gpt-5.4"},
+				FallbackModels:   []string{"gemini-2.5-pro", "qwen3-max-2026-01-23"},
 				RequiredFeatures: []string{"function_calling"},
 				MaxTokens:        4096,
 				Temperature:      0.3,
@@ -455,10 +502,17 @@ func extractUserMessage(messages []types.Message) string {
 
 func matchesProvider(model, providerName string) bool {
 	modelPrefixes := map[string][]string{
-		"openai":    {"gpt-", "o1", "o3", "davinci", "text-"},
+		"openai":    {"gpt-", "o1", "o3", "o4", "davinci", "text-", "chatgpt-"},
 		"anthropic": {"claude"},
 		"gemini":    {"gemini"},
 		"deepseek":  {"deepseek"},
+		"qwen":      {"qwen", "qwq"},
+		"grok":      {"grok"},
+		"glm":       {"glm"},
+		"minimax":   {"MiniMax", "abab"},
+		"mistral":   {"mistral", "magistral"},
+		"doubao":    {"Doubao"},
+		"kimi":      {"kimi", "k1", "k2"},
 	}
 
 	if prefixes, ok := modelPrefixes[providerName]; ok {

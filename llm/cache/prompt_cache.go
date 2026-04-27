@@ -12,12 +12,11 @@ import (
 	"time"
 
 	llmpkg "github.com/BaSui01/agentflow/llm/core"
+	pkgcache "github.com/BaSui01/agentflow/pkg/cache"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
-
-var ErrCacheMiss = errors.New("cache miss")
 
 // PromptCache Prompt 缓存接口
 type PromptCache interface {
@@ -155,7 +154,7 @@ func (c *MultiLevelCache) Get(ctx context.Context, key string) (*CacheEntry, err
 		}
 	}
 
-	return nil, ErrCacheMiss
+	return nil, pkgcache.ErrCacheMiss
 }
 
 // Set 设置缓存

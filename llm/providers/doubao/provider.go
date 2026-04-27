@@ -52,7 +52,7 @@ func newDoubaoCapabilityHost(cfg providers.DoubaoConfig, logger *zap.Logger) *Do
 			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "Doubao-1.5-pro-32k",
+			FallbackModel: "Doubao-1.5-pro-256k",
 			Timeout:       cfg.Timeout,
 			EndpointPath:  "/api/v3/chat/completions",
 			RequestHook:   doubaoRequestHook,

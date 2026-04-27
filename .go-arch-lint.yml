@@ -6,13 +6,8 @@ allow:
   ignoreNotFoundComponents: true
 
 exclude:
-  - agent
-  - api
   - cmd
   - internal
-  - llm
-  - rag
-  - workflow
   - testutil
   - scripts
   - sdk
@@ -46,6 +41,21 @@ components:
   config:
     in:
       - config
+  llm:
+    in:
+      - llm
+  agent:
+    in:
+      - agent
+  rag:
+    in:
+      - rag
+  workflow:
+    in:
+      - workflow
+  api:
+    in:
+      - api
   pkg_common:
     in:
       - pkg/common
@@ -100,6 +110,70 @@ deps:
     mayDependOn:
       - config
       - types
+  llm:
+    mayDependOn:
+      - llm
+      - types
+      - config
+      - pkg_common
+      - pkg_tlsutil
+      - pkg_telemetry
+  agent:
+    mayDependOn:
+      - agent
+      - llm
+      - types
+      - config
+      - pkg_common
+      - pkg_cache
+      - pkg_middleware
+      - pkg_telemetry
+      - pkg_tlsutil
+      - pkg_storage
+      - pkg_database
+  rag:
+    mayDependOn:
+      - rag
+      - llm
+      - types
+      - config
+      - pkg_common
+      - pkg_cache
+      - pkg_telemetry
+      - pkg_tlsutil
+      - pkg_storage
+      - pkg_database
+  workflow:
+    mayDependOn:
+      - workflow
+      - agent
+      - rag
+      - llm
+      - types
+      - config
+      - pkg_common
+      - pkg_cache
+      - pkg_middleware
+      - pkg_telemetry
+      - pkg_tlsutil
+      - pkg_storage
+      - pkg_database
+  api:
+    mayDependOn:
+      - api
+      - agent
+      - rag
+      - llm
+      - workflow
+      - types
+      - config
+      - pkg_common
+      - pkg_cache
+      - pkg_middleware
+      - pkg_telemetry
+      - pkg_tlsutil
+      - pkg_server
+      - pkg_storage
   pkg_common:
     mayDependOn: [pkg_common, types]
   pkg_cache:

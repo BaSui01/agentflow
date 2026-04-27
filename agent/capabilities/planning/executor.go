@@ -74,8 +74,12 @@ func (e *PlanExecutor) ExecuteWithAgents(ctx context.Context, planID string, exe
 				e.planner.SetPlanStatus(planID, PlanStatusFailed)
 				return nil, fmt.Errorf("plan deadlock: no ready or running tasks remain in plan %s", planID)
 			}
-			// Tasks are still running, wait a bit
-			time.Sleep(50 * time.Millisecond)
+			select {
+			case <-time.After(50 * time.Millisecond):
+			case <-ctx.Done():
+				e.planner.SetPlanStatus(planID, PlanStatusFailed)
+				return nil, fmt.Errorf("plan execution cancelled: %w", ctx.Err())
+			}
 			continue
 		}
 

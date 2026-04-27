@@ -100,18 +100,18 @@ func TestSelectModel_FamilyMatching(t *testing.T) {
 	tr := newTestTierRouter(true)
 
 	got := tr.SelectModel(TierNano, "gpt-4o")
-	if got != "gpt-4o-mini" {
-		t.Fatalf("expected gpt-4o-mini, got %s", got)
+	if got != "gpt-5.4-nano" {
+		t.Fatalf("expected gpt-5.4-nano, got %s", got)
 	}
 
-	got = tr.SelectModel(TierFrontier, "claude-sonnet-3.5")
-	if got != "claude-opus" {
-		t.Fatalf("expected claude-opus, got %s", got)
+	got = tr.SelectModel(TierFrontier, "claude-sonnet-4-6")
+	if got != "claude-opus-4-7" {
+		t.Fatalf("expected claude-opus-4-7, got %s", got)
 	}
 
 	got = tr.SelectModel(TierStandard, "gemini-flash")
-	if got != "gemini-pro" {
-		t.Fatalf("expected gemini-pro, got %s", got)
+	if got != "gemini-2.5-pro" {
+		t.Fatalf("expected gemini-2.5-pro, got %s", got)
 	}
 }
 
@@ -120,8 +120,8 @@ func TestSelectModel_UnknownFamily(t *testing.T) {
 	tr := newTestTierRouter(true)
 
 	got := tr.SelectModel(TierNano, "some-custom-model")
-	if got != "gpt-4o-mini" {
-		t.Fatalf("expected first candidate gpt-4o-mini, got %s", got)
+	if got != "gpt-5.4-nano" {
+		t.Fatalf("expected first candidate gpt-5.4-nano, got %s", got)
 	}
 }
 
@@ -163,8 +163,8 @@ func TestResolveModel_Enabled(t *testing.T) {
 		},
 	}
 	got := tr.ResolveModel(simple)
-	if got != "gpt-4o-mini" {
-		t.Fatalf("expected gpt-4o-mini for simple request, got %s", got)
+	if got != "gpt-5.4-nano" {
+		t.Fatalf("expected gpt-5.4-nano for simple request, got %s", got)
 	}
 
 	msgs := make([]Message, 25)
@@ -182,8 +182,8 @@ func TestResolveModel_Enabled(t *testing.T) {
 		Tools:    tools,
 	}
 	got = tr.ResolveModel(complex)
-	if got != "gpt-4.5" {
-		t.Fatalf("expected gpt-4.5 for complex request, got %s", got)
+	if got != "gpt-5.5" {
+		t.Fatalf("expected gpt-5.5 for complex request, got %s", got)
 	}
 }
 

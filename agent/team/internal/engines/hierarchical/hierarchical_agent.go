@@ -420,8 +420,11 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 			break
 		}
 
-		// 等待后重试
-		time.Sleep(time.Duration(attempt+1) * time.Second)
+		select {
+		case <-time.After(time.Duration(attempt+1) * time.Second):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 
 	// 5. 更新任务状态

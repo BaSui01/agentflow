@@ -189,7 +189,11 @@ func (m *MCPClientManager) checkAndReconnect(ctx context.Context) {
 			float64(time.Second)*math.Pow(2, float64(entry.failCount)),
 			float64(maxReconnectBackoff),
 		))
-		time.Sleep(backoff)
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return
+		}
 
 		newTransport, err := entry.transportFactory()
 		if err != nil {

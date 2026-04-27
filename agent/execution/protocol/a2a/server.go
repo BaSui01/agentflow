@@ -933,7 +933,11 @@ func (s *HTTPServer) updateTaskStatusWithRetry(ctx context.Context, taskID strin
 				zap.Int("attempt", attempt),
 				zap.Error(err),
 			)
-			time.Sleep(time.Duration(attempt*100) * time.Millisecond)
+			select {
+			case <-time.After(time.Duration(attempt*100) * time.Millisecond):
+			case <-ctx.Done():
+				return fmt.Errorf("task store status sync cancelled: %w", ctx.Err())
+			}
 			continue
 		}
 		return nil
