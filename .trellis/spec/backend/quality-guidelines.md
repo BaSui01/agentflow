@@ -34,6 +34,164 @@ make test
 
 ---
 
+## Reuse Infrastructure Quick Reference
+
+> 编写新代码前，先查此表确认是否已有可复用的 Builder/Factory/Adapter/工具函数。
+
+### Builder 入口速查
+
+| Builder | 路径 | 用途 |
+|---------|------|------|
+| `sdk.Builder` | `sdk/runtime.go` | **最高层入口**：组装 Agent + Workflow + RAG |
+| `runtime.Builder` | `agent/runtime/builder.go` | Agent 运行时（含全部子系统） |
+| `AgentBuilder` | `agent/runtime/agent_builder.go` | 单个 Agent 实例 |
+| `TeamBuilder` | `agent/team/builder.go` | 多 Agent 团队协作 |
+| `workflow.Builder` | `workflow/runtime/builder.go` | Workflow 运行时 |
+| `DAGBuilder` / `NodeBuilder` | `workflow/core/dag_builder.go` | DAG 工作流与节点 |
+| `rag.Builder` | `rag/runtime/builder.go` | RAG 运行时 |
+| `ChannelRoutedProviderBuilder` | `llm/runtime/router/channel_routed_provider_builder.go` | 渠道路由 Provider |
+| `SkillBuilder` | `agent/capabilities/tools/skill.go` | 技能定义 |
+| `EphemeralPromptLayerBuilder` | `agent/execution/context/ephemeral_prompt.go` | 临时提示层 |
+
+### Adapter 速查
+
+| Adapter | 路径 | 职责 |
+|---------|------|------|
+| `ChatRequestAdapter` | `agent/adapters/chat.go` | `ExecutionOptions + Messages → ChatRequest`（含深拷贝） |
+| `AgentFactory` (declarative) | `agent/adapters/declarative/factory.go` | `AgentDefinition → AgentConfig` |
+| `Handoff` protocol | `agent/adapters/handoff/protocol.go` | Agent 间任务交接 |
+| `structured` output | `agent/adapters/structured/` | 结构化输出/Schema/验证 |
+
+### Factory 速查
+
+| Factory | 路径 | 用途 |
+|---------|------|------|
+| `ProviderFactory` | `llm/runtime/router/provider_factory.go` | LLM Provider 创建接口 |
+| `ChatProviderFactory` | `llm/runtime/router/chat_provider_factory.go` | 聊天 Provider 工厂接口 |
+| `AgentFactory` (type) | `agent/runtime/registry_runtime.go` | 运行时 Agent 工厂函数 |
+| `StrategyFactory` | `rag/retrieval/registry.go` | RAG 检索策略工厂 |
+| `TransportFactory` | `agent/execution/protocol/mcp/client_manager.go` | MCP 传输工厂 |
+
+### 通用工具包速查
+
+| 包 | 路径 | 提供的工具 |
+|----|------|------------|
+| `common` | `pkg/common/` | UUID、Timestamp、HTTP body、Error wrap、Nil-safe、JSON clone |
+| `service` | `pkg/service/` | `Service` 生命周期接口、`Registry` 启停管理 |
+| `cache` | `pkg/cache/` | Redis 缓存管理器 |
+| `middleware` | `pkg/middleware/` | JWT、限流、CORS、RequestID、OTel |
+| `metrics` | `pkg/metrics/` | Prometheus 指标收集 |
+| `database` | `pkg/database/` | 连接池管理 |
+| `telemetry` | `pkg/telemetry/` | OpenTelemetry 初始化 |
+
+### Bootstrap 组装速查
+
+| 职责 | 路径 |
+|------|------|
+| 配置加载/日志/DB | `internal/app/bootstrap/bootstrap.go` |
+| Handler 集合 | `internal/app/bootstrap/handler_set.go` |
+| LLM 运行时集合 | `internal/app/bootstrap/runtime_set.go` |
+| Agent 工具运行时 | `internal/app/bootstrap/agent_tooling_runtime_builder.go` |
+| 授权构建 | `internal/app/bootstrap/authorization_builder.go` |
+| Handler 路由组装 | `internal/app/bootstrap/serve_handler_set_*.go` |
+| 热重载 | `internal/app/bootstrap/hotreload_runtime_builder.go` |
+
+---
+
+## Convention: Builder Lifecycle
+
+All builders in the project follow a uniform 3-phase lifecycle. New builders **must** conform to this contract.
+
+### Phase 1: Constructor
+
+```go
+// Constructor returns *Builder (not the final product).
+// Required dependencies are passed as arguments; optional ones via With*.
+func NewBuilder(gateway LLMGateway, logger *zap.Logger) *Builder {
+    return &Builder{
+        gateway: gateway,
+        logger:  logger,
+    }
+}
+```
+
+### Phase 2: With* Chain
+
+```go
+// Each With* returns *Builder for chaining.
+// With* only stores the value — no validation, no side effects.
+func (b *Builder) WithOptions(opts BuildOptions) *Builder {
+    b.opts = opts
+    return b
+}
+```
+
+### Phase 3: Build
+
+```go
+// Build validates all required fields, applies defaults, and returns the product.
+// Build is the ONLY place where validation and side-effect init happen.
+func (b *Builder) Build(ctx context.Context, cfg AgentConfig) (*Runtime, error) {
+    // 1. Validate required dependencies
+    if b.gateway == nil {
+        return nil, types.NewError(types.ErrAgentNotReady, "gateway is required")
+    }
+    // 2. Apply defaults for optional fields
+    if b.opts.MaxRetries == 0 {
+        b.opts.MaxRetries = 3
+    }
+    // 3. Construct the product
+    return &Runtime{...}, nil
+}
+```
+
+### Validation & Error Matrix
+
+| Condition | Error Code | Message Pattern |
+|-----------|------------|-----------------|
+| Required dependency nil | `ErrAgentNotReady` / `ErrInvalidRequest` | `"{dep} is required"` |
+| Invalid config value | `ErrInputValidation` | `"invalid {field}: {reason}"` |
+| Build called twice | No error (idempotent) or panic in dev | — |
+
+### Wrong vs Correct
+
+```go
+// ❌ Wrong: validate in With* (breaks chaining, inconsistent)
+func (b *Builder) WithModel(model string) (*Builder, error) {
+    if model == "" {
+        return nil, errors.New("model cannot be empty")
+    }
+    b.model = model
+    return b, nil
+}
+
+// ✅ Correct: store in With*, validate in Build
+func (b *Builder) WithModel(model string) *Builder {
+    b.model = model
+    return b
+}
+
+func (b *Builder) Build(ctx context.Context, cfg AgentConfig) (*Runtime, error) {
+    if b.model == "" {
+        return nil, types.NewError(types.ErrInputValidation, "model is required")
+    }
+    ...
+}
+```
+
+### Gotcha: ModelOptions Field Sync
+
+> **Warning**: Adding a new field to `types.ModelOptions` requires updating **at least 4 places** in the same change:
+>
+> 1. `ModelOptions.clone()` — deep-copy the new field
+> 2. `AgentConfig.hasFormalMainFace()` — so setting only the new field activates the formal main surface
+> 3. `mergeModelOptions(...)` — so formal `AgentConfig.Model` overrides legacy-derived defaults
+> 4. `agent/adapters.DefaultChatRequestAdapter.Build(...)` — so the field reaches `types.ChatRequest`
+>
+> Missing any one of these causes silent data loss or broken behavior.
+
+---
+
 ## Forbidden Patterns
 
 ### 1. 反向依赖 (Critical)
@@ -150,6 +308,34 @@ type Agent struct {
 ```
 
 **原因**: Go 编译器禁止循环依赖，破坏模块边界。
+
+### 8. 跨 compat 文件定义共享辅助函数 (High)
+
+**禁止**: 在一个 compat handler 文件中定义被其他 compat handler 使用的共享辅助函数。
+
+```go
+// ❌ 错误: writeSSEEventJSON 定义在 chat_openai_compat.go 中
+//         但 chat_anthropic_compat.go 也依赖它
+// chat_openai_compat.go
+func writeSSEEventJSON(w http.ResponseWriter, event string, payload any) error { ... }
+
+// chat_anthropic_compat.go
+_ = writeSSEEventJSON(w, "message_start", payload)  // 隐式跨文件依赖!
+
+// ✅ 正确: 共享辅助函数放在独立的公共文件中
+// chat_sse.go（或 common.go）
+func writeSSEEventJSON(w http.ResponseWriter, event string, payload any) error { ... }
+func writeSSEJSON(w http.ResponseWriter, payload any) error { ... }
+func writeSSE(w http.ResponseWriter, parts ...[]byte) error { ... }
+```
+
+**原因**: compat 文件按协议隔离（openai / anthropic / 自有接口），在一个 compat 文件中删除函数时不会检查其他 compat 文件的引用，导致编译失败。
+
+**重构检查规则**: 删除或移动 `api/handlers/` 下的任何导出或包级函数前，必须搜索整个包的引用：
+```bash
+# 检查函数是否被同包其他文件引用
+grep -r "writeSSEEventJSON" api/handlers/
+```
 
 ---
 
