@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -97,21 +96,13 @@ func (p *OpenAIProvider) sdkClient(ctx context.Context) openaisdk.Client {
 }
 
 func (p *OpenAIProvider) mapSDKError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var apiErr *openaisdk.Error
-	if errors.As(err, &apiErr) {
-		return providerbase.MapHTTPError(apiErr.StatusCode, apiErr.RawJSON(), p.Name())
-	}
-	return &types.Error{
-		Code:       llm.ErrUpstreamError,
-		Message:    err.Error(),
-		Cause:      err,
-		HTTPStatus: http.StatusBadGateway,
-		Retryable:  true,
-		Provider:   p.Name(),
-	}
+	return providerbase.MapSDKError(err, p.Name(), func(e error) (int, string, bool) {
+		var apiErr *openaisdk.Error
+		if errors.As(e, &apiErr) {
+			return apiErr.StatusCode, apiErr.RawJSON(), true
+		}
+		return 0, "", false
+	})
 }
 
 func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
@@ -154,10 +145,7 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	// Apply rewriter chain (与基类保持一致)
 	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &types.Error{
-			Code: llm.ErrInvalidRequest, Message: fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest, Provider: p.Name(),
-		}
+		return nil, providerbase.RewriteChainError(err, p.Name())
 	}
 	req = rewrittenReq
 
@@ -1296,18 +1284,7 @@ func emitResponsesReasoningChunk(
 
 // mapResponsesStatus maps Responses API status to Chat Completions finish_reason.
 func mapResponsesStatus(status string) string {
-	switch status {
-	case "completed":
-		return "stop"
-	case "failed":
-		return "error"
-	case "incomplete":
-		return "length"
-	case "cancelled":
-		return "stop"
-	default:
-		return status
-	}
+	return providerbase.NormalizeFinishReason(status)
 }
 
 // Stream 覆写基类方法，支持 Responses API 流式.
@@ -1319,10 +1296,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	// Apply rewriter chain
 	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &types.Error{
-			Code: llm.ErrInvalidRequest, Message: fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest, Provider: p.Name(),
-		}
+		return nil, providerbase.RewriteChainError(err, p.Name())
 	}
 	req = rewrittenReq
 

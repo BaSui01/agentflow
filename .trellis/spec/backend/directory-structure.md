@@ -127,12 +127,22 @@ agent/
 api/
 ├── handlers/           # HTTP 处理器
 │   ├── agent.go
-│   ├── chat.go
+│   ├── chat.go         # 自有接口 Handler（WriteError/WriteSuccess）
+│   ├── chat_openai_compat.go    # OpenAI 兼容端点（writeOpenAICompatError/JSON）
+│   ├── chat_anthropic_compat.go # Anthropic 兼容端点（writeAnthropicCompatError/JSON）
+│   ├── chat_openai_request.go   # OpenAI 请求构建与转换
+│   ├── chat_converter.go        # API ↔ UseCase DTO 转换
+│   ├── chat_sse.go              # 共享 SSE 辅助函数（writeSSE/writeSSEJSON/writeSSEEventJSON）
 │   └── ...
 ├── middleware/         # HTTP 中间件
 ├── routes.go           # 路由定义
 └── error_mapping.go    # 错误映射
 ```
+
+**Compat 文件隔离规则**:
+- 每个 compat 文件（`*_compat.go`）按协议格式独立，有自己的错误/响应写入函数
+- **共享辅助函数**（SSE、通用转换等）必须放在独立文件（如 `chat_sse.go`、`common.go`），不得定义在某个 compat 文件中
+- 请求构建/转换函数按协议拆分到 `*_request.go`，不混入 Handler 主文件
 
 ---
 
@@ -275,9 +285,28 @@ import "github.com/BaSui01/agentflow/agent"  // 禁止!
 
 ### 代码复用原则
 
-- **复用优先**: 新增能力前先复用现有 `builder/factory/adapter`
+- **复用优先**: 新增能力前先复用现有 `builder/factory/adapter`（见下表）
 - **单一职责**: 文件和包职责必须清晰，避免 "God Object / God Package"
-- **命名可检索**: 模块命名与目录结构要直观表达职责
+- **命名可检索**: 模块命名与目录结构要直观表达职责，便于快速定位与调用
+
+#### 复用入口对照表
+
+| 你想做的事 | 应该用的入口 | 路径 |
+|------------|-------------|------|
+| 构建 Agent | `runtime.NewBuilder()` | `agent/runtime/builder.go` |
+| 构建团队 | `NewTeamBuilder()` | `agent/team/builder.go` |
+| 构建 Workflow | `workflow.NewBuilder()` | `workflow/runtime/builder.go` |
+| 构建 RAG | `rag.NewBuilder()` | `rag/runtime/builder.go` |
+| SDK 统一入口 | `sdk.New(opts).Build(ctx)` | `sdk/runtime.go` |
+| 转换 Chat 请求 | `NewDefaultChatRequestAdapter()` | `agent/adapters/chat.go` |
+| 创建 Provider | `NewDefaultProviderFactory()` | `llm/runtime/router/provider_factory.go` |
+| 声明式 Agent 定义 | `NewAgentFactory()` | `agent/adapters/declarative/factory.go` |
+| 构建技能 | `NewSkillBuilder()` | `agent/capabilities/tools/skill.go` |
+| 通用 UUID/时间戳 | `common.NewUUID()`, `common.TimestampNow()` | `pkg/common/` |
+| 服务生命周期 | `service.Service` interface + `service.Registry` | `pkg/service/` |
+| 组装启动依赖 | `bootstrap.*Builder` | `internal/app/bootstrap/` |
+| 创建错误 | `types.NewError()`, `types.WrapError()` | `types/error.go` |
+| Context 传递 | `types.WithTraceID()`, `types.AgentID()` | `types/context.go` |
 
 ---
 

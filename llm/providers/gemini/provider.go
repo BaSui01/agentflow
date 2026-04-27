@@ -101,23 +101,13 @@ func (p *GeminiProvider) sdkClient(ctx context.Context) (*genai.Client, error) {
 }
 
 func (p *GeminiProvider) mapSDKError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	var apiErr genai.APIError
-	if errors.As(err, &apiErr) {
-		return providerbase.MapHTTPError(apiErr.Code, strings.TrimSpace(apiErr.Message), p.Name())
-	}
-
-	return &types.Error{
-		Code:       llm.ErrUpstreamError,
-		Message:    err.Error(),
-		Cause:      err,
-		HTTPStatus: http.StatusBadGateway,
-		Retryable:  true,
-		Provider:   p.Name(),
-	}
+	return providerbase.MapSDKError(err, p.Name(), func(e error) (int, string, bool) {
+		var apiErr genai.APIError
+		if errors.As(e, &apiErr) {
+			return apiErr.Code, strings.TrimSpace(apiErr.Message), true
+		}
+		return 0, "", false
+	})
 }
 
 func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
@@ -741,15 +731,9 @@ func decodeThoughtSignature(value string) []byte {
 }
 
 func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-		}
+		return nil, providerbase.RewriteChainError(err, p.Name())
 	}
 	req = rewrittenReq
 
@@ -778,16 +762,9 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 }
 
 func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// 对齐 Google streamGenerateContent：SSE data 行含 JSON，可选 [DONE] 或 error 负载。
-	// 文档：https://ai.google.dev/gemini-api/docs/text-generation（Streaming）
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-		}
+		return nil, providerbase.RewriteChainError(err, p.Name())
 	}
 	req = rewrittenReq
 
@@ -1095,20 +1072,7 @@ const defaultModel = "gemini-2.5-pro"
 
 // normalizeFinishReason maps Gemini finish reasons to OpenAI-compatible values.
 func normalizeFinishReason(reason string) string {
-	switch reason {
-	case "STOP":
-		return "stop"
-	case "MAX_TOKENS":
-		return "length"
-	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
-		return "content_filter"
-	case "LANGUAGE":
-		return "content_filter"
-	case "":
-		return ""
-	default:
-		return strings.ToLower(reason)
-	}
+	return providerbase.NormalizeFinishReason(reason)
 }
 
 func geminiThoughtSignatureByIndex(msg types.Message, index int) string {

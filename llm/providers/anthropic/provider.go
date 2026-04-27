@@ -89,21 +89,13 @@ func (p *ClaudeProvider) sdkRequestOptions(speed string) []anthropicsdkoption.Re
 }
 
 func (p *ClaudeProvider) mapSDKError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var apiErr *anthropicsdk.Error
-	if errors.As(err, &apiErr) {
-		return providerbase.MapHTTPError(apiErr.StatusCode, apiErr.RawJSON(), p.Name())
-	}
-	return &types.Error{
-		Code:       llm.ErrUpstreamError,
-		Message:    err.Error(),
-		Cause:      err,
-		HTTPStatus: http.StatusBadGateway,
-		Retryable:  true,
-		Provider:   p.Name(),
-	}
+	return providerbase.MapSDKError(err, p.Name(), func(e error) (int, string, bool) {
+		var apiErr *anthropicsdk.Error
+		if errors.As(e, &apiErr) {
+			return apiErr.StatusCode, apiErr.RawJSON(), true
+		}
+		return 0, "", false
+	})
 }
 
 func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
@@ -677,15 +669,9 @@ func decodeAnthropicSDKRawJSON(raw string, dst any) error {
 }
 
 func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-		}
+		return nil, providerbase.RewriteChainError(err, p.Name())
 	}
 	req = rewrittenReq
 
@@ -763,15 +749,9 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 }
 
 func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    fmt.Sprintf("request rewrite failed: %v", err),
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   p.Name(),
-		}
+		return nil, providerbase.RewriteChainError(err, p.Name())
 	}
 	req = rewrittenReq
 
@@ -1305,13 +1285,8 @@ func validateClaudeRequest(req *llm.ChatRequest, model string) error {
 		return nil
 	}
 	normModel := normalizeClaudeModelName(model)
-	if req.Temperature != 0 && req.TopP != 0 {
-		return &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    "Claude requests should set either temperature or top_p, but not both",
-			HTTPStatus: http.StatusBadRequest,
-			Provider:   "claude",
-		}
+	if err := providerbase.ValidateTemperatureTopPMutualExclusion(req.Temperature, req.TopP, "claude"); err != nil {
+		return err
 	}
 	if strings.Contains(normModel, "opus-4-7") || strings.Contains(normModel, "opus-4.7") {
 		if req.Temperature != 0 || req.TopP != 0 {

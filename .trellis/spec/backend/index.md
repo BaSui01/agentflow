@@ -22,10 +22,10 @@ This directory contains guidelines for backend development. Fill in each file wi
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | **Active** (330 lines) |
+| [Directory Structure](./directory-structure.md) | Module organization, file layout, reuse entry lookup | **Active** (360 lines) |
 | [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | **Active** (508 lines) |
 | [Error Handling](./error-handling.md) | Error types, handling strategies | **Active** (356 lines) |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns, Agent model option contract | **Active** (821 lines) |
+| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns, builder lifecycle contract, reuse quick reference | **Active** (1000 lines) |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | **Active** (396 lines) |
 
 ---
