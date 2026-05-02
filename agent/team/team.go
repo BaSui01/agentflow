@@ -48,11 +48,7 @@ type AgentTeam struct {
 	logger   *zap.Logger
 }
 
-type Team interface {
-	ID() string
-	Members() []agent.TeamMember
-	Execute(ctx context.Context, task string, opts ...agent.TeamOption) (*agent.TeamResult, error)
-}
+type Team = agent.Team
 
 // teamModeStrategy is the internal interface for mode-specific execution logic.
 type teamModeStrategy interface {

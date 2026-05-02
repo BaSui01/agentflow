@@ -96,6 +96,7 @@ func TestRootLayoutBudget(t *testing.T) {
 func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 	allowlist := map[string]string{
 		"cache":      "single cohesive cache manager entrypoint",
+		"httpclient": "single HTTP client factory entrypoint",
 		"jsonschema": "single JSON schema validator entrypoint",
 		"metrics":    "single metrics collector entrypoint",
 		"openapi":    "single OpenAPI helper entrypoint",
