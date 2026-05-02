@@ -19,6 +19,7 @@ import (
 	llmobservability "github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
+	"github.com/BaSui01/agentflow/types"
 	workflowcore "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -348,6 +349,8 @@ type ReloadedResolverBuildInput struct {
 
 	AgentRegistry     *agent.AgentRegistry
 	DefaultModel      string
+	DefaultProvider   string
+	ModelCatalog      *types.ModelCatalog
 	ToolingRuntime    *AgentToolingRuntime
 	DiscoveryRegistry *discovery.CapabilityRegistry
 	WireMongoStores   func(resolver *agent.CachingResolver, discoveryRegistry *discovery.CapabilityRegistry) error
@@ -367,7 +370,9 @@ func BuildReloadedResolver(in ReloadedResolverBuildInput) (*agent.CachingResolve
 	}
 
 	resolver := agent.NewCachingResolver(in.AgentRegistry, in.Gateway, logger).
-		WithDefaultModel(in.DefaultModel)
+		WithDefaultModel(in.DefaultModel).
+		WithDefaultProvider(in.DefaultProvider).
+		WithModelCatalog(in.ModelCatalog)
 	if tooling := in.ToolingRuntime; tooling != nil && tooling.ToolManager != nil {
 		resolver = resolver.WithToolManager(tooling.ToolManager)
 		if len(tooling.ToolNames) > 0 {

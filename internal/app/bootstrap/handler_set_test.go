@@ -34,3 +34,14 @@ func TestStorageSet_HasResolver(t *testing.T) {
 	set := &StorageSet{}
 	assert.False(t, set.HasResolver())
 }
+
+func TestLLMRuntimeSet_HasModelCatalog(t *testing.T) {
+	set := &LLMRuntimeSet{}
+	assert.Nil(t, set.ModelCatalog)
+	catalog, err := BuildModelCatalog("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.ModelCatalog = catalog
+	assert.NotNil(t, set.ModelCatalog)
+}

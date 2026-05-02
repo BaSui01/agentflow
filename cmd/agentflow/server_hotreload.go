@@ -22,7 +22,7 @@ func (s *Server) initHotReloadManager() error {
 
 	bootstrap.RegisterHotReloadCallbacks(s.ops.hotReloadManager, s.logger, func(_old, newConfig *config.Config) {
 		if err := s.reloadLLMRuntime(newConfig); err != nil {
-			s.logger.Fatal("LLM hot reload failed", zap.Error(err))
+			panic(err)
 		}
 		s.cfg = newConfig
 	})
@@ -35,6 +35,10 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		return fmt.Errorf("config is required for llm hot reload")
 	}
 	previousResolver := s.workflow.resolver
+	modelCatalog, err := bootstrap.BuildModelCatalog(cfg.LLM.ModelCatalogPath)
+	if err != nil {
+		return fmt.Errorf("rebuild model catalog: %w", err)
+	}
 
 	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(cfg, s.infra.db, s.logger)
 	if err != nil {
@@ -67,6 +71,8 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 		Gateway:           gateway,
 		AgentRegistry:     s.tooling.agentRegistry,
 		DefaultModel:      cfg.Agent.Model,
+		DefaultProvider:   cfg.LLM.DefaultProvider,
+		ModelCatalog:      modelCatalog,
 		ToolingRuntime:    s.tooling.toolingRuntime,
 		DiscoveryRegistry: s.tooling.discoveryRegistry,
 		WireMongoStores:   s.wireMongoStores,
@@ -95,6 +101,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 	s.text.costTracker = costTracker
 	s.text.llmCache = llmCache
 	s.text.llmMetrics = llmMetrics
+	s.text.modelCatalog = modelCatalog
 	s.workflow.resolver = resolver
 
 	previousChatService := s.text.chatService
@@ -146,7 +153,7 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 
 	if s.tooling.agentRegistry != nil {
 		if gateway != nil {
-			bootstrap.RegisterDefaultRuntimeAgentFactory(s.tooling.agentRegistry, gateway, toolGateway, s.workflow.checkpointManager, ledger, s.logger)
+			bootstrap.RegisterDefaultRuntimeAgentFactory(s.tooling.agentRegistry, gateway, toolGateway, s.workflow.checkpointManager, s.text.modelCatalog, ledger, s.logger)
 		} else {
 			s.tooling.agentRegistry.Unregister(agent.TypeGeneric)
 		}

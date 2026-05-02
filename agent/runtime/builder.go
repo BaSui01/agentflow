@@ -59,6 +59,7 @@ type BuildOptions struct {
 	ChatRequestAdapter       agentadapters.ChatRequestAdapter
 	ToolProtocolRuntime      ToolProtocolRuntime
 	ReasoningRuntime         ReasoningRuntime
+	ModelCatalog             *types.ModelCatalog
 
 	// Optional pass-throughs for AgentBuilder advanced wiring.
 	PromptStore       PromptStoreProvider
@@ -180,6 +181,9 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*BaseAgent,
 	if opts.MaxLoopIterations > 0 {
 		cfg2.Control.MaxLoopIterations = opts.MaxLoopIterations
 		cfg2.Runtime.MaxLoopIterations = opts.MaxLoopIterations
+	}
+	if err := types.ValidateModelCapabilities(opts.ModelCatalog, cfg2.ExecutionOptions()); err != nil {
+		return nil, NewError(types.ErrInputValidation, err.Error())
 	}
 
 	ag, err := BuildBaseAgent(

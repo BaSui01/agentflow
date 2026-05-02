@@ -628,3 +628,26 @@ func TestBuilder_Build_WiresCustomRuntimeComponents(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "runtime-output", output.Content)
 }
+
+func TestBuilder_Build_RejectsCatalogCapabilityMismatch(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{ID: "catalog-mismatch", Name: "Catalog mismatch", Type: string(TypeAssistant)},
+		Model: types.ModelOptions{
+			Provider:       "openai",
+			Model:          "text-only",
+			ResponseFormat: &types.ResponseFormat{Type: types.ResponseFormatJSONSchema},
+		},
+	}
+	catalog := types.NewModelCatalog([]types.ModelDescriptor{{
+		Provider:     "openai",
+		ID:           "text-only",
+		Capabilities: []types.ModelCapability{types.ModelCapabilityTextInput, types.ModelCapabilityTextOutput},
+	}})
+
+	ag, err := mustNewBuilder(testGateway(mocks.NewSuccessProvider("hello")), zap.NewNop()).
+		WithOptions(BuildOptions{ModelCatalog: catalog}).
+		Build(context.Background(), cfg)
+	require.Error(t, err)
+	require.Nil(t, ag)
+	assert.Contains(t, err.Error(), "structured_output")
+}

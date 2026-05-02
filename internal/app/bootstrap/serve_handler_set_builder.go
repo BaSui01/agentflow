@@ -52,6 +52,11 @@ func BuildServeHandlerSet(in ServeHandlerSetBuildInput) (*ServeHandlerSet, error
 	}
 
 	set := &ServeHandlerSet{}
+	modelCatalog, err := BuildModelCatalog(in.Cfg.LLM.ModelCatalogPath)
+	if err != nil {
+		return nil, err
+	}
+	set.ModelCatalog = modelCatalog
 	registerServeHealthChecks(set, in)
 
 	llmRuntime, err := buildServeLLMRuntime(set, in)

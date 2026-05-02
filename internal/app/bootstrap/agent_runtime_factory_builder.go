@@ -19,6 +19,7 @@ func RegisterDefaultRuntimeAgentFactory(
 	gateway llmcore.Gateway,
 	toolGateway llmcore.Gateway,
 	checkpointManager *agent.CheckpointManager,
+	modelCatalog *types.ModelCatalog,
 	ledger observability.Ledger,
 	logger *zap.Logger,
 ) {
@@ -46,6 +47,7 @@ func RegisterDefaultRuntimeAgentFactory(
 			ToolManager:          tm,
 			EventBus:             bus,
 			CheckpointManager:    checkpointManager,
+			ModelCatalog:         modelCatalog,
 		}
 		opts.EnableAll = false
 		if factoryLogger == nil {

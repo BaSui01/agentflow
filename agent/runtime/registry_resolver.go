@@ -30,6 +30,8 @@ type CachingResolver struct {
 	group          singleflight.Group
 	toolNames      []string
 	modelHint      string
+	providerHint   string
+	modelCatalog   *types.ModelCatalog
 
 	// MongoDB persistence stores (required)
 	promptStore       PromptStoreProvider
@@ -104,6 +106,19 @@ func (r *CachingResolver) WithDefaultModel(model string) *CachingResolver {
 	return r
 }
 
+// WithDefaultProvider sets the provider used when resolving the default model through a catalog.
+func (r *CachingResolver) WithDefaultProvider(provider string) *CachingResolver {
+	r.providerHint = strings.TrimSpace(provider)
+	return r
+}
+
+// WithModelCatalog sets the catalog used to resolve configured model aliases
+// into canonical provider model IDs for agents created by this resolver.
+func (r *CachingResolver) WithModelCatalog(catalog *types.ModelCatalog) *CachingResolver {
+	r.modelCatalog = catalog
+	return r
+}
+
 // WithPromptStore sets the PromptStoreProvider for resolved agents.
 func (r *CachingResolver) WithPromptStore(s PromptStoreProvider) *CachingResolver {
 	r.promptStore = s
@@ -136,14 +151,20 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 			return cached, nil
 		}
 
+		modelProvider, modelID := r.defaultResolverModelParts()
 		cfg := types.AgentConfig{
 			Core: types.CoreConfig{
 				ID:   agentID,
 				Name: agentID,
 				Type: string(TypeGeneric),
 			},
+			Model: types.ModelOptions{
+				Provider: modelProvider,
+				Model:    modelID,
+			},
 			LLM: types.LLMConfig{
-				Model: r.defaultResolverModel(),
+				Provider: modelProvider,
+				Model:    modelID,
 			},
 		}
 		toolNames := r.toolNames
@@ -193,15 +214,37 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 }
 
 func (r *CachingResolver) defaultResolverModel() string {
-	if model := strings.TrimSpace(r.modelHint); model != "" {
-		return model
-	}
-	if provider := compatProviderFromGateway(r.gateway); provider != nil {
-		if name := strings.TrimSpace(provider.Name()); name != "" {
-			return name
+	_, model := r.defaultResolverModelParts()
+	return model
+}
+
+func (r *CachingResolver) defaultResolverModelParts() (string, string) {
+	provider := r.defaultResolverProvider()
+	model := strings.TrimSpace(r.modelHint)
+	if model == "" {
+		if compatProvider := compatProviderFromGateway(r.gateway); compatProvider != nil {
+			model = strings.TrimSpace(compatProvider.Name())
 		}
 	}
-	return "resolver-default"
+	if model == "" {
+		model = "resolver-default"
+	}
+	if r.modelCatalog != nil && provider != "" {
+		if descriptor, ok := r.modelCatalog.Lookup(provider, model); ok {
+			return descriptor.Provider, descriptor.ID
+		}
+	}
+	return provider, model
+}
+
+func (r *CachingResolver) defaultResolverProvider() string {
+	if provider := strings.TrimSpace(r.providerHint); provider != "" {
+		return provider
+	}
+	if provider := compatProviderFromGateway(r.gateway); provider != nil {
+		return strings.TrimSpace(provider.Name())
+	}
+	return ""
 }
 
 // TeardownAll tears down all cached agent instances. Intended to be called

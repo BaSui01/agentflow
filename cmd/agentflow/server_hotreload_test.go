@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -185,6 +187,112 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 	require.Equal(t, modeA, s.cfg.LLM.MainProviderMode)
 	require.Equal(t, modeA, s.ops.hotReloadManager.GetConfig().LLM.MainProviderMode)
 	assertHotReloadChatContent(t, handler, "stable")
+}
+
+func TestServerHotReload_LoadsModelCatalogPath(t *testing.T) {
+	t.Parallel()
+
+	mode := "reload-catalog"
+	bootstrap.UnregisterMainProviderBuilder(mode)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(mode,
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
+			return &hotReloadProvider{name: "provider-catalog", content: "catalog"}, nil
+		}))
+	defer bootstrap.UnregisterMainProviderBuilder(mode)
+
+	catalogPath := writeHotReloadModelCatalog(t, "provider-catalog", "canonical-hot", "agent-hot")
+	cfg := config.DefaultConfig()
+	cfg.LLM.MainProviderMode = mode
+	cfg.LLM.DefaultProvider = "provider-catalog"
+	cfg.LLM.ModelCatalogPath = catalogPath
+	cfg.Agent.Model = "agent-hot"
+	cfg.Budget.Enabled = false
+
+	var created types.AgentConfig
+	registry := agent.NewAgentRegistry(zap.NewNop())
+	registry.Register(agent.TypeGeneric, func(
+		cfg types.AgentConfig,
+		_ llmcore.Gateway,
+		_ agent.MemoryManager,
+		_ agent.ToolManager,
+		_ agent.EventBus,
+		_ *zap.Logger,
+	) (agent.Agent, error) {
+		created = cfg
+		return &hotReloadTestAgent{id: cfg.Core.ID}, nil
+	})
+
+	s := &Server{
+		cfg:     cfg,
+		logger:  zap.NewNop(),
+		tooling: serverToolingBundle{agentRegistry: registry},
+	}
+	require.NoError(t, s.reloadLLMRuntime(cfg))
+	require.NotNil(t, s.text.modelCatalog)
+	require.NotNil(t, s.workflow.resolver)
+	registry.Register(agent.TypeGeneric, func(
+		cfg types.AgentConfig,
+		_ llmcore.Gateway,
+		_ agent.MemoryManager,
+		_ agent.ToolManager,
+		_ agent.EventBus,
+		_ *zap.Logger,
+	) (agent.Agent, error) {
+		created = cfg
+		return &hotReloadTestAgent{id: cfg.Core.ID}, nil
+	})
+
+	_, err := s.workflow.resolver.Resolve(context.Background(), "agent-from-catalog")
+	require.NoError(t, err)
+	require.Equal(t, "provider-catalog", created.LLM.Provider)
+	require.Equal(t, "canonical-hot", created.LLM.Model)
+	require.Equal(t, "provider-catalog", created.Model.Provider)
+	require.Equal(t, "canonical-hot", created.Model.Model)
+}
+
+func TestServerHotReload_RollsBackOnModelCatalogLoadFailure(t *testing.T) {
+	t.Parallel()
+
+	mode := "reload-catalog-rollback"
+	bootstrap.UnregisterMainProviderBuilder(mode)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(mode,
+		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llmcore.Provider, error) {
+			return &hotReloadProvider{name: "provider-catalog-rollback", content: "stable"}, nil
+		}))
+	defer bootstrap.UnregisterMainProviderBuilder(mode)
+
+	goodCatalogPath := writeHotReloadModelCatalog(t, "provider-catalog-rollback", "canonical-stable", "stable-alias")
+	cfg := config.DefaultConfig()
+	cfg.LLM.MainProviderMode = mode
+	cfg.LLM.DefaultProvider = "provider-catalog-rollback"
+	cfg.LLM.ModelCatalogPath = goodCatalogPath
+	cfg.Budget.Enabled = false
+
+	s := &Server{cfg: cfg, logger: zap.NewNop()}
+	require.NoError(t, s.reloadLLMRuntime(cfg))
+	require.NotNil(t, s.text.modelCatalog)
+	require.NoError(t, s.initHotReloadManager())
+
+	badCfg := config.DefaultConfig()
+	badCfg.LLM.MainProviderMode = mode
+	badCfg.LLM.DefaultProvider = "provider-catalog-rollback"
+	badCfg.LLM.ModelCatalogPath = filepath.Join(t.TempDir(), "missing-models.json")
+	badCfg.Budget.Enabled = false
+	err := s.ops.hotReloadManager.ApplyConfig(badCfg, "test")
+	require.Error(t, err)
+	stableModel, ok := s.text.modelCatalog.Lookup("provider-catalog-rollback", "stable-alias")
+	require.True(t, ok)
+	require.Equal(t, "canonical-stable", stableModel.ID)
+	require.Equal(t, goodCatalogPath, s.cfg.LLM.ModelCatalogPath)
+	require.Equal(t, goodCatalogPath, s.ops.hotReloadManager.GetConfig().LLM.ModelCatalogPath)
+}
+
+func writeHotReloadModelCatalog(t *testing.T, provider, modelID, alias string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "models.json")
+	payload := fmt.Sprintf(`{"models":[{"provider":%q,"id":%q,"aliases":[%q]}]}`, provider, modelID, alias)
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0644))
+	return path
 }
 
 func TestServerHotReload_RequiresRestartToActivateMissingChatAndCostRoutes(t *testing.T) {

@@ -29,7 +29,7 @@ func TestRegisterDefaultRuntimeAgentFactory_InjectsRuntimeDefaults(t *testing.T)
 	checkpointManager := &agent.CheckpointManager{}
 
 	gateway := testBootstrapGateway(provider)
-	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, checkpointManager, nil, zap.NewNop())
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, checkpointManager, nil, nil, zap.NewNop())
 
 	created, err := registry.Create(types.AgentConfig{
 		Core: types.CoreConfig{
@@ -55,7 +55,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesEventBusPassThrough(t *test
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := mocks.NewSuccessProvider("hello")
 	gateway := testBootstrapGateway(provider)
-	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, zap.NewNop())
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, nil, zap.NewNop())
 
 	bus := &testEventBus{}
 	created, err := registry.Create(types.AgentConfig{
@@ -80,7 +80,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesConfiguredLoopBudget(t *tes
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := mocks.NewSuccessProvider("hello")
 	gateway := testBootstrapGateway(provider)
-	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, zap.NewNop())
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, nil, zap.NewNop())
 
 	created, err := registry.Create(types.AgentConfig{
 		Core: types.CoreConfig{
@@ -104,7 +104,7 @@ func TestRegisterDefaultRuntimeAgentFactory_PreservesFormalControlLoopBudget(t *
 	registry := agent.NewAgentRegistry(zap.NewNop())
 	provider := &captureBootstrapProvider{content: "hello"}
 	gateway := testBootstrapGateway(provider)
-	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, zap.NewNop())
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, nil, nil, zap.NewNop())
 
 	created, err := registry.Create(types.AgentConfig{
 		Core: types.CoreConfig{
@@ -190,4 +190,28 @@ func (*captureBootstrapProvider) CountTokens(_ context.Context, req *llm.ChatReq
 	return &llm.TokenCountResponse{
 		InputTokens: len(req.Messages) + req.MaxTokens,
 	}, nil
+}
+
+func TestRegisterDefaultRuntimeAgentFactory_ValidatesModelCatalogCapabilities(t *testing.T) {
+	registry := agent.NewAgentRegistry(zap.NewNop())
+	provider := mocks.NewSuccessProvider("hello")
+	gateway := testBootstrapGateway(provider)
+	catalog := types.NewModelCatalog([]types.ModelDescriptor{{
+		Provider:     "openai",
+		ID:           "text-only",
+		Capabilities: []types.ModelCapability{types.ModelCapabilityTextInput, types.ModelCapabilityTextOutput},
+	}})
+	RegisterDefaultRuntimeAgentFactory(registry, gateway, nil, nil, catalog, nil, zap.NewNop())
+
+	created, err := registry.Create(types.AgentConfig{
+		Core: types.CoreConfig{ID: "test-agent", Name: "Test", Type: string(agent.TypeGeneric)},
+		Model: types.ModelOptions{
+			Provider:       "openai",
+			Model:          "text-only",
+			ResponseFormat: &types.ResponseFormat{Type: types.ResponseFormatJSONSchema},
+		},
+	}, gateway, nil, nil, nil, zap.NewNop())
+	require.Error(t, err)
+	require.Nil(t, created)
+	assert.Contains(t, err.Error(), "structured_output")
 }

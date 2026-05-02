@@ -99,6 +99,7 @@ llm:
   tool_base_url: "https://tool.example.com"
   tool_timeout: 25s
   tool_max_retries: 2
+  model_catalog_path: "./models.json"
 
 redis:
   addr: "redis.example.com:6379"
@@ -144,6 +145,7 @@ log:
 	assert.Equal(t, "https://tool.example.com", cfg.LLM.ToolBaseURL)
 	assert.Equal(t, 25*time.Second, cfg.LLM.ToolTimeout)
 	assert.Equal(t, 2, cfg.LLM.ToolMaxRetries)
+	assert.Equal(t, "./models.json", cfg.LLM.ModelCatalogPath)
 
 	assert.Equal(t, "redis.example.com:6379", cfg.Redis.Addr)
 	assert.Equal(t, "secret", cfg.Redis.Password)
@@ -177,6 +179,7 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 		"AGENTFLOW_LLM_TOOL_BASE_URL":           "https://tool-env.example.com",
 		"AGENTFLOW_LLM_TOOL_TIMEOUT":            "15s",
 		"AGENTFLOW_LLM_TOOL_MAX_RETRIES":        "2",
+		"AGENTFLOW_LLM_MODEL_CATALOG_PATH":      "./models-env.json",
 		"AGENTFLOW_REDIS_ADDR":                  "env-redis:6379",
 		"AGENTFLOW_LOG_LEVEL":                   "warn",
 	}
@@ -218,6 +221,7 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 	assert.Equal(t, "https://tool-env.example.com", cfg.LLM.ToolBaseURL)
 	assert.Equal(t, 15*time.Second, cfg.LLM.ToolTimeout)
 	assert.Equal(t, 2, cfg.LLM.ToolMaxRetries)
+	assert.Equal(t, "./models-env.json", cfg.LLM.ModelCatalogPath)
 	assert.Equal(t, "env-redis:6379", cfg.Redis.Addr)
 	assert.Equal(t, "warn", cfg.Log.Level)
 }
@@ -466,11 +470,11 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "memory backend is not allowed for multimodal reference store",
+			name: "memory backend is allowed for multimodal reference store",
 			modify: func(c *Config) {
 				c.Multimodal.ReferenceStoreBackend = "memory"
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "redis address is required when multimodal is enabled",

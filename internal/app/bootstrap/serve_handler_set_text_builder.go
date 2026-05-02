@@ -77,7 +77,9 @@ func buildServeAgentHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput, 
 
 	if llmRuntime != nil && llmRuntime.Gateway != nil {
 		resolver := agent.NewCachingResolver(set.AgentRegistry, llmRuntime.Gateway, in.Logger).
-			WithDefaultModel(in.Cfg.Agent.Model)
+			WithDefaultModel(in.Cfg.Agent.Model).
+			WithDefaultProvider(in.Cfg.LLM.DefaultProvider).
+			WithModelCatalog(set.ModelCatalog)
 		if set.ToolingRuntime != nil && set.ToolingRuntime.ToolManager != nil {
 			resolver = resolver.WithToolManager(set.ToolingRuntime.ToolManager)
 			if len(set.ToolingRuntime.ToolNames) > 0 {
@@ -97,7 +99,7 @@ func buildServeAgentHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput, 
 		if llmRuntime != nil {
 			ledger = llmRuntime.Ledger
 		}
-		RegisterDefaultRuntimeAgentFactory(set.AgentRegistry, llmRuntime.Gateway, llmRuntime.ToolGateway, set.CheckpointManager, ledger, in.Logger)
+		RegisterDefaultRuntimeAgentFactory(set.AgentRegistry, llmRuntime.Gateway, llmRuntime.ToolGateway, set.CheckpointManager, set.ModelCatalog, ledger, in.Logger)
 		in.Logger.Info("Default runtime agent factory registered")
 
 		set.AgentHandler = handlers.NewAgentHandlerWithService(BuildAgentService(set.DiscoveryRegistry, set.Resolver.Resolve), nil, in.Logger)

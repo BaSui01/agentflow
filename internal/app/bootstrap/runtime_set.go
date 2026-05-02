@@ -5,6 +5,7 @@ import (
 	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,6 +18,7 @@ type LLMRuntimeSet struct {
 	LLMCache      *cache.MultiLevelCache
 	LLMMetrics    *observability.Metrics
 	Ledger        observability.Ledger
+	ModelCatalog  *types.ModelCatalog
 
 	MultimodalRedis   *redis.Client
 	ToolApprovalRedis *redis.Client

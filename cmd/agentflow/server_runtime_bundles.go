@@ -24,6 +24,7 @@ import (
 	pkgservice "github.com/BaSui01/agentflow/pkg/service"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/rag/core"
+	"github.com/BaSui01/agentflow/types"
 	workflowpkg "github.com/BaSui01/agentflow/workflow/core"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -81,6 +82,7 @@ type serverTextRuntimeBundle struct {
 	costTracker   *observability.CostTracker
 	llmCache      *cache.MultiLevelCache
 	llmMetrics    *observability.Metrics
+	modelCatalog  *types.ModelCatalog
 }
 
 type serverToolingBundle struct {

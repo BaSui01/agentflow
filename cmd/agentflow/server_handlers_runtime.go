@@ -42,6 +42,7 @@ func (s *Server) initHandlers() error {
 	s.text.costTracker = set.CostTracker
 	s.text.llmCache = set.LLMCache
 	s.text.llmMetrics = set.LLMMetrics
+	s.text.modelCatalog = set.ModelCatalog
 
 	s.tooling.discoveryRegistry = set.DiscoveryRegistry
 	s.tooling.agentRegistry = set.AgentRegistry

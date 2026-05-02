@@ -33,6 +33,7 @@ const (
 	StorageTypeFile     = "file"
 	StorageTypeRedis    = "redis"
 	StorageTypePostgres = "postgres"
+	StorageTypeMemory   = "memory"
 )
 
 // LLM 主入口模式常量。
@@ -379,6 +380,8 @@ type LLMConnectionConfig struct {
 	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES"`
 	// 工具调用阶段最大重试次数（可选，未设置时回退 max_retries）
 	ToolMaxRetries int `yaml:"tool_max_retries" env:"TOOL_MAX_RETRIES"`
+	// 模型目录 JSON 快照路径（可选，未设置时使用内置默认快照）。
+	ModelCatalogPath string `yaml:"model_catalog_path" env:"MODEL_CATALOG_PATH"`
 }
 
 // NormalizeLLMMainProviderMode canonicalizes configured main provider mode.
@@ -844,8 +847,9 @@ func (c *Config) Validate() error {
 	if c.Multimodal.ReferenceTTL <= 0 {
 		errs = append(errs, "multimodal.reference_ttl must be positive")
 	}
-	if strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != StorageTypeRedis {
-		errs = append(errs, "multimodal.reference_store_backend must be redis")
+	if strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != StorageTypeRedis &&
+		strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != StorageTypeMemory {
+		errs = append(errs, "multimodal.reference_store_backend must be redis or memory")
 	}
 	if c.Multimodal.Enabled && strings.TrimSpace(c.Redis.Addr) == "" {
 		errs = append(errs, "redis.addr is required when multimodal.reference_store_backend=redis")
