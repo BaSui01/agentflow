@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/api"
-	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -150,7 +149,7 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 	return apiReq, nil
 }
 
-func applyWebSearchOptionsToChatRequest(req *api.ChatRequest, opts *llmcore.WebSearchOptions) {
+func applyWebSearchOptionsToChatRequest(req *api.ChatRequest, opts *types.WebSearchOptions) {
 	if req == nil || opts == nil {
 		return
 	}
@@ -217,11 +216,11 @@ func convertOpenAICompatResponseFormat(raw any) (*api.ResponseFormat, *types.Err
 	return &out, nil
 }
 
-func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *llmcore.WebSearchOptions {
+func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *types.WebSearchOptions {
 	if in == nil {
 		return nil
 	}
-	out := &llmcore.WebSearchOptions{
+	out := &types.WebSearchOptions{
 		SearchContextSize: strings.TrimSpace(in.SearchContextSize),
 		UserLocation:      parseOpenAICompatWebSearchLocation(in.UserLocation),
 		AllowedDomains:    normalizeAllowedDomains(in.AllowedDomains),
@@ -235,7 +234,7 @@ func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *llmc
 	return out
 }
 
-func parseOpenAICompatWebSearchLocation(raw json.RawMessage) *llmcore.WebSearchLocation {
+func parseOpenAICompatWebSearchLocation(raw json.RawMessage) *types.WebSearchLocation {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
@@ -256,7 +255,7 @@ func parseOpenAICompatWebSearchLocation(raw json.RawMessage) *llmcore.WebSearchL
 		return nil
 	}
 
-	out := &llmcore.WebSearchLocation{
+	out := &types.WebSearchLocation{
 		Type:     strings.TrimSpace(payload.Type),
 		Country:  strings.TrimSpace(payload.Country),
 		Region:   strings.TrimSpace(payload.Region),
@@ -310,22 +309,22 @@ func normalizeAllowedDomains(domains []string) []string {
 	return out
 }
 
-func mergeOpenAICompatWebSearchOptions(topLevel *openAICompatWebSearchOptions, fromTools *llmcore.WebSearchOptions) *llmcore.WebSearchOptions {
+func mergeOpenAICompatWebSearchOptions(topLevel *openAICompatWebSearchOptions, fromTools *types.WebSearchOptions) *types.WebSearchOptions {
 	return mergeLLMWebSearchOptions(fromTools, convertOpenAICompatWebSearchOptions(topLevel))
 }
 
-func mergeLLMWebSearchOptions(base *llmcore.WebSearchOptions, override *llmcore.WebSearchOptions) *llmcore.WebSearchOptions {
+func mergeLLMWebSearchOptions(base *types.WebSearchOptions, override *types.WebSearchOptions) *types.WebSearchOptions {
 	if base == nil && override == nil {
 		return nil
 	}
-	out := &llmcore.WebSearchOptions{}
+	out := &types.WebSearchOptions{}
 	if base != nil {
 		out.SearchContextSize = strings.TrimSpace(base.SearchContextSize)
 		out.AllowedDomains = normalizeAllowedDomains(base.AllowedDomains)
 		out.BlockedDomains = normalizeAllowedDomains(base.BlockedDomains)
 		out.MaxUses = base.MaxUses
 		if base.UserLocation != nil {
-			out.UserLocation = &llmcore.WebSearchLocation{
+			out.UserLocation = &types.WebSearchLocation{
 				Type:     strings.TrimSpace(base.UserLocation.Type),
 				Country:  strings.TrimSpace(base.UserLocation.Country),
 				Region:   strings.TrimSpace(base.UserLocation.Region),
@@ -349,7 +348,7 @@ func mergeLLMWebSearchOptions(base *llmcore.WebSearchOptions, override *llmcore.
 		}
 		if override.UserLocation != nil {
 			if out.UserLocation == nil {
-				out.UserLocation = &llmcore.WebSearchLocation{}
+				out.UserLocation = &types.WebSearchLocation{}
 			}
 			if v := strings.TrimSpace(override.UserLocation.Type); v != "" {
 				out.UserLocation.Type = v
@@ -375,7 +374,7 @@ func mergeLLMWebSearchOptions(base *llmcore.WebSearchOptions, override *llmcore.
 	return out
 }
 
-func toAPIWebSearchOptions(in *llmcore.WebSearchOptions) *api.WebSearchOptions {
+func toAPIWebSearchOptions(in *types.WebSearchOptions) *api.WebSearchOptions {
 	if in == nil {
 		return nil
 	}
@@ -605,12 +604,12 @@ func convertOpenAICompatReasoningText(raw any) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSchema, *llmcore.WebSearchOptions, *types.Error) {
+func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSchema, *types.WebSearchOptions, *types.Error) {
 	if len(in) == 0 {
 		return nil, nil, nil
 	}
 	tools := make([]api.ToolSchema, 0, len(in))
-	var wsOpts *llmcore.WebSearchOptions
+	var wsOpts *types.WebSearchOptions
 
 	for _, tool := range in {
 		toolType := strings.ToLower(strings.TrimSpace(tool.Type))
@@ -620,7 +619,7 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 				Name:       "web_search",
 				Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
 			})
-			candidate := &llmcore.WebSearchOptions{
+			candidate := &types.WebSearchOptions{
 				SearchContextSize: strings.TrimSpace(tool.SearchContextSize),
 				UserLocation:      parseOpenAICompatWebSearchLocation(tool.UserLocation),
 			}

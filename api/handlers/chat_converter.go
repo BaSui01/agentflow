@@ -5,18 +5,17 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
 // ChatConverter centralizes request/response conversion between API and LLM layers.
 // Implements usecase.ChatConverter (ToLLMRequest, ToAPIResponse) and extends with stream/choices/usage.
 type ChatConverter interface {
-	ToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
-	ToAPIResponse(resp *llm.ChatResponse) *api.ChatResponse
-	ToAPIChoices(choices []llm.ChatChoice) []api.ChatChoice
-	ToAPIUsage(usage llm.ChatUsage) api.ChatUsage
-	ToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk
+	ToLLMRequest(req *api.ChatRequest) *types.ChatRequest
+	ToAPIResponse(resp *types.ChatResponse) *api.ChatResponse
+	ToAPIChoices(choices []types.ChatChoice) []api.ChatChoice
+	ToAPIUsage(usage types.ChatUsage) api.ChatUsage
+	ToAPIStreamChunk(chunk *types.StreamChunk) *api.StreamChunk
 	ToAPIStreamChunkFromUsecase(chunk *usecase.ChatStreamChunk) *api.StreamChunk
 	ToUsecaseRequest(req *api.ChatRequest) *usecase.ChatRequest
 	ToAPIResponseFromUsecase(resp *usecase.ChatResponse) *api.ChatResponse
@@ -32,8 +31,8 @@ func NewDefaultChatConverter(defaultTimeout time.Duration) *DefaultChatConverter
 	return &DefaultChatConverter{defaultTimeout: defaultTimeout}
 }
 
-// ToLLMRequest converts api.ChatRequest to llm.ChatRequest.
-func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
+// ToLLMRequest converts api.ChatRequest to types.ChatRequest.
+func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *types.ChatRequest {
 	timeout := c.defaultTimeout
 	if req.Timeout != "" {
 		if d, err := time.ParseDuration(req.Timeout); err == nil {
@@ -76,7 +75,7 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 		}
 	}
 
-	return &llm.ChatRequest{
+	return &types.ChatRequest{
 		TraceID:                          req.TraceID,
 		TenantID:                         req.TenantID,
 		UserID:                           req.UserID,
@@ -123,8 +122,8 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 	}
 }
 
-// ToAPIResponse converts llm.ChatResponse to api.ChatResponse.
-func (c *DefaultChatConverter) ToAPIResponse(resp *llm.ChatResponse) *api.ChatResponse {
+// ToAPIResponse converts types.ChatResponse to api.ChatResponse.
+func (c *DefaultChatConverter) ToAPIResponse(resp *types.ChatResponse) *api.ChatResponse {
 	return &api.ChatResponse{
 		ID:        resp.ID,
 		Provider:  resp.Provider,
@@ -136,7 +135,7 @@ func (c *DefaultChatConverter) ToAPIResponse(resp *llm.ChatResponse) *api.ChatRe
 }
 
 // ToAPIChoices converts llm choices to API choices.
-func (c *DefaultChatConverter) ToAPIChoices(choices []llm.ChatChoice) []api.ChatChoice {
+func (c *DefaultChatConverter) ToAPIChoices(choices []types.ChatChoice) []api.ChatChoice {
 	result := make([]api.ChatChoice, len(choices))
 	for i, choice := range choices {
 		result[i] = api.ChatChoice{
@@ -149,7 +148,7 @@ func (c *DefaultChatConverter) ToAPIChoices(choices []llm.ChatChoice) []api.Chat
 }
 
 // ToAPIUsage converts llm usage to API usage.
-func (c *DefaultChatConverter) ToAPIUsage(usage llm.ChatUsage) api.ChatUsage {
+func (c *DefaultChatConverter) ToAPIUsage(usage types.ChatUsage) api.ChatUsage {
 	out := api.ChatUsage{
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
@@ -174,7 +173,7 @@ func (c *DefaultChatConverter) ToAPIUsage(usage llm.ChatUsage) api.ChatUsage {
 }
 
 // ToAPIStreamChunk converts llm stream chunk to API chunk.
-func (c *DefaultChatConverter) ToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
+func (c *DefaultChatConverter) ToAPIStreamChunk(chunk *types.StreamChunk) *api.StreamChunk {
 	return &api.StreamChunk{
 		ID:           chunk.ID,
 		Provider:     chunk.Provider,
@@ -206,13 +205,13 @@ func (c *DefaultChatConverter) ToAPIStreamChunkFromUsecase(chunk *usecase.ChatSt
 }
 
 // convertToLLMRequest 转换为 LLM 请求
-func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
+func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *types.ChatRequest {
 	return h.converter.ToLLMRequest(req)
 }
 
-// convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage
+// convertStreamUsage safely converts *types.ChatUsage to *api.ChatUsage
 // without relying on unsafe pointer casts between distinct types.
-func convertStreamUsage(u *llm.ChatUsage) *api.ChatUsage {
+func convertStreamUsage(u *types.ChatUsage) *api.ChatUsage {
 	if u == nil {
 		return nil
 	}
@@ -365,10 +364,10 @@ func newUsecaseChatConverter(base ChatConverter) usecase.ChatConverter {
 	return NewUsecaseChatConverter(base)
 }
 
-func (c *usecaseChatConverter) ToLLMRequest(req *usecase.ChatRequest) *llm.ChatRequest {
+func (c *usecaseChatConverter) ToLLMRequest(req *usecase.ChatRequest) *types.ChatRequest {
 	return c.base.ToLLMRequest(convertUsecaseRequestToAPI(req))
 }
 
-func (c *usecaseChatConverter) ToChatResponse(resp *llm.ChatResponse) *usecase.ChatResponse {
+func (c *usecaseChatConverter) ToChatResponse(resp *types.ChatResponse) *usecase.ChatResponse {
 	return convertAPIResponseToUsecase(c.base.ToAPIResponse(resp))
 }

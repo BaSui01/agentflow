@@ -8,9 +8,9 @@ import (
 
 func loadDomainRuntimeBuildersSource(t *testing.T) string {
 	t.Helper()
-	data, err := os.ReadFile("domain_runtime_builders.go")
+	data, err := os.ReadFile("workflow_runtime_builder.go")
 	if err != nil {
-		t.Fatalf("failed to read domain_runtime_builders.go: %v", err)
+		t.Fatalf("failed to read workflow_runtime_builder.go: %v", err)
 	}
 	return string(data)
 }
