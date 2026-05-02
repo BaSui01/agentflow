@@ -5,18 +5,17 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
-func convertAPIResponseFormat(in *api.ResponseFormat) *llm.ResponseFormat {
+func convertAPIResponseFormat(in *api.ResponseFormat) *types.ResponseFormat {
 	if in == nil {
 		return nil
 	}
-	out := &llm.ResponseFormat{
-		Type: llm.ResponseFormatType(in.Type),
+	out := &types.ResponseFormat{
+		Type: types.ResponseFormatType(in.Type),
 	}
 	if in.JSONSchema != nil {
-		out.JSONSchema = &llm.JSONSchemaParam{
+		out.JSONSchema = &types.JSONSchemaParam{
 			Name:        in.JSONSchema.Name,
 			Description: in.JSONSchema.Description,
 			Schema:      in.JSONSchema.Schema,
@@ -26,28 +25,28 @@ func convertAPIResponseFormat(in *api.ResponseFormat) *llm.ResponseFormat {
 	return out
 }
 
-func convertAPIStreamOptions(in *api.StreamOptions) *llm.StreamOptions {
+func convertAPIStreamOptions(in *api.StreamOptions) *types.StreamOptions {
 	if in == nil {
 		return nil
 	}
-	return &llm.StreamOptions{
+	return &types.StreamOptions{
 		IncludeUsage:      in.IncludeUsage,
 		ChunkIncludeUsage: in.ChunkIncludeUsage,
 	}
 }
 
-func convertAPIWebSearchOptions(in *api.WebSearchOptions) *llm.WebSearchOptions {
+func convertAPIWebSearchOptions(in *api.WebSearchOptions) *types.WebSearchOptions {
 	if in == nil {
 		return nil
 	}
-	out := &llm.WebSearchOptions{
+	out := &types.WebSearchOptions{
 		SearchContextSize: in.SearchContextSize,
 		AllowedDomains:    append([]string(nil), in.AllowedDomains...),
 		BlockedDomains:    append([]string(nil), in.BlockedDomains...),
 		MaxUses:           in.MaxUses,
 	}
 	if in.UserLocation != nil {
-		out.UserLocation = &llm.WebSearchLocation{
+		out.UserLocation = &types.WebSearchLocation{
 			Type:     in.UserLocation.Type,
 			Country:  in.UserLocation.Country,
 			Region:   in.UserLocation.Region,
@@ -58,11 +57,11 @@ func convertAPIWebSearchOptions(in *api.WebSearchOptions) *llm.WebSearchOptions 
 	return out
 }
 
-func convertAPICacheControl(in *api.CacheControl) *llm.CacheControl {
+func convertAPICacheControl(in *api.CacheControl) *types.CacheControl {
 	if in == nil {
 		return nil
 	}
-	return &llm.CacheControl{
+	return &types.CacheControl{
 		Type: in.Type,
 		TTL:  in.TTL,
 	}

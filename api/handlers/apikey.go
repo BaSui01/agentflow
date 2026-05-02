@@ -7,7 +7,6 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -91,23 +90,6 @@ type apiKeyStatsResponse struct {
 	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
 	LastErrorAt    *time.Time `json:"last_error_at,omitempty"`
 	LastError      string     `json:"last_error,omitempty"`
-}
-
-func toAPIKeyResponse(k llm.LLMProviderAPIKey) apiKeyResponse {
-	return apiKeyResponse{
-		ID:             k.ID,
-		ProviderID:     k.ProviderID,
-		APIKeyMasked:   maskAPIKey(k.APIKey),
-		BaseURL:        k.BaseURL,
-		Label:          k.Label,
-		Priority:       k.Priority,
-		Weight:         k.Weight,
-		Enabled:        k.Enabled,
-		TotalRequests:  k.TotalRequests,
-		FailedRequests: k.FailedRequests,
-		RateLimitRPM:   k.RateLimitRPM,
-		RateLimitRPD:   k.RateLimitRPD,
-	}
 }
 
 // HandleListAPIKeys GET /api/v1/providers/{id}/api-keys
