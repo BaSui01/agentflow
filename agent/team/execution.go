@@ -21,7 +21,6 @@ const (
 	ExecutionModeFederation     ExecutionMode = multiagent.ModeFederation
 	ExecutionModeParallel       ExecutionMode = multiagent.ModeParallel
 	ExecutionModeLoop           ExecutionMode = multiagent.ModeLoop
-	ExecutionModeTeamSupervisor ExecutionMode = multiagent.ModeTeamSupervisor
 	ExecutionModeTeamRoundRobin ExecutionMode = multiagent.ModeTeamRoundRobin
 	ExecutionModeTeamSelector   ExecutionMode = multiagent.ModeTeamSelector
 	ExecutionModeTeamSwarm      ExecutionMode = multiagent.ModeTeamSwarm
@@ -54,7 +53,6 @@ func SupportedExecutionModes() []string {
 		string(ExecutionModeFederation),
 		string(ExecutionModeParallel),
 		string(ExecutionModeLoop),
-		string(ExecutionModeTeamSupervisor),
 		string(ExecutionModeTeamRoundRobin),
 		string(ExecutionModeTeamSelector),
 		string(ExecutionModeTeamSwarm),

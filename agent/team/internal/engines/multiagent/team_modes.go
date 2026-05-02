@@ -12,13 +12,12 @@ import (
 
 // Team mode constants registered into ModeRegistry.
 const (
-	ModeTeamSupervisor = "team_supervisor"
 	ModeTeamRoundRobin = "team_round_robin"
 	ModeTeamSelector   = "team_selector"
 	ModeTeamSwarm      = "team_swarm"
 )
 
-// RegisterTeamModes registers the 4 team mode strategies into the given registry.
+// RegisterTeamModes registers the team mode strategies into the given registry.
 func RegisterTeamModes(reg *ModeRegistry, logger *zap.Logger) error {
 	if reg == nil {
 		return fmt.Errorf("mode registry is nil")
@@ -27,7 +26,6 @@ func RegisterTeamModes(reg *ModeRegistry, logger *zap.Logger) error {
 		logger = zap.NewNop()
 	}
 
-	reg.Register(newTeamModeStrategy(ModeTeamSupervisor, ModeTeamSupervisor, true, logger))
 	reg.Register(newTeamModeStrategy(ModeTeamRoundRobin, ModeTeamRoundRobin, false, logger))
 	reg.Register(newTeamModeStrategy(ModeTeamSelector, ModeTeamSelector, false, logger))
 	reg.Register(newTeamModeStrategy(ModeTeamSwarm, ModeTeamSwarm, false, logger))
@@ -61,7 +59,7 @@ func (m *teamModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 	if input != nil {
 		content = input.Content
 	}
-	if m.teamMode == ModeTeamSupervisor || m.teamMode == ModeTeamSelector {
+	if m.teamMode == ModeTeamSelector {
 		if len(agents) < 2 {
 			return nil, fmt.Errorf("%s mode requires at least two agents", m.name)
 		}
