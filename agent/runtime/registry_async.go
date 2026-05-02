@@ -27,6 +27,7 @@ type AsyncExecutor struct {
 	agent   Agent
 	manager *SubagentManager
 	logger  *zap.Logger
+	maxParallelism int
 }
 
 // NewAsyncExecutor 创建异步执行器
@@ -36,6 +37,16 @@ func NewAsyncExecutor(agent Agent, logger *zap.Logger) *AsyncExecutor {
 		manager: NewSubagentManager(logger),
 		logger:  logger.With(zap.String("component", "async_executor")),
 	}
+}
+
+func (e *AsyncExecutor) SetMaxParallelism(n int) {
+	if e == nil {
+		return
+	}
+	if n < 0 {
+		n = 0
+	}
+	e.maxParallelism = n
 }
 
 // ExecuteAsync 异步执行任务
@@ -73,16 +84,33 @@ func (e *AsyncExecutor) ExecuteWithSubagents(ctx context.Context, input *Input, 
 		zap.String("agent_id", e.agent.ID()),
 		zap.Int("subagents", len(subagents)),
 	)
+	options := types.ExecutionOptions{}
+	if input != nil && input.Overrides != nil {
+		input.Overrides.ApplyToExecutionOptions(&options)
+	}
+	rc := ResolveRunConfig(ctx, input)
+	if rc != nil {
+		rc.ApplyToExecutionOptions(&options)
+	}
+	if maxDepth := options.Tools.SubagentsMaxDepth(); maxDepth > 0 {
+		if depth, ok := types.SubagentDepth(ctx); ok && depth >= maxDepth {
+			return nil, fmt.Errorf("subagent max depth reached: current=%d limit=%d", depth, maxDepth)
+		}
+	}
+	if maxParallel := options.Tools.SubagentsMaxParallelism(); maxParallel > 0 {
+		e.SetMaxParallelism(maxParallel)
+	}
 
 	// 1. 创建并行执行上下文
 	execCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	results, err := registrycore.CollectParallelResults(registrycore.ParallelExecutionConfig[Input, Output, Agent, *AsyncExecution]{
-		Context:   execCtx,
-		Input:     input,
-		Subagents: subagents,
-		Spawn:     e.manager.SpawnSubagent,
+		Context:        execCtx,
+		Input:          input,
+		Subagents:      subagents,
+		MaxParallelism: e.maxParallelism,
+		Spawn:          e.manager.SpawnSubagent,
 		Wait: func(exec *AsyncExecution, waitCtx context.Context) (*Output, error) {
 			return exec.Wait(waitCtx)
 		},
@@ -386,12 +414,27 @@ func (c *RealtimeCoordinator) CoordinateSubagents(ctx context.Context, subagents
 	c.logger.Info("coordinating subagents",
 		zap.Int("count", len(subagents)),
 	)
+	options := types.ExecutionOptions{}
+	if input != nil && input.Overrides != nil {
+		input.Overrides.ApplyToExecutionOptions(&options)
+	}
+	rc := ResolveRunConfig(ctx, input)
+	if rc != nil {
+		rc.ApplyToExecutionOptions(&options)
+	}
+	if maxDepth := options.Tools.SubagentsMaxDepth(); maxDepth > 0 {
+		if depth, ok := types.SubagentDepth(ctx); ok && depth >= maxDepth {
+			return nil, fmt.Errorf("subagent max depth reached: current=%d limit=%d", depth, maxDepth)
+		}
+	}
+	maxParallelism := options.Tools.SubagentsMaxParallelism()
 
 	results, err := registrycore.CollectParallelResults(registrycore.ParallelExecutionConfig[Input, Output, Agent, *AsyncExecution]{
-		Context:   ctx,
-		Input:     input,
-		Subagents: subagents,
-		Spawn:     c.manager.SpawnSubagent,
+		Context:        ctx,
+		Input:          input,
+		Subagents:      subagents,
+		MaxParallelism: maxParallelism,
+		Spawn:          c.manager.SpawnSubagent,
 		Wait: func(exec *AsyncExecution, waitCtx context.Context) (*Output, error) {
 			return exec.Wait(waitCtx)
 		},
@@ -484,10 +527,16 @@ func prepareSubagentContext(ctx context.Context, executionID string) context.Con
 	if parentRunID, ok := types.RunID(ctx); ok {
 		childCtx = types.WithParentRunID(childCtx, parentRunID)
 	}
+	if depth, ok := types.SubagentDepth(ctx); ok {
+		childCtx = types.WithSubagentDepth(childCtx, depth+1)
+	} else {
+		childCtx = types.WithSubagentDepth(childCtx, 1)
+	}
 	childCtx = types.WithSpanID(childCtx, "span_"+uuid.New().String())
 	childCtx = types.WithRunID(childCtx, executionID)
 	return childCtx
 }
+
 
 // SubagentCompletedEvent Subagent 完成事件
 type SubagentCompletedEvent struct {

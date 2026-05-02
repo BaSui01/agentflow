@@ -7,6 +7,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/adapters/handoff"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -39,6 +40,14 @@ func (a *HandoffAdapter) Priority(task *OrchestrationTask) int {
 func (a *HandoffAdapter) Execute(ctx context.Context, task *OrchestrationTask) (*OrchestrationResult, error) {
 	if len(task.Agents) == 0 {
 		return nil, fmt.Errorf("handoff pattern requires at least 1 agent")
+	}
+	if disallowHandoffsForTask(ctx, task) {
+		return nil, fmt.Errorf("handoff pattern disabled by subagent policy")
+	}
+	if maxDepth := handoffMaxDepthFromTask(task); maxDepth > 0 {
+		if depth, ok := types.SubagentDepth(ctx); ok && depth >= maxDepth {
+			return nil, fmt.Errorf("handoff max depth reached: current=%d limit=%d", depth, maxDepth)
+		}
 	}
 
 	manager := handoff.NewHandoffManager(a.logger)
@@ -80,6 +89,47 @@ func (a *HandoffAdapter) Execute(ctx context.Context, task *OrchestrationTask) (
 		AgentUsed: []string{target.ID()},
 		Metadata:  map[string]any{"handoff_id": ho.ID},
 	}, nil
+}
+
+func disallowHandoffsForTask(ctx context.Context, task *OrchestrationTask) bool {
+	if task == nil || task.Input == nil {
+		return false
+	}
+	rc := agent.ResolveRunConfig(ctx, task.Input)
+	if rc == nil {
+		return false
+	}
+	opts := types.ExecutionOptions{}
+	rc.ApplyToExecutionOptions(&opts)
+	if opts.Tools.Subagents == nil || opts.Tools.Subagents.AllowHandoffs == nil {
+		return false
+	}
+	return !*opts.Tools.Subagents.AllowHandoffs
+}
+
+func handoffMaxDepthFromTask(task *OrchestrationTask) int {
+	if task == nil || task.Input == nil {
+		return 0
+	}
+	if task.Input.Context == nil {
+		return 0
+	}
+	raw, ok := task.Input.Context["subagent_max_depth"]
+	if !ok {
+		return 0
+	}
+	switch v := raw.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
 }
 
 type handoffAgentAdapter struct {

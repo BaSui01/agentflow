@@ -21,6 +21,12 @@ func buildOrchestrationAgentInput(input core.StepInput, maxRounds int) *agent.In
 	if maxRounds > 0 {
 		agentInput.Context["max_rounds"] = maxRounds
 	}
+	if value, ok := orchestrationIntValue(input.Data, "subagent_max_depth"); ok && value > 0 {
+		agentInput.Context["subagent_max_depth"] = value
+	}
+	if value, ok := orchestrationIntValue(input.Data, "subagent_max_parallelism"); ok && value > 0 {
+		agentInput.Context["subagent_max_parallelism"] = value
+	}
 	for k, v := range input.Data {
 		if _, skip := orchestrationPrimaryInputKeys[k]; skip {
 			continue
@@ -40,4 +46,26 @@ func orchestrationContent(data map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func orchestrationIntValue(data map[string]any, key string) (int, bool) {
+	if data == nil {
+		return 0, false
+	}
+	raw, ok := data[key]
+	if !ok {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case int:
+		return v, true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
 }

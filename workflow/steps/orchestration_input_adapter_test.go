@@ -11,8 +11,10 @@ func TestBuildOrchestrationAgentInput_MergesContentTraceAndContext(t *testing.T)
 	input := buildOrchestrationAgentInput(core.StepInput{
 		Metadata: map[string]string{"trace_id": "trace-1"},
 		Data: map[string]any{
-			"content": "hello",
-			"foo":     "bar",
+			"content":                 "hello",
+			"foo":                     "bar",
+			"subagent_max_depth":      2,
+			"subagent_max_parallelism": 3,
 		},
 	}, 3)
 
@@ -20,6 +22,8 @@ func TestBuildOrchestrationAgentInput_MergesContentTraceAndContext(t *testing.T)
 	assert.Equal(t, "hello", input.Content)
 	assert.Equal(t, "bar", input.Context["foo"])
 	assert.Equal(t, 3, input.Context["max_rounds"])
+	assert.Equal(t, 2, input.Context["subagent_max_depth"])
+	assert.Equal(t, 3, input.Context["subagent_max_parallelism"])
 }
 
 func TestBuildOrchestrationAgentInput_UsesFallbackPromptKey(t *testing.T) {

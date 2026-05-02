@@ -6,6 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/adapters/handoff"
 	agent "github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -264,6 +265,51 @@ func TestHandoffAdapter_Execute_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, []string{"a1"}, result.AgentUsed)
+}
+
+func TestHandoffAdapter_Execute_DisabledBySubagentPolicy(t *testing.T) {
+	a := NewHandoffAdapter(zap.NewNop())
+	deny := false
+	ctx := agent.WithRunConfig(context.Background(), &agent.RunConfig{
+		SubagentAllowHandoffs: &deny,
+		SubagentMaxDepth:       agent.IntPtr(2),
+		SubagentMaxParallelism: agent.IntPtr(2),
+	})
+	task := &OrchestrationTask{
+		ID:          "test",
+		Description: "test task",
+		Input: &agent.Input{
+			Content: "hello",
+			Context: map[string]any{
+				"subagent_max_depth": 2,
+			},
+		},
+		Agents: []agent.Agent{
+			newMockAgent("a1", "worker1", agent.TypeGeneric),
+		},
+	}
+	_, err := a.Execute(ctx, task)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "handoff pattern disabled")
+}
+
+func TestHandoffAdapter_Execute_RejectsWhenMaxDepthReached(t *testing.T) {
+	a := NewHandoffAdapter(zap.NewNop())
+	ctx := types.WithSubagentDepth(context.Background(), 2)
+	task := &OrchestrationTask{
+		ID:          "test",
+		Description: "test task",
+		Input: &agent.Input{
+			Content: "hello",
+			Context: map[string]any{"subagent_max_depth": 2},
+		},
+		Agents: []agent.Agent{
+			newMockAgent("a1", "worker1", agent.TypeGeneric),
+		},
+	}
+	_, err := a.Execute(ctx, task)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "handoff max depth reached")
 }
 
 func TestHandoffAdapter_Execute_NonStringResult(t *testing.T) {

@@ -190,6 +190,7 @@ type TeamOptions struct {
 	MaxRounds int
 	Timeout   time.Duration
 	Context   map[string]any
+	AllowHandoffs *bool
 }
 
 func WithMaxRounds(n int) TeamOption {
@@ -202,6 +203,10 @@ func WithTeamTimeout(d time.Duration) TeamOption {
 
 func WithTeamContext(ctx map[string]any) TeamOption {
 	return func(o *TeamOptions) { o.Context = ctx }
+}
+
+func WithTeamAllowHandoffs(allow bool) TeamOption {
+	return func(o *TeamOptions) { o.AllowHandoffs = &allow }
 }
 
 type Team interface {

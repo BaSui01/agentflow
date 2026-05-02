@@ -14,10 +14,10 @@ import (
 type TeamMode string
 
 const (
-	ModeSupervisor TeamMode = "supervisor"  // Supervisor 路由分配
 	ModeRoundRobin TeamMode = "round_robin" // 轮询发言
 	ModeSelector   TeamMode = "selector"    // LLM 选择下一个 agent
 	ModeSwarm      TeamMode = "swarm"       // 自主协作 + handoff
+	ModeSupervisor TeamMode = "supervisor"  // supervisor -> workers
 )
 
 // TeamConfig holds configuration for an AgentTeam.

@@ -310,6 +310,7 @@ type ParallelExecutionConfig[TInput any, TOutput any, TAgent any, TExec any] str
 	Context                   context.Context
 	Input                     *TInput
 	Subagents                 []TAgent
+	MaxParallelism            int
 	Spawn                     func(context.Context, TAgent, *TInput) (TExec, error)
 	Wait                      func(TExec, context.Context) (*TOutput, error)
 	OnSpawnError              func(TAgent, error)
@@ -320,34 +321,31 @@ type ParallelExecutionConfig[TInput any, TOutput any, TAgent any, TExec any] str
 
 // CollectParallelResults fans out subagent executions and compacts successful outputs.
 func CollectParallelResults[TInput any, TOutput any, TAgent any, TExec any](cfg ParallelExecutionConfig[TInput, TOutput, TAgent, TExec]) ([]*TOutput, error) {
-	type slot struct {
-		exec  TExec
-		valid bool
+	results := make([]*TOutput, len(cfg.Subagents))
+	var parallelSem chan struct{}
+	if cfg.MaxParallelism > 0 {
+		parallelSem = make(chan struct{}, cfg.MaxParallelism)
 	}
-
-	executions := make([]slot, len(cfg.Subagents))
-	for i, subagent := range cfg.Subagents {
-		exec, err := cfg.Spawn(cfg.Context, subagent, cfg.Input)
-		if err != nil {
-			if cfg.OnSpawnError != nil {
-				cfg.OnSpawnError(subagent, err)
-			}
-			continue
-		}
-		executions[i] = slot{exec: exec, valid: true}
-	}
-
-	results := make([]*TOutput, len(executions))
 	var wg sync.WaitGroup
 
-	for i, execution := range executions {
-		if !execution.valid {
-			continue
-		}
-
+	for i, subagent := range cfg.Subagents {
 		wg.Add(1)
-		go func(index int, exec TExec) {
+		go func(index int, subagent TAgent) {
 			defer wg.Done()
+			if parallelSem != nil {
+				parallelSem <- struct{}{}
+				defer func() {
+					<-parallelSem
+				}()
+			}
+
+			exec, err := cfg.Spawn(cfg.Context, subagent, cfg.Input)
+			if err != nil {
+				if cfg.OnSpawnError != nil {
+					cfg.OnSpawnError(subagent, err)
+				}
+				return
+			}
 
 			output, err := cfg.Wait(exec, cfg.Context)
 			if err != nil {
@@ -364,7 +362,7 @@ func CollectParallelResults[TInput any, TOutput any, TAgent any, TExec any](cfg 
 			if cfg.OnSuccess != nil {
 				cfg.OnSuccess(exec, output)
 			}
-		}(i, execution.exec)
+		}(i, subagent)
 	}
 
 	wg.Wait()

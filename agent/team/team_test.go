@@ -432,6 +432,24 @@ func TestSwarm_Execute_WithHandoff(t *testing.T) {
 	assert.Equal(t, "reviewed and approved", result.Content)
 }
 
+func TestSwarm_Execute_HandoffDisabledByOption(t *testing.T) {
+	a1 := &mockAgent{id: "a1", name: "Agent1", output: "I'll pass this along\nHANDOFF:reviewer"}
+	a2 := &mockAgent{id: "a2", name: "Reviewer", output: "reviewed and approved"}
+
+	team, err := NewTeamBuilder("swarm-handoff-disabled").
+		AddMember(a1, "coder").
+		AddMember(a2, "reviewer").
+		WithMode(ModeSwarm).
+		WithMaxRounds(5).
+		Build(zap.NewNop())
+	require.NoError(t, err)
+
+	result, err := team.Execute(context.Background(), "review this code", agent.WithTeamAllowHandoffs(false))
+	require.NoError(t, err)
+	assert.Equal(t, "I'll pass this along\nHANDOFF:reviewer", result.Content)
+	assert.Equal(t, 1, result.Metadata["rounds"])
+}
+
 func TestSwarm_Execute_ChainedHandoff(t *testing.T) {
 	a1 := &mockAgent{id: "a1", name: "Planner", output: "plan done\nHANDOFF:coder"}
 	a2 := &mockAgent{id: "a2", name: "Coder", output: "code done\nHANDOFF:tester"}

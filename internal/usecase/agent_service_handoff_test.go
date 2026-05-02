@@ -94,6 +94,30 @@ func TestDefaultAgentService_ExecuteAgent_InjectsRuntimeHandoffTargets(t *testin
 	}
 }
 
+func TestApplyAgentRoutingContext_InjectsSubagentPolicyIntoRunConfig(t *testing.T) {
+	ctx := applyAgentRoutingContext(context.Background(), AgentExecuteRequest{
+		Context: map[string]any{
+			"subagent_allow_handoffs":   false,
+			"subagent_max_depth":        2,
+			"subagent_max_parallelism":  3,
+		},
+	})
+
+	rc := agent.GetRunConfig(ctx)
+	if rc == nil {
+		t.Fatalf("expected run config to be injected")
+	}
+	if rc.SubagentAllowHandoffs == nil || *rc.SubagentAllowHandoffs {
+		t.Fatalf("expected SubagentAllowHandoffs=false, got %#v", rc.SubagentAllowHandoffs)
+	}
+	if rc.SubagentMaxDepth == nil || *rc.SubagentMaxDepth != 2 {
+		t.Fatalf("expected SubagentMaxDepth=2, got %#v", rc.SubagentMaxDepth)
+	}
+	if rc.SubagentMaxParallelism == nil || *rc.SubagentMaxParallelism != 3 {
+		t.Fatalf("expected SubagentMaxParallelism=3, got %#v", rc.SubagentMaxParallelism)
+	}
+}
+
 func TestDefaultAgentService_ExecuteAgent_InjectsConfigLevelHandoffTargets(t *testing.T) {
 	var sawHandoffTool bool
 

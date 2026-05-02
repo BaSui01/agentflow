@@ -12,7 +12,7 @@ import (
 )
 
 // =============================================================================
-// SupervisorMode — 第一个 member 作为 supervisor，分解任务给 workers
+// SupervisorMode — 首成员作为 supervisor，给 worker 分派统一指令
 // =============================================================================
 
 type supervisorMode struct {
@@ -25,112 +25,48 @@ func newSupervisorMode(logger *zap.Logger) *supervisorMode {
 
 func (m *supervisorMode) Execute(ctx context.Context, members []agent.TeamMember, task string, config TeamConfig, opts agent.TeamOptions) (*agent.Output, error) {
 	if len(members) < 2 {
-		return nil, fmt.Errorf("supervisor mode requires at least 2 members (1 supervisor + 1 worker)")
+		return nil, fmt.Errorf("supervisor mode requires at least 2 members")
 	}
 
 	supervisor := members[0]
 	workers := members[1:]
 
-	if config.EnablePlanner {
-		return m.executeWithPlanner(ctx, supervisor, workers, task)
-	}
-	return m.executeSimple(ctx, supervisor, workers, task)
-}
-
-// executeWithPlanner uses TaskPlanner to decompose and dispatch tasks.
-func (m *supervisorMode) executeWithPlanner(ctx context.Context, supervisor agent.TeamMember, workers []agent.TeamMember, task string) (*agent.Output, error) {
-	planInput := &agent.Input{
-		Content: fmt.Sprintf(
-			"Original task:\n%s\n\nAvailable workers: %s\n\nCreate an ordered execution plan that can be distributed across the team. Focus on directly executable steps; the runtime will assign them to workers.",
-			task,
-			workerList(workers),
-		),
-	}
-	planResult, err := supervisor.Agent.Plan(ctx, planInput)
-	if err != nil || planResult == nil || len(planResult.Steps) == 0 {
-		m.logger.Warn("supervisor planner unavailable, returning supervisor response directly",
-			zap.Error(err),
-		)
-		supOutput, execErr := supervisor.Agent.Execute(ctx, &agent.Input{
-			Content: fmt.Sprintf("You are a supervisor. Provide instructions for your workers to complete this task: %s", task),
-		})
-		if execErr != nil {
-			if err != nil {
-				return nil, fmt.Errorf("supervisor planning failed: %w", err)
-			}
-			return nil, fmt.Errorf("supervisor failed: %w", execErr)
-		}
-		return supOutput, nil
-	}
-
-	taskArgs := buildPlannerTasks(planResult, workers)
-	if len(taskArgs) == 0 {
-		return nil, fmt.Errorf("supervisor plan did not include executable steps")
-	}
-
-	// Step 2: Create plan and execute
-	dispatcher := planner.NewDefaultDispatcher(planner.StrategyByRole, m.logger)
-	tp := planner.NewTaskPlanner(dispatcher, m.logger)
-
-	plan, err := tp.CreatePlan(ctx, planner.CreatePlanArgs{
-		Title: fmt.Sprintf("Plan for: %s", truncateStr(task, 60)),
-		Tasks: taskArgs,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create plan: %w", err)
-	}
-
-	// Build executor map from workers
-	executors := make(map[string]planner.Executor, len(workers))
-	for _, w := range workers {
-		executors[w.Role] = &agentExecutorAdapter{agent: w.Agent}
-	}
-
-	executor := planner.NewPlanExecutor(tp, dispatcher, len(workers), m.logger)
-	result, err := executor.ExecuteWithAgents(ctx, plan.ID, executors)
-	if err != nil {
-		return nil, fmt.Errorf("plan execution failed: %w", err)
-	}
-
-	totalPlanTokens := planResultTokens(planResult)
-	return &agent.Output{
-		Content:    result.Content,
-		TokensUsed: result.TokensUsed + totalPlanTokens,
-		Cost:       result.Cost,
-		Duration:   result.Duration,
-		Metadata: map[string]any{
-			"plan_id":        plan.ID,
-			"mode":           "supervisor",
-			"planning_steps": len(taskArgs),
-			"plan_source":    "agent_plan",
-		},
-	}, nil
-}
-
-// executeSimple runs supervisor → workers sequentially without planner.
-func (m *supervisorMode) executeSimple(ctx context.Context, supervisor agent.TeamMember, workers []agent.TeamMember, task string) (*agent.Output, error) {
 	supOutput, err := supervisor.Agent.Execute(ctx, &agent.Input{
 		Content: fmt.Sprintf("You are a supervisor. Provide instructions for your workers to complete this task: %s", task),
+		Context: opts.Context,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("supervisor failed: %w", err)
 	}
+	if config.EnablePlanner {
+		if _, planErr := supervisor.Agent.Plan(ctx, &agent.Input{Content: task, Context: opts.Context}); planErr != nil {
+			return &agent.Output{
+				Content:    supOutput.Content,
+				TokensUsed: supOutput.TokensUsed,
+				Cost:       supOutput.Cost,
+				Metadata: map[string]any{
+					"mode":           "supervisor",
+					"enable_planner": config.EnablePlanner,
+					"worker_count":   len(workers),
+				},
+			}, nil
+		}
+	}
 
-	var (
-		contents    []string
-		totalTokens = supOutput.TokensUsed
-		totalCost   = supOutput.Cost
-	)
+	contents := []string{supOutput.Content}
+	totalTokens := supOutput.TokensUsed
+	totalCost := supOutput.Cost
 
-	for _, w := range workers {
-		out, execErr := w.Agent.Execute(ctx, &agent.Input{
+	for _, worker := range workers {
+		out, execErr := worker.Agent.Execute(ctx, &agent.Input{
 			Content: fmt.Sprintf("Instructions from supervisor:\n%s\n\nOriginal task: %s", supOutput.Content, task),
+			Context: opts.Context,
 		})
 		if execErr != nil {
-			m.logger.Warn("worker failed", zap.String("role", w.Role), zap.Error(execErr))
+			m.logger.Warn("worker failed", zap.String("role", worker.Role), zap.Error(execErr))
 			continue
 		}
-		contents = append(contents, fmt.Sprintf("[%s] %s", w.Role, out.Content))
+		contents = append(contents, fmt.Sprintf("[%s] %s", worker.Role, out.Content))
 		totalTokens += out.TokensUsed
 		totalCost += out.Cost
 	}
@@ -139,7 +75,11 @@ func (m *supervisorMode) executeSimple(ctx context.Context, supervisor agent.Tea
 		Content:    strings.Join(contents, "\n\n"),
 		TokensUsed: totalTokens,
 		Cost:       totalCost,
-		Metadata:   map[string]any{"mode": "supervisor"},
+		Metadata: map[string]any{
+			"mode":           "supervisor",
+			"enable_planner": config.EnablePlanner,
+			"worker_count":   len(workers),
+		},
 	}, nil
 }
 
@@ -465,6 +405,10 @@ func (m *swarmMode) Execute(ctx context.Context, members []agent.TeamMember, tas
 		}
 
 		// Check for handoff
+		if opts.AllowHandoffs != nil && !*opts.AllowHandoffs {
+			break
+		}
+
 		nextAgent := extractHandoff(out.Content, memberMap)
 		if nextAgent == nil {
 			// No handoff — current agent is done

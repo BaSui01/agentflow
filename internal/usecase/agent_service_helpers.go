@@ -284,8 +284,72 @@ func applyAgentRoutingContext(ctx context.Context, req AgentExecuteRequest) cont
 		}
 	}
 
+	if req.Context != nil {
+		if value, ok := requestContextBool(req.Context, "subagent_allow_handoffs"); ok {
+			rc.SubagentAllowHandoffs = requestBoolPtr(value)
+			hasRunConfig = true
+		}
+		if value, ok := requestContextInt(req.Context, "subagent_max_depth"); ok && value > 0 {
+			rc.SubagentMaxDepth = agent.IntPtr(value)
+			hasRunConfig = true
+		}
+		if value, ok := requestContextInt(req.Context, "subagent_max_parallelism"); ok && value > 0 {
+			rc.SubagentMaxParallelism = agent.IntPtr(value)
+			hasRunConfig = true
+		}
+	}
+
 	if hasRunConfig {
 		ctx = agent.WithRunConfig(ctx, rc)
 	}
 	return ctx
 }
+
+func requestContextBool(values map[string]any, key string) (bool, bool) {
+	if len(values) == 0 {
+		return false, false
+	}
+	raw, ok := values[key]
+	if !ok {
+		return false, false
+	}
+	switch v := raw.(type) {
+	case bool:
+		return v, true
+	case string:
+		switch strings.TrimSpace(strings.ToLower(v)) {
+		case "true":
+			return true, true
+		case "false":
+			return false, true
+		default:
+			return false, false
+		}
+	default:
+		return false, false
+	}
+}
+
+func requestContextInt(values map[string]any, key string) (int, bool) {
+	if len(values) == 0 {
+		return 0, false
+	}
+	raw, ok := values[key]
+	if !ok {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case int:
+		return v, true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
+}
+
+func requestBoolPtr(v bool) *bool { return &v }

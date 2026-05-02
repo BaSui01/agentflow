@@ -25,7 +25,7 @@ type TeamBuilder struct {
 func NewTeamBuilder(name string) *TeamBuilder {
 	return &TeamBuilder{
 		name:      name,
-		mode:      ModeSupervisor,
+		mode:      ModeRoundRobin,
 		maxRounds: 10,
 		timeout:   5 * time.Minute,
 	}
@@ -43,7 +43,7 @@ func (b *TeamBuilder) WithMode(mode TeamMode) *TeamBuilder {
 	return b
 }
 
-// WithPlanner enables or disables the TaskPlanner integration (supervisor mode only).
+// WithPlanner enables or disables optional planner integration for modes that support it.
 func (b *TeamBuilder) WithPlanner(enabled bool) *TeamBuilder {
 	b.enablePlanner = enabled
 	return b
@@ -83,12 +83,11 @@ func (b *TeamBuilder) Build(logger *zap.Logger) (*AgentTeam, error) {
 		return nil, fmt.Errorf("team must have at least 1 member")
 	}
 
-	if b.mode == ModeSupervisor && len(b.members) < 2 {
-		return nil, fmt.Errorf("supervisor mode requires at least 2 members (1 supervisor + 1 worker)")
-	}
-
 	if b.mode == ModeSelector && len(b.members) < 2 {
 		return nil, fmt.Errorf("selector mode requires at least 2 members (1 selector + 1 candidate)")
+	}
+	if b.mode == ModeSupervisor && len(b.members) < 2 {
+		return nil, fmt.Errorf("supervisor mode requires at least 2 members (1 supervisor + 1 worker)")
 	}
 
 	config := TeamConfig{
@@ -118,15 +117,15 @@ func (b *TeamBuilder) Build(logger *zap.Logger) (*AgentTeam, error) {
 // createStrategy returns the appropriate mode strategy for the given mode.
 func createStrategy(mode TeamMode, logger *zap.Logger) teamModeStrategy {
 	switch mode {
-	case ModeSupervisor:
-		return newSupervisorMode(logger)
 	case ModeRoundRobin:
 		return newRoundRobinMode(logger)
 	case ModeSelector:
 		return newSelectorMode(logger)
 	case ModeSwarm:
 		return newSwarmMode(logger)
-	default:
+	case ModeSupervisor:
 		return newSupervisorMode(logger)
+	default:
+		return newRoundRobinMode(logger)
 	}
 }
