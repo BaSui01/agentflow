@@ -12,12 +12,14 @@ func TestRunConfigCloneDeepCopies(t *testing.T) {
 	model := "gpt-5.4"
 	timeout := 3 * time.Second
 	maxIterations := 4
+	maxDepth := 2
 	rc := &RunConfig{
 		Model:              &model,
 		Stop:               []string{"END"},
 		ToolWhitelist:      []string{"search"},
 		Timeout:            &timeout,
 		MaxReActIterations: &maxIterations,
+		SubagentMaxDepth:   &maxDepth,
 		Metadata:           map[string]string{"trace": "t1"},
 		Tags:               []string{"prod"},
 	}
@@ -38,6 +40,7 @@ func TestRunConfigCloneDeepCopies(t *testing.T) {
 	assert.Equal(t, []string{"END"}, clone.Stop)
 	assert.Equal(t, []string{"search"}, clone.ToolWhitelist)
 	assert.Equal(t, 3*time.Second, *clone.Timeout)
+	assert.Equal(t, 2, *clone.SubagentMaxDepth)
 	assert.Equal(t, map[string]string{"trace": "t1"}, clone.Metadata)
 	assert.Equal(t, []string{"prod"}, clone.Tags)
 }
@@ -49,6 +52,9 @@ func TestRunConfigApplyToExecutionOptionsPreservesOverrides(t *testing.T) {
 	disableTools := &RunConfig{DisableTools: true}
 	timeout := 2 * time.Second
 	maxIterations := 0
+	allowHandoffs := false
+	maxDepth := 3
+	maxParallel := 2
 	rc := &RunConfig{
 		Model:              &model,
 		Provider:           &provider,
@@ -56,6 +62,9 @@ func TestRunConfigApplyToExecutionOptionsPreservesOverrides(t *testing.T) {
 		ToolWhitelist:      []string{"calc"},
 		Timeout:            &timeout,
 		MaxReActIterations: &maxIterations,
+		SubagentAllowHandoffs: &allowHandoffs,
+		SubagentMaxDepth:   &maxDepth,
+		SubagentMaxParallelism: &maxParallel,
 		Metadata:           map[string]string{"tenant": "t1"},
 		Tags:               []string{"tag-1"},
 	}
@@ -71,6 +80,11 @@ func TestRunConfigApplyToExecutionOptionsPreservesOverrides(t *testing.T) {
 	assert.Equal(t, []string{"calc"}, options.Tools.ToolWhitelist)
 	assert.Equal(t, 2*time.Second, options.Control.Timeout)
 	assert.Equal(t, 0, options.Control.MaxReActIterations)
+	require.NotNil(t, options.Tools.Subagents)
+	require.NotNil(t, options.Tools.Subagents.AllowHandoffs)
+	assert.False(t, *options.Tools.Subagents.AllowHandoffs)
+	assert.Equal(t, 3, options.Tools.Subagents.MaxDepth)
+	assert.Equal(t, 2, options.Tools.Subagents.MaxParallelism)
 	assert.Equal(t, map[string]string{"tenant": "t1"}, options.Metadata)
 	assert.Equal(t, []string{"tag-1"}, options.Tags)
 }

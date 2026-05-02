@@ -191,6 +191,15 @@ func MergeRunConfig(base *RunConfig, override *RunConfig) *RunConfig {
 	if override.MaxLoopIterations != nil {
 		merged.MaxLoopIterations = cloneIntPtr(override.MaxLoopIterations)
 	}
+	if override.SubagentAllowHandoffs != nil {
+		merged.SubagentAllowHandoffs = cloneBoolPtr(override.SubagentAllowHandoffs)
+	}
+	if override.SubagentMaxDepth != nil {
+		merged.SubagentMaxDepth = cloneIntPtr(override.SubagentMaxDepth)
+	}
+	if override.SubagentMaxParallelism != nil {
+		merged.SubagentMaxParallelism = cloneIntPtr(override.SubagentMaxParallelism)
+	}
 	if len(override.Metadata) > 0 {
 		if merged.Metadata == nil {
 			merged.Metadata = make(map[string]string, len(override.Metadata))
@@ -226,6 +235,14 @@ func cloneFloat32Ptr(v *float32) *float32 {
 }
 
 func cloneIntPtr(v *int) *int {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneBoolPtr(v *bool) *bool {
 	if v == nil {
 		return nil
 	}
@@ -279,6 +296,18 @@ func RunConfigFromInputContext(inputCtx map[string]any) *RunConfig {
 	}
 	if value, ok := intOverrideFromContext(inputCtx, "max_loop_iterations"); ok {
 		rc.MaxLoopIterations = IntPtr(value)
+		hasOverride = true
+	}
+	if value, ok := intOverrideFromContext(inputCtx, "subagent_max_depth"); ok {
+		rc.SubagentMaxDepth = IntPtr(value)
+		hasOverride = true
+	}
+	if value, ok := intOverrideFromContext(inputCtx, "subagent_max_parallelism"); ok {
+		rc.SubagentMaxParallelism = IntPtr(value)
+		hasOverride = true
+	}
+	if value, ok := boolOverrideFromContext(inputCtx, "subagent_allow_handoffs"); ok {
+		rc.SubagentAllowHandoffs = cloneBoolPtr(&value)
 		hasOverride = true
 	}
 

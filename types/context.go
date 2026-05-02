@@ -18,6 +18,10 @@ const (
 	keyLLMRoutePolicy      contextKey = "llm_route_policy"
 	keyPromptBundleVersion contextKey = "prompt_bundle_version"
 	keyRoles               contextKey = "roles"
+	keyApprovalPolicy      contextKey = "approval_policy"
+	keySandboxMode         contextKey = "sandbox_mode"
+	keyMemoryExternalMode  contextKey = "memory_external_context_policy"
+	keySubagentDepth       contextKey = "subagent_depth"
 )
 
 // WithTraceID adds trace ID to context.
@@ -155,4 +159,48 @@ func Roles(ctx context.Context) ([]string, bool) {
 		return nil, false
 	}
 	return append([]string(nil), v...), true
+}
+
+// WithApprovalPolicy adds the normalized approval policy to context.
+func WithApprovalPolicy(ctx context.Context, policy string) context.Context {
+	return context.WithValue(ctx, keyApprovalPolicy, policy)
+}
+
+// ApprovalPolicy extracts approval policy from context.
+func ApprovalPolicy(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keyApprovalPolicy).(string)
+	return v, ok && v != ""
+}
+
+// WithSandboxMode adds sandbox mode to context.
+func WithSandboxMode(ctx context.Context, mode string) context.Context {
+	return context.WithValue(ctx, keySandboxMode, mode)
+}
+
+// SandboxMode extracts sandbox mode from context.
+func SandboxMode(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keySandboxMode).(string)
+	return v, ok && v != ""
+}
+
+// WithMemoryExternalContextPolicy adds memory external-context policy to context.
+func WithMemoryExternalContextPolicy(ctx context.Context, policy string) context.Context {
+	return context.WithValue(ctx, keyMemoryExternalMode, policy)
+}
+
+// MemoryExternalContextPolicyValue extracts memory external-context policy from context.
+func MemoryExternalContextPolicyValue(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keyMemoryExternalMode).(string)
+	return v, ok && v != ""
+}
+
+// WithSubagentDepth adds subagent depth to context.
+func WithSubagentDepth(ctx context.Context, depth int) context.Context {
+	return context.WithValue(ctx, keySubagentDepth, depth)
+}
+
+// SubagentDepth extracts subagent depth from context.
+func SubagentDepth(ctx context.Context) (int, bool) {
+	v, ok := ctx.Value(keySubagentDepth).(int)
+	return v, ok
 }

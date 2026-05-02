@@ -50,9 +50,12 @@ func TestDefaultExecutionOptionsResolverAppliesContextRunConfigAndInputOverrides
 	ctx := types.WithLLMModel(context.Background(), "ctx-model")
 	ctx = types.WithLLMProvider(ctx, "ctx-provider")
 	ctx = types.WithLLMRoutePolicy(ctx, "balanced")
+	denyHandoffs := false
 	ctx = WithRunConfig(ctx, &RunConfig{
 		Provider:      StringPtr(" runtime-provider "),
 		ToolWhitelist: []string{"search"},
+		SubagentAllowHandoffs: &denyHandoffs,
+		SubagentMaxParallelism: IntPtr(2),
 		Metadata:      map[string]string{"source": "ctx"},
 	})
 	input := &Input{
@@ -60,6 +63,8 @@ func TestDefaultExecutionOptionsResolverAppliesContextRunConfigAndInputOverrides
 			"disable_planner":           "true",
 			"top_level_loop_budget":     json.Number("9"),
 			"max_react_iterations":      "4",
+			"subagent_allow_handoffs":   "false",
+			"subagent_max_depth":        json.Number("3"),
 			"unsupported_runtime_field": "ignored",
 		},
 		Overrides: &RunConfig{
@@ -80,6 +85,11 @@ func TestDefaultExecutionOptionsResolverAppliesContextRunConfigAndInputOverrides
 	assert.Equal(t, 4, options.Control.MaxReActIterations)
 	assert.Equal(t, 9, options.Control.MaxLoopIterations)
 	assert.Equal(t, []string{"search"}, options.Tools.ToolWhitelist)
+	require.NotNil(t, options.Tools.Subagents)
+	require.NotNil(t, options.Tools.Subagents.AllowHandoffs)
+	assert.False(t, *options.Tools.Subagents.AllowHandoffs)
+	assert.Equal(t, 3, options.Tools.Subagents.MaxDepth)
+	assert.Equal(t, 2, options.Tools.Subagents.MaxParallelism)
 	assert.Equal(t, map[string]string{"source": "ctx"}, options.Metadata)
 	assert.Equal(t, []string{"urgent"}, options.Tags)
 }

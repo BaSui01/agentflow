@@ -64,6 +64,8 @@ type RuntimeConfig struct {
 	MaxReActIterations int      `json:"max_react_iterations,omitempty"`
 	MaxLoopIterations  int      `json:"max_loop_iterations,omitempty"`
 	ToolModel          string   `json:"tool_model,omitempty"`
+	ApprovalPolicy     string   `json:"approval_policy,omitempty"`
+	SandboxMode        string   `json:"sandbox_mode,omitempty"`
 }
 
 // ContextConfig configures context assembly, budgeting, and compression.
@@ -228,6 +230,9 @@ type MemoryConfig struct {
 	EnableLongTerm   bool          `json:"enable_long_term,omitempty"`
 	EnableEpisodic   bool          `json:"enable_episodic,omitempty"`
 	DecayEnabled     bool          `json:"decay_enabled,omitempty"`
+	DisableOnExternalContext bool `json:"disable_on_external_context,omitempty"`
+	DisableRecallOnExternalContext bool `json:"disable_recall_on_external_context,omitempty"`
+	DisableWriteOnExternalContext bool `json:"disable_write_on_external_context,omitempty"`
 }
 
 // DefaultMemoryConfig returns sensible defaults.

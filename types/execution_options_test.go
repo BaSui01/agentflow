@@ -9,6 +9,8 @@ import (
 )
 
 func TestAgentConfigExecutionOptions(t *testing.T) {
+	approvalPolicy := "on-request"
+	sandboxMode := "workspace-write"
 	cfg := AgentConfig{
 		Core: CoreConfig{ID: "agent-1", Name: "Agent", Type: "assistant"},
 		LLM: LLMConfig{
@@ -26,6 +28,8 @@ func TestAgentConfigExecutionOptions(t *testing.T) {
 			MaxReActIterations: 5,
 			MaxLoopIterations:  3,
 			ToolModel:          "gpt-4o-mini",
+			ApprovalPolicy:     approvalPolicy,
+			SandboxMode:        sandboxMode,
 		},
 		Context: &ContextConfig{
 			Enabled:          true,
@@ -49,9 +53,14 @@ func TestAgentConfigExecutionOptions(t *testing.T) {
 	assert.Equal(t, "You are helpful.", options.Control.SystemPrompt)
 	assert.Equal(t, 5, options.Control.MaxReActIterations)
 	assert.Equal(t, 3, options.Control.MaxLoopIterations)
+	assert.Equal(t, approvalPolicy, options.Control.ApprovalPolicy)
+	assert.Equal(t, sandboxMode, options.Control.SandboxMode)
 	assert.Equal(t, []string{"search", "calc"}, options.Tools.AllowedTools)
 	assert.Equal(t, []string{"reviewer"}, options.Tools.Handoffs)
 	assert.Equal(t, "gpt-4o-mini", options.Tools.ToolModel)
+	require.NotNil(t, options.Tools.Subagents)
+	require.NotNil(t, options.Tools.Subagents.AllowHandoffs)
+	assert.True(t, *options.Tools.Subagents.AllowHandoffs)
 	require.NotNil(t, options.Control.Context)
 	assert.Equal(t, 1234, options.Control.Context.MaxContextTokens)
 	require.NotNil(t, options.Control.Reflection)
@@ -64,6 +73,58 @@ func TestAgentConfigExecutionOptions(t *testing.T) {
 	assert.Equal(t, []string{"STOP"}, options.Model.Stop)
 	assert.Equal(t, []string{"search", "calc"}, options.Tools.AllowedTools)
 	assert.Equal(t, map[string]string{"tenant": "t1"}, options.Metadata)
+}
+
+func TestAgentConfigExecutionOptions_MapsMemoryExternalContextPolicy(t *testing.T) {
+	cfg := AgentConfig{
+		Core: CoreConfig{ID: "agent-1", Name: "Agent", Type: "assistant"},
+		LLM:  LLMConfig{Model: "gpt-4o"},
+		Features: FeaturesConfig{
+			Memory: &MemoryConfig{
+				Enabled:                        true,
+				DisableOnExternalContext:       true,
+				DisableRecallOnExternalContext: true,
+				DisableWriteOnExternalContext:  true,
+			},
+		},
+	}
+
+	options := cfg.ExecutionOptions()
+	require.NotNil(t, options.Control.MemoryExternalContext)
+	assert.True(t, options.Control.MemoryExternalContext.DisableAllOnExternalContext)
+	assert.True(t, options.Control.MemoryExternalContext.DisableRecallOnExternalContext)
+	assert.True(t, options.Control.MemoryExternalContext.DisableWriteOnExternalContext)
+}
+
+func TestAgentConfigExecutionOptions_FormalPoliciesOverrideLegacyRuntime(t *testing.T) {
+	allowHandoffs := false
+	cfg := AgentConfig{
+		Core: CoreConfig{ID: "agent-1", Name: "Agent", Type: "assistant"},
+		LLM:  LLMConfig{Model: "legacy-model"},
+		Runtime: RuntimeConfig{
+			ApprovalPolicy: "on-request",
+			SandboxMode:    "workspace-write",
+			Handoffs:       []string{"legacy-reviewer"},
+		},
+		Control: AgentControlOptions{
+			ApprovalPolicy: "never",
+			SandboxMode:    "danger-full-access",
+		},
+		Tools: ToolProtocolOptions{
+			Handoffs:  []string{"formal-reviewer"},
+			Subagents: &SubagentExecutionPolicy{AllowHandoffs: &allowHandoffs, MaxDepth: 1, MaxParallelism: 1},
+		},
+	}
+
+	options := cfg.ExecutionOptions()
+	assert.Equal(t, "never", options.Control.ApprovalPolicy)
+	assert.Equal(t, "danger-full-access", options.Control.SandboxMode)
+	assert.Equal(t, []string{"formal-reviewer"}, options.Tools.Handoffs)
+	require.NotNil(t, options.Tools.Subagents)
+	require.NotNil(t, options.Tools.Subagents.AllowHandoffs)
+	assert.False(t, *options.Tools.Subagents.AllowHandoffs)
+	assert.Equal(t, 1, options.Tools.Subagents.MaxDepth)
+	assert.Equal(t, 1, options.Tools.Subagents.MaxParallelism)
 }
 
 func TestParseToolChoiceString(t *testing.T) {

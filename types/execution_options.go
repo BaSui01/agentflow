@@ -25,50 +25,90 @@ type ToolChoice struct {
 	IncludeServerSideToolInvocations *bool          `json:"include_server_side_tool_invocations,omitempty"`
 }
 
+// SafetySetting captures provider-neutral safety filter settings.
+type SafetySetting struct {
+	Category  string `json:"category"`
+	Threshold string `json:"threshold"`
+}
+
+// OutputSpeechOptions captures provider-neutral speech output controls.
+type OutputSpeechOptions struct {
+	VoiceName    string `json:"voice_name,omitempty"`
+	LanguageCode string `json:"language_code,omitempty"`
+}
+
+// OutputImageOptions captures provider-neutral generated-image output controls.
+type OutputImageOptions struct {
+	AspectRatio        string `json:"aspect_ratio,omitempty"`
+	ImageSize          string `json:"image_size,omitempty"`
+	PersonGeneration   string `json:"person_generation,omitempty"`
+	OutputMIMEType     string `json:"output_mime_type,omitempty"`
+	CompressionQuality *int32 `json:"compression_quality,omitempty"`
+}
+
+// MemoryExternalContextPolicy controls memory behavior when external context
+// sources like MCP or web search are involved in the turn.
+type MemoryExternalContextPolicy struct {
+	DisableAllOnExternalContext    bool `json:"disable_all_on_external_context,omitempty"`
+	DisableRecallOnExternalContext bool `json:"disable_recall_on_external_context,omitempty"`
+	DisableWriteOnExternalContext  bool `json:"disable_write_on_external_context,omitempty"`
+}
+
+// SubagentExecutionPolicy captures provider-neutral limits for handoffs and
+// multi-agent fan-out.
+type SubagentExecutionPolicy struct {
+	AllowHandoffs  *bool `json:"allow_handoffs,omitempty"`
+	MaxDepth       int   `json:"max_depth,omitempty"`
+	MaxParallelism int   `json:"max_parallelism,omitempty"`
+}
+
 // ModelOptions contains provider request parameters that shape model behavior.
 type ModelOptions struct {
-	Provider             string            `json:"provider,omitempty"`
-	Model                string            `json:"model"`
-	RoutePolicy          string            `json:"route_policy,omitempty"`
-	MaxTokens            int               `json:"max_tokens,omitempty"`
-	MaxCompletionTokens  *int              `json:"max_completion_tokens,omitempty"`
-	Temperature          float32           `json:"temperature,omitempty"`
-	TopP                 float32           `json:"top_p,omitempty"`
-	Stop                 []string          `json:"stop,omitempty"`
-	FrequencyPenalty     *float32          `json:"frequency_penalty,omitempty"`
-	PresencePenalty      *float32          `json:"presence_penalty,omitempty"`
-	RepetitionPenalty    *float32          `json:"repetition_penalty,omitempty"`
-	N                    *int              `json:"n,omitempty"`
-	LogProbs             *bool             `json:"logprobs,omitempty"`
-	TopLogProbs          *int              `json:"top_logprobs,omitempty"`
-	User                 string            `json:"user,omitempty"`
-	ResponseFormat       *ResponseFormat   `json:"response_format,omitempty"`
-	StreamOptions        *StreamOptions    `json:"stream_options,omitempty"`
-	ServiceTier          *string           `json:"service_tier,omitempty"`
-	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
-	ReasoningSummary     string            `json:"reasoning_summary,omitempty"`
-	ReasoningDisplay     string            `json:"reasoning_display,omitempty"`
-	ReasoningMode        string            `json:"reasoning_mode,omitempty"`
-	ThinkingType         string            `json:"thinking_type,omitempty"`
-	ThinkingLevel        string            `json:"thinking_level,omitempty"`
-	ThinkingBudget       *int32            `json:"thinking_budget,omitempty"`
-	IncludeThoughts      *bool             `json:"include_thoughts,omitempty"`
-	MediaResolution      string            `json:"media_resolution,omitempty"`
-	InferenceSpeed       string            `json:"inference_speed,omitempty"`
-	Store                *bool             `json:"store,omitempty"`
-	Modalities           []string          `json:"modalities,omitempty"`
-	PromptCacheKey       string            `json:"prompt_cache_key,omitempty"`
-	PromptCacheRetention string            `json:"prompt_cache_retention,omitempty"`
-	CacheControl         *CacheControl     `json:"cache_control,omitempty"`
-	CachedContent        string            `json:"cached_content,omitempty"`
-	Include              []string          `json:"include,omitempty"`
-	Truncation           string            `json:"truncation,omitempty"`
-	PreviousResponseID   string            `json:"previous_response_id,omitempty"`
-	ConversationID       string            `json:"conversation_id,omitempty"`
-	ThoughtSignatures    []string          `json:"thought_signatures,omitempty"`
-	Verbosity            string            `json:"verbosity,omitempty"`
-	Phase                string            `json:"phase,omitempty"`
-	WebSearchOptions     *WebSearchOptions `json:"web_search_options,omitempty"`
+	Provider             string               `json:"provider,omitempty"`
+	Model                string               `json:"model"`
+	RoutePolicy          string               `json:"route_policy,omitempty"`
+	MaxTokens            int                  `json:"max_tokens,omitempty"`
+	MaxCompletionTokens  *int                 `json:"max_completion_tokens,omitempty"`
+	Temperature          float32              `json:"temperature,omitempty"`
+	TopP                 float32              `json:"top_p,omitempty"`
+	Stop                 []string             `json:"stop,omitempty"`
+	FrequencyPenalty     *float32             `json:"frequency_penalty,omitempty"`
+	PresencePenalty      *float32             `json:"presence_penalty,omitempty"`
+	RepetitionPenalty    *float32             `json:"repetition_penalty,omitempty"`
+	N                    *int                 `json:"n,omitempty"`
+	LogProbs             *bool                `json:"logprobs,omitempty"`
+	TopLogProbs          *int                 `json:"top_logprobs,omitempty"`
+	User                 string               `json:"user,omitempty"`
+	ResponseFormat       *ResponseFormat      `json:"response_format,omitempty"`
+	StreamOptions        *StreamOptions       `json:"stream_options,omitempty"`
+	ServiceTier          *string              `json:"service_tier,omitempty"`
+	ReasoningEffort      string               `json:"reasoning_effort,omitempty"`
+	ReasoningSummary     string               `json:"reasoning_summary,omitempty"`
+	ReasoningDisplay     string               `json:"reasoning_display,omitempty"`
+	ReasoningMode        string               `json:"reasoning_mode,omitempty"`
+	ThinkingType         string               `json:"thinking_type,omitempty"`
+	ThinkingLevel        string               `json:"thinking_level,omitempty"`
+	ThinkingBudget       *int32               `json:"thinking_budget,omitempty"`
+	IncludeThoughts      *bool                `json:"include_thoughts,omitempty"`
+	MediaResolution      string               `json:"media_resolution,omitempty"`
+	SafetySettings       []SafetySetting      `json:"safety_settings,omitempty"`
+	OutputSpeech         *OutputSpeechOptions `json:"output_speech,omitempty"`
+	OutputImage          *OutputImageOptions  `json:"output_image,omitempty"`
+	InferenceSpeed       string               `json:"inference_speed,omitempty"`
+	Store                *bool                `json:"store,omitempty"`
+	Modalities           []string             `json:"modalities,omitempty"`
+	PromptCacheKey       string               `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string               `json:"prompt_cache_retention,omitempty"`
+	CacheControl         *CacheControl        `json:"cache_control,omitempty"`
+	CachedContent        string               `json:"cached_content,omitempty"`
+	Include              []string             `json:"include,omitempty"`
+	Truncation           string               `json:"truncation,omitempty"`
+	PreviousResponseID   string               `json:"previous_response_id,omitempty"`
+	ConversationID       string               `json:"conversation_id,omitempty"`
+	ThoughtSignatures    []string             `json:"thought_signatures,omitempty"`
+	Verbosity            string               `json:"verbosity,omitempty"`
+	Phase                string               `json:"phase,omitempty"`
+	WebSearchOptions     *WebSearchOptions    `json:"web_search_options,omitempty"`
 }
 
 // AgentControlOptions contains runtime loop, validation, and context controls.
@@ -78,11 +118,14 @@ type AgentControlOptions struct {
 	MaxReActIterations int                   `json:"max_react_iterations,omitempty"`
 	MaxLoopIterations  int                   `json:"max_loop_iterations,omitempty"`
 	MaxConcurrency     int                   `json:"max_concurrency,omitempty"`
+	ApprovalPolicy     string                `json:"approval_policy,omitempty"`
+	SandboxMode        string                `json:"sandbox_mode,omitempty"`
 	DisablePlanner     bool                  `json:"disable_planner,omitempty"`
 	Context            *ContextConfig        `json:"context,omitempty"`
 	Reflection         *ReflectionConfig     `json:"reflection,omitempty"`
 	Guardrails         *GuardrailsConfig     `json:"guardrails,omitempty"`
 	Memory             *MemoryConfig         `json:"memory,omitempty"`
+	MemoryExternalContext *MemoryExternalContextPolicy `json:"memory_external_context,omitempty"`
 	ToolSelection      *ToolSelectionConfig  `json:"tool_selection,omitempty"`
 	PromptEnhancer     *PromptEnhancerConfig `json:"prompt_enhancer,omitempty"`
 }
@@ -93,10 +136,25 @@ type ToolProtocolOptions struct {
 	ToolWhitelist     []string     `json:"tool_whitelist,omitempty"`
 	DisableTools      bool         `json:"disable_tools,omitempty"`
 	Handoffs          []string     `json:"handoffs,omitempty"`
+	Subagents         *SubagentExecutionPolicy `json:"subagents,omitempty"`
 	ToolModel         string       `json:"tool_model,omitempty"`
 	ToolChoice        *ToolChoice  `json:"tool_choice,omitempty"`
 	ParallelToolCalls *bool        `json:"parallel_tool_calls,omitempty"`
 	ToolCallMode      ToolCallMode `json:"tool_call_mode,omitempty"`
+}
+
+func (o ToolProtocolOptions) SubagentsMaxDepth() int {
+	if o.Subagents == nil {
+		return 0
+	}
+	return o.Subagents.MaxDepth
+}
+
+func (o ToolProtocolOptions) SubagentsMaxParallelism() int {
+	if o.Subagents == nil {
+		return 0
+	}
+	return o.Subagents.MaxParallelism
 }
 
 // RunOverrides is the staged override surface for a single execution.
@@ -146,16 +204,20 @@ func (c AgentConfig) ExecutionOptions() ExecutionOptions {
 			SystemPrompt:       c.Runtime.SystemPrompt,
 			MaxReActIterations: c.Runtime.MaxReActIterations,
 			MaxLoopIterations:  c.Runtime.MaxLoopIterations,
+			ApprovalPolicy:     strings.TrimSpace(c.Runtime.ApprovalPolicy),
+			SandboxMode:        strings.TrimSpace(c.Runtime.SandboxMode),
 			Context:            cloneContextConfig(c.Context),
 			Reflection:         cloneReflectionConfig(c.Features.Reflection),
 			Guardrails:         cloneGuardrailsConfig(c.Features.Guardrails),
 			Memory:             cloneMemoryConfig(c.Features.Memory),
+			MemoryExternalContext: memoryConfigToExternalContextPolicy(c.Features.Memory),
 			ToolSelection:      cloneToolSelectionConfig(c.Features.ToolSelection),
 			PromptEnhancer:     clonePromptEnhancerConfig(c.Features.PromptEnhancer),
 		},
 		Tools: ToolProtocolOptions{
 			AllowedTools: cloneExecutionStrings(c.Runtime.Tools),
 			Handoffs:     cloneExecutionStrings(c.Runtime.Handoffs),
+			Subagents:    runtimeConfigToSubagentPolicy(c.Runtime),
 			ToolModel:    c.Runtime.ToolModel,
 		},
 		Metadata: cloneExecutionMetadata(c.Metadata),
@@ -214,6 +276,9 @@ func (o ModelOptions) clone() ModelOptions {
 		ThinkingBudget:       cloneExecutionInt32Ptr(o.ThinkingBudget),
 		IncludeThoughts:      cloneExecutionBoolPtr(o.IncludeThoughts),
 		MediaResolution:      o.MediaResolution,
+		SafetySettings:       cloneSafetySettings(o.SafetySettings),
+		OutputSpeech:         cloneOutputSpeechOptions(o.OutputSpeech),
+		OutputImage:          cloneOutputImageOptions(o.OutputImage),
 		InferenceSpeed:       o.InferenceSpeed,
 		Store:                cloneExecutionBoolPtr(o.Store),
 		Modalities:           cloneExecutionStrings(o.Modalities),
@@ -239,11 +304,14 @@ func (o AgentControlOptions) clone() AgentControlOptions {
 		MaxReActIterations: o.MaxReActIterations,
 		MaxLoopIterations:  o.MaxLoopIterations,
 		MaxConcurrency:     o.MaxConcurrency,
+		ApprovalPolicy:     o.ApprovalPolicy,
+		SandboxMode:        o.SandboxMode,
 		DisablePlanner:     o.DisablePlanner,
 		Context:            cloneContextConfig(o.Context),
 		Reflection:         cloneReflectionConfig(o.Reflection),
 		Guardrails:         cloneGuardrailsConfig(o.Guardrails),
 		Memory:             cloneMemoryConfig(o.Memory),
+		MemoryExternalContext: cloneMemoryExternalContextPolicy(o.MemoryExternalContext),
 		ToolSelection:      cloneToolSelectionConfig(o.ToolSelection),
 		PromptEnhancer:     clonePromptEnhancerConfig(o.PromptEnhancer),
 	}
@@ -255,6 +323,7 @@ func (o ToolProtocolOptions) clone() ToolProtocolOptions {
 		ToolWhitelist:     cloneExecutionStrings(o.ToolWhitelist),
 		DisableTools:      o.DisableTools,
 		Handoffs:          cloneExecutionStrings(o.Handoffs),
+		Subagents:         cloneSubagentExecutionPolicy(o.Subagents),
 		ToolModel:         o.ToolModel,
 		ToolChoice:        cloneToolChoice(o.ToolChoice),
 		ParallelToolCalls: cloneExecutionBoolPtr(o.ParallelToolCalls),
@@ -290,6 +359,9 @@ func (c AgentConfig) hasFormalMainFace() bool {
 		c.Model.ThinkingBudget != nil ||
 		c.Model.IncludeThoughts != nil ||
 		strings.TrimSpace(c.Model.MediaResolution) != "" ||
+		len(c.Model.SafetySettings) > 0 ||
+		c.Model.OutputSpeech != nil ||
+		c.Model.OutputImage != nil ||
 		strings.TrimSpace(c.Model.InferenceSpeed) != "" ||
 		c.Model.Store != nil ||
 		len(c.Model.Modalities) > 0 ||
@@ -310,17 +382,21 @@ func (c AgentConfig) hasFormalMainFace() bool {
 		c.Control.MaxReActIterations != 0 ||
 		c.Control.MaxLoopIterations != 0 ||
 		c.Control.MaxConcurrency != 0 ||
+		strings.TrimSpace(c.Control.ApprovalPolicy) != "" ||
+		strings.TrimSpace(c.Control.SandboxMode) != "" ||
 		c.Control.DisablePlanner ||
 		c.Control.Context != nil ||
 		c.Control.Reflection != nil ||
 		c.Control.Guardrails != nil ||
 		c.Control.Memory != nil ||
+		c.Control.MemoryExternalContext != nil ||
 		c.Control.ToolSelection != nil ||
 		c.Control.PromptEnhancer != nil ||
 		len(c.Tools.AllowedTools) > 0 ||
 		len(c.Tools.ToolWhitelist) > 0 ||
 		c.Tools.DisableTools ||
 		len(c.Tools.Handoffs) > 0 ||
+		c.Tools.Subagents != nil ||
 		strings.TrimSpace(c.Tools.ToolModel) != "" ||
 		c.Tools.ToolChoice != nil ||
 		c.Tools.ParallelToolCalls != nil ||
@@ -410,6 +486,15 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 	if strings.TrimSpace(override.MediaResolution) != "" {
 		out.MediaResolution = strings.TrimSpace(override.MediaResolution)
 	}
+	if len(override.SafetySettings) > 0 {
+		out.SafetySettings = cloneSafetySettings(override.SafetySettings)
+	}
+	if override.OutputSpeech != nil {
+		out.OutputSpeech = cloneOutputSpeechOptions(override.OutputSpeech)
+	}
+	if override.OutputImage != nil {
+		out.OutputImage = cloneOutputImageOptions(override.OutputImage)
+	}
 	if strings.TrimSpace(override.InferenceSpeed) != "" {
 		out.InferenceSpeed = strings.TrimSpace(override.InferenceSpeed)
 	}
@@ -475,6 +560,12 @@ func mergeAgentControlOptions(base AgentControlOptions, override AgentControlOpt
 	if override.MaxConcurrency > 0 {
 		out.MaxConcurrency = override.MaxConcurrency
 	}
+	if strings.TrimSpace(override.ApprovalPolicy) != "" {
+		out.ApprovalPolicy = strings.TrimSpace(override.ApprovalPolicy)
+	}
+	if strings.TrimSpace(override.SandboxMode) != "" {
+		out.SandboxMode = strings.TrimSpace(override.SandboxMode)
+	}
 	if override.DisablePlanner {
 		out.DisablePlanner = true
 	}
@@ -489,6 +580,9 @@ func mergeAgentControlOptions(base AgentControlOptions, override AgentControlOpt
 	}
 	if override.Memory != nil {
 		out.Memory = cloneMemoryConfig(override.Memory)
+	}
+	if override.MemoryExternalContext != nil {
+		out.MemoryExternalContext = cloneMemoryExternalContextPolicy(override.MemoryExternalContext)
 	}
 	if override.ToolSelection != nil {
 		out.ToolSelection = cloneToolSelectionConfig(override.ToolSelection)
@@ -513,6 +607,9 @@ func mergeToolProtocolOptions(base ToolProtocolOptions, override ToolProtocolOpt
 	}
 	if len(override.Handoffs) > 0 {
 		out.Handoffs = cloneExecutionStrings(override.Handoffs)
+	}
+	if override.Subagents != nil {
+		out.Subagents = cloneSubagentExecutionPolicy(override.Subagents)
 	}
 	if strings.TrimSpace(override.ToolModel) != "" {
 		out.ToolModel = strings.TrimSpace(override.ToolModel)
@@ -691,6 +788,45 @@ func cloneMemoryConfig(value *MemoryConfig) *MemoryConfig {
 	return &cloned
 }
 
+func cloneMemoryExternalContextPolicy(value *MemoryExternalContextPolicy) *MemoryExternalContextPolicy {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneSubagentExecutionPolicy(value *SubagentExecutionPolicy) *SubagentExecutionPolicy {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.AllowHandoffs = cloneExecutionBoolPtr(value.AllowHandoffs)
+	return &cloned
+}
+
+func memoryConfigToExternalContextPolicy(value *MemoryConfig) *MemoryExternalContextPolicy {
+	if value == nil {
+		return nil
+	}
+	if !value.DisableOnExternalContext && !value.DisableRecallOnExternalContext && !value.DisableWriteOnExternalContext {
+		return nil
+	}
+	return &MemoryExternalContextPolicy{
+		DisableAllOnExternalContext:    value.DisableOnExternalContext,
+		DisableRecallOnExternalContext: value.DisableRecallOnExternalContext,
+		DisableWriteOnExternalContext:  value.DisableWriteOnExternalContext,
+	}
+}
+
+func runtimeConfigToSubagentPolicy(value RuntimeConfig) *SubagentExecutionPolicy {
+	if len(value.Handoffs) == 0 {
+		return nil
+	}
+	allow := true
+	return &SubagentExecutionPolicy{AllowHandoffs: &allow}
+}
+
 func cloneToolSelectionConfig(value *ToolSelectionConfig) *ToolSelectionConfig {
 	if value == nil {
 		return nil
@@ -704,5 +840,29 @@ func clonePromptEnhancerConfig(value *PromptEnhancerConfig) *PromptEnhancerConfi
 		return nil
 	}
 	cloned := *value
+	return &cloned
+}
+
+func cloneSafetySettings(values []SafetySetting) []SafetySetting {
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]SafetySetting(nil), values...)
+}
+
+func cloneOutputSpeechOptions(value *OutputSpeechOptions) *OutputSpeechOptions {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneOutputImageOptions(value *OutputImageOptions) *OutputImageOptions {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.CompressionQuality = cloneExecutionInt32Ptr(value.CompressionQuality)
 	return &cloned
 }

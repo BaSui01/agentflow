@@ -56,6 +56,9 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 		ThinkingBudget:       cloneAdapterInt32Ptr(options.Model.ThinkingBudget),
 		IncludeThoughts:      cloneAdapterBoolPtr(options.Model.IncludeThoughts),
 		MediaResolution:      strings.TrimSpace(options.Model.MediaResolution),
+		SafetySettings:       cloneAdapterSafetySettings(options.Model.SafetySettings),
+		OutputSpeech:         cloneAdapterOutputSpeech(options.Model.OutputSpeech),
+		OutputImage:          cloneAdapterOutputImage(options.Model.OutputImage),
 		InferenceSpeed:       options.Model.InferenceSpeed,
 		Store:                cloneAdapterBoolPtr(options.Model.Store),
 		Modalities:           append([]string(nil), options.Model.Modalities...),
@@ -91,6 +94,44 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 	}
 	if options.Tools.ToolCallMode != "" {
 		req.ToolCallMode = options.Tools.ToolCallMode
+	}
+	if strings.TrimSpace(options.Control.ApprovalPolicy) != "" {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 4)
+		}
+		req.Metadata["agentflow.approval_policy"] = strings.TrimSpace(options.Control.ApprovalPolicy)
+	}
+	if strings.TrimSpace(options.Control.SandboxMode) != "" {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 4)
+		}
+		req.Metadata["agentflow.sandbox_mode"] = strings.TrimSpace(options.Control.SandboxMode)
+	}
+	if options.Control.MemoryExternalContext != nil {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 6)
+		}
+		if options.Control.MemoryExternalContext.DisableAllOnExternalContext {
+			req.Metadata["agentflow.memory.disable_on_external_context"] = "true"
+		}
+		if options.Control.MemoryExternalContext.DisableRecallOnExternalContext {
+			req.Metadata["agentflow.memory.disable_recall_on_external_context"] = "true"
+		}
+		if options.Control.MemoryExternalContext.DisableWriteOnExternalContext {
+			req.Metadata["agentflow.memory.disable_write_on_external_context"] = "true"
+		}
+	}
+	if options.Tools.Subagents != nil {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 8)
+		}
+		if options.Tools.Subagents.AllowHandoffs != nil {
+			if *options.Tools.Subagents.AllowHandoffs {
+				req.Metadata["agentflow.subagents.allow_handoffs"] = "true"
+			} else {
+				req.Metadata["agentflow.subagents.allow_handoffs"] = "false"
+			}
+		}
 	}
 
 	return req, nil
@@ -221,5 +262,35 @@ func cloneWebSearchOptionsForAdapter(value *types.WebSearchOptions) *types.WebSe
 		location := *value.UserLocation
 		cloned.UserLocation = &location
 	}
+	return &cloned
+}
+
+func cloneAdapterSafetySettings(values []types.SafetySetting) []types.SafetySetting {
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]types.SafetySetting(nil), values...)
+}
+
+func cloneAdapterOutputSpeech(value *types.OutputSpeechOptions) *types.OutputSpeechOptions {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.VoiceName = strings.TrimSpace(cloned.VoiceName)
+	cloned.LanguageCode = strings.TrimSpace(cloned.LanguageCode)
+	return &cloned
+}
+
+func cloneAdapterOutputImage(value *types.OutputImageOptions) *types.OutputImageOptions {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	cloned.AspectRatio = strings.TrimSpace(cloned.AspectRatio)
+	cloned.ImageSize = strings.TrimSpace(cloned.ImageSize)
+	cloned.PersonGeneration = strings.TrimSpace(cloned.PersonGeneration)
+	cloned.OutputMIMEType = strings.TrimSpace(cloned.OutputMIMEType)
+	cloned.CompressionQuality = cloneAdapterInt32Ptr(value.CompressionQuality)
 	return &cloned
 }

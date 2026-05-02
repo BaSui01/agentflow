@@ -23,36 +23,49 @@ func TestDefaultChatRequestAdapter_BuildMapsFormalModelFields(t *testing.T) {
 	includeServerSide := true
 	thinkingBudget := int32(-1)
 	includeThoughts := true
+	allowHandoffs := true
 	adapter := NewDefaultChatRequestAdapter()
 
 	req, err := adapter.Build(types.ExecutionOptions{
 		Model: types.ModelOptions{
-			Provider:             "openai",
-			Model:                "gpt-5.4",
-			RoutePolicy:          "latency_first",
-			MaxTokens:            1024,
-			MaxCompletionTokens:  &maxCompletionTokens,
-			Temperature:          0.2,
-			TopP:                 0.9,
-			Stop:                 []string{"STOP"},
-			FrequencyPenalty:     &frequencyPenalty,
-			PresencePenalty:      &presencePenalty,
-			RepetitionPenalty:    &repetitionPenalty,
-			N:                    &n,
-			LogProbs:             &logProbs,
-			TopLogProbs:          &topLogProbs,
-			User:                 " user-1 ",
-			StreamOptions:        &types.StreamOptions{IncludeUsage: true, ChunkIncludeUsage: true},
-			ServiceTier:          &serviceTier,
-			ReasoningEffort:      "medium",
-			ReasoningSummary:     "auto",
-			ReasoningDisplay:     "redacted",
-			ReasoningMode:        "thinking",
-			ThinkingType:         " adaptive ",
-			ThinkingLevel:        " high ",
-			ThinkingBudget:       &thinkingBudget,
-			IncludeThoughts:      &includeThoughts,
-			MediaResolution:      " media_resolution_high ",
+			Provider:            "openai",
+			Model:               "gpt-5.4",
+			RoutePolicy:         "latency_first",
+			MaxTokens:           1024,
+			MaxCompletionTokens: &maxCompletionTokens,
+			Temperature:         0.2,
+			TopP:                0.9,
+			Stop:                []string{"STOP"},
+			FrequencyPenalty:    &frequencyPenalty,
+			PresencePenalty:     &presencePenalty,
+			RepetitionPenalty:   &repetitionPenalty,
+			N:                   &n,
+			LogProbs:            &logProbs,
+			TopLogProbs:         &topLogProbs,
+			User:                " user-1 ",
+			StreamOptions:       &types.StreamOptions{IncludeUsage: true, ChunkIncludeUsage: true},
+			ServiceTier:         &serviceTier,
+			ReasoningEffort:     "medium",
+			ReasoningSummary:    "auto",
+			ReasoningDisplay:    "redacted",
+			ReasoningMode:       "thinking",
+			ThinkingType:        " adaptive ",
+			ThinkingLevel:       " high ",
+			ThinkingBudget:      &thinkingBudget,
+			IncludeThoughts:     &includeThoughts,
+			MediaResolution:     " media_resolution_high ",
+			SafetySettings: []types.SafetySetting{{
+				Category:  "HARM_CATEGORY_HATE_SPEECH",
+				Threshold: "BLOCK_ONLY_HIGH",
+			}},
+			OutputSpeech: &types.OutputSpeechOptions{VoiceName: " Aoede ", LanguageCode: " en-US "},
+			OutputImage: &types.OutputImageOptions{
+				AspectRatio:        " 16:9 ",
+				ImageSize:          " 2K ",
+				PersonGeneration:   " ALLOW_ADULT ",
+				OutputMIMEType:     " image/jpeg ",
+				CompressionQuality: &thinkingBudget,
+			},
 			InferenceSpeed:       "fast",
 			Store:                &store,
 			Modalities:           []string{"text", "audio"},
@@ -69,7 +82,15 @@ func TestDefaultChatRequestAdapter_BuildMapsFormalModelFields(t *testing.T) {
 			Phase:                " commentary ",
 			WebSearchOptions:     &types.WebSearchOptions{SearchContextSize: "medium", AllowedDomains: []string{"example.com"}},
 		},
-		Control: types.AgentControlOptions{Timeout: 5 * time.Second},
+		Control: types.AgentControlOptions{
+			Timeout:        5 * time.Second,
+			ApprovalPolicy: "on-request",
+			SandboxMode:    "workspace-write",
+			MemoryExternalContext: &types.MemoryExternalContextPolicy{
+				DisableRecallOnExternalContext: true,
+				DisableWriteOnExternalContext:  true,
+			},
+		},
 		Tools: types.ToolProtocolOptions{
 			ToolChoice: &types.ToolChoice{
 				Mode:                             types.ToolChoiceModeSpecific,
@@ -78,6 +99,7 @@ func TestDefaultChatRequestAdapter_BuildMapsFormalModelFields(t *testing.T) {
 			},
 			ParallelToolCalls: &store,
 			ToolCallMode:      types.ToolCallModeNative,
+			Subagents:         &types.SubagentExecutionPolicy{AllowHandoffs: &allowHandoffs, MaxDepth: 2, MaxParallelism: 3},
 		},
 		Metadata: map[string]string{"request": "r1"},
 		Tags:     []string{"tag-a"},
@@ -119,6 +141,19 @@ func TestDefaultChatRequestAdapter_BuildMapsFormalModelFields(t *testing.T) {
 	require.NotNil(t, req.IncludeThoughts)
 	assert.True(t, *req.IncludeThoughts)
 	assert.Equal(t, "media_resolution_high", req.MediaResolution)
+	require.Len(t, req.SafetySettings, 1)
+	assert.Equal(t, "HARM_CATEGORY_HATE_SPEECH", req.SafetySettings[0].Category)
+	assert.Equal(t, "BLOCK_ONLY_HIGH", req.SafetySettings[0].Threshold)
+	require.NotNil(t, req.OutputSpeech)
+	assert.Equal(t, "Aoede", req.OutputSpeech.VoiceName)
+	assert.Equal(t, "en-US", req.OutputSpeech.LanguageCode)
+	require.NotNil(t, req.OutputImage)
+	assert.Equal(t, "16:9", req.OutputImage.AspectRatio)
+	assert.Equal(t, "2K", req.OutputImage.ImageSize)
+	assert.Equal(t, "ALLOW_ADULT", req.OutputImage.PersonGeneration)
+	assert.Equal(t, "image/jpeg", req.OutputImage.OutputMIMEType)
+	require.NotNil(t, req.OutputImage.CompressionQuality)
+	assert.Equal(t, int32(-1), *req.OutputImage.CompressionQuality)
 	assert.Equal(t, "fast", req.InferenceSpeed)
 	require.NotNil(t, req.Store)
 	assert.True(t, *req.Store)
@@ -139,6 +174,11 @@ func TestDefaultChatRequestAdapter_BuildMapsFormalModelFields(t *testing.T) {
 	assert.Equal(t, []string{"example.com"}, req.WebSearchOptions.AllowedDomains)
 	assert.Equal(t, "openai", req.Metadata[llmcore.MetadataKeyChatProvider])
 	assert.Equal(t, "r1", req.Metadata["request"])
+	assert.Equal(t, "on-request", req.Metadata["agentflow.approval_policy"])
+	assert.Equal(t, "workspace-write", req.Metadata["agentflow.sandbox_mode"])
+	assert.Equal(t, "true", req.Metadata["agentflow.memory.disable_recall_on_external_context"])
+	assert.Equal(t, "true", req.Metadata["agentflow.memory.disable_write_on_external_context"])
+	assert.Equal(t, "true", req.Metadata["agentflow.subagents.allow_handoffs"])
 	assert.Equal(t, []string{"tag-a"}, req.Tags)
 	require.NotNil(t, req.ToolChoice)
 	assert.Equal(t, types.ToolChoiceModeSpecific, req.ToolChoice.Mode)

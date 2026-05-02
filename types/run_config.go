@@ -22,6 +22,9 @@ type RunConfig struct {
 	Timeout            *time.Duration    `json:"timeout,omitempty"`
 	MaxReActIterations *int              `json:"max_react_iterations,omitempty"`
 	MaxLoopIterations  *int              `json:"max_loop_iterations,omitempty"`
+	SubagentAllowHandoffs *bool          `json:"subagent_allow_handoffs,omitempty"`
+	SubagentMaxDepth   *int              `json:"subagent_max_depth,omitempty"`
+	SubagentMaxParallelism *int          `json:"subagent_max_parallelism,omitempty"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
 	Tags               []string          `json:"tags,omitempty"`
 	Budget             *int              `json:"budget,omitempty"`
@@ -45,6 +48,9 @@ func (rc *RunConfig) Clone() *RunConfig {
 	out.Timeout = cloneRunConfigDurationPtr(rc.Timeout)
 	out.MaxReActIterations = cloneExecutionIntPtr(rc.MaxReActIterations)
 	out.MaxLoopIterations = cloneExecutionIntPtr(rc.MaxLoopIterations)
+	out.SubagentAllowHandoffs = cloneExecutionBoolPtr(rc.SubagentAllowHandoffs)
+	out.SubagentMaxDepth = cloneExecutionIntPtr(rc.SubagentMaxDepth)
+	out.SubagentMaxParallelism = cloneExecutionIntPtr(rc.SubagentMaxParallelism)
 	out.Metadata = cloneRunConfigMetadata(rc.Metadata)
 	out.Tags = append([]string(nil), rc.Tags...)
 	out.Budget = cloneExecutionIntPtr(rc.Budget)
@@ -98,6 +104,20 @@ func (rc *RunConfig) ApplyToExecutionOptions(opts *ExecutionOptions) {
 	}
 	if rc.MaxLoopIterations != nil {
 		opts.Control.MaxLoopIterations = *rc.MaxLoopIterations
+	}
+	if rc.SubagentMaxDepth != nil || rc.SubagentMaxParallelism != nil {
+		if opts.Tools.Subagents == nil {
+			opts.Tools.Subagents = &SubagentExecutionPolicy{}
+		}
+		if rc.SubagentAllowHandoffs != nil {
+			opts.Tools.Subagents.AllowHandoffs = cloneExecutionBoolPtr(rc.SubagentAllowHandoffs)
+		}
+		if rc.SubagentMaxDepth != nil {
+			opts.Tools.Subagents.MaxDepth = *rc.SubagentMaxDepth
+		}
+		if rc.SubagentMaxParallelism != nil {
+			opts.Tools.Subagents.MaxParallelism = *rc.SubagentMaxParallelism
+		}
 	}
 	if len(rc.Metadata) > 0 {
 		if opts.Metadata == nil {

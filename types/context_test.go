@@ -49,6 +49,11 @@ func TestContextHelpers(t *testing.T) {
 	if got, ok := PromptBundleVersion(ctx); !ok || got != "v1" {
 		t.Fatalf("PromptBundleVersion mismatch: %v %v", got, ok)
 	}
+
+	ctx = WithSubagentDepth(ctx, 2)
+	if got, ok := SubagentDepth(ctx); !ok || got != 2 {
+		t.Fatalf("SubagentDepth mismatch: %v %v", got, ok)
+	}
 }
 
 func TestWithRolesCopiesInputSlice(t *testing.T) {
