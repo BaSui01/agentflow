@@ -75,6 +75,9 @@ func TestBuildAgentToolingRuntime_ToolManagerUsesAuthorizationService(t *testing
 	ctx = types.WithRunID(ctx, "run-1")
 	ctx = types.WithUserID(ctx, "user-1")
 	ctx = types.WithRoles(ctx, []string{"researcher"})
+	ctx = types.WithApprovalPolicy(ctx, "on-request")
+	ctx = types.WithSandboxMode(ctx, "workspace-write")
+	ctx = types.WithMemoryExternalContextPolicy(ctx, "disable_recall,disable_write")
 
 	results := runtime.ToolManager.ExecuteForAgent(ctx, "agent-a", []types.ToolCall{
 		{
@@ -104,6 +107,9 @@ func TestBuildAgentToolingRuntime_ToolManagerUsesAuthorizationService(t *testing
 	assert.Equal(t, "agent_tooling", metadata["runtime"])
 	assert.Equal(t, "retrieval", metadata["hosted_tool_type"])
 	assert.Equal(t, "safe_read", metadata["hosted_tool_risk"])
+	assert.Equal(t, "on-request", metadata["approval_policy"])
+	assert.Equal(t, "workspace-write", metadata["sandbox_mode"])
+	assert.Equal(t, "disable_recall,disable_write", metadata["memory_external_context_policy"])
 }
 
 func TestBuildAgentToolingRuntime_AuthorizationServiceDeniesBeforeHostedExecution(t *testing.T) {

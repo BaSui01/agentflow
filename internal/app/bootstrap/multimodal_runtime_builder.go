@@ -37,8 +37,8 @@ type MultimodalRuntime struct {
 // ValidateMultimodalReferenceBackend validates and normalizes multimodal reference backend.
 func ValidateMultimodalReferenceBackend(cfg *config.Config) (string, error) {
 	backend := strings.ToLower(strings.TrimSpace(cfg.Multimodal.ReferenceStoreBackend))
-	if backend != "redis" {
-		return "", fmt.Errorf("multimodal.reference_store_backend must be redis")
+	if backend != "redis" && backend != "memory" {
+		return "", fmt.Errorf("multimodal.reference_store_backend must be redis or memory")
 	}
 	return backend, nil
 }

@@ -22,6 +22,11 @@ func BuildMultimodalRedisReferenceStore(
 	ttl time.Duration,
 	logger *zap.Logger,
 ) (*redis.Client, storage.ReferenceStore, error) {
+	if strings.EqualFold(cfg.Multimodal.ReferenceStoreBackend, config.StorageTypeMemory) {
+		logger.Info("using memory reference store for multimodal (non-persistent)")
+		return nil, storage.NewMemoryReferenceStore(), nil
+	}
+
 	addr := strings.TrimSpace(cfg.Redis.Addr)
 	if addr == "" {
 		return nil, nil, fmt.Errorf("redis address is required when multimodal reference_store_backend=redis")

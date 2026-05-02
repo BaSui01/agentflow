@@ -583,6 +583,18 @@ func toolAuthorizationRequest(
 			principal.ID = normalizedAgentID
 		}
 	}
+	if approvalPolicy, ok := types.ApprovalPolicy(ctx); ok {
+		authContext["approval_policy"] = approvalPolicy
+		metadata["approval_policy"] = approvalPolicy
+	}
+	if sandboxMode, ok := types.SandboxMode(ctx); ok {
+		authContext["sandbox_mode"] = sandboxMode
+		metadata["sandbox_mode"] = sandboxMode
+	}
+	if memoryExternalPolicy, ok := types.MemoryExternalContextPolicyValue(ctx); ok {
+		authContext["memory_external_context_policy"] = memoryExternalPolicy
+		metadata["memory_external_context_policy"] = memoryExternalPolicy
+	}
 	authContext["metadata"] = metadata
 
 	return types.AuthorizationRequest{
