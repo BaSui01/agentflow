@@ -1,4 +1,4 @@
-﻿# 📚 AgentFlow 中文文档
+# 📚 AgentFlow 中文文档
 
 > 官方入口：sdk.New(opts).Build(ctx)；单 Agent：agent/runtime；多 Agent：agent/team；显式编排：workflow/runtime。
 
@@ -74,6 +74,8 @@
 | [🧭 模型厂商与模型中文命名规范](./guides/模型厂商与模型中文命名规范.md) | 统一厂商名、模型名、latest 写法与引用口径 | ⭐ |
 | [🗂️ 近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 统一近 12 个月 chat / image / video / TTS / STT 主流模型口径 | ⭐ |
 | [🧩 模型字段与 Agent 框架接入指南](./guides/模型字段与Agent框架接入指南.md) | 说明上游模型字段如何落到 `Model / Control / Tools` 主面，以及当前实现缺口 | ⭐⭐ |
+| [📊 模型供应商请求参数矩阵](./guides/模型供应商请求参数矩阵.md) | 汇总 OpenAI / Claude / Gemini / DeepSeek / Qwen / Grok 等请求参数，并映射到 AgentFlow 主面 | ⭐⭐ |
+| [🛠️ Codex CLI 能力映射到 AgentFlow 指南](./guides/Codex-CLI能力映射到AgentFlow指南.md) | 说明 Codex CLI 的 approval / sandbox / MCP / memory / subagent / web search 能力如何收口进 AgentFlow | ⭐⭐⭐ |
 | [✅ 最佳实践](./guides/best-practices.md) | AgentFlow 使用建议与常见设计约束 | ⭐⭐ |
 
 ### 🧭 文档分层导航
@@ -81,7 +83,7 @@
 | 层次 | 先看什么 | 适用场景 |
 |------|----------|----------|
 | 官方主流模型 | [近12个月主流多模态模型总表](./guides/近12个月主流多模态模型总表.md) | 需要确认最新一年的主流 chat / image / video / speech 模型 |
-| 字段映射 / 运行时主面 | [模型字段与 Agent 框架接入指南](./guides/模型字段与Agent框架接入指南.md) | 需要把上游模型字段对齐到 `Model / Control / Tools`，或评估当前实现缺口 |
+| 字段映射 / 运行时主面 | [模型字段与 Agent 框架接入指南](./guides/模型字段与Agent框架接入指南.md) / [模型供应商请求参数矩阵](./guides/模型供应商请求参数矩阵.md) / [Codex CLI 能力映射到 AgentFlow 指南](./guides/Codex-CLI能力映射到AgentFlow指南.md) | 需要把上游模型字段、approval / sandbox / subagent / memory / web search 等运行时语义对齐到 `Model / Control / Tools` |
 | 项目统一总览 | [`./guides/模型与媒体端点参考.md`](./guides/模型与媒体端点参考.md) | 需要看 provider `/models`、chat / image / video / speech 总览 |
 | 当前代码能力 | [`./guides/多模态能力端点参考.md`](./guides/多模态能力端点参考.md) | 需要确认项目当前真正已实现哪些多模态能力 |
 | 厂商接入与配置 | [`./guides/视频与图像厂商及端点说明.md`](./guides/视频与图像厂商及端点说明.md) | 需要接入图像 / 视频厂商、看共享 key / endpoint / 配置关系 |
