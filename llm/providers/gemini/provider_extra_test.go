@@ -287,6 +287,54 @@ func TestBuildGenerationConfig_WithResponseFormat(t *testing.T) {
 	assert.NotNil(t, cfg.ResponseSchema)
 }
 
+func TestBuildGenAIGenerationConfig_WithOutputMediaConfig(t *testing.T) {
+	quality := int32(88)
+	req := &llm.ChatRequest{
+		OutputSpeech: &types.OutputSpeechOptions{
+			VoiceName:    "Aoede",
+			LanguageCode: "en-US",
+		},
+		OutputImage: &types.OutputImageOptions{
+			AspectRatio:        "16:9",
+			ImageSize:          "2K",
+			PersonGeneration:   "ALLOW_ADULT",
+			OutputMIMEType:     "image/jpeg",
+			CompressionQuality: &quality,
+		},
+	}
+	cfg := buildGenAIGenerationConfig(req, nil)
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.SpeechConfig)
+	assert.Equal(t, "en-US", cfg.SpeechConfig.LanguageCode)
+	require.NotNil(t, cfg.SpeechConfig.VoiceConfig)
+	require.NotNil(t, cfg.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig)
+	assert.Equal(t, "Aoede", cfg.SpeechConfig.VoiceConfig.PrebuiltVoiceConfig.VoiceName)
+	require.NotNil(t, cfg.ImageConfig)
+	assert.Equal(t, "16:9", cfg.ImageConfig.AspectRatio)
+	assert.Equal(t, "2K", cfg.ImageConfig.ImageSize)
+	assert.Equal(t, "ALLOW_ADULT", cfg.ImageConfig.PersonGeneration)
+	assert.Equal(t, "image/jpeg", cfg.ImageConfig.OutputMIMEType)
+	require.NotNil(t, cfg.ImageConfig.OutputCompressionQuality)
+	assert.Equal(t, int32(88), *cfg.ImageConfig.OutputCompressionQuality)
+}
+
+func TestBuildGenAIGenerationConfig_RequestSafetyOverridesConfiguredSafety(t *testing.T) {
+	req := &llm.ChatRequest{
+		SafetySettings: []types.SafetySetting{{
+			Category:  "HARM_CATEGORY_HATE_SPEECH",
+			Threshold: "BLOCK_ONLY_HIGH",
+		}},
+	}
+	cfg := buildGenAIGenerationConfig(req, []providers.GeminiSafetySetting{{
+		Category:  "HARM_CATEGORY_DANGEROUS_CONTENT",
+		Threshold: "BLOCK_LOW_AND_ABOVE",
+	}})
+	require.NotNil(t, cfg)
+	require.Len(t, cfg.SafetySettings, 1)
+	assert.Equal(t, "HARM_CATEGORY_HATE_SPEECH", string(cfg.SafetySettings[0].Category))
+	assert.Equal(t, "BLOCK_ONLY_HIGH", string(cfg.SafetySettings[0].Threshold))
+}
+
 func TestGeminiProvider_Completion_PreservesCachedContentWithToolConfig(t *testing.T) {
 	var reqBody geminiRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

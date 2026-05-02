@@ -59,7 +59,7 @@ func TestIsLoopbackHost(t *testing.T) {
 	assert.False(t, bootstrap.IsLoopbackHost("example.com"))
 }
 
-func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
+func TestInitHandlers_MultimodalAllowsMemoryBackend(t *testing.T) {
 	const mode = "test-multimodal-init"
 	bootstrap.UnregisterMainProviderBuilder(mode)
 	require.NoError(t, bootstrap.RegisterMainProviderBuilder(mode,
@@ -74,9 +74,9 @@ func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
 	cfg.Multimodal.ReferenceStoreBackend = "memory"
 
 	s := &Server{cfg: cfg, logger: zap.NewNop()}
-	err := s.initHandlers()
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "multimodal.reference_store_backend must be redis")
+	require.NoError(t, s.initHandlers())
+	require.NotNil(t, s.handlers.multimodalHandler)
+	assert.Nil(t, s.infra.multimodalRedis)
 }
 
 func TestInitHandlers_WithoutLLMRuntimeLeavesChatDisabled(t *testing.T) {

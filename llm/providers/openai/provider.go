@@ -179,6 +179,7 @@ type openAIResponsesRequest struct {
 	User                 string              `json:"user,omitempty"`
 	Stream               bool                `json:"stream,omitempty"`
 	TopLogProbs          *int                `json:"top_logprobs,omitempty"`
+	Phase                string              `json:"phase,omitempty"`
 }
 
 // responsesReasoning configures reasoning for o-series and gpt-5 models.
@@ -319,6 +320,9 @@ func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIR
 	}
 	if body.TopLogProbs != nil {
 		params.TopLogprobs = param.NewOpt(int64(*body.TopLogProbs))
+	}
+	if body.Phase != "" {
+		params.SetExtraFields(map[string]any{"phase": body.Phase})
 	}
 	if len(body.Metadata) > 0 {
 		params.Metadata = body.Metadata
@@ -525,6 +529,7 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 		ServiceTier:          req.ServiceTier,
 		TopLogProbs:          req.TopLogProbs,
 		ParallelToolCalls:    req.ParallelToolCalls,
+		Phase:                strings.TrimSpace(req.Phase),
 	}
 
 	// Temperature / TopP — 使用指针避免零值被发送
@@ -570,10 +575,11 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 		body.Include = ensureString(body.Include, "reasoning.encrypted_content")
 	}
 
-	// ResponseFormat → text.format
-	if req.ResponseFormat != nil {
+	// ResponseFormat / verbosity → text config
+	if req.ResponseFormat != nil || strings.TrimSpace(req.Verbosity) != "" {
 		body.Text = &responsesTextParam{
-			Format: providerbase.ConvertResponseFormat(req.ResponseFormat),
+			Format:    providerbase.ConvertResponseFormat(req.ResponseFormat),
+			Verbosity: strings.TrimSpace(req.Verbosity),
 		}
 	}
 

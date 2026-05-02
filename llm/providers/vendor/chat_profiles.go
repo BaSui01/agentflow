@@ -248,6 +248,10 @@ func qwenRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatReques
 		incrementalOutput := true
 		body.EnableThinking = &enableThinking
 		body.IncrementalOutput = &incrementalOutput
+		if req.ThinkingBudget != nil {
+			budget := int(*req.ThinkingBudget)
+			body.ThinkingBudget = &budget
+		}
 	}
 }
 

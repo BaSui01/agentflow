@@ -93,17 +93,20 @@ type ChatRequest struct {
 	ToolCallMode ToolCallMode `json:"tool_call_mode,omitempty"`
 
 	// 扩展字段
-	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
-	ThinkingType       string   `json:"thinking_type,omitempty"`
-	ThinkingLevel      string   `json:"thinking_level,omitempty"`
-	ThinkingBudget     *int32   `json:"thinking_budget,omitempty"`
-	IncludeThoughts    *bool    `json:"include_thoughts,omitempty"`
-	MediaResolution    string   `json:"media_resolution,omitempty"`
-	PreviousResponseID string   `json:"previous_response_id,omitempty"`
-	ConversationID     string   `json:"conversation_id,omitempty"`
-	ThoughtSignatures  []string `json:"thought_signatures,omitempty"`
-	Verbosity          string   `json:"verbosity,omitempty"`
-	Phase              string   `json:"phase,omitempty"`
+	ReasoningMode      string               `json:"reasoning_mode,omitempty"`
+	ThinkingType       string               `json:"thinking_type,omitempty"`
+	ThinkingLevel      string               `json:"thinking_level,omitempty"`
+	ThinkingBudget     *int32               `json:"thinking_budget,omitempty"`
+	IncludeThoughts    *bool                `json:"include_thoughts,omitempty"`
+	MediaResolution    string               `json:"media_resolution,omitempty"`
+	SafetySettings     []SafetySetting      `json:"safety_settings,omitempty"`
+	OutputSpeech       *OutputSpeechOptions `json:"output_speech,omitempty"`
+	OutputImage        *OutputImageOptions  `json:"output_image,omitempty"`
+	PreviousResponseID string               `json:"previous_response_id,omitempty"`
+	ConversationID     string               `json:"conversation_id,omitempty"`
+	ThoughtSignatures  []string             `json:"thought_signatures,omitempty"`
+	Verbosity          string               `json:"verbosity,omitempty"`
+	Phase              string               `json:"phase,omitempty"`
 }
 
 // ChatResponse 表示聊天补全响应。

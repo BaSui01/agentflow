@@ -535,15 +535,7 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 
 	applyGeminiThinkingConfig(cfg, req)
 
-	if len(safetySettings) > 0 {
-		cfg.SafetySettings = make([]*genai.SafetySetting, 0, len(safetySettings))
-		for _, s := range safetySettings {
-			cfg.SafetySettings = append(cfg.SafetySettings, &genai.SafetySetting{
-				Category:  genai.HarmCategory(strings.TrimSpace(s.Category)),
-				Threshold: genai.HarmBlockThreshold(strings.TrimSpace(s.Threshold)),
-			})
-		}
-	}
+	applyGeminiSafetySettings(cfg, req, safetySettings)
 
 	cfg.Tools = convertToGenAITools(req.Tools, req.WebSearchOptions)
 	cfg.ToolConfig = convertToolChoiceToGenAI(req.ToolChoice, req.IncludeServerSideToolInvocations)
@@ -558,6 +550,7 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 			}
 		}
 	}
+	applyGeminiOutputMediaConfig(cfg, req)
 
 	if mr := strings.TrimSpace(req.MediaResolution); mr != "" {
 		cfg.MediaResolution = genai.MediaResolution(strings.ToUpper(mr))
@@ -567,6 +560,60 @@ func buildGenAIGenerationConfig(req *llm.ChatRequest, safetySettings []providers
 		return nil
 	}
 	return cfg
+}
+
+func applyGeminiSafetySettings(cfg *genai.GenerateContentConfig, req *llm.ChatRequest, configured []providers.GeminiSafetySetting) {
+	if cfg == nil {
+		return
+	}
+	if req != nil && len(req.SafetySettings) > 0 {
+		cfg.SafetySettings = make([]*genai.SafetySetting, 0, len(req.SafetySettings))
+		for _, s := range req.SafetySettings {
+			cfg.SafetySettings = append(cfg.SafetySettings, &genai.SafetySetting{
+				Category:  genai.HarmCategory(strings.TrimSpace(s.Category)),
+				Threshold: genai.HarmBlockThreshold(strings.TrimSpace(s.Threshold)),
+			})
+		}
+		return
+	}
+	if len(configured) == 0 {
+		return
+	}
+	cfg.SafetySettings = make([]*genai.SafetySetting, 0, len(configured))
+	for _, s := range configured {
+		cfg.SafetySettings = append(cfg.SafetySettings, &genai.SafetySetting{
+			Category:  genai.HarmCategory(strings.TrimSpace(s.Category)),
+			Threshold: genai.HarmBlockThreshold(strings.TrimSpace(s.Threshold)),
+		})
+	}
+}
+
+func applyGeminiOutputMediaConfig(cfg *genai.GenerateContentConfig, req *llm.ChatRequest) {
+	if cfg == nil || req == nil {
+		return
+	}
+	if speech := req.OutputSpeech; speech != nil {
+		cfg.SpeechConfig = &genai.SpeechConfig{
+			LanguageCode: strings.TrimSpace(speech.LanguageCode),
+		}
+		if voice := strings.TrimSpace(speech.VoiceName); voice != "" {
+			cfg.SpeechConfig.VoiceConfig = &genai.VoiceConfig{
+				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{VoiceName: voice},
+			}
+		}
+	}
+	if image := req.OutputImage; image != nil {
+		cfg.ImageConfig = &genai.ImageConfig{
+			AspectRatio:      strings.TrimSpace(image.AspectRatio),
+			ImageSize:        strings.TrimSpace(image.ImageSize),
+			PersonGeneration: strings.TrimSpace(image.PersonGeneration),
+			OutputMIMEType:   strings.TrimSpace(image.OutputMIMEType),
+		}
+		if image.CompressionQuality != nil {
+			quality := *image.CompressionQuality
+			cfg.ImageConfig.OutputCompressionQuality = &quality
+		}
+	}
 }
 
 func applyGeminiThinkingConfig(cfg *genai.GenerateContentConfig, req *llm.ChatRequest) {

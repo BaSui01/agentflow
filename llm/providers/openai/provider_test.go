@@ -328,3 +328,18 @@ func TestOpenAIProvider_Stream_ResponsesAPI(t *testing.T) {
 	assert.Equal(t, "code_exec", toolCalls[1].Name)
 	assert.Equal(t, "print('hi')", toolCalls[1].Input)
 }
+
+func TestOpenAIProvider_BuildResponsesRequestMapsVerbosityAndPhase(t *testing.T) {
+	p := NewOpenAIProvider(providers.OpenAIConfig{UseResponsesAPI: true}, zap.NewNop())
+
+	body := p.buildResponsesRequest(&llm.ChatRequest{
+		Model:     "gpt-5.4",
+		Messages:  []types.Message{{Role: types.RoleUser, Content: "hi"}},
+		Verbosity: " high ",
+		Phase:     " commentary ",
+	})
+
+	require.NotNil(t, body.Text)
+	assert.Equal(t, "high", body.Text.Verbosity)
+	assert.Equal(t, "commentary", body.Phase)
+}

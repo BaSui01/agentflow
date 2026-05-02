@@ -11,7 +11,8 @@ import (
 )
 
 func TestQwenRequestHook_ThinkingModeUsesLatestQwen3AndCompatFlags(t *testing.T) {
-	req := &llm.ChatRequest{ReasoningMode: "thinking"}
+	budget := int32(2048)
+	req := &llm.ChatRequest{ReasoningMode: "thinking", ThinkingBudget: &budget}
 	body := &providerbase.OpenAICompatRequest{Model: "qwen3-235b-a22b"}
 
 	qwenRequestHook(req, body)
@@ -21,6 +22,8 @@ func TestQwenRequestHook_ThinkingModeUsesLatestQwen3AndCompatFlags(t *testing.T)
 	assert.True(t, *body.EnableThinking)
 	require.NotNil(t, body.IncrementalOutput)
 	assert.True(t, *body.IncrementalOutput)
+	require.NotNil(t, body.ThinkingBudget)
+	assert.Equal(t, 2048, *body.ThinkingBudget)
 }
 
 func TestQwenRequestHook_ThinkingModeDefaultsToSnapshotWhenModelEmpty(t *testing.T) {
