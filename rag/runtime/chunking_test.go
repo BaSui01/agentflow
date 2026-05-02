@@ -16,6 +16,14 @@ func (m *mockTokenizer) CountTokens(text string) int {
 	return len(text) / 4
 }
 
+func (m *mockTokenizer) Encode(text string) []int {
+	tokens := make([]int, len(text)/4)
+	for i := range tokens {
+		tokens[i] = i
+	}
+	return tokens
+}
+
 func TestDefaultChunkingConfig(t *testing.T) {
 	cfg := DefaultChunkingConfig()
 	assert.Equal(t, ChunkingRecursive, cfg.Strategy)
