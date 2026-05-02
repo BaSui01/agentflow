@@ -1,0 +1,4 @@
+server:
+  allow_no_auth: true
+  api_keys:
+    - "af-dev-key-12345"

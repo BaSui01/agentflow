@@ -34,29 +34,30 @@ services:
       AGENTFLOW_SERVER_HTTP_PORT: "8080"
       AGENTFLOW_SERVER_METRICS_PORT: "9091"
       AGENTFLOW_SERVER_METRICS_BIND_ADDRESS: "0.0.0.0"
+      AGENTFLOW_SERVER_ALLOW_NO_AUTH: "true"
       # Redis 配置
       AGENTFLOW_REDIS_ADDR: "redis:6379"
       AGENTFLOW_REDIS_PASSWORD: ""
       AGENTFLOW_REDIS_DB: "0"
+      # 多模态配置 - 使用 memory 后端避免 Redis TLS 要求
+      AGENTFLOW_MULTIMODAL_REFERENCE_STORE_BACKEND: "memory"
       # PostgreSQL 配置
       AGENTFLOW_DATABASE_HOST: "postgres"
       AGENTFLOW_DATABASE_PORT: "5432"
       AGENTFLOW_DATABASE_USER: "agentflow"
       AGENTFLOW_DATABASE_PASSWORD: "agentflow_secret"
       AGENTFLOW_DATABASE_NAME: "agentflow"
+      AGENTFLOW_DATABASE_SSL_MODE: "disable"
       # Qdrant 配置
       AGENTFLOW_QDRANT_HOST: "qdrant"
       AGENTFLOW_QDRANT_PORT: "6334"
-      # MongoDB 配置
-      AGENTFLOW_MONGODB_HOST: "mongodb"
-      AGENTFLOW_MONGODB_PORT: "27017"
-      AGENTFLOW_MONGODB_USER: "agentflow"
-      AGENTFLOW_MONGODB_PASSWORD: "agentflow_secret"
-      AGENTFLOW_MONGODB_DATABASE: "agentflow"
-      AGENTFLOW_MONGODB_AUTH_SOURCE: "admin"
+      # MongoDB 配置（复用宿主机已有的 ns-mongo）
+      AGENTFLOW_MONGODB_URI: "mongodb://novel:Ud1pMDc73B04re6kibIKvmtwaHWq8VX5@host.docker.internal:27017/agentflow?authSource=admin&directConnection=true"
       # 日志配置
       AGENTFLOW_LOG_LEVEL: "info"
       AGENTFLOW_LOG_FORMAT: "json"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./config:/app/config:ro
       - agentflow_data:/app/data
@@ -65,8 +66,7 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      mongodb:
-        condition: service_healthy
+
       qdrant:
         condition: service_started
     healthcheck:
@@ -75,6 +75,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    command: ["serve", "--config", "/app/config/dev.yaml"]
     networks:
       - agentflow-network
 
@@ -123,27 +124,8 @@ services:
       - agentflow-network
 
   # ---------------------------------------------------------------------------
-  # MongoDB - Document Store
+  # MongoDB - 复用宿主机已有的 ns-mongo (localhost:27017)
   # ---------------------------------------------------------------------------
-  mongodb:
-    image: mongo:7
-    container_name: agentflow-mongodb
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: agentflow
-      MONGO_INITDB_ROOT_PASSWORD: agentflow_secret
-      MONGO_INITDB_DATABASE: agentflow
-    volumes:
-      - mongodb_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - agentflow-network
 
   # ---------------------------------------------------------------------------
   # Qdrant - Vector Store
