@@ -11,6 +11,20 @@ import (
 	"go.uber.org/zap"
 )
 
+type promptContextMemoryRuntimeStub struct {
+	recallCalled bool
+	layers       []agentcontext.PromptLayer
+}
+
+func (s *promptContextMemoryRuntimeStub) RecallForPrompt(_ context.Context, _ string, _ MemoryRecallOptions) ([]agentcontext.PromptLayer, error) {
+	s.recallCalled = true
+	return append([]agentcontext.PromptLayer(nil), s.layers...), nil
+}
+
+func (s *promptContextMemoryRuntimeStub) ObserveTurn(context.Context, string, MemoryObservationInput) error {
+	return nil
+}
+
 func TestPrepareRuntimePromptContextUsesAssemblerWithRetrievedContext(t *testing.T) {
 	manager := &promptContextCapturingManager{}
 	agent := newPromptContextTestAgent()
@@ -79,6 +93,32 @@ func TestPrepareRuntimePromptContextPrefersHandoffConversation(t *testing.T) {
 	assert.Equal(t, "memory item", result.messages[2].Content)
 	assert.Equal(t, handoff[0], result.messages[3])
 	assert.Equal(t, types.Message{Role: types.RoleUser, Content: "continue"}, result.messages[4])
+}
+
+func TestPrepareRuntimePromptContext_SkipsMemoryRecallWhenExternalContextPolicyDisablesRecall(t *testing.T) {
+	agent := newPromptContextTestAgent()
+	agent.memoryRuntime = &promptContextMemoryRuntimeStub{
+		layers: []agentcontext.PromptLayer{{ID: "memory-recall", Type: agentcontext.SegmentEphemeral, Role: types.RoleSystem, Content: "recalled"}},
+	}
+	agent.config.Control.MemoryExternalContext = &types.MemoryExternalContextPolicy{
+		DisableRecallOnExternalContext: true,
+	}
+	input := &Input{
+		Content: "question",
+		Context: map[string]any{
+			"retrieval_context": []agentcontext.RetrievalItem{{Title: "doc", Content: "external"}},
+		},
+	}
+
+	result := agent.prepareRuntimePromptContext(context.Background(), input, NewPromptBundleFromIdentity("v1", "system"), nil)
+
+	require.NotNil(t, result)
+	stub, ok := agent.memoryRuntime.(*promptContextMemoryRuntimeStub)
+	require.True(t, ok)
+	assert.False(t, stub.recallCalled)
+	for _, msg := range result.messages {
+		assert.NotEqual(t, "recalled", msg.Content)
+	}
 }
 
 func newPromptContextTestAgent() *BaseAgent {

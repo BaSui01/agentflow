@@ -181,6 +181,9 @@ func (r *ExtensionRegistry[InputT, OutputT]) SaveToEnhancedMemory(ctx context.Co
 	if r.enhancedMemory == nil {
 		return
 	}
+	if shouldSkipEnhancedMemoryWriteback(ctx) {
+		return
+	}
 	recordedAt := record.RecordedAt
 	if recordedAt.IsZero() {
 		recordedAt = time.Now()
@@ -209,6 +212,19 @@ func (r *ExtensionRegistry[InputT, OutputT]) SaveToEnhancedMemory(ctx context.Co
 	}
 	if err := r.enhancedMemory.RecordEpisode(ctx, event); err != nil {
 		r.logger.Warn("failed to record episode", zap.Error(err))
+	}
+}
+
+func shouldSkipEnhancedMemoryWriteback(ctx context.Context) bool {
+	policy, ok := types.MemoryExternalContextPolicyValue(ctx)
+	if !ok || policy == "" {
+		return false
+	}
+	switch policy {
+	case "disable_all", "disable_write", "disable_recall,disable_write", "disable_write,disable_recall":
+		return true
+	default:
+		return false
 	}
 }
 

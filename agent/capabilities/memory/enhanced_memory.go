@@ -414,6 +414,9 @@ func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID strin
 	if !m.config.LongTermEnabled {
 		return nil, fmt.Errorf("long-term memory not enabled")
 	}
+	if skipExternalMemoryRecall(ctx) {
+		return []types.VectorSearchResult{}, nil
+	}
 
 	if m.longTermRetriever != nil {
 		return m.searchViaRetriever(ctx, agentID, queryVector, topK)
@@ -585,6 +588,9 @@ func (m *EnhancedMemorySystem) StartConsolidation(ctx context.Context) error {
 	if !m.config.ConsolidationEnabled || m.consolidator == nil {
 		return fmt.Errorf("memory consolidation not configured")
 	}
+	if skipExternalMemoryWrite(ctx) {
+		return nil
+	}
 
 	return m.consolidator.Start(ctx)
 }
@@ -602,6 +608,9 @@ func (m *EnhancedMemorySystem) StopConsolidation() error {
 func (m *EnhancedMemorySystem) ConsolidateOnce(ctx context.Context) error {
 	if !m.config.ConsolidationEnabled || m.consolidator == nil {
 		return fmt.Errorf("memory consolidation not configured")
+	}
+	if skipExternalMemoryWrite(ctx) {
+		return nil
 	}
 	return m.consolidator.consolidate(ctx)
 }

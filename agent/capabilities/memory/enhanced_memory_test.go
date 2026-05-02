@@ -67,6 +67,21 @@ func TestEnhancedMemorySystem_SaveSearchLongTerm(t *testing.T) {
 	assert.InDelta(t, 1.0, results[0].Score, 0.01)
 }
 
+func TestEnhancedMemorySystem_SearchLongTerm_SkipsWhenExternalPolicyDisablesRecall(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultEnhancedMemoryConfig()
+	cfg.ConsolidationEnabled = false
+	cfg.LongTermEnabled = true
+	cfg.VectorDimension = 3
+	sys := NewDefaultEnhancedMemorySystem(cfg, zap.NewNop())
+	ctx := types.WithMemoryExternalContextPolicy(context.Background(), "disable_recall,disable_write")
+
+	require.NoError(t, sys.SaveLongTerm(context.Background(), "agent-1", "important fact", []float64{1, 0, 0}, nil))
+	results, err := sys.SearchLongTerm(ctx, "agent-1", []float64{1, 0, 0}, 5)
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
 func TestEnhancedMemorySystem_LongTermDisabled(t *testing.T) {
 	t.Parallel()
 	cfg := DefaultEnhancedMemoryConfig()
@@ -175,6 +190,16 @@ func TestEnhancedMemorySystem_ConsolidateOnce(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, sys.SaveShortTerm(ctx, "agent-1", "data", nil))
+	require.NoError(t, sys.ConsolidateOnce(ctx))
+}
+
+func TestEnhancedMemorySystem_ConsolidateOnce_SkipsWhenExternalPolicyDisablesWrite(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultEnhancedMemoryConfig()
+	cfg.ConsolidationEnabled = true
+	sys := NewDefaultEnhancedMemorySystem(cfg, zap.NewNop())
+	ctx := types.WithMemoryExternalContextPolicy(context.Background(), "disable_recall,disable_write")
+
 	require.NoError(t, sys.ConsolidateOnce(ctx))
 }
 

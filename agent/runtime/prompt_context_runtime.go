@@ -199,7 +199,7 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 		CodeVerificationRequired: codeTaskRequired(input, nil, nil),
 		ContextStatus:            status,
 	})
-	if b.memoryRuntime != nil && plan.InjectMemoryRecall {
+	if b.memoryRuntime != nil && plan.InjectMemoryRecall && !skipMemoryRecallForExternalContext(b.config.ExecutionOptions().Control.MemoryExternalContext, input.Context) {
 		recallLayers, err := b.memoryRuntime.RecallForPrompt(ctx, b.ID(), MemoryRecallOptions{
 			Query:  input.Content,
 			Status: status,
@@ -212,6 +212,44 @@ func (b *BaseAgent) buildEphemeralPromptLayers(
 		}
 	}
 	return layers, plan
+}
+
+func skipMemoryRecallForExternalContext(policy *types.MemoryExternalContextPolicy, values map[string]any) bool {
+	if policy == nil {
+		return false
+	}
+	if !hasExternalContext(values) {
+		return false
+	}
+	return policy.DisableAllOnExternalContext || policy.DisableRecallOnExternalContext
+}
+
+func hasExternalContext(values map[string]any) bool {
+	if len(values) == 0 {
+		return false
+	}
+	if items := retrievalItemsFromInputContext(values); len(items) > 0 {
+		return true
+	}
+	if toolStates := toolStatesFromInputContext(values); len(toolStates) > 0 {
+		return true
+	}
+	if raw, ok := values["external_context"]; ok {
+		if flag, ok := raw.(bool); ok && flag {
+			return true
+		}
+	}
+	if raw, ok := values["mcp_context"]; ok {
+		if flag, ok := raw.(bool); ok && flag {
+			return true
+		}
+	}
+	if raw, ok := values["web_search_context"]; ok {
+		if flag, ok := raw.(bool); ok && flag {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *BaseAgent) estimateContextStatus(

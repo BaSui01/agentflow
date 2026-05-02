@@ -163,6 +163,9 @@ func NewDefaultMemoryRuntime(facadeProvider func() *UnifiedMemoryFacade, basePro
 }
 
 func (r *DefaultMemoryRuntime) RecallForPrompt(ctx context.Context, agentID string, opts MemoryRecallOptions) ([]agentcontext.PromptLayer, error) {
+	if skipExternalMemoryRecall(ctx) {
+		return nil, nil
+	}
 	base := r.base()
 	if base == nil || strings.TrimSpace(opts.Query) == "" {
 		return nil, nil
@@ -204,6 +207,9 @@ func (r *DefaultMemoryRuntime) RecallForPrompt(ctx context.Context, agentID stri
 }
 
 func (r *DefaultMemoryRuntime) ObserveTurn(ctx context.Context, agentID string, turn MemoryObservationInput) error {
+	if skipExternalMemoryWrite(ctx) {
+		return nil
+	}
 	facade := r.facade()
 	if facade == nil {
 		return nil
@@ -226,6 +232,32 @@ func (r *DefaultMemoryRuntime) ObserveTurn(ctx context.Context, agentID string, 
 		},
 	})
 	return nil
+}
+
+func skipExternalMemoryRecall(ctx context.Context) bool {
+	policy, ok := types.MemoryExternalContextPolicyValue(ctx)
+	if !ok || policy == "" {
+		return false
+	}
+	switch policy {
+	case "disable_all", "disable_recall", "disable_recall,disable_write", "disable_write,disable_recall":
+		return true
+	default:
+		return false
+	}
+}
+
+func skipExternalMemoryWrite(ctx context.Context) bool {
+	policy, ok := types.MemoryExternalContextPolicyValue(ctx)
+	if !ok || policy == "" {
+		return false
+	}
+	switch policy {
+	case "disable_all", "disable_write", "disable_recall,disable_write", "disable_write,disable_recall":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *DefaultMemoryRuntime) facade() *UnifiedMemoryFacade {
