@@ -14,7 +14,7 @@ import (
 
 var toolRegistrationNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,119}$`)
 
-// TODO(refactor): ToolRegistryService should be moved to internal/app/service or a domain layer package.
+// TODO(refactor, #19): ToolRegistryService should be moved to internal/app/service or a domain layer package.
 // It currently resides in api/handlers but contains business logic that belongs in Layer 2-3.
 //
 // ToolRegistryRuntime describes runtime hooks used by tool registration API.

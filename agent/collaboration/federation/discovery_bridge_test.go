@@ -278,8 +278,9 @@ func TestAutoSync_CallbackCtxPropagatesParentCancellation(t *testing.T) {
 	orch := newBridgeTestOrchestrator(t)
 	reg := newMockDiscoveryRegistry()
 
-	// capturedCtx 由 register 回调内的 syncCtx 提供，registerStarted 通知主流程
-	// 已经进入注册函数（即回调链已经触发并派生出 syncCtx）。
+	// capturedCh 收集 register 回调内观察到的 syncCtx；
+	// registerEntered 在回调进入 RegisterAgent 时关闭；
+	// releaseRegister 由测试主流程关闭，让 mock 退出。
 	capturedCh := make(chan context.Context, 1)
 	registerEntered := make(chan struct{})
 	releaseRegister := make(chan struct{})
@@ -290,13 +291,11 @@ func TestAutoSync_CallbackCtxPropagatesParentCancellation(t *testing.T) {
 		default:
 		}
 		close(registerEntered)
-		// 阻塞到主流程取消父 ctx 或测试结束。
+		// 阻塞到 ctx 取消（期望路径）或 release 信号（兜底）。
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-releaseRegister:
-			return nil
-		case <-time.After(2 * time.Second):
 			return nil
 		}
 	}
@@ -313,8 +312,8 @@ func TestAutoSync_CallbackCtxPropagatesParentCancellation(t *testing.T) {
 	defer bridge.Stop()
 	defer close(releaseRegister)
 
-	// 触发 OnNodeRegister 回调。
-	orch.RegisterNode(testNode("n1", "node-1", "chat"))
+	// orchestrator 同步调用 callback；放进 goroutine 避免阻塞主流程。
+	go orch.RegisterNode(testNode("n1", "node-1", "chat"))
 
 	// 等待回调进入 RegisterAgent。
 	select {
@@ -331,11 +330,10 @@ func TestAutoSync_CallbackCtxPropagatesParentCancellation(t *testing.T) {
 	}
 
 	// 取消父 ctx，期望 capturedCtx 也随之 Done。
-	t.Logf("captured ctx string: %v", capturedCtx)
-	t.Logf("captured ctx err before cancel: %v", capturedCtx.Err())
+	if capturedCtx.Err() != nil {
+		t.Fatalf("captured ctx already done before parent cancel: %v", capturedCtx.Err())
+	}
 	parentCancel()
-	time.Sleep(50 * time.Millisecond)
-	t.Logf("captured ctx err after cancel: %v", capturedCtx.Err())
 
 	select {
 	case <-capturedCtx.Done():
@@ -367,8 +365,6 @@ func TestAutoSync_CallbackCtxCancelsOnStop(t *testing.T) {
 			return ctx.Err()
 		case <-releaseRegister:
 			return nil
-		case <-time.After(2 * time.Second):
-			return nil
 		}
 	}
 
@@ -384,7 +380,7 @@ func TestAutoSync_CallbackCtxCancelsOnStop(t *testing.T) {
 	}
 	defer close(releaseRegister)
 
-	orch.RegisterNode(testNode("n2", "node-2", "translate"))
+	go orch.RegisterNode(testNode("n2", "node-2", "translate"))
 
 	select {
 	case <-registerEntered:
@@ -399,6 +395,9 @@ func TestAutoSync_CallbackCtxCancelsOnStop(t *testing.T) {
 		t.Fatal("could not capture syncCtx from callback")
 	}
 
+	if capturedCtx.Err() != nil {
+		t.Fatalf("captured ctx already done before Stop: %v", capturedCtx.Err())
+	}
 	bridge.Stop()
 
 	select {

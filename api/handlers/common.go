@@ -88,7 +88,7 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 
 const maxRequestBodyBytes = 1 << 20 // 1 MB
 
-// TODO(V-008): 引入统一的 ValidateRequest 中间件，替代在每个 handler 中手动校验。
+// TODO(V-008, #16): 引入统一的 ValidateRequest 中间件，替代在每个 handler 中手动校验。
 
 // DecodeJSONBody 解码 JSON 请求体
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {

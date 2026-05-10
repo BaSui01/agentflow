@@ -6,7 +6,7 @@
 // - 自有接口：WriteError / WriteSuccess，输出 api.Response 统一格式（success/error/data）
 // 两套格式分别满足不同客户端契约，不做统一。
 //
-// TODO(C-002): OpenAI 兼容错误格式与主 API 的 api.ErrorInfo 不一致，
+// TODO(C-002, #17): OpenAI 兼容错误格式与主 API 的 api.ErrorInfo 不一致，
 // 需要在文档中说明或增加适配层统一。
 package handlers
 

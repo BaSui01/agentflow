@@ -36,6 +36,13 @@ type DiscoveryBridge struct {
 	logger       *zap.Logger
 	stopCh       chan struct{}
 	closeOnce    sync.Once
+
+	// lifecycleCtx 在 Start 时由父 ctx 派生，用于桥接 auto-sync 回调中
+	// 必须的"短超时 + 跟随父生命周期"语义。lifecycleCancel 由 Stop 调用。
+	// 通过 lifecycleCtx 派生 syncCtx 可避免回调泄漏到父 ctx 之外（issue #12）。
+	lifecycleMu     sync.Mutex
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 }
 
 // BridgeConfig holds configuration for the DiscoveryBridge.
@@ -119,9 +126,17 @@ func (b *DiscoveryBridge) SyncAllNodes(ctx context.Context) error {
 
 // Start begins periodic sync and auto-sync on node changes.
 func (b *DiscoveryBridge) Start(ctx context.Context) error {
+	// 派生 lifecycleCtx：所有 auto-sync 回调都从这个 ctx 派生 syncCtx，
+	// 这样父 ctx 取消或 Stop 触发 lifecycleCancel 都能让回调中
+	// 飞行中的 IO 立即取消（issue #12）。
+	b.lifecycleMu.Lock()
+	b.lifecycleCtx, b.lifecycleCancel = context.WithCancel(ctx)
+	lifecycleCtx := b.lifecycleCtx
+	b.lifecycleMu.Unlock()
+
 	if b.config.AutoSync {
 		b.orchestrator.SetOnNodeRegister(func(node *FederatedNode) {
-			syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			syncCtx, cancel := context.WithTimeout(lifecycleCtx, 10*time.Second)
 			defer cancel()
 			if err := b.SyncNode(syncCtx, node); err != nil {
 				b.logger.Warn("auto-sync on register failed",
@@ -132,7 +147,7 @@ func (b *DiscoveryBridge) Start(ctx context.Context) error {
 		})
 
 		b.orchestrator.SetOnNodeUnregister(func(nodeID string) {
-			syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			syncCtx, cancel := context.WithTimeout(lifecycleCtx, 10*time.Second)
 			defer cancel()
 			if err := b.registry.UnregisterAgent(syncCtx, nodeID); err != nil {
 				b.logger.Warn("auto-sync on unregister failed",
@@ -143,7 +158,7 @@ func (b *DiscoveryBridge) Start(ctx context.Context) error {
 		})
 
 		b.orchestrator.SetOnNodeStatusChange(func(nodeID string, status NodeStatus) {
-			syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			syncCtx, cancel := context.WithTimeout(lifecycleCtx, 10*time.Second)
 			defer cancel()
 			if err := b.registry.UpdateAgentStatus(syncCtx, nodeID, string(status)); err != nil {
 				b.logger.Warn("auto-sync on status change failed",
@@ -170,7 +185,15 @@ func (b *DiscoveryBridge) Start(ctx context.Context) error {
 
 // Stop stops the bridge. It is safe to call multiple times.
 func (b *DiscoveryBridge) Stop() {
-	b.closeOnce.Do(func() { close(b.stopCh) })
+	b.closeOnce.Do(func() {
+		close(b.stopCh)
+		// 取消 lifecycleCtx，让所有飞行中的 auto-sync 回调立即退出（issue #12）。
+		b.lifecycleMu.Lock()
+		if b.lifecycleCancel != nil {
+			b.lifecycleCancel()
+		}
+		b.lifecycleMu.Unlock()
+	})
 	b.logger.Info("discovery bridge stopped")
 }
 
