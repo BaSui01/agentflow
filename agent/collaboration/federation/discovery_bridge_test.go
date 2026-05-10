@@ -331,7 +331,11 @@ func TestAutoSync_CallbackCtxPropagatesParentCancellation(t *testing.T) {
 	}
 
 	// 取消父 ctx，期望 capturedCtx 也随之 Done。
+	t.Logf("captured ctx string: %v", capturedCtx)
+	t.Logf("captured ctx err before cancel: %v", capturedCtx.Err())
 	parentCancel()
+	time.Sleep(50 * time.Millisecond)
+	t.Logf("captured ctx err after cancel: %v", capturedCtx.Err())
 
 	select {
 	case <-capturedCtx.Done():
