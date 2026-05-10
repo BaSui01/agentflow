@@ -381,30 +381,4 @@ func CreateAgentCard(name, description, url, version string, capabilities []a2as
 	return card
 }
 
-// 全球发现服务实例
-var (
-	globalService     *DiscoveryService
-	globalServiceOnce sync.Once
-	globalServiceMu   sync.RWMutex
-)
 
-// InitGlobal Discovery Service初始化了全球发现服务.
-func InitGlobalDiscoveryService(config *ServiceConfig, logger *zap.Logger) {
-	globalServiceOnce.Do(func() {
-		globalService = NewDiscoveryService(config, logger)
-	})
-}
-
-// 获取全球 Discovery Service返回了全球发现服务.
-func GetGlobalDiscoveryService() *DiscoveryService {
-	globalServiceMu.RLock()
-	defer globalServiceMu.RUnlock()
-	return globalService
-}
-
-// 设置全局 发现服务设置全球发现服务.
-func SetGlobalDiscoveryService(service *DiscoveryService) {
-	globalServiceMu.Lock()
-	defer globalServiceMu.Unlock()
-	globalService = service
-}

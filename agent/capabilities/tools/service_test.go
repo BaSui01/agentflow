@@ -294,21 +294,6 @@ func TestCreateAgentCard(t *testing.T) {
 	assert.Len(t, card.Capabilities, 2)
 }
 
-func TestSetGlobalDiscoveryService(t *testing.T) {
-	cfg := DefaultServiceConfig()
-	cfg.Registry.EnableHealthCheck = false
-	cfg.Protocol.EnableHTTP = false
-	cfg.Protocol.EnableMulticast = false
-
-	svc := NewDiscoveryService(cfg, zap.NewNop())
-	SetGlobalDiscoveryService(svc)
-	got := GetGlobalDiscoveryService()
-	assert.Equal(t, svc, got)
-
-	// Cleanup
-	SetGlobalDiscoveryService(nil)
-}
-
 func TestDefaultServiceConfig(t *testing.T) {
 	cfg := DefaultServiceConfig()
 	assert.NotNil(t, cfg.Registry)

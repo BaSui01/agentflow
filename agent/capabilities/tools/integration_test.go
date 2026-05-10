@@ -290,12 +290,3 @@ func TestAgentDiscoveryIntegration_DiscoveryService(t *testing.T) {
 	svc, integration := newTestIntegration(t)
 	assert.Equal(t, svc, integration.DiscoveryService())
 }
-
-func TestSetGlobalIntegration(t *testing.T) {
-	svc := NewDiscoveryService(nil, nil)
-	integration := NewAgentDiscoveryIntegration(svc, nil, nil)
-	SetGlobalIntegration(integration)
-	got := GetGlobalIntegration()
-	assert.Equal(t, integration, got)
-	SetGlobalIntegration(nil)
-}

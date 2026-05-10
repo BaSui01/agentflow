@@ -356,30 +356,4 @@ func (i *AgentDiscoveryIntegration) DiscoveryService() *DiscoveryService {
 	return i.service
 }
 
-// 全球一体化实例
-var (
-	globalIntegration     *AgentDiscoveryIntegration
-	globalIntegrationOnce sync.Once
-	globalIntegrationMu   sync.RWMutex
-)
 
-// InitGlobal集成初始化了全球物剂发现集成.
-func InitGlobalIntegration(service *DiscoveryService, config *IntegrationConfig, logger *zap.Logger) {
-	globalIntegrationOnce.Do(func() {
-		globalIntegration = NewAgentDiscoveryIntegration(service, config, logger)
-	})
-}
-
-// Get Global Introduction返回全球代理发现集成.
-func GetGlobalIntegration() *AgentDiscoveryIntegration {
-	globalIntegrationMu.RLock()
-	defer globalIntegrationMu.RUnlock()
-	return globalIntegration
-}
-
-// SetGlobal Introduction设定了全球物剂发现集成.
-func SetGlobalIntegration(integration *AgentDiscoveryIntegration) {
-	globalIntegrationMu.Lock()
-	defer globalIntegrationMu.Unlock()
-	globalIntegration = integration
-}

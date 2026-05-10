@@ -117,17 +117,6 @@ func TestDiscoveryProtocol_StartStop_WithHTTP(t *testing.T) {
 	require.NoError(t, proto.Stop(ctx))
 }
 
-func TestInitGlobalIntegration(t *testing.T) {
-	// Reset global state for test
-	SetGlobalIntegration(nil)
-
-	service := NewDiscoveryService(nil, zap.NewNop())
-	InitGlobalIntegration(service, nil, zap.NewNop())
-
-	integration := GetGlobalIntegration()
-	assert.NotNil(t, integration)
-}
-
 func TestDiscoveryProtocol_MatchesFilter_LocalRemote(t *testing.T) {
 	proto := NewDiscoveryProtocol(&ProtocolConfig{EnableLocal: true}, nil, zap.NewNop())
 	ctx := context.Background()
