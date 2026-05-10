@@ -148,14 +148,14 @@ func runWithMigrator(
 func runMigratorCommand(
 	flagSetName string,
 	args []string,
-	createFailureMessage string,
+	_ string,
 	runFailureMessage string,
 	action func(context.Context, *migration.CLI) error,
 ) {
 	fs := flag.NewFlagSet(flagSetName, flag.ExitOnError)
 	migrator, err := createMigrator(fs, args)
 	if err != nil {
-		fatalf("%s: %v", createFailureMessage, err)
+		fatalf("Failed to create migrator: %v", err)
 	}
 
 	if err := runWithMigrator(migrator, action); err != nil {

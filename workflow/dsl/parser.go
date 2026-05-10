@@ -136,8 +136,9 @@ func (p *Parser) buildWorkflow(
 		WithDescription(description).
 		WithLogger(zap.NewNop())
 
-	for _, nodeDef := range nodesDef.Nodes {
-		node, err := p.buildNode(&nodeDef, dsl, vars)
+	for i := range nodesDef.Nodes {
+		nodeDef := &nodesDef.Nodes[i]
+		node, err := p.buildNode(nodeDef, dsl, vars)
 		if err != nil {
 			return nil, fmt.Errorf("build node %s: %w", nodeDef.ID, err)
 		}
@@ -145,19 +146,9 @@ func (p *Parser) buildWorkflow(
 		nodeBuilder := builder.AddNode(node.ID, node.Type)
 		switch node.Type {
 		case core.NodeTypeAction:
-			if node.Step != nil {
-				nodeBuilder.WithStep(node.Step)
-			}
+			p.buildActionNode(nodeBuilder, node)
 		case core.NodeTypeCondition:
-			if node.Condition != nil {
-				nodeBuilder.WithCondition(node.Condition)
-			}
-			if len(nodeDef.OnTrue) > 0 {
-				nodeBuilder.WithOnTrue(nodeDef.OnTrue...)
-			}
-			if len(nodeDef.OnFalse) > 0 {
-				nodeBuilder.WithOnFalse(nodeDef.OnFalse...)
-			}
+			p.buildConditionNode(nodeBuilder, node, nodeDef)
 		case core.NodeTypeLoop:
 			if node.LoopConfig != nil {
 				nodeBuilder.WithLoop(*node.LoopConfig)
@@ -197,6 +188,24 @@ func (p *Parser) buildWorkflow(
 		return nil, err
 	}
 	return wf, nil
+}
+
+func (p *Parser) buildActionNode(builder *core.NodeBuilder, node *core.DAGNode) {
+	if node.Step != nil {
+		builder.WithStep(node.Step)
+	}
+}
+
+func (p *Parser) buildConditionNode(builder *core.NodeBuilder, node *core.DAGNode, def *NodeDef) {
+	if node.Condition != nil {
+		builder.WithCondition(node.Condition)
+	}
+	if len(def.OnTrue) > 0 {
+		builder.WithOnTrue(def.OnTrue...)
+	}
+	if len(def.OnFalse) > 0 {
+		builder.WithOnFalse(def.OnFalse...)
+	}
 }
 
 // buildNode 构建单个节点
@@ -481,7 +490,7 @@ func (p *Parser) effectiveStepDeps() engine.StepDependencies {
 		deps.ToolRegistry = noopToolRegistry{}
 	}
 	if deps.HumanHandler == nil {
-		deps.HumanHandler = noopHumanHandler{}
+		deps.HumanHandler = &noopHumanHandler{}
 	}
 	if deps.AgentExecutor == nil {
 		deps.AgentExecutor = noopAgentExecutor{}
@@ -567,7 +576,7 @@ func (noopToolRegistry) ExecuteTool(ctx context.Context, name string, params map
 
 type noopHumanHandler struct{}
 
-func (noopHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
+func (p *noopHumanHandler) RequestInput(ctx context.Context, prompt, inputType string, options []string) (*core.HumanInputResult, error) {
 	return nil, fmt.Errorf("step dependency not configured")
 }
 

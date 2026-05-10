@@ -57,8 +57,9 @@ func (v *Validator) Validate(dsl *WorkflowDSL) []error {
 	}
 
 	// 验证每个节点
-	for _, node := range dsl.Workflow.Nodes {
-		errs = append(errs, v.validateNode(&node, dsl, nodeIDs)...)
+	for i := range dsl.Workflow.Nodes {
+		node := &dsl.Workflow.Nodes[i]
+		errs = append(errs, v.validateNode(node, dsl, nodeIDs)...)
 	}
 
 	// 验证 Step 定义与类型约束
