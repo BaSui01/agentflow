@@ -28,6 +28,12 @@ type HealthChecker struct {
 	done      chan struct{}
 	closeOnce sync.Once
 	wg        sync.WaitGroup
+
+	// lifecycleCtx 在 Start 时由父 ctx 派生，所有 checkAll/checkAgent 的
+	// 超时 ctx 都从这里派生，使 Stop() 或父 ctx 取消能立即终止飞行中的 IO（issue #12）。
+	lifecycleMu     sync.Mutex
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 }
 
 // 健康检查员Config拥有健康检查员的配置.
@@ -56,22 +62,36 @@ func NewHealthChecker(config *HealthCheckerConfig, registry *CapabilityRegistry,
 
 // 开始体检
 func (h *HealthChecker) Start(ctx context.Context) error {
+	// 派生 lifecycleCtx，所有 checkAll/checkAgent 的超时 ctx 从中派生（issue #12）。
+	h.lifecycleMu.Lock()
+	h.lifecycleCtx, h.lifecycleCancel = context.WithCancel(ctx)
+	lcCtx := h.lifecycleCtx
+	h.lifecycleMu.Unlock()
+
 	h.wg.Add(1)
-	go h.run()
+	go h.run(lcCtx)
 	h.logger.Info("health checker started")
 	return nil
 }
 
 // 停止停止健康检查。
 func (h *HealthChecker) Stop(ctx context.Context) error {
-	h.closeOnce.Do(func() { close(h.done) })
+	h.closeOnce.Do(func() {
+		close(h.done)
+		// 取消 lifecycleCtx 让飞行中的 health check IO 立即退出（issue #12）。
+		h.lifecycleMu.Lock()
+		if h.lifecycleCancel != nil {
+			h.lifecycleCancel()
+		}
+		h.lifecycleMu.Unlock()
+	})
 	h.wg.Wait()
 	h.logger.Info("health checker stopped")
 	return nil
 }
 
 // 运行是主要的健康检查循环。
-func (h *HealthChecker) run() {
+func (h *HealthChecker) run(parentCtx context.Context) {
 	defer h.wg.Done()
 
 	ticker := time.NewTicker(h.config.Interval)
@@ -80,7 +100,9 @@ func (h *HealthChecker) run() {
 	for {
 		select {
 		case <-ticker.C:
-			h.checkAll()
+			h.checkAll(parentCtx)
+		case <-parentCtx.Done():
+			return
 		case <-h.done:
 			return
 		}
@@ -88,8 +110,9 @@ func (h *HealthChecker) run() {
 }
 
 // 对所有注册代理人进行健康检查。
-func (h *HealthChecker) checkAll() {
-	ctx, cancel := context.WithTimeout(context.Background(), h.config.Timeout)
+func (h *HealthChecker) checkAll(parentCtx context.Context) {
+	// 从 lifecycle ctx 派生超时 ctx，使父 ctx 取消能传播到 health 检查 IO（issue #12）。
+	ctx, cancel := context.WithTimeout(parentCtx, h.config.Timeout)
 	defer cancel()
 
 	agents, err := h.registry.ListAgents(ctx)

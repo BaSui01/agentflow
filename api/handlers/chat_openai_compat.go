@@ -6,8 +6,15 @@
 // - 自有接口：WriteError / WriteSuccess，输出 api.Response 统一格式（success/error/data）
 // 两套格式分别满足不同客户端契约，不做统一。
 //
-// TODO(C-002, #17): OpenAI 兼容错误格式与主 API 的 api.ErrorInfo 不一致，
-// 需要在文档中说明或增加适配层统一。
+// 两套 wire format 不会强行统一（保留 OpenAI 客户端兼容性），但 issue #17 要求两者承载的
+// 信息保持一致：
+//   - error.code     = string(types.ErrorCode)（与 api.ErrorInfo.Code 同源）
+//   - error.message  = types.Error.Message（与 api.ErrorInfo.Message 同源）
+//   - HTTP status    = api.HTTPStatusFromErrorCode(code)（与主 API 同一映射表）
+//   - error.type     = openAICompatErrorType(err)，每个 types.ErrorCode 显式映射到 OpenAI 规范
+//     的 error.type（invalid_request_error / authentication_error / permission_error /
+//     not_found_error / rate_limit_error / insufficient_quota / server_error / api_error），
+//     避免大量错误被笼统塞进 server_error 桶里。回归保护见 chat_openai_compat_error_test.go。
 package handlers
 
 import (
@@ -416,17 +423,41 @@ func writeOpenAICompatError(w http.ResponseWriter, err *types.Error) {
 	writeOpenAICompatJSON(w, status, payload)
 }
 
+// openAICompatErrorType 把内部 types.ErrorCode 显式映射到 OpenAI 规范的 error.type。
+// 与 api.HTTPStatusFromErrorCode 的语义保持对称：4xx 客户端错误细分为
+// invalid_request_error / authentication_error / permission_error / not_found_error /
+// rate_limit_error / insufficient_quota；5xx 服务端错误分为 server_error / api_error。
+// 全量映射的回归保护见 TestOpenAICompatErrorType_FullMapping（issue #17）。
 func openAICompatErrorType(err *types.Error) string {
 	if err == nil {
 		return "server_error"
 	}
 	switch err.Code {
-	case types.ErrInvalidRequest:
+	// 4xx 客户端请求问题（参数/格式/上下文/工具入参）
+	case types.ErrInvalidRequest,
+		types.ErrContextTooLong,
+		types.ErrContentFiltered,
+		types.ErrToolValidation:
 		return "invalid_request_error"
+	// 4xx 凭证问题
 	case types.ErrUnauthorized, types.ErrAuthentication:
 		return "authentication_error"
+	// 4xx 授权/策略拒绝
+	case types.ErrForbidden, types.ErrGuardrailsViolated:
+		return "permission_error"
+	// 4xx 资源不存在
+	case types.ErrModelNotFound:
+		return "not_found_error"
+	// 4xx 速率限制
 	case types.ErrRateLimit:
 		return "rate_limit_error"
+	// 402 配额耗尽（OpenAI 习惯用 insufficient_quota）
+	case types.ErrQuotaExceeded:
+		return "insufficient_quota"
+	// 502 上游 API 异常（透传给上层 SDK 一个明确的 api_error 信号）
+	case types.ErrUpstreamError:
+		return "api_error"
+	// 5xx 兜底
 	default:
 		return "server_error"
 	}
