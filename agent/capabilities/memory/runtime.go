@@ -78,7 +78,7 @@ func (f *UnifiedMemoryFacade) SaveInteraction(ctx context.Context, agentID, trac
 	if f.base != nil {
 		userRec := MemoryRecord{
 			AgentID:  agentID,
-			Kind:     MemoryShortTerm,
+			Kind:     MemoryWorking,
 			Content:  userContent,
 			Metadata: map[string]any{"trace_id": traceID, "role": "user"},
 		}
@@ -87,7 +87,7 @@ func (f *UnifiedMemoryFacade) SaveInteraction(ctx context.Context, agentID, trac
 		}
 		agentRec := MemoryRecord{
 			AgentID:  agentID,
-			Kind:     MemoryShortTerm,
+			Kind:     MemoryWorking,
 			Content:  agentContent,
 			Metadata: map[string]any{"trace_id": traceID, "role": "assistant"},
 		}
@@ -228,7 +228,7 @@ func (r *DefaultMemoryRuntime) ObserveTurn(ctx context.Context, agentID string, 
 			"trace_id":         turn.TraceID,
 			"user_content":     turn.UserContent,
 			"assistant_output": turn.AssistantContent,
-			"metadata":         cloneAnyMap(turn.Metadata),
+			"metadata":         cloneMap(turn.Metadata),
 		},
 	})
 	return nil
@@ -272,17 +272,6 @@ func (r *DefaultMemoryRuntime) base() MemoryManager {
 		return nil
 	}
 	return r.baseProvider()
-}
-
-func cloneAnyMap(values map[string]any) map[string]any {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string]any, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
-	return cloned
 }
 
 func normalizeStringSlice(values []string) []string {

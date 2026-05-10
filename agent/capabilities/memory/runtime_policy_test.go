@@ -11,7 +11,8 @@ import (
 )
 
 func TestDefaultMemoryRuntime_RecallForPrompt_SkipsWhenExternalPolicyDisablesRecall(t *testing.T) {
-	base := &stubMemoryManager{records: []MemoryRecord{{Content: "remember this"}}}
+	base := newTestMM()
+	_ = base.Save(context.Background(), MemoryRecord{Content: "remember this", AgentID: "agent-1"})
 	rt := NewDefaultMemoryRuntime(func() *UnifiedMemoryFacade {
 		return NewUnifiedMemoryFacade(base, nil, zap.NewNop())
 	}, func() MemoryManager {
@@ -26,8 +27,8 @@ func TestDefaultMemoryRuntime_RecallForPrompt_SkipsWhenExternalPolicyDisablesRec
 }
 
 func TestDefaultMemoryRuntime_ObserveTurn_SkipsWhenExternalPolicyDisablesWrite(t *testing.T) {
-	base := &stubMemoryManager{}
-	episodic := NewInMemoryEpisodicStore(zap.NewNop())
+	base := newTestMM()
+	episodic := NewInMemoryEpisodicStore(0, zap.NewNop())
 	enhanced := NewEnhancedMemorySystem(
 		NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, zap.NewNop()),
 		nil,
@@ -49,7 +50,10 @@ func TestDefaultMemoryRuntime_ObserveTurn_SkipsWhenExternalPolicyDisablesWrite(t
 	})
 
 	require.NoError(t, err)
-	assert.Empty(t, base.records)
+
+	// After skip, base should have no records
+	records, _ := base.LoadRecent(context.Background(), "agent-1", MemoryWorking, 10)
+	assert.Empty(t, records)
 	events, qErr := episodic.QueryEvents(context.Background(), EpisodicQuery{AgentID: "agent-1"})
 	require.NoError(t, qErr)
 	assert.Empty(t, events)

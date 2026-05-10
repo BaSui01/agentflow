@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -38,7 +37,7 @@ func TestParseAgentIDFromKey(t *testing.T) {
 // --- GetTimeline ---
 
 func TestInMemoryEpisodicStore_GetTimeline(t *testing.T) {
-	store := NewInMemoryEpisodicStore(zap.NewNop())
+	store := NewInMemoryEpisodicStore(0, zap.NewNop())
 	ctx := context.Background()
 
 	now := time.Now()
@@ -124,110 +123,6 @@ func TestEnhancedMemorySystem_AddConsolidationStrategy_NilStrategy(t *testing.T)
 	err := sys.AddConsolidationStrategy(nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "strategy is nil")
-}
-
-// --- IntelligentDecay additional coverage ---
-
-func TestIntelligentDecay_UpdateRelevance(t *testing.T) {
-	decay := NewIntelligentDecay(DefaultDecayConfig(), zap.NewNop())
-
-	t.Run("not found", func(t *testing.T) {
-		err := decay.UpdateRelevance("nonexistent", 0.5)
-		assert.ErrorIs(t, err, ErrMemoryNotFound)
-	})
-
-	t.Run("clamp below zero", func(t *testing.T) {
-		decay.Add(&MemoryItem{ID: "m1", Content: "test"})
-		err := decay.UpdateRelevance("m1", -0.5)
-		require.NoError(t, err)
-		item := decay.Get("m1")
-		assert.Equal(t, 0.0, item.Relevance)
-	})
-
-	t.Run("clamp above one", func(t *testing.T) {
-		err := decay.UpdateRelevance("m1", 1.5)
-		require.NoError(t, err)
-		item := decay.Get("m1")
-		assert.Equal(t, 1.0, item.Relevance)
-	})
-}
-
-func TestIntelligentDecay_GetStats(t *testing.T) {
-	decay := NewIntelligentDecay(DefaultDecayConfig(), zap.NewNop())
-
-	t.Run("empty", func(t *testing.T) {
-		stats := decay.GetStats()
-		assert.Equal(t, 0, stats.TotalMemories)
-	})
-
-	t.Run("with items", func(t *testing.T) {
-		decay.Add(&MemoryItem{ID: "m1", Content: "a", Relevance: 0.8})
-		decay.Add(&MemoryItem{ID: "m2", Content: "b", Relevance: 0.6})
-		stats := decay.GetStats()
-		assert.Equal(t, 2, stats.TotalMemories)
-		assert.Greater(t, stats.AverageRelevance, 0.0)
-	})
-}
-
-func TestIntelligentDecay_Search(t *testing.T) {
-	decay := NewIntelligentDecay(DefaultDecayConfig(), zap.NewNop())
-
-	decay.Add(&MemoryItem{ID: "m1", Content: "hello", Vector: []float64{1, 0, 0}})
-	decay.Add(&MemoryItem{ID: "m2", Content: "world", Vector: []float64{0, 1, 0}})
-	decay.Add(&MemoryItem{ID: "m3", Content: "no vector"})
-
-	results := decay.Search([]float64{1, 0, 0}, 2)
-	assert.Len(t, results, 2)
-	assert.Equal(t, "m1", results[0].ID) // most similar
-}
-
-func TestIntelligentDecay_Decay(t *testing.T) {
-	config := DefaultDecayConfig()
-	config.DecayThreshold = 0.9 // high threshold to prune most items
-	config.MaxMemories = 1
-	decay := NewIntelligentDecay(config, zap.NewNop())
-
-	for i := 0; i < 5; i++ {
-		decay.Add(&MemoryItem{
-			ID:        fmt.Sprintf("m%d", i),
-			Content:   "test",
-			Relevance: 0.1,
-		})
-	}
-
-	result := decay.Decay(context.Background())
-	assert.Equal(t, 5, result.TotalBefore)
-	assert.Greater(t, result.PrunedCount, 0)
-}
-
-func TestIntelligentDecay_StartStop(t *testing.T) {
-	config := DefaultDecayConfig()
-	config.DecayInterval = 50 * time.Millisecond
-	decay := NewIntelligentDecay(config, zap.NewNop())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, decay.Start(ctx))
-	// Start again should be no-op
-	require.NoError(t, decay.Start(ctx))
-
-	time.Sleep(100 * time.Millisecond)
-	cancel()
-	decay.Stop()
-}
-
-// --- MemoryItem scoring ---
-
-func TestMemoryItem_CompositeScore(t *testing.T) {
-	item := &MemoryItem{
-		ID:           "test",
-		LastAccessed: time.Now(),
-		Relevance:    0.8,
-		Utility:      0.5,
-	}
-	config := DefaultDecayConfig()
-	score := item.CompositeScore(config)
-	assert.Greater(t, score, 0.0)
-	assert.LessOrEqual(t, score, 1.0)
 }
 
 // --- cosineSimilarity edge cases ---

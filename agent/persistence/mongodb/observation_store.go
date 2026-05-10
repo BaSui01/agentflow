@@ -9,7 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/BaSui01/agentflow/agent/capabilities/memory"
+	obsv "github.com/BaSui01/agentflow/agent/capabilities/memory/observation"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 )
 
@@ -24,7 +24,7 @@ type observationDocument struct {
 	Metadata  map[string]any `bson:"metadata"    json:"metadata,omitempty"`
 }
 
-// MongoObservationStore implements memory.ObservationStore backed by MongoDB.
+// MongoObservationStore implements obsv.ObservationStore backed by MongoDB.
 type MongoObservationStore struct {
 	coll *mongo.Collection
 }
@@ -44,21 +44,21 @@ func NewObservationStore(ctx context.Context, client *mongoclient.Client) (*Mong
 	return &MongoObservationStore{coll: coll}, nil
 }
 
-func (s *MongoObservationStore) Save(ctx context.Context, obs memory.Observation) error {
-	if obs.ID == "" {
-		obs.ID = fmt.Sprintf("obs_%d", time.Now().UnixNano())
+func (s *MongoObservationStore) Save(ctx context.Context, o obsv.Observation) error {
+	if o.ID == "" {
+		o.ID = fmt.Sprintf("obs_%d", time.Now().UnixNano())
 	}
-	if obs.CreatedAt.IsZero() {
-		obs.CreatedAt = time.Now()
+	if o.CreatedAt.IsZero() {
+		o.CreatedAt = time.Now()
 	}
 
 	doc := observationDocument{
-		ID:        obs.ID,
-		AgentID:   obs.AgentID,
-		Date:      obs.Date,
-		Content:   obs.Content,
-		CreatedAt: obs.CreatedAt,
-		Metadata:  obs.Metadata,
+		ID:        o.ID,
+		AgentID:   o.AgentID,
+		Date:      o.Date,
+		Content:   o.Content,
+		CreatedAt: o.CreatedAt,
+		Metadata:  o.Metadata,
 	}
 
 	filter := bson.D{{Key: "_id", Value: doc.ID}}
@@ -69,7 +69,7 @@ func (s *MongoObservationStore) Save(ctx context.Context, obs memory.Observation
 	return err
 }
 
-func (s *MongoObservationStore) LoadRecent(ctx context.Context, agentID string, limit int) ([]memory.Observation, error) {
+func (s *MongoObservationStore) LoadRecent(ctx context.Context, agentID string, limit int) ([]obsv.Observation, error) {
 	filter := bson.D{{Key: "agent_id", Value: agentID}}
 	opts := options.Find().
 		SetSort(bson.D{{Key: "created_at", Value: -1}}).
@@ -78,7 +78,7 @@ func (s *MongoObservationStore) LoadRecent(ctx context.Context, agentID string, 
 	return s.findObservations(ctx, filter, opts)
 }
 
-func (s *MongoObservationStore) LoadByDateRange(ctx context.Context, agentID string, start, end time.Time) ([]memory.Observation, error) {
+func (s *MongoObservationStore) LoadByDateRange(ctx context.Context, agentID string, start, end time.Time) ([]obsv.Observation, error) {
 	filter := bson.D{
 		{Key: "agent_id", Value: agentID},
 		{Key: "created_at", Value: bson.D{
@@ -91,7 +91,7 @@ func (s *MongoObservationStore) LoadByDateRange(ctx context.Context, agentID str
 	return s.findObservations(ctx, filter, opts)
 }
 
-func (s *MongoObservationStore) findObservations(ctx context.Context, filter bson.D, opts *options.FindOptionsBuilder) ([]memory.Observation, error) {
+func (s *MongoObservationStore) findObservations(ctx context.Context, filter bson.D, opts *options.FindOptionsBuilder) ([]obsv.Observation, error) {
 	cursor, err := s.coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -103,9 +103,9 @@ func (s *MongoObservationStore) findObservations(ctx context.Context, filter bso
 		return nil, err
 	}
 
-	results := make([]memory.Observation, 0, len(docs))
+	results := make([]obsv.Observation, 0, len(docs))
 	for _, doc := range docs {
-		results = append(results, memory.Observation{
+		results = append(results, obsv.Observation{
 			ID:        doc.ID,
 			AgentID:   doc.AgentID,
 			Date:      doc.Date,
@@ -117,4 +117,4 @@ func (s *MongoObservationStore) findObservations(ctx context.Context, filter bso
 	return results, nil
 }
 
-var _ memory.ObservationStore = (*MongoObservationStore)(nil)
+var _ obsv.ObservationStore = (*MongoObservationStore)(nil)

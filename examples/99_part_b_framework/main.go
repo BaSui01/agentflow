@@ -1181,7 +1181,7 @@ func b38MemoryManager() {
 	ctx := context.Background()
 
 	err := mm.Save(ctx, memorycore.MemoryRecord{
-		ID: "rec1", AgentID: "agent1", Kind: types.MemoryShortTerm,
+		ID: "rec1", AgentID: "agent1", Kind: types.MemoryWorking,
 		Content: "用户喜欢Go语言", Metadata: map[string]any{"topic": "preference"},
 	})
 	if err != nil {
@@ -1189,7 +1189,7 @@ func b38MemoryManager() {
 		return
 	}
 
-	records, err := mm.LoadRecent(ctx, "agent1", types.MemoryShortTerm, 10)
+	records, err := mm.LoadRecent(ctx, "agent1", types.MemoryWorking, 10)
 	if err != nil {
 		rec("记忆管理器", "FAIL", time.Since(t), fmt.Sprintf("LoadRecent失败: %v", err))
 		return
@@ -1201,14 +1201,14 @@ func b38MemoryManager() {
 		rec("记忆管理器", "WARN", time.Since(t), fmt.Sprintf("records=%d", len(records)))
 	}
 
-	// 测试 Cache 层
-	cache := memorycore.NewCache("agent1", mm, zap.NewNop())
-	cache.LoadRecent(ctx)
-	err = cache.Save(ctx, "新的记忆内容", types.MemoryShortTerm, nil)
+	// 测试 Coordinator 层（取代原 Cache 层）
+	cache := memorycore.NewCoordinator("agent1", mm, zap.NewNop())
+	cache.LoadRecentDefault(ctx)
+	err = cache.Save(ctx, "新的记忆内容", types.MemoryWorking, nil)
 	if err != nil {
-		rec("记忆Cache层", "FAIL", time.Since(t), err.Error())
+		rec("记忆Coordinator层", "FAIL", time.Since(t), err.Error())
 	} else {
-		rec("记忆Cache层", "PASS", time.Since(t), "Cache Save 成功")
+		rec("记忆Coordinator层", "PASS", time.Since(t), "Coordinator Save 成功")
 	}
 }
 

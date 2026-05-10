@@ -13,9 +13,7 @@ const MaxRecentMemory = 50
 type MemoryKind = types.MemoryKind
 
 const (
-	MemoryShortTerm  MemoryKind = types.MemoryShortTerm
 	MemoryWorking    MemoryKind = types.MemoryWorking
-	MemoryLongTerm   MemoryKind = types.MemoryLongTerm
 	MemoryEpisodic   MemoryKind = types.MemoryEpisodic
 	MemorySemantic   MemoryKind = types.MemorySemantic
 	MemoryProcedural MemoryKind = types.MemoryProcedural

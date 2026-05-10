@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 
+	obs "github.com/BaSui01/agentflow/agent/capabilities/memory/observation"
 	"go.uber.org/zap"
 )
 
@@ -43,9 +44,9 @@ type EnhancedMemorySystem struct {
 	semantic KnowledgeGraph
 
 	// 观测记忆 - 对话压缩与精炼
-	observationStore ObservationStore
-	observer         *Observer
-	reflector        *Reflector
+	observationStore obs.ObservationStore
+	observer         *obs.Observer
+	reflector        *obs.Reflector
 
 	// 记忆整合器
 	consolidator     *MemoryConsolidator
@@ -73,13 +74,16 @@ type EnhancedMemoryConfig struct {
 	// 情节记忆配置
 	EpisodicEnabled   bool          `json:"episodic_enabled"`   // 是否启用情节记忆
 	EpisodicRetention time.Duration `json:"episodic_retention"` // 情节记忆保留时间
+	EpisodicMaxEntries int          `json:"episodic_max_entries"` // 情节记忆最大条目数
 
 	// 语义记忆配置
 	SemanticEnabled bool `json:"semantic_enabled"` // 是否启用语义记忆
+	SemanticMaxEntries int `json:"semantic_max_entries"` // 语义记忆最大实体数
 
 	// 观测记忆配置
 	ObservationEnabled bool           `json:"observation_enabled"` // 是否启用观测记忆
-	ObserverConfig     ObserverConfig `json:"observer_config"`     // Observer 配置
+	ObserverConfig     obs.ObserverConfig `json:"observer_config"`     // Observer 配置
+	ObservationMaxEntries int         `json:"observation_max_entries"` // 观测记忆最大条目数
 
 	// 记忆整合配置
 	ConsolidationEnabled  bool          `json:"consolidation_enabled"`  // 是否启用记忆整合
@@ -139,13 +143,6 @@ func toStoreEntries(raw []any) []types.MemoryEntry {
 	return entries
 }
 
-// VectorItem 向量项
-type VectorItem struct {
-	ID       string
-	Vector   []float64
-	Metadata map[string]any
-}
-
 // BatchVectorStore extends VectorStore with batch operations.
 // This is memory-specific and not part of the shared types interface.
 type BatchVectorStore interface {
@@ -192,28 +189,7 @@ type KnowledgeGraph interface {
 	FindPath(ctx context.Context, fromID, toID string, maxDepth int) ([][]string, error)
 }
 
-// Entity 实体
-type Entity struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"`
-	Name       string         `json:"name"`
-	Properties map[string]any `json:"properties"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-}
 
-// Relation 关系
-type Relation struct {
-	ID         string         `json:"id"`
-	FromID     string         `json:"from_id"`
-	ToID       string         `json:"to_id"`
-	Type       string         `json:"type"`
-	Properties map[string]any `json:"properties"`
-	Weight     float64        `json:"weight"`
-	CreatedAt  time.Time      `json:"created_at"`
-}
-
-// MemoryConsolidator 记忆整合器
 type MemoryConsolidator struct {
 	system *EnhancedMemorySystem
 
@@ -246,7 +222,7 @@ func NewEnhancedMemorySystem(
 	longTerm types.VectorStore,
 	episodic EpisodicStore,
 	semantic KnowledgeGraph,
-	observationStore ObservationStore,
+	observationStore obs.ObservationStore,
 	config EnhancedMemoryConfig,
 	logger *zap.Logger,
 ) *EnhancedMemorySystem {
@@ -291,7 +267,19 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 		longTerm = NewInMemoryVectorStore(InMemoryVectorStoreConfig{Dimension: config.VectorDimension}, logger)
 	}
 
-	system := NewEnhancedMemorySystem(shortTerm, working, longTerm, nil, nil, nil, config, logger)
+	var episodic EpisodicStore
+	if config.EpisodicEnabled {
+		episodic = NewInMemoryEpisodicStore(config.EpisodicMaxEntries, logger)
+	}
+
+	var semantic KnowledgeGraph
+	if config.SemanticEnabled {
+		semantic = NewInMemoryKnowledgeGraph(config.SemanticMaxEntries, logger)
+	}
+
+	observationStore := obs.NewInMemoryObservationStore(config.ObservationMaxEntries)
+
+	system := NewEnhancedMemorySystem(shortTerm, working, longTerm, episodic, semantic, observationStore, config, logger)
 	if config.ConsolidationEnabled {
 		_ = system.AddDefaultConsolidationStrategies()
 	}
@@ -507,17 +495,17 @@ func (m *EnhancedMemorySystem) QueryKnowledge(ctx context.Context, entityID stri
 
 // EnableObservationPipeline 启用观测管线（Observer + Reflector），
 // 需要 LLM CompletionFunc 来驱动压缩与精炼。
-func (m *EnhancedMemorySystem) EnableObservationPipeline(completeFn CompletionFunc) {
+func (m *EnhancedMemorySystem) EnableObservationPipeline(completeFn obs.CompletionFunc) {
 	cfg := m.config.ObserverConfig
 	if cfg.MaxMessagesPerBatch == 0 {
-		cfg = DefaultObserverConfig()
+		cfg = obs.DefaultObserverConfig()
 	}
-	m.observer = NewObserver(cfg, completeFn, m.logger)
-	m.reflector = NewReflector(completeFn, m.logger)
+	m.observer = obs.NewObserver(cfg, completeFn, m.logger)
+	m.reflector = obs.NewReflector(completeFn, m.logger)
 }
 
 // ProcessObservation 对一批对话消息执行观测：Observer 压缩 -> Reflector 精炼 -> Store 持久化。
-func (m *EnhancedMemorySystem) ProcessObservation(ctx context.Context, agentID string, messages []types.Message) (*Observation, error) {
+func (m *EnhancedMemorySystem) ProcessObservation(ctx context.Context, agentID string, messages []types.Message) (*obs.Observation, error) {
 	if !m.config.ObservationEnabled || m.observationStore == nil {
 		return nil, fmt.Errorf("observation memory not configured")
 	}
@@ -553,7 +541,7 @@ func (m *EnhancedMemorySystem) ProcessObservation(ctx context.Context, agentID s
 }
 
 // GetRecentObservations 从 Store 加载最近的观测记录。
-func (m *EnhancedMemorySystem) GetRecentObservations(ctx context.Context, agentID string, limit int) ([]Observation, error) {
+func (m *EnhancedMemorySystem) GetRecentObservations(ctx context.Context, agentID string, limit int) ([]obs.Observation, error) {
 	if !m.config.ObservationEnabled || m.observationStore == nil {
 		return nil, fmt.Errorf("observation memory not configured")
 	}
@@ -813,13 +801,4 @@ func (c *MemoryConsolidator) AddStrategy(strategy ConsolidationStrategy) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.strategies = append(c.strategies, strategy)
-}
-
-func extractMemoryKey(memory any) (string, bool) {
-	m, ok := memory.(map[string]any)
-	if !ok {
-		return "", false
-	}
-	key, ok := m["key"].(string)
-	return key, ok && key != ""
 }

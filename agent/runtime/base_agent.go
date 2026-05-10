@@ -556,9 +556,7 @@ func loopObservationsFromCore(observations []checkpointcore.Observation) []LoopO
 type MemoryKind = memorycore.MemoryKind
 
 const (
-	MemoryShortTerm  MemoryKind = memorycore.MemoryShortTerm
 	MemoryWorking    MemoryKind = memorycore.MemoryWorking
-	MemoryLongTerm   MemoryKind = memorycore.MemoryLongTerm
 	MemoryEpisodic   MemoryKind = memorycore.MemoryEpisodic
 	MemorySemantic   MemoryKind = memorycore.MemorySemantic
 	MemoryProcedural MemoryKind = memorycore.MemoryProcedural
@@ -578,12 +576,12 @@ type MemoryManager = memorycore.MemoryManager
 
 const defaultMaxRecentMemory = memorycore.MaxRecentMemory
 
-// MemoryCache is the agent facade type for memory cache.
-type MemoryCache = memorycore.Cache
+// MemoryCache is the agent facade type for memory cache (alias for Coordinator).
+type MemoryCache = memorycore.Coordinator
 
-// NewMemoryCache creates a new MemoryCache.
+// NewMemoryCache creates a new MemoryCache (alias for NewCoordinator).
 func NewMemoryCache(agentID string, memory MemoryManager, logger *zap.Logger) *MemoryCache {
-	return memorycore.NewCache(agentID, memory, logger)
+	return memorycore.NewCoordinator(agentID, memory, logger)
 }
 
 // MemoryCoordinator is the agent facade type for memory coordination.

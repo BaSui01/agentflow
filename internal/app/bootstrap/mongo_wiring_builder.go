@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	agentmemory "github.com/BaSui01/agentflow/agent/capabilities/memory"
+	obsv "github.com/BaSui01/agentflow/agent/capabilities/memory/observation"
 	agenttools "github.com/BaSui01/agentflow/agent/capabilities/tools"
 	"github.com/BaSui01/agentflow/agent/observability/evaluation"
 	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
@@ -107,7 +108,7 @@ func WireMongoRuntimeStores(
 		if knowledgeGraph != nil {
 			semantic = knowledgeGraph
 		}
-		var obsStore agentmemory.ObservationStore
+		var obsStore obsv.ObservationStore
 		if observationStore != nil {
 			obsStore = observationStore
 		}

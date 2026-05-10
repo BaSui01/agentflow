@@ -3,7 +3,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"sync"
@@ -129,7 +128,7 @@ func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK 
 		if !matchesFilter(ent.metadata, filter) {
 			continue
 		}
-		score := cosineSimilarityFloat64(query, ent.vector)
+		score := cosineSimilarity(query, ent.vector)
 		results = append(results, types.VectorSearchResult{
 			ID:       id,
 			Score:    score,
@@ -215,33 +214,6 @@ func matchesFilter(metadata map[string]any, filter map[string]any) bool {
 		}
 	}
 	return true
-}
-
-func cosineSimilarityFloat64(a, b []float64) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return 0
-	}
-	var dot, normA, normB float64
-	for i := range a {
-		dot += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
-}
-
-func cloneMap(in map[string]any) map[string]any {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }
 
 // 编译时接口检查：确保 InMemoryVectorStore 实现 types.VectorStore
