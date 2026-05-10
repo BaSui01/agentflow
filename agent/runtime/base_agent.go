@@ -556,10 +556,9 @@ func loopObservationsFromCore(observations []checkpointcore.Observation) []LoopO
 type MemoryKind = memorycore.MemoryKind
 
 const (
-	MemoryWorking    MemoryKind = memorycore.MemoryWorking
-	MemoryEpisodic   MemoryKind = memorycore.MemoryEpisodic
-	MemorySemantic   MemoryKind = memorycore.MemorySemantic
-	MemoryProcedural MemoryKind = memorycore.MemoryProcedural
+	MemoryWorking  MemoryKind = memorycore.MemoryWorking
+	MemoryEpisodic MemoryKind = memorycore.MemoryEpisodic
+	MemorySemantic MemoryKind = memorycore.MemorySemantic
 )
 
 // MemoryRecord 统一记忆结构。

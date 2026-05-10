@@ -13,10 +13,9 @@ const MaxRecentMemory = 50
 type MemoryKind = types.MemoryKind
 
 const (
-	MemoryWorking    MemoryKind = types.MemoryWorking
-	MemoryEpisodic   MemoryKind = types.MemoryEpisodic
-	MemorySemantic   MemoryKind = types.MemorySemantic
-	MemoryProcedural MemoryKind = types.MemoryProcedural
+	MemoryWorking  MemoryKind = types.MemoryWorking
+	MemoryEpisodic MemoryKind = types.MemoryEpisodic
+	MemorySemantic MemoryKind = types.MemorySemantic
 )
 
 // MemoryRecord is the unified memory record.

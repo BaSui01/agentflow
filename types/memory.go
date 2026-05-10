@@ -27,11 +27,9 @@ type EpisodicEvent struct {
 type MemoryKind string
 
 const (
-	MemoryWorking       MemoryKind = "working"
-	MemoryEpisodic      MemoryKind = "episodic"
-	MemorySemantic      MemoryKind = "semantic"
-	MemoryProcedural    MemoryKind = "procedural"
-	MemoryObservational MemoryKind = "observational"
+	MemoryWorking   MemoryKind = "working"
+	MemoryEpisodic  MemoryKind = "episodic"
+	MemorySemantic  MemoryKind = "semantic"
 )
 
 // MemoryRecord is the cross-layer memory payload contract.
