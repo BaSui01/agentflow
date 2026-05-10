@@ -20,7 +20,7 @@ func (p *MiniMaxProvider) GenerateVideo(ctx context.Context, req *llm.VideoGener
 
 // GenerateAudio 使用 MiniMax 生成音频.
 func (p *MiniMaxProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	return providerbase.GenerateAudioOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/v1/audio/speech", req, p.ApplyHeaders)
+	return providerbase.GenerateAudioOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/v1/audio/speech", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
 // TranscribeAudio MiniMax 不支持音频转录.

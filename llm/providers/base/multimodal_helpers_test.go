@@ -85,8 +85,8 @@ func TestGenerateImageOpenAICompat_Success(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	resp, err := GenerateImageOpenAICompat(
-		context.Background(), server.Client(), server.URL, "key", "test", "/v1/images/generations",
-		&llm.ImageGenerationRequest{Prompt: "cat"}, BearerTokenHeaders,
+		context.Background(), OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/images/generations", BuildHeadersFunc: BearerTokenHeaders},
+		&llm.ImageGenerationRequest{Prompt: "cat"},
 	)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 1)
@@ -100,8 +100,8 @@ func TestGenerateImageOpenAICompat_HTTPError(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	_, err := GenerateImageOpenAICompat(
-		context.Background(), server.Client(), server.URL, "key", "test", "/v1/images",
-		&llm.ImageGenerationRequest{}, BearerTokenHeaders,
+		context.Background(), OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/images", BuildHeadersFunc: BearerTokenHeaders},
+		&llm.ImageGenerationRequest{},
 	)
 	require.Error(t, err)
 }
@@ -114,8 +114,8 @@ func TestGenerateVideoOpenAICompat_Success(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	resp, err := GenerateVideoOpenAICompat(
-		context.Background(), server.Client(), server.URL, "key", "test", "/v1/videos",
-		&llm.VideoGenerationRequest{Prompt: "sunset"}, BearerTokenHeaders,
+		context.Background(), OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/videos", BuildHeadersFunc: BearerTokenHeaders},
+		&llm.VideoGenerationRequest{Prompt: "sunset"},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "vid-1", resp.ID)
@@ -130,8 +130,8 @@ func TestGenerateAudioOpenAICompat_Success(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	resp, err := GenerateAudioOpenAICompat(
-		context.Background(), server.Client(), server.URL, "key", "test", "/v1/audio/speech",
-		&llm.AudioGenerationRequest{Input: "hello"}, BearerTokenHeaders,
+		context.Background(), OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/audio/speech", BuildHeadersFunc: BearerTokenHeaders},
+		&llm.AudioGenerationRequest{Input: "hello"},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, audioData, resp.Audio)
@@ -145,8 +145,8 @@ func TestGenerateAudioOpenAICompat_HTTPError(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	_, err := GenerateAudioOpenAICompat(
-		context.Background(), server.Client(), server.URL, "key", "test", "/v1/audio/speech",
-		&llm.AudioGenerationRequest{}, BearerTokenHeaders,
+		context.Background(), OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/audio/speech", BuildHeadersFunc: BearerTokenHeaders},
+		&llm.AudioGenerationRequest{},
 	)
 	require.Error(t, err)
 }
@@ -162,8 +162,8 @@ func TestCreateEmbeddingOpenAICompat_Success(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	resp, err := CreateEmbeddingOpenAICompat(
-		context.Background(), server.Client(), server.URL, "key", "test", "/v1/embeddings",
-		&llm.EmbeddingRequest{Input: []string{"hello"}}, BearerTokenHeaders,
+		context.Background(), OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/embeddings", BuildHeadersFunc: BearerTokenHeaders},
+		&llm.EmbeddingRequest{Input: []string{"hello"}},
 	)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 1)

@@ -72,7 +72,7 @@ func (p *TencentHunyuanProvider) doSigned(ctx context.Context, action string, bo
 	if err != nil {
 		return nil, err
 	}
-	tc3SignRequest(httpReq, payload, p.secretId(), p.secretKey(), host, tc3ServiceAiart, tc3DefaultRegion, action, tc3AiartVersion)
+	tc3SignRequest(httpReq, payload, TC3SignParams{SecretID: p.secretId(), SecretKey: p.secretKey(), Host: host, Service: tc3ServiceAiart, Region: tc3DefaultRegion, Action: action, Version: tc3AiartVersion})
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("tencent request: %w", err)

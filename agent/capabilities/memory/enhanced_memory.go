@@ -215,14 +215,21 @@ type ConsolidationStrategy interface {
 	Consolidate(ctx context.Context, memories []any) error
 }
 
+// EnhancedMemoryDeps 聚合了增强记忆系统的全部外部依赖。
+// 引入此结构体将 NewEnhancedMemorySystem 的参数从 8 个缩减为 3 个，
+// 提升可读性并降低传参出错风险。
+type EnhancedMemoryDeps struct {
+	ShortTerm        MemoryStore
+	Working          MemoryStore
+	LongTerm         types.VectorStore
+	Episodic         EpisodicStore
+	Semantic         KnowledgeGraph
+	ObservationStore obs.ObservationStore
+}
+
 // NewEnhancedMemorySystem 创建增强记忆系统
 func NewEnhancedMemorySystem(
-	shortTerm MemoryStore,
-	working MemoryStore,
-	longTerm types.VectorStore,
-	episodic EpisodicStore,
-	semantic KnowledgeGraph,
-	observationStore obs.ObservationStore,
+	deps EnhancedMemoryDeps,
 	config EnhancedMemoryConfig,
 	logger *zap.Logger,
 ) *EnhancedMemorySystem {
@@ -231,12 +238,12 @@ func NewEnhancedMemorySystem(
 	}
 
 	system := &EnhancedMemorySystem{
-		shortTerm:        shortTerm,
-		working:          working,
-		longTerm:         longTerm,
-		episodic:         episodic,
-		semantic:         semantic,
-		observationStore: observationStore,
+		shortTerm:        deps.ShortTerm,
+		working:          deps.Working,
+		longTerm:         deps.LongTerm,
+		episodic:         deps.Episodic,
+		semantic:         deps.Semantic,
+		observationStore: deps.ObservationStore,
 		config:           config,
 		logger:           logger.With(zap.String("component", "enhanced_memory")),
 	}
@@ -279,7 +286,14 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 
 	observationStore := obs.NewInMemoryObservationStore(config.ObservationMaxEntries)
 
-	system := NewEnhancedMemorySystem(shortTerm, working, longTerm, episodic, semantic, observationStore, config, logger)
+	system := NewEnhancedMemorySystem(EnhancedMemoryDeps{
+		ShortTerm:        shortTerm,
+		Working:          working,
+		LongTerm:         longTerm,
+		Episodic:         episodic,
+		Semantic:         semantic,
+		ObservationStore: observationStore,
+	}, config, logger)
 	if config.ConsolidationEnabled {
 		_ = system.AddDefaultConsolidationStrategies()
 	}

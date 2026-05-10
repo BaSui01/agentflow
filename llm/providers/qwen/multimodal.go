@@ -21,7 +21,7 @@ import (
 // Endpoint: POST /compatible-mode/v1/images/generations
 // Models: wanx-v1, wanx2.1-t2i-turbo, wanx2.1-t2i-plus
 func (p *QwenProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return providerbase.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/compatible-mode/v1/images/generations", req, p.ApplyHeaders)
+	return providerbase.GenerateImageOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/compatible-mode/v1/images/generations", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
 // GenerateVideo 使用 Qwen 万相视频生成.
@@ -165,7 +165,7 @@ type qwenAsyncTaskResponse struct {
 // Endpoint: POST /compatible-mode/v1/audio/speech
 // Models: cosyvoice-v1, sambert-v1, qwen-tts
 func (p *QwenProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	return providerbase.GenerateAudioOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/compatible-mode/v1/audio/speech", req, p.ApplyHeaders)
+	return providerbase.GenerateAudioOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/compatible-mode/v1/audio/speech", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
 // TranscribeAudio Qwen 不支持音频转录.
@@ -177,7 +177,7 @@ func (p *QwenProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTransc
 // Endpoint: POST /compatible-mode/v1/embeddings
 // Models: text-embedding-v4, text-embedding-v3, text-embedding-v2
 func (p *QwenProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return providerbase.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/compatible-mode/v1/embeddings", req, p.ApplyHeaders)
+	return providerbase.CreateEmbeddingOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/compatible-mode/v1/embeddings", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
 // CreateFineTuningJob Qwen 不支持微调.

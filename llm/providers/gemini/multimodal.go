@@ -80,7 +80,7 @@ func (p *GeminiProvider) GenerateImage(ctx context.Context, req *llm.ImageGenera
 
 	default:
 		endpoint := fmt.Sprintf("/v1beta/models/%s:predict", model)
-		return providerbase.GenerateImageOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.resolveAPIKey(ctx), p.Name(), endpoint, req, p.buildHeaders)
+		return providerbase.GenerateImageOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.client, BaseURL: p.cfg.BaseURL, APIKey: p.resolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: endpoint, BuildHeadersFunc: p.buildHeaders}, req)
 	}
 }
 
@@ -129,7 +129,7 @@ func (p *GeminiProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 	}
 
 	endpoint := fmt.Sprintf("/v1beta/models/%s:predictLongRunning", model)
-	return providerbase.GenerateVideoOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.resolveAPIKey(ctx), p.Name(), endpoint, req, p.buildHeaders)
+	return providerbase.GenerateVideoOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.client, BaseURL: p.cfg.BaseURL, APIKey: p.resolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: endpoint, BuildHeadersFunc: p.buildHeaders}, req)
 }
 
 func imageModelFamily(model string) string {

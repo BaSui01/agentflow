@@ -27,7 +27,7 @@ const (
 // Endpoint: POST /v1/images/generations
 // Models: grok-2-image, grok-2-image-latest
 func (p *GrokProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return providerbase.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/v1/images/generations", req, p.ApplyHeaders)
+	return providerbase.GenerateImageOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/v1/images/generations", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
 // GenerateVideo 使用 xAI Grok 生成视频.
@@ -151,7 +151,7 @@ func (p *GrokProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTransc
 // Endpoint: POST /v1/embeddings
 // Models: grok-embedding-beta
 func (p *GrokProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return providerbase.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/v1/embeddings", req, p.ApplyHeaders)
+	return providerbase.CreateEmbeddingOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/v1/embeddings", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
 // CreateFineTuningJob Grok 不支持微调.

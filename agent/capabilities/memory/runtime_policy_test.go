@@ -30,12 +30,10 @@ func TestDefaultMemoryRuntime_ObserveTurn_SkipsWhenExternalPolicyDisablesWrite(t
 	base := newTestMM()
 	episodic := NewInMemoryEpisodicStore(0, zap.NewNop())
 	enhanced := NewEnhancedMemorySystem(
-		NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, zap.NewNop()),
-		nil,
-		nil,
-		episodic,
-		nil,
-		nil,
+		EnhancedMemoryDeps{
+			ShortTerm: NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, zap.NewNop()),
+			Episodic:  episodic,
+		},
 		DefaultEnhancedMemoryConfig(),
 		zap.NewNop(),
 	)
