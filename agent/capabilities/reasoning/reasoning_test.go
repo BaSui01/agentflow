@@ -360,13 +360,13 @@ func TestDynamicPlanner_CollectResults(t *testing.T) {
 
 func TestIterativeDeepening_Name(t *testing.T) {
 	t.Parallel()
-	id := NewIterativeDeepening(nil, nil, DefaultIterativeDeepeningConfig(), nil)
+	id := NewIterativeDeepening(nil, nil, nil, DefaultIterativeDeepeningConfig(), nil)
 	assert.Equal(t, "iterative_deepening", id.Name())
 }
 
 func TestIterativeDeepening_CalculateConfidence(t *testing.T) {
 	t.Parallel()
-	id := NewIterativeDeepening(nil, nil, DefaultIterativeDeepeningConfig(), nil)
+	id := NewIterativeDeepening(nil, nil, nil, DefaultIterativeDeepeningConfig(), nil)
 
 	assert.Equal(t, 0.0, id.calculateConfidence(nil))
 
@@ -378,7 +378,7 @@ func TestIterativeDeepening_CalculateConfidence(t *testing.T) {
 
 func TestIterativeDeepening_CalculateConfidence_MoreFindingsHigherConfidence(t *testing.T) {
 	t.Parallel()
-	id := NewIterativeDeepening(nil, nil, DefaultIterativeDeepeningConfig(), nil)
+	id := NewIterativeDeepening(nil, nil, nil, DefaultIterativeDeepeningConfig(), nil)
 
 	few := []researchFinding{{Relevance: 0.8}}
 	many := make([]researchFinding, 20)
@@ -1149,7 +1149,7 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 	cfg.MaxDepth = 1
 	cfg.Breadth = 1
 	cfg.MinConfidence = 0.0 // low threshold so it finishes quickly
-	id := NewIterativeDeepening(testGateway(provider), nil, cfg, zap.NewNop())
+	id := NewIterativeDeepening(testGateway(provider), nil, nil, cfg, zap.NewNop())
 
 	result, err := id.Execute(context.Background(), "research topic")
 	require.NoError(t, err)

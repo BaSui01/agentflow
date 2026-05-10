@@ -229,6 +229,9 @@ func (t *TreeOfThought) Execute(ctx context.Context, task string) (*ReasoningRes
 			wg.Add(1)
 			go func(b ReasoningStep) {
 				defer wg.Done()
+				if ctx.Err() != nil {
+					return
+				}
 				children, childTokens, err := t.generateThoughts(ctx, task, &b, t.config.BranchingFactor)
 				if err != nil {
 					t.logger.Warn("failed to generate children", zap.Error(err))
@@ -314,6 +317,9 @@ func (t *TreeOfThought) evaluateThoughts(ctx context.Context, task string, thoug
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			if ctx.Err() != nil {
+				return
+			}
 			score, tokens := t.evaluateSingle(ctx, task, thoughts[idx])
 			mu.Lock()
 			thoughts[idx].Score = score

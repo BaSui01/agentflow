@@ -2,6 +2,7 @@ package reasoning
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -53,18 +54,20 @@ func DefaultIterativeDeepeningConfig() IterativeDeepeningConfig {
 type IterativeDeepening struct {
 	gateway      llmcore.Gateway
 	toolExecutor tools.ToolExecutor
+	toolSchemas  []types.ToolSchema
 	config       IterativeDeepeningConfig
 	logger       *zap.Logger
 }
 
-// NewIterative Deepenning 创造了一个新的"活泼"Deepenning Research causeer. 互联网档案馆的存檔,存档日期2013-12-21.
-func NewIterativeDeepening(gateway llmcore.Gateway, executor tools.ToolExecutor, config IterativeDeepeningConfig, logger *zap.Logger) *IterativeDeepening {
+// NewIterativeDeepening creates a new iterative deepening research reasoner.
+func NewIterativeDeepening(gateway llmcore.Gateway, executor tools.ToolExecutor, schemas []types.ToolSchema, config IterativeDeepeningConfig, logger *zap.Logger) *IterativeDeepening {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &IterativeDeepening{
 		gateway:      gateway,
 		toolExecutor: executor,
+		toolSchemas:  schemas,
 		config:       config,
 		logger:       logger,
 	}
@@ -346,9 +349,38 @@ Generate queries that explore NEW aspects not covered by previous findings.`, co
 	return queries, tokens, nil
 }
 
-// 分析 Query 分析单个查询并提取发现.
+// analyzeQuery 分析单个查询并提取发现。若配置了搜索类工具，优先调用真实工具获取结果后交由 LLM 分析。
 func (id *IterativeDeepening) analyzeQuery(ctx context.Context, query string) ([]researchFinding, int, error) {
-	prompt := fmt.Sprintf(`You are a research analyst. Analyze the following research query and provide key findings.
+	var toolResults []string
+
+	// 若配置了工具，尝试调用搜索/检索类工具获取真实结果
+	if len(id.toolSchemas) > 0 && id.toolExecutor != nil {
+		for _, schema := range id.toolSchemas {
+			nameLower := strings.ToLower(schema.Name)
+			if !strings.Contains(nameLower, "search") && !strings.Contains(nameLower, "retrieve") {
+				continue
+			}
+			argsJSON, _ := json.Marshal(map[string]string{"query": query})
+			call := types.ToolCall{
+				ID:        fmt.Sprintf("id_search_%d", time.Now().UnixNano()),
+				Name:      schema.Name,
+				Arguments: argsJSON,
+			}
+			results := id.toolExecutor.Execute(ctx, []types.ToolCall{call})
+			if len(results) > 0 && results[0].Error == "" {
+				toolResults = append(toolResults, string(results[0].Result))
+			}
+		}
+	}
+
+	prompt := "You are a research analyst. Analyze the following research query and provide key findings."
+	if len(toolResults) > 0 {
+		prompt += "\n\nThe following real-world search results are available for your analysis:"
+		for i, r := range toolResults {
+			prompt += fmt.Sprintf("\n--- Result %d ---\n%s", i+1, r)
+		}
+	}
+	prompt += fmt.Sprintf(`
 
 Query: %s
 
@@ -369,9 +401,12 @@ Return the findings using the provided structured output schema.`, query)
 	tokens := structuredTokens(parseResult)
 	findings := append([]researchFinding(nil), (*parseResult.Value)...)
 
-	// 用源码查询标记结果
+	// 标记来源为工具调用（若有）
 	for i := range findings {
 		findings[i].Query = query
+		if len(toolResults) > 0 && findings[i].Source == "" {
+			findings[i].Source = "tool_search"
+		}
 	}
 
 	// 限制每次查询的结果
@@ -436,7 +471,7 @@ Synthesize these findings into a clear, comprehensive answer. Include:
 Be thorough but concise.`, task, findingsStr.String())
 
 	resp, err := invokeChatGateway(ctx, id.gateway, newGatewayChatRequest(
-		"",
+		defaultModel(id.config.SynthesisModel),
 		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3

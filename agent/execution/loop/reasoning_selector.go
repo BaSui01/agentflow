@@ -142,8 +142,7 @@ func ShouldUseReflection(input *Input, state *State, registry *reasoning.Pattern
 		contextBool(input, "needs_critique") ||
 		contextString(input, "current_stage") == "reflection" ||
 		contextString(input, "loop_stage") == "reflection" ||
-		(state != nil && state.Decision == "reflect") ||
-		(state != nil && state.Iteration > 1 && strings.TrimSpace(state.Goal) != "" && strings.TrimSpace(state.ValidationSummary) == "")
+		(state != nil && state.Decision == "reflect")
 }
 
 func ShouldUseReWOO(input *Input, state *State, registry *reasoning.PatternRegistry) bool {
@@ -160,8 +159,7 @@ func ShouldUseReWOO(input *Input, state *State, registry *reasoning.PatternRegis
 		contextBool(input, "tool_verification_required") ||
 		contextBool(input, "requires_tools") ||
 		contextBool(input, "requires_observationless_tool_plan") ||
-		intContextAtLeast(input, "tool_count", 2) ||
-		contentContainsAny(input, "tool", "tools", "search", "collect", "gather", "retrieve", "crawl", "inspect")
+		intContextAtLeast(input, "tool_count", 2)
 }
 
 func ShouldUsePlanAndExecute(input *Input, state *State, registry *reasoning.PatternRegistry) bool {
@@ -175,8 +173,7 @@ func ShouldUsePlanAndExecute(input *Input, state *State, registry *reasoning.Pat
 		contextBool(input, "multi_step") ||
 		contextBool(input, "needs_replanning") ||
 		contextBool(input, "complex_task") ||
-		intContextAtLeast(input, "plan_steps", 2) ||
-		contentContainsAny(input, "plan", "steps", "implement", "execute", "roadmap", "break down")
+		intContextAtLeast(input, "plan_steps", 2)
 }
 
 func ShouldUseDynamicPlanner(input *Input, state *State, registry *reasoning.PatternRegistry) bool {
@@ -189,8 +186,7 @@ func ShouldUseDynamicPlanner(input *Input, state *State, registry *reasoning.Pat
 		contextBool(input, "dynamic_replanning") ||
 		contextBool(input, "search_space_large") ||
 		(state != nil && state.Decision == "replan") ||
-		(state != nil && state.StopReason == "blocked") ||
-		contentContainsAny(input, "backtrack", "alternative", "constraint", "optimize")
+		(state != nil && state.StopReason == "blocked")
 }
 
 func ShouldUseTreeOfThought(input *Input, state *State, registry *reasoning.PatternRegistry) bool {
@@ -203,8 +199,7 @@ func ShouldUseTreeOfThought(input *Input, state *State, registry *reasoning.Patt
 	return contextBool(input, "high_uncertainty") ||
 		contextBool(input, "explore_multiple_paths") ||
 		contextBool(input, "compare_branches") ||
-		intContextAtLeast(input, "candidate_count", 3) ||
-		contentContainsAny(input, "compare options", "multiple approaches", "explore", "brainstorm", "tradeoff", "uncertain")
+		intContextAtLeast(input, "candidate_count", 3)
 }
 
 func HasReasoningPattern(registry *reasoning.PatternRegistry, mode string) bool {

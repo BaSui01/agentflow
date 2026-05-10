@@ -421,8 +421,37 @@ func (d *DynamicPlanner) tryAlternativeOrBacktrack(ctx context.Context, failedNo
 }
 
 func (d *DynamicPlanner) replaceNodeWithAlternative(original, alternative *PlanNode) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	alternative.ParentID = original.ParentID
 	original.Status = NodeStatusSkipped
+
+	// 在父节点的 Children 切片中用 alternative 替换 original
+	parent := d.findParentRecursive(d.rootNode, original.ID)
+	if parent != nil {
+		for i, child := range parent.Children {
+			if child.ID == original.ID {
+				parent.Children[i] = alternative
+				return
+			}
+		}
+	}
+}
+
+func (d *DynamicPlanner) findParentRecursive(node *PlanNode, childID string) *PlanNode {
+	if node == nil {
+		return nil
+	}
+	for _, child := range node.Children {
+		if child.ID == childID {
+			return node
+		}
+		if found := d.findParentRecursive(child, childID); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 func (d *DynamicPlanner) findParent(root *PlanNode, childID string) *PlanNode {
