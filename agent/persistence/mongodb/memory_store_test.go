@@ -9,14 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/config"
-	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
+	"github.com/BaSui01/agentflow/pkg/mongodb"
 	"go.uber.org/zap"
 )
 
 // testMongoClient creates a MongoDB client for integration tests.
 // It reads the connection URI from MONGO_URI env var (default: mongodb://localhost:27017).
-func testMongoClient(t *testing.T) *mongoclient.Client {
+func testMongoClient(t *testing.T) *mongodb.Client {
 	t.Helper()
 
 	uri := os.Getenv("MONGO_URI")
@@ -24,12 +23,12 @@ func testMongoClient(t *testing.T) *mongoclient.Client {
 		uri = "mongodb://localhost:27017"
 	}
 
-	cfg := config.MongoDBConfig{
+	cfg := mongodb.ConnectConfig{
 		URI:      uri,
 		Database: fmt.Sprintf("agentflow_test_%d", time.Now().UnixNano()),
 	}
 
-	client, err := mongoclient.NewClient(cfg, zap.NewNop())
+	client, err := mongodb.NewClient(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("failed to create mongo client: %v", err)
 	}

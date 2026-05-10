@@ -6,16 +6,15 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/BaSui01/agentflow/config"
-		"github.com/BaSui01/agentflow/rag/core"
+	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
 
 // Builder 是 RAG 运行时的唯一构建器。
 // 所有 RAG 实例必须通过此入口构建。
 type Builder struct {
-	cfg    *config.Config
-	logger *zap.Logger
+	storeCfg *StoreConfig
+	logger   *zap.Logger
 
 	// 可选覆盖
 	vectorStoreType   core.VectorStoreType
@@ -36,14 +35,14 @@ type Providers struct {
 	Rerank    core.RerankProvider
 }
 
-// NewBuilder 创建构建器。cfg 可以为 nil（使用 WithAPIKey 或直接注入 provider）。
-func NewBuilder(cfg *config.Config, logger *zap.Logger) *Builder {
+// NewBuilder 创建构建器。storeCfg 可以为 nil（使用 WithAPIKey 或直接注入 provider）。
+func NewBuilder(storeCfg *StoreConfig, logger *zap.Logger) *Builder {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &Builder{
-		cfg:    cfg,
-		logger: logger,
+		storeCfg: storeCfg,
+		logger:   logger,
 	}
 }
 
@@ -129,7 +128,7 @@ func (b *Builder) BuildVectorStore() (core.VectorStore, error) {
 		return b.vectorStore, nil
 	}
 
-	if b.cfg == nil {
+	if b.storeCfg == nil {
 		// 默认使用内存存储
 		return NewInMemoryVectorStore(b.logger), nil
 	}
@@ -139,7 +138,7 @@ func (b *Builder) BuildVectorStore() (core.VectorStore, error) {
 		vectorType = core.VectorStoreMemory
 	}
 
-	store, err := newVectorStoreFromConfig(b.cfg, vectorType, b.logger)
+	store, err := newVectorStoreFromConfig(b.storeCfg, vectorType, b.logger)
 	if err != nil {
 		return nil, err
 	}

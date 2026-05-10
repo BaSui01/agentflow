@@ -22,7 +22,7 @@ func BuildRAGHandlerRuntime(cfg *config.Config, logger *zap.Logger) (*RAGHandler
 		return nil, nil
 	}
 
-	builder := ragruntime.NewBuilder(cfg, logger).
+	builder := ragruntime.NewBuilder(StoreConfigFromApp(cfg), logger).
 		WithVectorStoreType(core.VectorStoreMemory).
 		WithEmbeddingType(core.EmbeddingProviderType(cfg.LLM.DefaultProvider)).
 		WithAPIKey(cfg.LLM.APIKey)

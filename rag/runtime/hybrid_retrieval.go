@@ -177,7 +177,7 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 	// 2. 向量检索
 	var vectorResults map[string]float64
 	if r.config.UseVector && queryEmbedding != nil {
-		vectorResults = r.vectorRetrieve(queryEmbedding)
+		vectorResults = r.vectorRetrieve(ctx, queryEmbedding)
 	}
 
 	// 3. 合并结果
@@ -321,12 +321,12 @@ func (r *HybridRetriever) bm25Retrieve(query string) map[string]float64 {
 }
 
 // vectorRetrieve 向量检索（余弦相似度）
-func (r *HybridRetriever) vectorRetrieve(queryEmbedding []float64) map[string]float64 {
+func (r *HybridRetriever) vectorRetrieve(ctx context.Context, queryEmbedding []float64) map[string]float64 {
 	scores := make(map[string]float64)
 
 	// 优先使用向量存储
 	if r.vectorStore != nil {
-		results, err := r.vectorStore.Search(context.Background(), queryEmbedding, r.config.RerankTopK)
+		results, err := r.vectorStore.Search(ctx, queryEmbedding, r.config.RerankTopK)
 		if err != nil {
 			r.logger.Warn("vector store search failed", zap.Error(err))
 			return scores

@@ -25,7 +25,13 @@ func BuildAuthMiddleware(serverCfg config.ServerConfig, skipPaths []string, logg
 			zap.Bool("rsa", jwtCfg.PublicKey != ""),
 			zap.String("issuer", jwtCfg.Issuer),
 		)
-		return mw.JWTAuth(jwtCfg, skipPaths, logger)
+		return mw.JWTAuth(mw.JWTAuthConfig{
+			Secret:   jwtCfg.Secret,
+			PublicKey: jwtCfg.PublicKey,
+			Issuer:   jwtCfg.Issuer,
+			Audience: jwtCfg.Audience,
+			Expiration: jwtCfg.Expiration,
+		}, skipPaths, logger)
 	case hasAPIKeys:
 		logger.Info("Authentication: API Key enabled",
 			zap.Int("key_count", len(serverCfg.APIKeys)),

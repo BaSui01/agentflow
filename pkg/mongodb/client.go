@@ -10,8 +10,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.uber.org/zap"
-
-	"github.com/BaSui01/agentflow/config"
 )
 
 // Client wraps the MongoDB driver client with health checks and graceful shutdown.
@@ -19,7 +17,7 @@ import (
 type Client struct {
 	client   *mongo.Client
 	database *mongo.Database
-	cfg      config.MongoDBConfig
+	cfg      ConnectConfig
 	logger   *zap.Logger
 	mu       sync.RWMutex
 	closed   bool
@@ -27,7 +25,7 @@ type Client struct {
 
 // NewClient creates a new MongoDB client, pings the server, and starts
 // a background health-check goroutine.
-func NewClient(cfg config.MongoDBConfig, logger *zap.Logger) (*Client, error) {
+func NewClient(cfg ConnectConfig, logger *zap.Logger) (*Client, error) {
 	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()

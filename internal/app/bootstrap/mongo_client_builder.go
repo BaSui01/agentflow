@@ -10,7 +10,25 @@ import (
 
 // BuildMongoClient creates the MongoDB client used by runtime wiring.
 func BuildMongoClient(cfg config.MongoDBConfig, logger *zap.Logger) (*mongoclient.Client, error) {
-	client, err := mongoclient.NewClient(cfg, logger)
+	connectCfg := mongoclient.ConnectConfig{
+		URI:            cfg.URI,
+		Host:           cfg.Host,
+		Port:           cfg.Port,
+		User:           cfg.User,
+		Password:       cfg.Password,
+		AuthSource:     cfg.AuthSource,
+		ReplicaSet:     cfg.ReplicaSet,
+		MaxPoolSize:    cfg.MaxPoolSize,
+		MinPoolSize:    cfg.MinPoolSize,
+		ConnectTimeout: cfg.ConnectTimeout,
+		Timeout:        cfg.Timeout,
+		TLSEnabled:     cfg.TLSEnabled,
+		TLSCAFile:      cfg.TLSCAFile,
+		TLSCertFile:    cfg.TLSCertFile,
+		TLSKeyFile:     cfg.TLSKeyFile,
+		Database:       cfg.Database,
+	}
+	client, err := mongoclient.NewClient(connectCfg, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
 	}

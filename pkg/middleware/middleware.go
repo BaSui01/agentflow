@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
@@ -37,6 +36,22 @@ const (
 	visitorCleanupInterval = 3 * time.Minute
 	minJWTSecretLength     = 32
 )
+
+// JWTAuthConfig holds JWT authentication configuration.
+// This is a self-contained copy of the relevant fields from config.JWTConfig,
+// decoupling pkg/middleware from the config package.
+type JWTAuthConfig struct {
+	// Secret is the HMAC signing key.
+	Secret string
+	// PublicKey is the RSA public key in PEM format.
+	PublicKey string
+	// Issuer is the expected token issuer.
+	Issuer string
+	// Audience is the expected token audience.
+	Audience string
+	// Expiration is the default token validity duration. Defaults to 1h when zero.
+	Expiration time.Duration
+}
 
 // requestIDKey is the context key for the request ID.
 type requestIDKey struct{}
@@ -525,7 +540,7 @@ func generateRequestID() string {
 // JWTAuth validates JWT tokens from the Authorization: Bearer header and injects
 // tenant_id, user_id, and roles into the request context.
 // Returns error when HMAC secret is configured but shorter than minJWTSecretLength (reject startup).
-func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) (Middleware, error) {
+func JWTAuth(cfg JWTAuthConfig, skipPaths []string, logger *zap.Logger) (Middleware, error) {
 	if len(cfg.Secret) > 0 && len(cfg.Secret) < minJWTSecretLength {
 		logger.Warn("JWT HMAC secret is shorter than 32 bytes — NOT recommended for production",
 			zap.Int("length", len(cfg.Secret)),

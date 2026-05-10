@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -509,7 +508,7 @@ func TestTenantRateLimiter_ContextCanceled(t *testing.T) {
 
 func TestJWTAuth_ValidHMACToken(t *testing.T) {
 	secret := "this-is-a-very-long-secret-key-for-testing-purposes"
-	cfg := config.JWTConfig{Secret: secret}
+	cfg := JWTAuthConfig{Secret: secret}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"tenant_id": "t-123",
@@ -545,7 +544,7 @@ func TestJWTAuth_ValidHMACToken(t *testing.T) {
 }
 
 func TestJWTAuth_MissingHeader(t *testing.T) {
-	cfg := config.JWTConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
+	cfg := JWTAuthConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
 	mw, err := JWTAuth(cfg, nil, zap.NewNop())
 	require.NoError(t, err)
 	handler := mw(okHandler())
@@ -557,7 +556,7 @@ func TestJWTAuth_MissingHeader(t *testing.T) {
 }
 
 func TestJWTAuth_InvalidToken(t *testing.T) {
-	cfg := config.JWTConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
+	cfg := JWTAuthConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
 	mw, err := JWTAuth(cfg, nil, zap.NewNop())
 	require.NoError(t, err)
 	handler := mw(okHandler())
@@ -571,7 +570,7 @@ func TestJWTAuth_InvalidToken(t *testing.T) {
 
 func TestJWTAuth_MissingExpClaim(t *testing.T) {
 	secret := "this-is-a-very-long-secret-key-for-testing-purposes"
-	cfg := config.JWTConfig{Secret: secret}
+	cfg := JWTAuthConfig{Secret: secret}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"tenant_id": "t-123",
@@ -592,7 +591,7 @@ func TestJWTAuth_MissingExpClaim(t *testing.T) {
 }
 
 func TestJWTAuth_SkipPath(t *testing.T) {
-	cfg := config.JWTConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
+	cfg := JWTAuthConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
 	mw, err := JWTAuth(cfg, []string{"/health"}, zap.NewNop())
 	require.NoError(t, err)
 	handler := mw(okHandler())
@@ -605,7 +604,7 @@ func TestJWTAuth_SkipPath(t *testing.T) {
 
 func TestJWTAuth_ExpiredToken(t *testing.T) {
 	secret := "this-is-a-very-long-secret-key-for-testing-purposes"
-	cfg := config.JWTConfig{Secret: secret}
+	cfg := JWTAuthConfig{Secret: secret}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"exp": time.Now().Add(-time.Hour).Unix(),
@@ -630,7 +629,7 @@ func TestJWTAuth_RSAToken(t *testing.T) {
 	pubKeyBytes, err := encodeRSAPublicKeyPEM(&privateKey.PublicKey)
 	require.NoError(t, err)
 
-	cfg := config.JWTConfig{PublicKey: string(pubKeyBytes)}
+	cfg := JWTAuthConfig{PublicKey: string(pubKeyBytes)}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"tenant_id": "rsa-tenant",

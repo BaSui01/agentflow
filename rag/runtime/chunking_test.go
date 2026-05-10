@@ -3,7 +3,6 @@ package runtime
 import (
 	"testing"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,8 +81,7 @@ func TestDocumentChunker_EmptyContent(t *testing.T) {
 }
 
 func TestBuildHybridRetrieverWithVectorStore(t *testing.T) {
-	cfg := config.DefaultConfig()
-	retriever, err := NewBuilder(cfg, zap.NewNop()).BuildHybridRetrieverWithVectorStore()
+	retriever, err := NewBuilder(nil, zap.NewNop()).BuildHybridRetrieverWithVectorStore()
 	require.NoError(t, err)
 	require.NotNil(t, retriever)
 }

@@ -183,7 +183,13 @@ func InitializeServeRuntime(configPath string) (*ServeRuntime, error) {
 
 	logger := NewLogger(cfg.Log)
 
-	otelProviders, err := telemetry.Init(cfg.Telemetry, logger)
+	otelProviders, err := telemetry.Init(telemetry.InitConfig{
+		Enabled:      cfg.Telemetry.Enabled,
+		OTLPEndpoint: cfg.Telemetry.OTLPEndpoint,
+		OTLPInsecure: cfg.Telemetry.OTLPInsecure,
+		ServiceName:  cfg.Telemetry.ServiceName,
+		SampleRate:   cfg.Telemetry.SampleRate,
+	}, logger)
 	if err != nil {
 		logger.Warn("failed to initialize telemetry", zap.Error(err))
 	}

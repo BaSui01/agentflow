@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +30,7 @@ func TestInit_Disabled(t *testing.T) {
 	saveAndRestoreGlobalProviders(t)
 	logger := zaptest.NewLogger(t)
 
-	cfg := config.TelemetryConfig{
+	cfg := InitConfig{
 		Enabled: false,
 	}
 
@@ -48,7 +47,7 @@ func TestInit_Enabled(t *testing.T) {
 	saveAndRestoreGlobalProviders(t)
 	logger := zaptest.NewLogger(t)
 
-	cfg := config.TelemetryConfig{
+	cfg := InitConfig{
 		Enabled:      true,
 		OTLPEndpoint: "localhost:4317",
 		ServiceName:  "agentflow-test",
@@ -90,7 +89,7 @@ func TestProviders_Shutdown_Noop(t *testing.T) {
 	saveAndRestoreGlobalProviders(t)
 	logger := zaptest.NewLogger(t)
 
-	cfg := config.TelemetryConfig{Enabled: false}
+	cfg := InitConfig{Enabled: false}
 	p, err := Init(cfg, logger)
 	require.NoError(t, err)
 
@@ -103,7 +102,7 @@ func TestProviders_Shutdown_Real(t *testing.T) {
 	saveAndRestoreGlobalProviders(t)
 	logger := zaptest.NewLogger(t)
 
-	cfg := config.TelemetryConfig{
+	cfg := InitConfig{
 		Enabled:      true,
 		OTLPEndpoint: "localhost:4317",
 		ServiceName:  "agentflow-shutdown-test",

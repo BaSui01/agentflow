@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -41,11 +40,9 @@ func (m *mockRerankProvider) Name() string {
 }
 
 func TestBuildProviders(t *testing.T) {
-	cfg := &config.Config{}
-
 	// 新设计：provider 必须由上层注入
 	mockEmbedding := &mockEmbeddingProvider{name: "test-embedding"}
-	b := NewBuilder(cfg, zap.NewNop()).WithEmbeddingProvider(mockEmbedding)
+	b := NewBuilder(nil, zap.NewNop()).WithEmbeddingProvider(mockEmbedding)
 
 	providers, err := b.BuildProviders()
 	if err != nil {
@@ -63,13 +60,11 @@ func TestBuildProviders(t *testing.T) {
 }
 
 func TestBuildProvidersWithRerank(t *testing.T) {
-	cfg := &config.Config{}
-
 	// 新设计：provider 必须由上层注入
 	mockEmbedding := &mockEmbeddingProvider{name: "test-embedding"}
 	mockRerank := &mockRerankProvider{name: "test-rerank"}
 
-	b := NewBuilder(cfg, zap.NewNop()).
+	b := NewBuilder(nil, zap.NewNop()).
 		WithEmbeddingProvider(mockEmbedding).
 		WithRerankProvider(mockRerank)
 
@@ -92,10 +87,8 @@ func TestBuildProvidersWithRerank(t *testing.T) {
 }
 
 func TestBuildProvidersNoInjection(t *testing.T) {
-	cfg := &config.Config{}
-
 	// 新设计：没有注入 provider 时，返回的 providers 中字段为 nil（不再报错）
-	b := NewBuilder(cfg, zap.NewNop())
+	b := NewBuilder(nil, zap.NewNop())
 	providers, err := b.BuildProviders()
 	if err != nil {
 		t.Fatalf("BuildProviders should not fail: %v", err)
@@ -121,8 +114,18 @@ func TestBuildProvidersNilBuilder(t *testing.T) {
 }
 
 func TestBuildVectorStoreDefault(t *testing.T) {
-	cfg := config.DefaultConfig()
-	store, err := NewBuilder(cfg, zap.NewNop()).BuildVectorStore()
+	store, err := NewBuilder(nil, zap.NewNop()).BuildVectorStore()
+	if err != nil {
+		t.Fatalf("BuildVectorStore failed: %v", err)
+	}
+	if store == nil {
+		t.Fatal("expected vector store")
+	}
+}
+
+func TestBuildVectorStoreWithStoreConfig(t *testing.T) {
+	storeCfg := &StoreConfig{}
+	store, err := NewBuilder(storeCfg, zap.NewNop()).BuildVectorStore()
 	if err != nil {
 		t.Fatalf("BuildVectorStore failed: %v", err)
 	}
@@ -132,8 +135,8 @@ func TestBuildVectorStoreDefault(t *testing.T) {
 }
 
 func TestBuildVectorStoreUnsupported(t *testing.T) {
-	cfg := config.DefaultConfig()
-	_, err := NewBuilder(cfg, zap.NewNop()).
+	storeCfg := &StoreConfig{}
+	_, err := NewBuilder(storeCfg, zap.NewNop()).
 		WithVectorStoreType(core.VectorStoreType("bad-store")).
 		BuildVectorStore()
 	if err == nil {
@@ -142,10 +145,8 @@ func TestBuildVectorStoreUnsupported(t *testing.T) {
 }
 
 func TestBuildEnhancedRetriever(t *testing.T) {
-	cfg := &config.Config{}
-
 	// 新设计：EnhancedRetriever 可在没有外部 provider 的情况下构建（仅使用混合检索）
-	retriever, err := NewBuilder(cfg, zap.NewNop()).BuildEnhancedRetriever()
+	retriever, err := NewBuilder(nil, zap.NewNop()).BuildEnhancedRetriever()
 	if err != nil {
 		t.Fatalf("BuildEnhancedRetriever failed: %v", err)
 	}
@@ -155,9 +156,7 @@ func TestBuildEnhancedRetriever(t *testing.T) {
 }
 
 func TestBuildHybridRetriever(t *testing.T) {
-	cfg := &config.Config{}
-
-	retriever, err := NewBuilder(cfg, zap.NewNop()).BuildHybridRetriever()
+	retriever, err := NewBuilder(nil, zap.NewNop()).BuildHybridRetriever()
 	if err != nil {
 		t.Fatalf("BuildHybridRetriever failed: %v", err)
 	}
@@ -167,12 +166,10 @@ func TestBuildHybridRetriever(t *testing.T) {
 }
 
 func TestBuilderWithVectorStore(t *testing.T) {
-	cfg := config.DefaultConfig()
-
 	// 创建自定义向量存储
 	customStore := &mockVectorStore{}
 
-	b := NewBuilder(cfg, zap.NewNop()).WithVectorStore(customStore)
+	b := NewBuilder(nil, zap.NewNop()).WithVectorStore(customStore)
 	store, err := b.BuildVectorStore()
 	if err != nil {
 		t.Fatalf("BuildVectorStore failed: %v", err)

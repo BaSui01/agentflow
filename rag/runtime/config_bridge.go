@@ -3,14 +3,13 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/BaSui01/agentflow/config"
-		"github.com/BaSui01/agentflow/rag/core"
+	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
 
-func newVectorStoreFromConfig(cfg *config.Config, storeType core.VectorStoreType, logger *zap.Logger) (core.VectorStore, error) {
+func newVectorStoreFromConfig(cfg *StoreConfig, storeType core.VectorStoreType, logger *zap.Logger) (core.VectorStore, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("config is nil")
+		return nil, fmt.Errorf("store config is nil")
 	}
 	if logger == nil {
 		logger = zap.NewNop()
@@ -32,17 +31,17 @@ func newVectorStoreFromConfig(cfg *config.Config, storeType core.VectorStoreType
 	}
 }
 
-func mapQdrantConfig(c *config.QdrantConfig) QdrantConfig {
+func mapQdrantConfig(c *QdrantStoreConfig) QdrantConfig {
 	return QdrantConfig{
-		Host:                 c.Host,
-		Port:                 c.Port,
-		APIKey:               c.APIKey,
-		Collection:           c.Collection,
-		AutoCreateCollection: true,
+		Host:               c.Host,
+		Port:               c.Port,
+		APIKey:             c.APIKey,
+		Collection:         c.Collection,
+		AutoCreateCollection: c.AutoCreateCollection,
 	}
 }
 
-func mapWeaviateConfig(c *config.WeaviateConfig) WeaviateConfig {
+func mapWeaviateConfig(c *WeaviateStoreConfig) WeaviateConfig {
 	return WeaviateConfig{
 		Host:             c.Host,
 		Port:             c.Port,
@@ -56,7 +55,7 @@ func mapWeaviateConfig(c *config.WeaviateConfig) WeaviateConfig {
 	}
 }
 
-func mapMilvusConfig(c *config.MilvusConfig) MilvusConfig {
+func mapMilvusConfig(c *MilvusStoreConfig) MilvusConfig {
 	return MilvusConfig{
 		Host:                 c.Host,
 		Port:                 c.Port,
@@ -66,8 +65,8 @@ func mapMilvusConfig(c *config.MilvusConfig) MilvusConfig {
 		Database:             c.Database,
 		Collection:           c.Collection,
 		VectorDimension:      c.VectorDimension,
-		IndexType:            MilvusIndexType(c.IndexType),
-		MetricType:           MilvusMetricType(c.MetricType),
+		IndexType:            c.IndexType,
+		MetricType:           c.MetricType,
 		AutoCreateCollection: c.AutoCreateCollection,
 		Timeout:              c.Timeout,
 		BatchSize:            c.BatchSize,
@@ -75,7 +74,7 @@ func mapMilvusConfig(c *config.MilvusConfig) MilvusConfig {
 	}
 }
 
-func mapPineconeConfig(c *config.PineconeConfig) PineconeConfig {
+func mapPineconeConfig(c *PineconeStoreConfig) PineconeConfig {
 	return PineconeConfig{
 		APIKey:    c.APIKey,
 		Index:     c.Index,
