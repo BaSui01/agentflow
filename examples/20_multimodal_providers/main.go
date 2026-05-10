@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
@@ -157,9 +156,8 @@ func demoEnhancedRetrieval(ctx context.Context, logger *zap.Logger) {
 		return
 	}
 
-	cfg := config.DefaultConfig()
-	cfg.LLM.APIKey = cohereKey
-	cfg.LLM.DefaultProvider = string(rag.EmbeddingCohere)
+	cfg := &ragruntime.StoreConfig{}
+	cfg.Qdrant.APIKey = cohereKey
 	retriever, err := ragruntime.NewBuilder(cfg, logger).
 		WithEmbeddingType(rag.EmbeddingCohere).
 		WithRerankType(rag.RerankCohere).

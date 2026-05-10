@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	appconfig "github.com/BaSui01/agentflow/config"
 	_ "modernc.org/sqlite"
 )
 
@@ -16,34 +15,22 @@ import (
 // Factory — NewMigratorFromConfig
 // =============================================================================
 
-func TestNewMigratorFromConfig_NilConfig(t *testing.T) {
-	_, err := NewMigratorFromConfig(nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "config is required")
-}
-
-func TestNewMigratorFromConfig_InvalidDriver(t *testing.T) {
-	cfg := &appconfig.Config{
-		Database: appconfig.DatabaseConfig{
-			Driver: "invalid",
-		},
-	}
-	_, err := NewMigratorFromConfig(cfg)
+func TestNewMigratorFromDBConfig_InvalidDriver(t *testing.T) {
+	cfg := DBConfig{Driver: "invalid"}
+	_, err := NewMigratorFromDBConfig(cfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid database type")
 }
 
-func TestNewMigratorFromConfig_SQLite(t *testing.T) {
+func TestNewMigratorFromDBConfig_SQLite(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	cfg := &appconfig.Config{
-		Database: appconfig.DatabaseConfig{
-			Driver: "sqlite",
-			Name:   dbPath,
-		},
+	cfg := DBConfig{
+		Driver: "sqlite",
+		Name:   dbPath,
 	}
-	m, err := NewMigratorFromConfig(cfg)
+	m, err := NewMigratorFromDBConfig(cfg)
 	require.NoError(t, err)
 	require.NotNil(t, m)
 	t.Cleanup(func() { m.Close() })
@@ -73,8 +60,8 @@ func TestNewMigratorFromURL_SQLite(t *testing.T) {
 // Factory — NewMigratorFromDatabaseConfig with different DB types
 // =============================================================================
 
-func TestNewMigratorFromDatabaseConfig_Postgres(t *testing.T) {
-	_, err := NewMigratorFromDatabaseConfig(appconfig.DatabaseConfig{
+func TestNewMigratorFromDBConfig_Postgres(t *testing.T) {
+	_, err := NewMigratorFromDBConfig(DBConfig{
 		Driver:   "postgres",
 		Host:     "localhost",
 		Port:     5432,
@@ -87,8 +74,8 @@ func TestNewMigratorFromDatabaseConfig_Postgres(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestNewMigratorFromDatabaseConfig_MySQL(t *testing.T) {
-	_, err := NewMigratorFromDatabaseConfig(appconfig.DatabaseConfig{
+func TestNewMigratorFromDBConfig_MySQL(t *testing.T) {
+	_, err := NewMigratorFromDBConfig(DBConfig{
 		Driver:   "mysql",
 		Host:     "localhost",
 		Port:     3306,

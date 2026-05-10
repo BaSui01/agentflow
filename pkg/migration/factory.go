@@ -2,21 +2,23 @@ package migration
 
 import (
 	"fmt"
-
-	appconfig "github.com/BaSui01/agentflow/config"
 )
 
-// NewMigratorFromConfig creates a new migrator from application configuration
-func NewMigratorFromConfig(cfg *appconfig.Config) (*DefaultMigrator, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("config is required")
-	}
-
-	return NewMigratorFromDatabaseConfig(cfg.Database)
+// DBConfig holds database connection configuration.
+// This is a self-contained copy of the relevant fields from config.DatabaseConfig,
+// decoupling pkg/migration from the config package.
+type DBConfig struct {
+	Driver   string
+	Host     string
+	Port     int
+	Name     string
+	User     string
+	Password string
+	SSLMode  string
 }
 
-// NewMigratorFromDatabaseConfig creates a new migrator from database configuration
-func NewMigratorFromDatabaseConfig(dbCfg appconfig.DatabaseConfig) (*DefaultMigrator, error) {
+// NewMigratorFromDBConfig creates a new migrator from database configuration.
+func NewMigratorFromDBConfig(dbCfg DBConfig) (*DefaultMigrator, error) {
 	// Parse database type (Driver field in config)
 	dbType, err := ParseDatabaseType(dbCfg.Driver)
 	if err != nil {
@@ -31,8 +33,8 @@ func NewMigratorFromDatabaseConfig(dbCfg appconfig.DatabaseConfig) (*DefaultMigr
 			dbType,
 			dbCfg.Host,
 			dbCfg.Port,
-			dbCfg.Name,     // Name field in config
-			dbCfg.User,     // User field in config
+			dbCfg.Name,
+			dbCfg.User,
 			dbCfg.Password,
 			dbCfg.SSLMode,
 		)
@@ -67,7 +69,7 @@ func NewMigratorFromDatabaseConfig(dbCfg appconfig.DatabaseConfig) (*DefaultMigr
 func NewMigratorFromURL(dbType, dbURL string) (*DefaultMigrator, error) {
 	dt, err := ParseDatabaseType(dbType)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	return NewMigrator(&Config{
@@ -76,4 +78,3 @@ func NewMigratorFromURL(dbType, dbURL string) (*DefaultMigrator, error) {
 		TableName:    "schema_migrations",
 	})
 }
-

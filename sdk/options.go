@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/runtime"
-	"github.com/BaSui01/agentflow/config"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
@@ -103,20 +102,23 @@ type RAGOptions struct {
 	// Enable builds RAG runtime components.
 	Enable bool
 
-	// Config optionally provides global config (used by runtime builder for store selection).
+	// StoreConfig optionally provides vector store backend configuration.
 	// May be nil; in that case the runtime defaults to in-memory store unless overridden.
-	Config *config.Config
+	// Use ragruntime.StoreConfig to construct, or bootstrap.StoreConfigFromApp to map from config.Config.
+	StoreConfig *rag.StoreConfig
 
-	// VectorStoreType selects a backend when Config is present.
+	// DefaultLLMProvider optionally specifies the default LLM provider name
+	// for selecting embedding/rerank types. Used as fallback when EmbeddingType/RerankType are not set.
+	DefaultLLMProvider string
+
+	// VectorStoreType selects a backend when StoreConfig is present.
 	// Default: core.VectorStoreMemory.
 	VectorStoreType core.VectorStoreType
 
-	// EmbeddingType selects embedding provider type when Config is present.
-	// Default: core.EmbeddingProviderType(cfg.LLM.DefaultProvider) when cfg != nil.
+	// EmbeddingType selects embedding provider type when StoreConfig is present.
 	EmbeddingType core.EmbeddingProviderType
 
-	// RerankType selects rerank provider type when Config is present.
-	// Default: core.RerankProviderType(cfg.LLM.DefaultProvider) when cfg != nil.
+	// RerankType selects rerank provider type when StoreConfig is present.
 	RerankType core.RerankProviderType
 
 	// Direct injections (override types/config).
@@ -127,6 +129,6 @@ type RAGOptions struct {
 	// HybridConfig overrides the default hybrid retrieval config.
 	HybridConfig *rag.HybridRetrievalConfig
 
-	// APIKey overrides cfg.LLM.APIKey when building providers/stores from config.
+	// APIKey overrides the API Key when building providers/stores from config.
 	APIKey string
 }

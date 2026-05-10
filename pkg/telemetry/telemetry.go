@@ -13,8 +13,6 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/BaSui01/agentflow/config"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -36,7 +34,7 @@ type Providers struct {
 
 // Init initializes the OTel SDK. When cfg.Enabled is false, it returns
 // a noop Providers (nil tp/mp) without connecting to any external service.
-func Init(cfg config.TelemetryConfig, logger *zap.Logger) (*Providers, error) {
+func Init(cfg InitConfig, logger *zap.Logger) (*Providers, error) {
 	if !cfg.Enabled {
 		logger.Info("telemetry disabled, using noop providers")
 		return &Providers{}, nil

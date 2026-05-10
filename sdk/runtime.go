@@ -203,7 +203,7 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 		if !ropts.Enable {
 			// keep nil
 		} else {
-			rb := ragruntime.NewBuilder(ropts.Config, logger)
+			rb := ragruntime.NewBuilder(ropts.StoreConfig, logger)
 
 			// Apply overrides
 			if ropts.VectorStoreType != "" {
@@ -214,13 +214,13 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 
 			if ropts.EmbeddingType != "" {
 				rb = rb.WithEmbeddingType(ropts.EmbeddingType)
-			} else if ropts.Config != nil {
-				rb = rb.WithEmbeddingType(core.EmbeddingProviderType(ropts.Config.LLM.DefaultProvider))
+			} else if ropts.DefaultLLMProvider != "" {
+				rb = rb.WithEmbeddingType(core.EmbeddingProviderType(ropts.DefaultLLMProvider))
 			}
 			if ropts.RerankType != "" {
 				rb = rb.WithRerankType(ropts.RerankType)
-			} else if ropts.Config != nil {
-				rb = rb.WithRerankType(core.RerankProviderType(ropts.Config.LLM.DefaultProvider))
+			} else if ropts.DefaultLLMProvider != "" {
+				rb = rb.WithRerankType(core.RerankProviderType(ropts.DefaultLLMProvider))
 			}
 
 			if ropts.APIKey != "" {

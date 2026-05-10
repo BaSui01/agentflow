@@ -13,12 +13,33 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
-// BuildClientOptions converts a config.MongoDBConfig into mongo driver options.
-func BuildClientOptions(cfg config.MongoDBConfig) (*options.ClientOptions, error) {
+// ConnectConfig holds MongoDB connection configuration.
+// This is a self-contained copy of the relevant fields from config.MongoDBConfig,
+// decoupling pkg/mongodb from the config package.
+type ConnectConfig struct {
+	URI             string
+	Host            string
+	Port            int
+	User            string
+	Password        string
+	AuthSource      string
+	ReplicaSet      string
+	MaxPoolSize     int
+	MinPoolSize     int
+	ConnectTimeout  time.Duration
+	Timeout         time.Duration
+	TLSEnabled      bool
+	TLSCAFile       string
+	TLSCertFile     string
+	TLSKeyFile      string
+	Database        string
+}
+
+// BuildClientOptions converts a ConnectConfig into mongo driver options.
+func BuildClientOptions(cfg ConnectConfig) (*options.ClientOptions, error) {
 	opts := options.Client()
 
 	// URI takes precedence; otherwise build from host/port.
@@ -57,7 +78,7 @@ func BuildClientOptions(cfg config.MongoDBConfig) (*options.ClientOptions, error
 }
 
 // buildURI constructs a mongodb:// URI from discrete config fields.
-func buildURI(cfg config.MongoDBConfig) string {
+func buildURI(cfg ConnectConfig) string {
 	host := cfg.Host
 	if host == "" {
 		host = "localhost"
@@ -96,7 +117,7 @@ func buildURI(cfg config.MongoDBConfig) string {
 }
 
 // buildTLSConfig creates a *tls.Config following §32 TLS hardening.
-func buildTLSConfig(cfg config.MongoDBConfig) (*tls.Config, error) {
+func buildTLSConfig(cfg ConnectConfig) (*tls.Config, error) {
 	// Start from the project-wide hardened defaults.
 	tlsCfg := tlsutil.DefaultTLSConfig()
 
