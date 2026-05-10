@@ -7,6 +7,7 @@ import (
 
 	agentcore "github.com/BaSui01/agentflow/agent/core"
 	checkpointcore "github.com/BaSui01/agentflow/agent/persistence/checkpoint/core"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // CheckpointDiff 代表两个检查点版本之间的差异。
@@ -49,6 +50,9 @@ type Checkpoint struct {
 	ParentID            string                         `json:"parent_id,omitempty"`
 
 	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
+
+	// MemorySnapshot 保存恢复时需要的记忆状态（短期/工作记忆条目）。
+	MemorySnapshot []types.MemoryEntry `json:"memory_snapshot,omitempty"`
 }
 
 type CheckpointMessage struct {

@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -12,10 +13,12 @@ import (
 // MemoryTaskStore是TaskStore的一个内在执行.
 // 适合开发和测试。 数据在重新启动时丢失 。
 type MemoryTaskStore struct {
-	tasks  map[string]*AsyncTask
-	mu     sync.RWMutex
-	closed bool
-	config StoreConfig
+	tasks       map[string]*AsyncTask
+	mu          sync.RWMutex
+	closed      bool
+	config      StoreConfig
+	cleanupStop chan struct{}
+	cleanupDone chan struct{}
 }
 
 // 新建记忆任务存储器
@@ -27,7 +30,14 @@ func NewMemoryTaskStore(config StoreConfig) *MemoryTaskStore {
 
 	// 启用后开始清理 goroutine
 	if config.Cleanup.Enabled {
-		go store.cleanupLoop(config.Cleanup.Interval)
+		interval := config.Cleanup.Interval
+		if interval <= 0 {
+			interval = DefaultCleanupConfig().Interval
+			store.config.Cleanup.Interval = interval
+		}
+		store.cleanupStop = make(chan struct{})
+		store.cleanupDone = make(chan struct{})
+		go store.cleanupLoop(interval, store.cleanupStop, store.cleanupDone)
 	}
 
 	return store
@@ -36,8 +46,23 @@ func NewMemoryTaskStore(config StoreConfig) *MemoryTaskStore {
 // 关闭商店
 func (s *MemoryTaskStore) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
 	s.closed = true
+	stop := s.cleanupStop
+	done := s.cleanupDone
+	s.cleanupStop = nil
+	s.cleanupDone = nil
+	s.mu.Unlock()
+
+	if stop != nil {
+		close(stop)
+	}
+	if done != nil {
+		<-done
+	}
 	return nil
 }
 
@@ -413,11 +438,18 @@ func (s *MemoryTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 // cleanupLoop 运行定期清理
 // T-009: 仅使用单一 mu，无多锁交叉；先 RLock 检查 closed 后立即 RUnlock，再调用 Cleanup（内部 Lock），
 // 不持有 RLock 时调用 Cleanup，避免同一 goroutine 上 RLock→Lock 自死锁。
-func (s *MemoryTaskStore) cleanupLoop(interval time.Duration) {
+func (s *MemoryTaskStore) cleanupLoop(interval time.Duration, stop <-chan struct{}, done chan<- struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	defer close(done)
 
-	for range ticker.C {
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+		}
+
 		s.mu.RLock()
 		closed := s.closed
 		s.mu.RUnlock()
@@ -426,7 +458,9 @@ func (s *MemoryTaskStore) cleanupLoop(interval time.Duration) {
 			return
 		}
 
-		_, _ = s.Cleanup(context.Background(), s.config.Cleanup.TaskRetention)
+		if _, err := s.Cleanup(context.Background(), s.config.Cleanup.TaskRetention); err != nil && err != ErrStoreClosed {
+			log.Printf("[memory_task_store] cleanup failed: %v", err)
+		}
 	}
 }
 

@@ -233,3 +233,31 @@ func TestMemoryTaskStore_Ping_Closed(t *testing.T) {
 	store.Close()
 	assert.ErrorIs(t, store.Ping(context.Background()), ErrStoreClosed)
 }
+
+func TestMemoryTaskStore_Close_StopsCleanupLoopPromptly(t *testing.T) {
+	config := DefaultStoreConfig()
+	config.Cleanup.Enabled = true
+	config.Cleanup.Interval = 5 * time.Millisecond
+	store := NewMemoryTaskStore(config)
+
+	done := store.cleanupDone
+	require.NotNil(t, done)
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- store.Close()
+	}()
+
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Close blocked while waiting for cleanup goroutine to stop")
+	}
+
+	select {
+	case <-done:
+	default:
+		t.Fatal("cleanup goroutine should be stopped before Close returns")
+	}
+}

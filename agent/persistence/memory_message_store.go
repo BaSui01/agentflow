@@ -12,11 +12,13 @@ import (
 // 记忆MessageStore是MessageStore的内在执行.
 // 适合开发和测试。 数据在重新启动时丢失 。
 type MemoryMessageStore struct {
-	messages map[string]*Message // msgID -> Message
-	topics   map[string][]string // topic -> []msgID
-	mu       sync.RWMutex
-	closed   bool
-	config   StoreConfig
+	messages    map[string]*Message // msgID -> Message
+	topics      map[string][]string // topic -> []msgID
+	mu          sync.RWMutex
+	closed      bool
+	config      StoreConfig
+	cleanupStop chan struct{}
+	cleanupDone chan struct{}
 }
 
 // 新记忆MessageStore 创建了新的记忆信息存储器
@@ -29,7 +31,14 @@ func NewMemoryMessageStore(config StoreConfig) *MemoryMessageStore {
 
 	// 启用后开始清理 goroutine
 	if config.Cleanup.Enabled {
-		go store.cleanupLoop(config.Cleanup.Interval)
+		interval := config.Cleanup.Interval
+		if interval <= 0 {
+			interval = DefaultCleanupConfig().Interval
+			store.config.Cleanup.Interval = interval
+		}
+		store.cleanupStop = make(chan struct{})
+		store.cleanupDone = make(chan struct{})
+		go store.cleanupLoop(interval, store.cleanupStop, store.cleanupDone)
 	}
 
 	return store
@@ -38,8 +47,23 @@ func NewMemoryMessageStore(config StoreConfig) *MemoryMessageStore {
 // 关闭商店
 func (s *MemoryMessageStore) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
 	s.closed = true
+	stop := s.cleanupStop
+	done := s.cleanupDone
+	s.cleanupStop = nil
+	s.cleanupDone = nil
+	s.mu.Unlock()
+
+	if stop != nil {
+		close(stop)
+	}
+	if done != nil {
+		<-done
+	}
 	return nil
 }
 
@@ -437,11 +461,18 @@ func (s *MemoryMessageStore) Stats(ctx context.Context) (*MessageStoreStats, err
 // cleanupLoop 运行定期清理
 // T-009: 仅使用单一 mu，无多锁交叉；先 RLock 检查 closed 后立即 RUnlock，再调用 Cleanup（内部 Lock），
 // 不持有 RLock 时调用 Cleanup，避免同一 goroutine 上 RLock→Lock 自死锁。
-func (s *MemoryMessageStore) cleanupLoop(interval time.Duration) {
+func (s *MemoryMessageStore) cleanupLoop(interval time.Duration, stop <-chan struct{}, done chan<- struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	defer close(done)
 
-	for range ticker.C {
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+		}
+
 		s.mu.RLock()
 		closed := s.closed
 		s.mu.RUnlock()
@@ -451,6 +482,9 @@ func (s *MemoryMessageStore) cleanupLoop(interval time.Duration) {
 		}
 
 		if _, err := s.Cleanup(context.Background(), s.config.Cleanup.MessageRetention); err != nil {
+			if err == ErrStoreClosed {
+				return
+			}
 			log.Printf("[memory_message_store] cleanup failed: %v", err)
 		}
 	}
