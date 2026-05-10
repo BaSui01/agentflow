@@ -282,8 +282,7 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 
 // HandleCapabilities handles GET /api/v1/chat/capabilities
 func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("chat")

@@ -41,8 +41,7 @@ func extractKeyID(r *http.Request) (uint, bool) {
 
 // HandleListProviders GET /api/v1/providers
 func (h *APIKeyHandler) HandleListProviders(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("api key")
@@ -94,8 +93,7 @@ type apiKeyStatsResponse struct {
 
 // HandleListAPIKeys GET /api/v1/providers/{id}/api-keys
 func (h *APIKeyHandler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("api key")
@@ -130,8 +128,7 @@ type createAPIKeyRequest struct {
 
 // HandleCreateAPIKey POST /api/v1/providers/{id}/api-keys
 func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("api key")
@@ -179,8 +176,7 @@ type updateAPIKeyRequest struct {
 
 // HandleUpdateAPIKey PUT /api/v1/providers/{id}/api-keys/{keyId}
 func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPut, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("api key")
@@ -220,8 +216,7 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 
 // HandleDeleteAPIKey DELETE /api/v1/providers/{id}/api-keys/{keyId}
 func (h *APIKeyHandler) HandleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodDelete, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("api key")
@@ -248,8 +243,7 @@ func (h *APIKeyHandler) HandleDeleteAPIKey(w http.ResponseWriter, r *http.Reques
 
 // HandleAPIKeyStats GET /api/v1/providers/{id}/api-keys/stats
 func (h *APIKeyHandler) HandleAPIKeyStats(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("api key")

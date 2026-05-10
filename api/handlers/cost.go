@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -22,8 +21,7 @@ func NewCostHandler(service usecase.CostQueryService, logger *zap.Logger) *CostH
 }
 
 func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("cost tracker")
@@ -40,8 +38,7 @@ func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("cost tracker")
@@ -75,8 +72,7 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CostHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("cost tracker")

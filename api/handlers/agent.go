@@ -556,8 +556,7 @@ func (h *AgentHandler) HandleAgentInterrupt(w http.ResponseWriter, r *http.Reque
 
 // HandleCapabilities handles GET /api/v1/agents/capabilities
 func (h *AgentHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 

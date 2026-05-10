@@ -39,8 +39,7 @@ type ragQueryResult struct {
 
 // HandleQuery handles POST /api/v1/rag/query
 func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("rag")
@@ -110,8 +109,7 @@ type ragIndexRequest struct {
 
 // HandleIndex handles POST /api/v1/rag/index
 func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("rag")
@@ -155,8 +153,7 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 // HandleCapabilities handles GET /api/v1/rag/capabilities
 func (h *RAGHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("rag")
