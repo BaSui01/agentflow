@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"sync"
 
 	"go.uber.org/zap"
@@ -407,19 +408,15 @@ func (idx *HNSWIndex) selectNeighbors(id string, candidates []string, m int) []s
 	}
 	
 	// 排序
-	for i := 0; i < len(cands)-1; i++ {
-		for j := i + 1; j < len(cands); j++ {
-			if cands[i].dist > cands[j].dist {
-				cands[i], cands[j] = cands[j], cands[i]
-			}
-		}
-	}
-	
+	sort.Slice(cands, func(i, j int) bool {
+		return cands[i].dist < cands[j].dist
+	})
+
 	result := make([]string, m)
 	for i := 0; i < m; i++ {
 		result[i] = cands[i].id
 	}
-	
+
 	return result
 }
 

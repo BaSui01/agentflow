@@ -262,6 +262,8 @@ func (al *DefaultAuditLogger) Close() error {
 type MemoryAuditBackend struct {
 	entries []*AuditEntry
 	maxSize int
+	// byAgent 按 agentID 建立简单索引，避免全量扫描
+	byAgent map[string][]*AuditEntry
 	mu      sync.RWMutex
 }
 
@@ -272,6 +274,7 @@ func NewMemoryAuditBackend(maxSize int) *MemoryAuditBackend {
 	}
 	return &MemoryAuditBackend{
 		entries: make([]*AuditEntry, 0),
+		byAgent: make(map[string][]*AuditEntry),
 		maxSize: maxSize,
 	}
 }
@@ -289,10 +292,24 @@ func (m *MemoryAuditBackend) Write(ctx context.Context, entry *AuditEntry) error
 			removeCount = 1
 		}
 		m.entries = m.entries[removeCount:]
+		m.rebuildIndexLocked()
 	}
 
 	m.entries = append(m.entries, entry)
+	if entry.AgentID != "" {
+		m.byAgent[entry.AgentID] = append(m.byAgent[entry.AgentID], entry)
+	}
 	return nil
+}
+
+// rebuildIndexLocked 在淘汰后重建 byAgent 索引（需在持有写锁时调用）。
+func (m *MemoryAuditBackend) rebuildIndexLocked() {
+	m.byAgent = make(map[string][]*AuditEntry, len(m.byAgent))
+	for _, e := range m.entries {
+		if e.AgentID != "" {
+			m.byAgent[e.AgentID] = append(m.byAgent[e.AgentID], e)
+		}
+	}
 }
 
 // Query 从内存中检索审计条目。
@@ -300,23 +317,30 @@ func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var results []*AuditEntry
+	var candidates []*AuditEntry
+	// 当 AgentID 过滤条件存在时优先使用索引，避免全量扫描
+	if filter != nil && filter.AgentID != "" {
+		candidates = m.byAgent[filter.AgentID]
+	} else {
+		candidates = m.entries
+	}
 
-	for _, entry := range m.entries {
+	var results []*AuditEntry
+	for _, entry := range candidates {
 		if m.matchesFilter(entry, filter) {
 			results = append(results, entry)
 		}
 	}
 
 	// 应用偏移和限制
-	if filter.Offset > 0 {
+	if filter != nil && filter.Offset > 0 {
 		if filter.Offset >= len(results) {
 			return []*AuditEntry{}, nil
 		}
 		results = results[filter.Offset:]
 	}
 
-	if filter.Limit > 0 && len(results) > filter.Limit {
+	if filter != nil && filter.Limit > 0 && len(results) > filter.Limit {
 		results = results[:filter.Limit]
 	}
 

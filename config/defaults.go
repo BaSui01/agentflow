@@ -94,6 +94,7 @@ func DefaultConfig() *Config {
 		Qdrant:             DefaultQdrantConfig(),
 		Weaviate:           DefaultWeaviateConfig(),
 		Milvus:             DefaultMilvusConfig(),
+		Pinecone:           DefaultPineconeConfig(),
 		MongoDB:            DefaultMongoDBConfig(),
 		LLM:                DefaultLLMConfig(),
 		Multimodal:         DefaultMultimodalConfig(),
@@ -223,6 +224,17 @@ func DefaultMilvusConfig() MilvusConfig {
 		Timeout:              30 * time.Second,
 		BatchSize:            1000,
 		ConsistencyLevel:     "Strong",
+	}
+}
+
+// DefaultPineconeConfig 返回默认 Pinecone 配置
+func DefaultPineconeConfig() PineconeConfig {
+	return PineconeConfig{
+		APIKey:    "",
+		Index:     "",
+		BaseURL:   "",
+		Namespace: "",
+		Timeout:   30 * time.Second,
 	}
 }
 

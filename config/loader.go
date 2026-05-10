@@ -67,6 +67,9 @@ type Config struct {
 	// Milvus 向量存储配置
 	Milvus MilvusConfig `yaml:"milvus" env:"MILVUS"`
 
+	// Pinecone 向量存储配置
+	Pinecone PineconeConfig `yaml:"pinecone" env:"PINECONE"`
+
 	// MongoDB 文档型数据存储配置
 	MongoDB MongoDBConfig `yaml:"mongodb" env:"MONGODB"`
 
@@ -311,6 +314,20 @@ type MilvusConfig struct {
 	BatchSize int `yaml:"batch_size" env:"BATCH_SIZE"`
 	// 一致性级别: Strong, Session, Bounded, Eventually
 	ConsistencyLevel string `yaml:"consistency_level" env:"CONSISTENCY_LEVEL"`
+}
+
+// PineconeConfig Pinecone 向量存储配置
+type PineconeConfig struct {
+	// API Key（必需）
+	APIKey string `yaml:"api_key" env:"API_KEY"`
+	// Index 名称（用于通过 Controller API 解析 BaseURL）
+	Index string `yaml:"index" env:"INDEX"`
+	// BaseURL（数据平面地址，若设置则优先使用，格式 https://...svc...pinecone.io）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// Namespace（可选，用于隔离向量空间）
+	Namespace string `yaml:"namespace" env:"NAMESPACE"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
 }
 
 // MongoDBConfig MongoDB 文档型数据存储配置

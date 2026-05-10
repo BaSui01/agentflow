@@ -929,7 +929,7 @@ func demoCoreHelpers(logger *zap.Logger) {
 	fmt.Printf("   Prompt bundle version: %s\n", pb.EffectiveVersion("default"))
 
 	coordinator := agent.NewMemoryCoordinator("demo-agent", nil, logger)
-	_ = coordinator.LoadRecent(context.Background(), agent.MemoryShortTerm, 5)
+	_ = coordinator.LoadRecent(context.Background(), agent.MemoryWorking, 5)
 	fmt.Printf("   Memory coordinator has memory backend: %v\n", coordinator.HasMemory())
 
 	grCfg := guardrails.DefaultConfig()
@@ -1333,7 +1333,7 @@ func demoReasoningPatterns(logger *zap.Logger) {
 	iterCfg.Breadth = 2
 	iterCfg.MaxDepth = 2
 	iterCfg.Timeout = 2 * time.Second
-	iterative := reasoning.NewIterativeDeepening(gw, executor, iterCfg, logger)
+	iterative := reasoning.NewIterativeDeepening(gw, executor, nil, iterCfg, logger)
 	_, _ = iterative.Execute(ctx, "investigate latency anomaly root causes")
 
 	registry := reasoning.NewPatternRegistry()

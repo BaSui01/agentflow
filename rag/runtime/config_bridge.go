@@ -26,7 +26,7 @@ func newVectorStoreFromConfig(cfg *config.Config, storeType core.VectorStoreType
 	case core.VectorStoreMilvus:
 		return NewMilvusStore(mapMilvusConfig(&cfg.Milvus), logger), nil
 	case core.VectorStorePinecone:
-		return NewPineconeStore(PineconeConfig{}, logger), nil
+		return NewPineconeStore(mapPineconeConfig(&cfg.Pinecone), logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported vector store type: %s", storeType)
 	}
@@ -72,5 +72,15 @@ func mapMilvusConfig(c *config.MilvusConfig) MilvusConfig {
 		Timeout:              c.Timeout,
 		BatchSize:            c.BatchSize,
 		ConsistencyLevel:     c.ConsistencyLevel,
+	}
+}
+
+func mapPineconeConfig(c *config.PineconeConfig) PineconeConfig {
+	return PineconeConfig{
+		APIKey:    c.APIKey,
+		Index:     c.Index,
+		BaseURL:   c.BaseURL,
+		Namespace: c.Namespace,
+		Timeout:   c.Timeout,
 	}
 }

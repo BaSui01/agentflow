@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -232,13 +233,9 @@ func (rlm *DefaultRateLimitManager) findApplicableRules(rlCtx *RateLimitContext)
 	}
 
 	// 按优先级排序（高优先级在前）
-	for i := 0; i < len(rules)-1; i++ {
-		for j := i + 1; j < len(rules); j++ {
-			if rules[j].Priority > rules[i].Priority {
-				rules[i], rules[j] = rules[j], rules[i]
-			}
-		}
-	}
+	sort.Slice(rules, func(i, j int) bool {
+		return rules[i].Priority > rules[j].Priority
+	})
 
 	return rules
 }
