@@ -126,7 +126,7 @@ func TestEnhancedMemorySystem_Episodic(t *testing.T) {
 	cfg := DefaultEnhancedMemoryConfig()
 	cfg.ConsolidationEnabled = false
 	cfg.EpisodicEnabled = true
-	store := NewInMemoryEpisodicStore(zap.NewNop())
+	store := NewInMemoryEpisodicStore(0, zap.NewNop())
 	sys := NewEnhancedMemorySystem(nil, nil, nil, store, nil, nil, cfg, zap.NewNop())
 	ctx := context.Background()
 
@@ -160,7 +160,7 @@ func TestEnhancedMemorySystem_Semantic(t *testing.T) {
 	cfg := DefaultEnhancedMemoryConfig()
 	cfg.ConsolidationEnabled = false
 	cfg.SemanticEnabled = true
-	kg := NewInMemoryKnowledgeGraph(zap.NewNop())
+	kg := NewInMemoryKnowledgeGraph(0, zap.NewNop())
 	sys := NewEnhancedMemorySystem(nil, nil, nil, nil, kg, nil, cfg, zap.NewNop())
 	ctx := context.Background()
 

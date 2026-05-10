@@ -12,27 +12,30 @@ import (
 // InMemoryKnowledgeGraph 基于内存的知识图谱实现。
 // 适用于本地开发、测试和小规模部署场景。
 type InMemoryKnowledgeGraph struct {
-	mu        sync.RWMutex
-	entities  map[string]*Entity
-	relations map[string]*Relation
+	mu         sync.RWMutex
+	entities   map[string]*Entity
+	relations  map[string]*Relation
 	// outRels 记录从某个实体出发的关系 ID 列表
 	outRels map[string][]string
 	// inRels 记录指向某个实体的关系 ID 列表
 	inRels map[string][]string
-	logger *zap.Logger
+	maxEntries int // 实体数量上限，0 表示无限制
+	logger     *zap.Logger
 }
 
 // NewInMemoryKnowledgeGraph 创建内存知识图谱。
-func NewInMemoryKnowledgeGraph(logger *zap.Logger) *InMemoryKnowledgeGraph {
+// maxEntries 限制实体数量上限，0 表示无限制。
+func NewInMemoryKnowledgeGraph(maxEntries int, logger *zap.Logger) *InMemoryKnowledgeGraph {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &InMemoryKnowledgeGraph{
-		entities:  make(map[string]*Entity),
-		relations: make(map[string]*Relation),
-		outRels:   make(map[string][]string),
-		inRels:    make(map[string][]string),
-		logger:    logger.With(zap.String("component", "knowledge_graph_inmemory")),
+		entities:   make(map[string]*Entity),
+		relations:  make(map[string]*Relation),
+		outRels:    make(map[string][]string),
+		inRels:     make(map[string][]string),
+		maxEntries: maxEntries,
+		logger:     logger.With(zap.String("component", "knowledge_graph_inmemory")),
 	}
 }
 
@@ -57,6 +60,13 @@ func (g *InMemoryKnowledgeGraph) AddEntity(ctx context.Context, entity *Entity) 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
+	// 如果超出容量限制，先淘汰最旧的实体
+	if g.maxEntries > 0 && len(g.entities) >= g.maxEntries {
+		if _, exists := g.entities[entity.ID]; !exists {
+			g.evictOldestEntityLocked()
+		}
+	}
+
 	// 存储副本
 	copied := *entity
 	g.entities[entity.ID] = &copied
@@ -67,6 +77,31 @@ func (g *InMemoryKnowledgeGraph) AddEntity(ctx context.Context, entity *Entity) 
 		zap.String("name", entity.Name))
 
 	return nil
+}
+
+// evictOldestEntityLocked 淘汰创建时间最早的实体及其关联关系（需在持有写锁时调用）。
+func (g *InMemoryKnowledgeGraph) evictOldestEntityLocked() {
+	var oldestID string
+	var oldestTime time.Time
+	for id, ent := range g.entities {
+		if oldestID == "" || ent.CreatedAt.Before(oldestTime) {
+			oldestID = id
+			oldestTime = ent.CreatedAt
+		}
+	}
+	if oldestID == "" {
+		return
+	}
+	// 删除该实体的所有出边和入边关系
+	for _, relID := range g.outRels[oldestID] {
+		delete(g.relations, relID)
+	}
+	for _, relID := range g.inRels[oldestID] {
+		delete(g.relations, relID)
+	}
+	delete(g.outRels, oldestID)
+	delete(g.inRels, oldestID)
+	delete(g.entities, oldestID)
 }
 
 // AddRelation 添加关系到知识图谱。

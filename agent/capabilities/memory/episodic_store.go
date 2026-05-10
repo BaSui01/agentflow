@@ -14,19 +14,22 @@ import (
 // InMemoryEpisodicStore 基于内存的情节记忆存储实现。
 // 适用于本地开发、测试和小规模部署场景。
 type InMemoryEpisodicStore struct {
-	mu     sync.RWMutex
-	events []types.EpisodicEvent
-	logger *zap.Logger
+	mu         sync.RWMutex
+	events     []types.EpisodicEvent
+	maxEntries int
+	logger     *zap.Logger
 }
 
 // NewInMemoryEpisodicStore 创建内存情节记忆存储。
-func NewInMemoryEpisodicStore(logger *zap.Logger) *InMemoryEpisodicStore {
+// maxEntries 为 0 表示无限制。
+func NewInMemoryEpisodicStore(maxEntries int, logger *zap.Logger) *InMemoryEpisodicStore {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &InMemoryEpisodicStore{
-		events: make([]types.EpisodicEvent, 0),
-		logger: logger.With(zap.String("component", "episodic_store_inmemory")),
+		events:     make([]types.EpisodicEvent, 0),
+		maxEntries: maxEntries,
+		logger:     logger.With(zap.String("component", "episodic_store_inmemory")),
 	}
 }
 
@@ -51,6 +54,11 @@ func (s *InMemoryEpisodicStore) RecordEvent(ctx context.Context, event *types.Ep
 	// 存储副本，避免外部修改
 	copied := *event
 	s.events = append(s.events, copied)
+
+	// 如果超出容量限制，淘汰最旧的事件
+	if s.maxEntries > 0 && len(s.events) > s.maxEntries {
+		s.events = s.events[len(s.events)-s.maxEntries:]
+	}
 
 	s.logger.Debug("episodic event recorded",
 		zap.String("id", copied.ID),
