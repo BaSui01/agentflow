@@ -95,6 +95,7 @@ http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 - 错误响应：`WriteError(w, err, logger)`（`types.Error`）
 - 入参解析：`DecodeJSONBody(...)`
 - Content-Type 校验：`ValidateContentType(...)`
+- HTTP method 校验：统一使用 `requireMethod(...)`，集中输出 `405` 与 `Allow` header
 
 ## 当前测试覆盖
 

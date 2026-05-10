@@ -30,8 +30,7 @@ type workflowExecuteRequest struct {
 
 // HandleExecute handles POST /api/v1/workflows/execute
 func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	var req workflowExecuteRequest
@@ -104,8 +103,7 @@ type workflowParseRequest struct {
 
 // HandleParse handles POST /api/v1/workflows/parse (validate DSL)
 func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	if !ValidateContentType(w, r, h.logger) {
@@ -137,8 +135,7 @@ func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
 
 // HandleList handles GET /api/v1/workflows
 func (h *WorkflowHandler) HandleList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	// Currently returns an empty list as workflows are not persisted.
@@ -150,8 +147,7 @@ func (h *WorkflowHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 
 // HandleCapabilities handles GET /api/v1/workflows/capabilities
 func (h *WorkflowHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	WriteSuccess(w, map[string]any{

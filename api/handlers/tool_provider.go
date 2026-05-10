@@ -29,8 +29,7 @@ type upsertToolProviderRequest struct {
 }
 
 func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool provider")
@@ -49,8 +48,7 @@ func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPut, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool provider")
@@ -92,8 +90,7 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodDelete, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool provider")
@@ -116,8 +113,7 @@ func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ToolProviderHandler) HandleReload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool provider")

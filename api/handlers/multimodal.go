@@ -106,8 +106,7 @@ func (h *MultimodalHandler) ApplyRuntimeDeps(deps MultimodalHandlerRuntimeDeps) 
 }
 
 func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 
@@ -140,8 +139,7 @@ func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Re
 }
 
 func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 
@@ -215,8 +213,7 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 }
 
 func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	if !ValidateContentType(w, r, h.logger) {
@@ -492,8 +489,7 @@ func (h *MultimodalHandler) flushImageResult(w http.ResponseWriter, req usecase.
 }
 
 func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	if !ValidateContentType(w, r, h.logger) {
@@ -547,8 +543,7 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	if !ValidateContentType(w, r, h.logger) {
@@ -601,8 +596,7 @@ type multimodalChatRequest struct {
 }
 
 func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	if !ValidateContentType(w, r, h.logger) {

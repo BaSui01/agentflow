@@ -28,8 +28,7 @@ type resolveToolApprovalRequest struct {
 }
 
 func (h *ToolApprovalHandler) HandleList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -48,8 +47,7 @@ func (h *ToolApprovalHandler) HandleList(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ToolApprovalHandler) HandleGet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -73,8 +71,7 @@ func (h *ToolApprovalHandler) HandleGet(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *ToolApprovalHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -107,8 +104,7 @@ func (h *ToolApprovalHandler) HandleResolve(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ToolApprovalHandler) HandleStats(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -127,8 +123,7 @@ func (h *ToolApprovalHandler) HandleStats(w http.ResponseWriter, r *http.Request
 }
 
 func (h *ToolApprovalHandler) HandleCleanup(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -147,8 +142,7 @@ func (h *ToolApprovalHandler) HandleCleanup(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ToolApprovalHandler) HandleHistory(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -174,8 +168,7 @@ func (h *ToolApprovalHandler) HandleHistory(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ToolApprovalHandler) HandleListGrants(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")
@@ -194,8 +187,7 @@ func (h *ToolApprovalHandler) HandleListGrants(w http.ResponseWriter, r *http.Re
 }
 
 func (h *ToolApprovalHandler) HandleRevokeGrant(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodDelete, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool approval")

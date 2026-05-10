@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -21,8 +20,7 @@ func NewAuthorizationAuditHandler(service usecase.AuthorizationAuditService, log
 }
 
 func (h *AuthorizationAuditHandler) HandleList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("authorization audit")

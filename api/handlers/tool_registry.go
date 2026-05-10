@@ -41,8 +41,7 @@ type updateToolRegistrationRequest struct {
 
 // HandleList returns tool registrations. No pagination: config data is typically small.
 func (h *ToolRegistryHandler) HandleList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool registry")
@@ -61,8 +60,7 @@ func (h *ToolRegistryHandler) HandleList(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ToolRegistryHandler) HandleListTargets(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodGet, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool registry")
@@ -81,8 +79,7 @@ func (h *ToolRegistryHandler) HandleListTargets(w http.ResponseWriter, r *http.R
 }
 
 func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool registry")
@@ -115,8 +112,7 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPut, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool registry")
@@ -150,8 +146,7 @@ func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ToolRegistryHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodDelete, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool registry")
@@ -174,8 +169,7 @@ func (h *ToolRegistryHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ToolRegistryHandler) HandleReload(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
 	service, svcErr := h.currentServiceOrUnavailable("tool registry")
