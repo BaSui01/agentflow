@@ -11,103 +11,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// ─── testMemoryManager mock ──────────────────────────
-
-type testMemoryManager struct {
-	mu      sync.Mutex
-	records map[string]MemoryRecord
-	failOn  string // 设置后对应方法返回错误
-}
-
-func newTestMM() *testMemoryManager {
-	return &testMemoryManager{records: make(map[string]MemoryRecord)}
-}
-
-func (m *testMemoryManager) Save(_ context.Context, rec MemoryRecord) error {
-	if m.failOn == "save" {
-		return fmt.Errorf("mock save error")
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if rec.ID == "" {
-		rec.ID = fmt.Sprintf("rec_%d", len(m.records)+1)
-	}
-	m.records[rec.ID] = rec
-	return nil
-}
-
-func (m *testMemoryManager) Delete(_ context.Context, id string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.records, id)
-	return nil
-}
-
-func (m *testMemoryManager) Clear(_ context.Context, agentID string, _ MemoryKind) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for k, v := range m.records {
-		if v.AgentID == agentID {
-			delete(m.records, k)
-		}
-	}
-	return nil
-}
-
-func (m *testMemoryManager) LoadRecent(_ context.Context, agentID string, kind MemoryKind, limit int) ([]MemoryRecord, error) {
-	if m.failOn == "load" {
-		return nil, fmt.Errorf("mock load error")
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []MemoryRecord
-	for _, v := range m.records {
-		if v.AgentID == agentID && v.Kind == kind {
-			out = append(out, v)
-		}
-		if len(out) >= limit {
-			break
-		}
-	}
-	return out, nil
-}
-
-func (m *testMemoryManager) Search(_ context.Context, agentID string, _ string, topK int) ([]MemoryRecord, error) {
-	if m.failOn == "search" {
-		return nil, fmt.Errorf("mock search error")
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []MemoryRecord
-	for _, v := range m.records {
-		if v.AgentID == agentID {
-			out = append(out, v)
-		}
-		if len(out) >= topK {
-			break
-		}
-	}
-	return out, nil
-}
-
-func (m *testMemoryManager) Get(_ context.Context, id string) (*MemoryRecord, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if r, ok := m.records[id]; ok {
-		return &r, nil
-	}
-	return nil, fmt.Errorf("not found: %s", id)
-}
-
 // ═══════════════════════════════════════════════════════
-// Cache 测试
+// Coordinator 缓存特性测试（原 Cache 迁移）
 // ═══════════════════════════════════════════════════════
 
-func TestCache_NewCache(t *testing.T) {
+func TestCoordinator_CacheNew(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	if c == nil {
-		t.Fatal("NewCache returned nil")
+		t.Fatal("NewCoordinator returned nil")
 	}
 	if c.Manager() != mm {
 		t.Fatal("Manager() returned wrong instance")
@@ -120,17 +32,17 @@ func TestCache_NewCache(t *testing.T) {
 	}
 }
 
-func TestCache_NilMemory(t *testing.T) {
-	c := NewCache("agent1", nil, zap.NewNop())
+func TestCoordinator_CacheNilMemory(t *testing.T) {
+	c := NewCoordinator("agent1", nil, zap.NewNop())
 	if c.HasMemory() {
 		t.Fatal("HasMemory should be false with nil")
 	}
 	// Save with nil memory should not error
-	if err := c.Save(context.Background(), "test", MemoryShortTerm, nil); err != nil {
+	if err := c.Save(context.Background(), "test", MemoryWorking, nil); err != nil {
 		t.Fatalf("Save with nil memory should return nil, got %v", err)
 	}
-	// LoadRecent with nil memory should not panic
-	c.LoadRecent(context.Background())
+	// LoadRecentDefault with nil memory should not panic
+	c.LoadRecentDefault(context.Background())
 	// Recall with nil memory should return empty
 	recs, err := c.Recall(context.Background(), "query", 5)
 	if err != nil {
@@ -141,14 +53,14 @@ func TestCache_NilMemory(t *testing.T) {
 	}
 }
 
-func TestCache_SaveAndLoadRecent(t *testing.T) {
+func TestCoordinator_CacheSaveAndLoadRecent(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
 	// Save 3 records
 	for i := 0; i < 3; i++ {
-		if err := c.Save(ctx, fmt.Sprintf("content_%d", i), MemoryShortTerm, nil); err != nil {
+		if err := c.Save(ctx, fmt.Sprintf("content_%d", i), MemoryWorking, nil); err != nil {
 			t.Fatalf("Save failed: %v", err)
 		}
 	}
@@ -163,43 +75,43 @@ func TestCache_SaveAndLoadRecent(t *testing.T) {
 		t.Fatalf("expected 3 messages, got %d", len(msgs))
 	}
 
-	// LoadRecent from backend
-	c2 := NewCache("agent1", mm, zap.NewNop())
-	c2.LoadRecent(ctx)
+	// LoadRecent from backend via default method
+	c2 := NewCoordinator("agent1", mm, zap.NewNop())
+	c2.LoadRecentDefault(ctx)
 	if !c2.HasRecentMemory() {
-		t.Fatal("HasRecentMemory should be true after LoadRecent")
+		t.Fatal("HasRecentMemory should be true after LoadRecentDefault")
 	}
 }
 
-func TestCache_SaveError(t *testing.T) {
+func TestCoordinator_CacheSaveError(t *testing.T) {
 	mm := newTestMM()
 	mm.failOn = "save"
-	c := NewCache("agent1", mm, zap.NewNop())
-	err := c.Save(context.Background(), "test", MemoryShortTerm, nil)
+	c := NewCoordinator("agent1", mm, zap.NewNop())
+	err := c.Save(context.Background(), "test", MemoryWorking, nil)
 	if err == nil {
 		t.Fatal("expected error from Save")
 	}
 }
 
-func TestCache_LoadRecentError(t *testing.T) {
+func TestCoordinator_CacheLoadRecentDefaultError(t *testing.T) {
 	mm := newTestMM()
 	mm.failOn = "load"
-	c := NewCache("agent1", mm, zap.NewNop())
-	// LoadRecent should not panic, just log warning
-	c.LoadRecent(context.Background())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
+	// LoadRecentDefault should not panic, just log warning
+	c.LoadRecentDefault(context.Background())
 	if c.HasRecentMemory() {
 		t.Fatal("should have no recent memory after load error")
 	}
 }
 
-func TestCache_MaxRecentMemory(t *testing.T) {
+func TestCoordinator_CacheMaxRecentMemory(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
 	// Save more than MaxRecentMemory
 	for i := 0; i < MaxRecentMemory+10; i++ {
-		c.Save(ctx, fmt.Sprintf("content_%d", i), MemoryShortTerm, nil)
+		c.Save(ctx, fmt.Sprintf("content_%d", i), MemoryWorking, nil)
 	}
 
 	msgs := c.GetRecentMessages()
@@ -208,14 +120,14 @@ func TestCache_MaxRecentMemory(t *testing.T) {
 	}
 }
 
-func TestCache_GetRecentMessages_RoleMetadata(t *testing.T) {
+func TestCoordinator_CacheGetRecentMessagesRole(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
-	c.Save(ctx, "user msg", MemoryShortTerm, map[string]any{"role": "user"})
-	c.Save(ctx, "assistant msg", MemoryShortTerm, map[string]any{"role": "assistant"})
-	c.Save(ctx, "no role", MemoryShortTerm, nil) // default to assistant
+	c.Save(ctx, "user msg", MemoryWorking, map[string]any{"role": "user"})
+	c.Save(ctx, "assistant msg", MemoryWorking, map[string]any{"role": "assistant"})
+	c.Save(ctx, "no role", MemoryWorking, nil) // default to assistant
 
 	msgs := c.GetRecentMessages()
 	if len(msgs) != 3 {
@@ -232,16 +144,16 @@ func TestCache_GetRecentMessages_RoleMetadata(t *testing.T) {
 	}
 }
 
-func TestCache_GetRecentMessages_FilterKind(t *testing.T) {
+func TestCoordinator_CacheGetRecentMessagesFilterKind(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
-	c.Save(ctx, "short term", MemoryShortTerm, nil)
-	c.Save(ctx, "long term", MemoryLongTerm, nil)
+	c.Save(ctx, "short term", MemoryWorking, nil)
+	c.Save(ctx, "long term", MemorySemantic, nil)
 
 	msgs := c.GetRecentMessages()
-	// Only MemoryShortTerm should be returned
+	// Only MemoryWorking should be returned
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message (short term only), got %d", len(msgs))
 	}
@@ -250,13 +162,13 @@ func TestCache_GetRecentMessages_FilterKind(t *testing.T) {
 	}
 }
 
-func TestCache_Recall(t *testing.T) {
+func TestCoordinator_CacheRecall(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
-	c.Save(ctx, "Go is great", MemoryShortTerm, nil)
-	c.Save(ctx, "Rust is fast", MemoryShortTerm, nil)
+	c.Save(ctx, "Go is great", MemoryWorking, nil)
+	c.Save(ctx, "Rust is fast", MemoryWorking, nil)
 
 	results, err := c.Recall(ctx, "Go", 5)
 	if err != nil {
@@ -267,9 +179,9 @@ func TestCache_Recall(t *testing.T) {
 	}
 }
 
-func TestCache_ConcurrentAccess(t *testing.T) {
+func TestCoordinator_CacheConcurrentAccess(t *testing.T) {
 	mm := newTestMM()
-	c := NewCache("agent1", mm, zap.NewNop())
+	c := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -278,7 +190,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			c.Save(ctx, fmt.Sprintf("concurrent_%d", n), MemoryShortTerm, nil)
+			c.Save(ctx, fmt.Sprintf("concurrent_%d", n), MemoryWorking, nil)
 		}(i)
 	}
 	// 10 concurrent readers
@@ -320,10 +232,10 @@ func TestCoordinator_NilMemory(t *testing.T) {
 	if co.HasMemory() {
 		t.Fatal("HasMemory should be false")
 	}
-	if err := co.LoadRecent(context.Background(), MemoryShortTerm, 10); err != nil {
+	if err := co.LoadRecent(context.Background(), MemoryWorking, 10); err != nil {
 		t.Fatalf("LoadRecent with nil should not error: %v", err)
 	}
-	if err := co.Save(context.Background(), "test", MemoryShortTerm, nil); err != nil {
+	if err := co.Save(context.Background(), "test", MemoryWorking, nil); err != nil {
 		t.Fatalf("Save with nil should not error: %v", err)
 	}
 	recs, err := co.Search(context.Background(), "query", 5)
@@ -344,8 +256,8 @@ func TestCoordinator_SaveAndLoadRecent(t *testing.T) {
 	co := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
-	co.Save(ctx, "memory1", MemoryShortTerm, nil)
-	co.Save(ctx, "memory2", MemoryShortTerm, nil)
+	co.Save(ctx, "memory1", MemoryWorking, nil)
+	co.Save(ctx, "memory2", MemoryWorking, nil)
 
 	recent := co.GetRecentMemory()
 	if len(recent) != 2 {
@@ -354,7 +266,7 @@ func TestCoordinator_SaveAndLoadRecent(t *testing.T) {
 
 	// LoadRecent from backend
 	co2 := NewCoordinator("agent1", mm, zap.NewNop())
-	if err := co2.LoadRecent(ctx, MemoryShortTerm, 10); err != nil {
+	if err := co2.LoadRecent(ctx, MemoryWorking, 10); err != nil {
 		t.Fatalf("LoadRecent failed: %v", err)
 	}
 	recent2 := co2.GetRecentMemory()
@@ -367,7 +279,7 @@ func TestCoordinator_SaveError(t *testing.T) {
 	mm := newTestMM()
 	mm.failOn = "save"
 	co := NewCoordinator("agent1", mm, zap.NewNop())
-	err := co.Save(context.Background(), "test", MemoryShortTerm, nil)
+	err := co.Save(context.Background(), "test", MemoryWorking, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -377,7 +289,7 @@ func TestCoordinator_LoadRecentError(t *testing.T) {
 	mm := newTestMM()
 	mm.failOn = "load"
 	co := NewCoordinator("agent1", mm, zap.NewNop())
-	err := co.LoadRecent(context.Background(), MemoryShortTerm, 10)
+	err := co.LoadRecent(context.Background(), MemoryWorking, 10)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -389,7 +301,7 @@ func TestCoordinator_MaxRecentMemory(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < MaxRecentMemory+10; i++ {
-		co.Save(ctx, fmt.Sprintf("mem_%d", i), MemoryShortTerm, nil)
+		co.Save(ctx, fmt.Sprintf("mem_%d", i), MemoryWorking, nil)
 	}
 
 	recent := co.GetRecentMemory()
@@ -403,7 +315,7 @@ func TestCoordinator_ClearRecentMemory(t *testing.T) {
 	co := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
-	co.Save(ctx, "test", MemoryShortTerm, nil)
+	co.Save(ctx, "test", MemoryWorking, nil)
 	if len(co.GetRecentMemory()) == 0 {
 		t.Fatal("should have memory")
 	}
@@ -441,8 +353,8 @@ func TestCoordinator_RecallRelevant(t *testing.T) {
 	co := NewCoordinator("agent1", mm, zap.NewNop())
 	ctx := context.Background()
 
-	co.Save(ctx, "Go语言很棒", MemoryShortTerm, nil)
-	co.Save(ctx, "Rust也不错", MemoryShortTerm, nil)
+	co.Save(ctx, "Go语言很棒", MemoryWorking, nil)
+	co.Save(ctx, "Rust也不错", MemoryWorking, nil)
 
 	results, err := co.RecallRelevant(ctx, "Go", 5)
 	if err != nil {
@@ -473,7 +385,7 @@ func TestCoordinator_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			co.Save(ctx, fmt.Sprintf("concurrent_%d", n), MemoryShortTerm, nil)
+			co.Save(ctx, fmt.Sprintf("concurrent_%d", n), MemoryWorking, nil)
 		}(i)
 	}
 	for i := 0; i < 10; i++ {
@@ -501,7 +413,7 @@ func TestNamespacedManager_SaveAndGet(t *testing.T) {
 	ns := NewNamespacedManager(mm, "ns1")
 
 	ctx := context.Background()
-	rec := MemoryRecord{ID: "r1", AgentID: "agent1", Kind: types.MemoryShortTerm, Content: "test", CreatedAt: time.Now()}
+	rec := MemoryRecord{ID: "r1", AgentID: "agent1", Kind: types.MemoryWorking, Content: "test", CreatedAt: time.Now()}
 	if err := ns.Save(ctx, rec); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -525,7 +437,7 @@ func TestNamespacedManager_Delete(t *testing.T) {
 	ns := NewNamespacedManager(mm, "ns1")
 	ctx := context.Background()
 
-	rec := MemoryRecord{ID: "r1", AgentID: "agent1", Kind: types.MemoryShortTerm, Content: "test"}
+	rec := MemoryRecord{ID: "r1", AgentID: "agent1", Kind: types.MemoryWorking, Content: "test"}
 	ns.Save(ctx, rec)
 	if err := ns.Delete(ctx, "r1"); err != nil {
 		t.Fatalf("Delete failed: %v", err)
@@ -537,8 +449,8 @@ func TestNamespacedManager_Clear(t *testing.T) {
 	ns := NewNamespacedManager(mm, "ns1")
 	ctx := context.Background()
 
-	ns.Save(ctx, MemoryRecord{ID: "r1", AgentID: "agent1", Kind: types.MemoryShortTerm, Content: "test"})
-	if err := ns.Clear(ctx, "agent1", types.MemoryShortTerm); err != nil {
+	ns.Save(ctx, MemoryRecord{ID: "r1", AgentID: "agent1", Kind: types.MemoryWorking, Content: "test"})
+	if err := ns.Clear(ctx, "agent1", types.MemoryWorking); err != nil {
 		t.Fatalf("Clear failed: %v", err)
 	}
 }
