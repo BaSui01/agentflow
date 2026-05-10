@@ -73,6 +73,14 @@ type HTTPServer struct {
 
 	// 从代理生成代理卡
 	cardGenerator *AgentCardGenerator
+
+	// lifecycleCtx 由 InitLifecycle 派生，Shutdown 时取消。
+	// 所有 Background() 回退点（async task、cleanup 等）改为从此派生，使
+	// 服务关闭时飞行中的 IO 能立即终止（issue #12）。
+	lifecycleMu     sync.Mutex
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+	lifecycleOnce   sync.Once
 }
 
 // asyncTask 代表正在处理的 A2A 异步任务。
@@ -126,3 +134,35 @@ func NewHTTPServerWithTaskStore(config *ServerConfig, taskStore persistence.Task
 }
 
 // SetTaskStore 设置任务存储,用于持久性(依赖性注射).
+
+// InitLifecycle initializes the server's lifecycle context derived from parent.
+// Must be called before the server starts handling requests.
+// All async task contexts and cleanup operations will respect this lifecycle (#12).
+func (s *HTTPServer) InitLifecycle(parent context.Context) {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(parent)
+}
+
+// Shutdown cancels the lifecycle context, terminating in-flight async tasks and
+// cleanup loops. Safe to call multiple times.
+func (s *HTTPServer) Shutdown() {
+	s.lifecycleOnce.Do(func() {
+		s.lifecycleMu.Lock()
+		if s.lifecycleCancel != nil {
+			s.lifecycleCancel()
+		}
+		s.lifecycleMu.Unlock()
+	})
+}
+
+// lifecycleContext returns the server's lifecycle context, falling back to
+// context.Background() if InitLifecycle was never called.
+func (s *HTTPServer) lifecycleContext() context.Context {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.lifecycleCtx != nil {
+		return s.lifecycleCtx
+	}
+	return context.Background()
+}

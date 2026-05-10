@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -18,6 +19,7 @@ const defaultServeChatServiceTimeout = 30 * time.Second
 
 // ServeHandlerSetBuildInput defines dependencies for serve-time handler assembly.
 type ServeHandlerSetBuildInput struct {
+	Ctx         context.Context // lifecycle context for servers; defaults to context.Background() if nil (#12)
 	Cfg         *config.Config
 	DB          *gorm.DB
 	MongoClient *mongoclient.Client
@@ -27,6 +29,14 @@ type ServeHandlerSetBuildInput struct {
 	WorkflowHITLManager *hitl.InterruptManager
 
 	WireMongoStores func(resolver *agent.CachingResolver, discoveryRegistry *discovery.CapabilityRegistry) error
+}
+
+// lifecycleCtx returns a non-nil context from input, defaulting to Background().
+func (in *ServeHandlerSetBuildInput) lifecycleCtx() context.Context {
+	if in.Ctx != nil {
+		return in.Ctx
+	}
+	return context.Background()
 }
 
 // ServeHandlerSet aggregates handlers and runtime dependencies built at startup.

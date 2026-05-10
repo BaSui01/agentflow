@@ -292,7 +292,8 @@ func (s *HTTPServer) CleanupExpiredTasks(maxAge time.Duration) int {
 
 	// 还清理了持久性储存
 	if s.taskStore != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// 从服务 lifecycle 派生 ctx，使 Shutdown 能取消 cleanup IO（issue #12）。
+		ctx, cancel := context.WithTimeout(s.lifecycleContext(), 30*time.Second)
 		defer cancel()
 		persistCount, err := s.taskStore.Cleanup(ctx, maxAge)
 		if err != nil {

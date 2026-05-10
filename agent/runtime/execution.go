@@ -139,7 +139,7 @@ func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*
 		return recordFailure(fmt.Errorf("sandbox backend is nil"), false)
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, fmt.Errorf("context must not be nil (#12)")
 	}
 	if err := ctx.Err(); err != nil {
 		return recordFailure(err, err == context.DeadlineExceeded)
@@ -312,7 +312,7 @@ func (d *DockerBackend) Name() string { return "docker" }
 // Execute runs code inside a docker container.
 func (d *DockerBackend) Execute(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, fmt.Errorf("context must not be nil (#12)")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -504,7 +504,7 @@ func (p *ProcessBackend) Name() string { return "process" }
 // Execute runs code with a trusted local interpreter.
 func (p *ProcessBackend) Execute(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, fmt.Errorf("context must not be nil (#12)")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
