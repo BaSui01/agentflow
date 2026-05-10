@@ -20,22 +20,23 @@ import (
 // This is a self-contained copy of the relevant fields from config.MongoDBConfig,
 // decoupling pkg/mongodb from the config package.
 type ConnectConfig struct {
-	URI             string
-	Host            string
-	Port            int
-	User            string
-	Password        string
-	AuthSource      string
-	ReplicaSet      string
-	MaxPoolSize     int
-	MinPoolSize     int
-	ConnectTimeout  time.Duration
-	Timeout         time.Duration
-	TLSEnabled      bool
-	TLSCAFile       string
-	TLSCertFile     string
-	TLSKeyFile      string
-	Database        string
+	URI                string
+	Host               string
+	Port               int
+	User               string
+	Password           string
+	AuthSource         string
+	ReplicaSet         string
+	MaxPoolSize        int
+	MinPoolSize        int
+	ConnectTimeout     time.Duration
+	Timeout            time.Duration
+	TLSEnabled         bool
+	TLSCAFile          string
+	TLSCertFile        string
+	TLSKeyFile         string
+	Database           string
+	HealthCheckInterval time.Duration
 }
 
 // BuildClientOptions converts a ConnectConfig into mongo driver options.

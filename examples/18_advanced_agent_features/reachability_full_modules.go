@@ -632,7 +632,7 @@ func demoFullModuleIntegrationReachability() {
 	_ = pkg_cache.IsCacheMiss
 	_ = pkg_middleware.RequestIDFromContext
 	_ = pkg_migration.GetMigrationsPath
-	_ = pkg_migration.NewMigratorFromConfig
+	_ = pkg_migration.NewMigratorFromDBConfig
 	_ = pkg_mongodb.NewClientFromOptions
 	_ = pkg_server.DefaultConfig
 	_ = pkg_telemetry.LoggerWithTrace
@@ -846,7 +846,7 @@ func demoFullModuleIntegrationReachability() {
 		pkg_cache.IsCacheMiss(nil)
 		pkg_middleware.RequestIDFromContext(nil)
 		pkg_migration.GetMigrationsPath("")
-		pkg_migration.NewMigratorFromConfig(nil)
+		pkg_migration.NewMigratorFromDBConfig(pkg_migration.DBConfig{})
 		pkg_mongodb.NewClientFromOptions(nil, "", nil)
 		pkg_server.DefaultConfig()
 		pkg_telemetry.LoggerWithTrace(nil, nil)

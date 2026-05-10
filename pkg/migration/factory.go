@@ -69,7 +69,7 @@ func NewMigratorFromDBConfig(dbCfg DBConfig) (*DefaultMigrator, error) {
 func NewMigratorFromURL(dbType, dbURL string) (*DefaultMigrator, error) {
 	dt, err := ParseDatabaseType(dbType)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	return NewMigrator(&Config{
