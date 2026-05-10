@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"math"
 	"time"
 )
 
@@ -91,6 +92,43 @@ func extractMemoryVector(memory any) ([]float64, bool) {
 	}
 
 	return nil, false
+}
+
+func cosineSimilarity(a, b []float64) float64 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0.0
+	}
+	var dot, normA, normB float64
+	for i := range a {
+		dot += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+	if normA == 0 || normB == 0 {
+		return 0.0
+	}
+	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
+}
+
+func extractMemoryKey(memory any) (string, bool) {
+	m, ok := memory.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	key, ok := m["key"].(string)
+	return key, ok && key != ""
+}
+
+// cloneMap performs a shallow copy of a map[string]any.
+func cloneMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func coerceVector(raw any) ([]float64, bool) {
