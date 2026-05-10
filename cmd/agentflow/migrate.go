@@ -120,7 +120,15 @@ func buildMigrator(configPath, dbType, dbURL string) (*migration.DefaultMigrator
 		cfg.Database.Driver = dbType
 	}
 
-	return migration.NewMigratorFromDatabaseConfig(cfg.Database)
+	return migration.NewMigratorFromDBConfig(migration.DBConfig{
+		Driver:   cfg.Database.Driver,
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		Name:     cfg.Database.Name,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		SSLMode:  cfg.Database.SSLMode,
+	})
 }
 
 func fatalf(format string, args ...any) {
