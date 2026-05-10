@@ -58,7 +58,7 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 
 	// 加载记忆（如果有）并缓存
 	if b.memory != nil {
-		records, err := b.memory.LoadRecent(ctx, b.config.Core.ID, MemoryShortTerm, defaultMaxRecentMemory)
+		records, err := b.memory.LoadRecent(ctx, b.config.Core.ID, MemoryWorking, defaultMaxRecentMemory)
 		if err != nil {
 			b.logger.Warn("failed to load memory", zap.Error(err))
 		} else {

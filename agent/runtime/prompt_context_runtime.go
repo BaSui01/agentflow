@@ -21,7 +21,7 @@ func (b *BaseAgent) prepareRuntimePromptContext(ctx context.Context, input *Inpu
 		return runtimePromptContext{}
 	}
 	logger := runtimePromptLogger(b)
-	memoryContext := b.collectContextMemory(input.Context)
+	memoryContext := b.collectContextMemory(ctx, input.Context)
 	conversation := restoredMessages
 	if handoffMessages := handoffMessagesFromInputContext(input.Context); len(handoffMessages) > 0 {
 		conversation = handoffMessages

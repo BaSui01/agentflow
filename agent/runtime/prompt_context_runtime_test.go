@@ -25,6 +25,37 @@ func (s *promptContextMemoryRuntimeStub) ObserveTurn(context.Context, string, Me
 	return nil
 }
 
+type promptContextTestKey struct{}
+
+type promptContextEnhancedMemoryStub struct {
+	loadCtx    context.Context
+	working    []types.MemoryEntry
+	shortTerm  []types.MemoryEntry
+	loadAgent  string
+	shortLimit int
+}
+
+func (s *promptContextEnhancedMemoryStub) LoadWorking(ctx context.Context, agentID string) ([]types.MemoryEntry, error) {
+	s.loadCtx = ctx
+	s.loadAgent = agentID
+	return append([]types.MemoryEntry(nil), s.working...), nil
+}
+
+func (s *promptContextEnhancedMemoryStub) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]types.MemoryEntry, error) {
+	s.loadCtx = ctx
+	s.loadAgent = agentID
+	s.shortLimit = limit
+	return append([]types.MemoryEntry(nil), s.shortTerm...), nil
+}
+
+func (s *promptContextEnhancedMemoryStub) SaveShortTerm(context.Context, string, string, map[string]any) error {
+	return nil
+}
+
+func (s *promptContextEnhancedMemoryStub) RecordEpisode(context.Context, *types.EpisodicEvent) error {
+	return nil
+}
+
 func TestPrepareRuntimePromptContextUsesAssemblerWithRetrievedContext(t *testing.T) {
 	manager := &promptContextCapturingManager{}
 	agent := newPromptContextTestAgent()
@@ -119,6 +150,34 @@ func TestPrepareRuntimePromptContext_SkipsMemoryRecallWhenExternalContextPolicyD
 	for _, msg := range result.messages {
 		assert.NotEqual(t, "recalled", msg.Content)
 	}
+}
+
+func TestPrepareRuntimePromptContext_PropagatesRequestContextToMemoryFacade(t *testing.T) {
+	manager := &promptContextCapturingManager{}
+	agent := newPromptContextTestAgent()
+	agent.contextManager = manager
+	enhanced := &promptContextEnhancedMemoryStub{
+		working:   []types.MemoryEntry{{Content: "working memory"}},
+		shortTerm: []types.MemoryEntry{{Content: "short-term memory"}},
+	}
+	agent.memoryFacade = NewUnifiedMemoryFacade(nil, enhanced, zap.NewNop())
+
+	ctx := context.WithValue(context.Background(), promptContextTestKey{}, "req-ctx-memory")
+	input := &Input{
+		Content: "question",
+		Context: map[string]any{
+			"memory_context": []string{"external memory"},
+		},
+	}
+
+	result := agent.prepareRuntimePromptContext(ctx, input, NewPromptBundleFromIdentity("v1", "system"), nil)
+
+	require.NotNil(t, result)
+	require.NotNil(t, manager.request)
+	assert.Equal(t, "req-ctx-memory", enhanced.loadCtx.Value(promptContextTestKey{}))
+	assert.Equal(t, "agent-1", enhanced.loadAgent)
+	assert.Equal(t, 5, enhanced.shortLimit)
+	assert.Equal(t, []string{"working memory", "short-term memory", "external memory"}, manager.request.MemoryContext)
 }
 
 func newPromptContextTestAgent() *BaseAgent {

@@ -558,13 +558,13 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	} else {
 		skipBaseMemory := b.memoryFacade != nil && b.memoryFacade.SkipBaseMemory()
 		if b.memory != nil && !skipBaseMemory {
-			if err := b.SaveMemory(ctx, input.Content, MemoryShortTerm, map[string]any{
+			if err := b.SaveMemory(ctx, input.Content, MemoryWorking, map[string]any{
 				"trace_id": input.TraceID,
 				"role":     "user",
 			}); err != nil {
 				b.logger.Warn("failed to save user input to memory", zap.Error(err))
 			}
-			if err := b.SaveMemory(ctx, outputContent, MemoryShortTerm, map[string]any{
+			if err := b.SaveMemory(ctx, outputContent, MemoryWorking, map[string]any{
 				"trace_id": input.TraceID,
 				"role":     "assistant",
 			}); err != nil {

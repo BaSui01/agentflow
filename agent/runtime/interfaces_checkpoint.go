@@ -206,6 +206,28 @@ func (m *CheckpointManager) restoreAgentFromCheckpoint(ctx context.Context, agen
 		}
 	}
 
+	// 恢复记忆快照到增强记忆系统
+	if len(checkpoint.MemorySnapshot) > 0 {
+		if ba, ok := agent.(*BaseAgent); ok && ba.extensions != nil {
+			if em := ba.extensions.EnhancedMemoryExt(); em != nil {
+				for _, entry := range checkpoint.MemorySnapshot {
+					if entry.Content == "" {
+						continue
+					}
+					if err := em.SaveShortTerm(ctx, checkpoint.AgentID, entry.Content, entry.Metadata); err != nil {
+						m.loggerOrNop().Warn("failed to restore memory snapshot entry",
+							zap.String("agent_id", checkpoint.AgentID),
+							zap.String("entry_key", entry.Key),
+							zap.Error(err))
+					}
+				}
+				m.loggerOrNop().Info("memory snapshot restored",
+					zap.String("agent_id", checkpoint.AgentID),
+					zap.Int("entries", len(checkpoint.MemorySnapshot)))
+			}
+		}
+	}
+
 	m.loggerOrNop().Info("checkpoint restored successfully")
 	return nil
 }

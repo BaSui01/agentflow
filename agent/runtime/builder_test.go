@@ -420,7 +420,7 @@ func TestResolveRuntimeReasoningRegistry_UsesAdvancedExposureModes(t *testing.T)
 	)
 
 	require.NotNil(t, resolved)
-	assert.Equal(t, []string{"plan_and_execute", "reflexion", "rewoo"}, resolved.List())
+	assert.Equal(t, []string{"plan_and_execute", "react", "reflexion", "rewoo"}, resolved.List())
 }
 
 func TestResolveRuntimeReasoningRegistry_UsesAllExposureModes(t *testing.T) {
@@ -440,6 +440,7 @@ func TestResolveRuntimeReasoningRegistry_UsesAllExposureModes(t *testing.T) {
 		"dynamic_planner",
 		"iterative_deepening",
 		"plan_and_execute",
+		"react",
 		"reflexion",
 		"rewoo",
 		"tree_of_thought",

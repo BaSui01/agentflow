@@ -93,6 +93,10 @@ func mergeInputWithCheckpoint(input *Input, checkpoint *Checkpoint) *Input {
 			merged.Context[key] = value
 		}
 	}
+	// 传递记忆快照以便 executeCore 恢复
+	if len(checkpoint.MemorySnapshot) > 0 {
+		merged.Context["memory_snapshot"] = checkpoint.MemorySnapshot
+	}
 	if strings.TrimSpace(merged.Content) == "" {
 		if goal, ok := merged.Context["goal"].(string); ok && strings.TrimSpace(goal) != "" {
 			merged.Content = goal
