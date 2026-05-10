@@ -137,7 +137,7 @@ func TestReflector_Reflect(t *testing.T) {
 		return "  Refined: user prefers Go and confirmed deployment on Kubernetes.  ", nil
 	}
 
-	r := observation.NewReflector(mockComplete, nil)
+	r := observation.NewObservationReflector(mockComplete, nil)
 
 	existing := []observation.Observation{
 		{Date: "2025-06-01", Content: "User mentioned interest in Go."},
@@ -161,7 +161,7 @@ func TestReflector_FallbackOnError(t *testing.T) {
 		return "", errors.New("LLM unavailable")
 	}
 
-	r := observation.NewReflector(mockComplete, nil)
+	r := observation.NewObservationReflector(mockComplete, nil)
 
 	draft := &observation.Observation{
 		ID:      "obs-2",
@@ -177,7 +177,7 @@ func TestReflector_FallbackOnError(t *testing.T) {
 }
 
 func TestReflector_NilDraft(t *testing.T) {
-	r := observation.NewReflector(nil, nil)
+	r := observation.NewObservationReflector(nil, nil)
 	result, err := r.Reflect(context.Background(), nil, nil)
 	require.NoError(t, err)
 	assert.Nil(t, result)

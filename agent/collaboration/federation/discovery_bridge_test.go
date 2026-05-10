@@ -267,3 +267,141 @@ func TestDefaultBridgeConfig(t *testing.T) {
 		t.Error("AutoSync should default to true")
 	}
 }
+
+// TestAutoSync_CallbackCtxPropagatesParentCancellation 验证 GitHub Issue #12：
+// Start(ctx) 注册的 auto-sync 回调内派生的 syncCtx 必须从父 ctx 派生，
+// 这样父 ctx 取消（或 Stop() 被调用）能立即取消正在飞行中的同步操作。
+//
+// 旧实现使用 context.WithTimeout(context.Background(), ...)，
+// 父 ctx 取消后回调 ctx 仍存活，导致 goroutine 与 IO 调用泄漏。
+func TestAutoSync_CallbackCtxPropagatesParentCancellation(t *testing.T) {
+	orch := newBridgeTestOrchestrator(t)
+	reg := newMockDiscoveryRegistry()
+
+	// capturedCtx 由 register 回调内的 syncCtx 提供，registerStarted 通知主流程
+	// 已经进入注册函数（即回调链已经触发并派生出 syncCtx）。
+	capturedCh := make(chan context.Context, 1)
+	registerEntered := make(chan struct{})
+	releaseRegister := make(chan struct{})
+
+	reg.registerFn = func(ctx context.Context, info *AgentRegistration) error {
+		select {
+		case capturedCh <- ctx:
+		default:
+		}
+		close(registerEntered)
+		// 阻塞到主流程取消父 ctx 或测试结束。
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-releaseRegister:
+			return nil
+		case <-time.After(2 * time.Second):
+			return nil
+		}
+	}
+
+	bridge := newBridgeTestBridge(t, orch, reg, BridgeConfig{
+		SyncInterval: time.Hour,
+		AutoSync:     true,
+	})
+
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	if err := bridge.Start(parentCtx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer bridge.Stop()
+	defer close(releaseRegister)
+
+	// 触发 OnNodeRegister 回调。
+	orch.RegisterNode(testNode("n1", "node-1", "chat"))
+
+	// 等待回调进入 RegisterAgent。
+	select {
+	case <-registerEntered:
+	case <-time.After(time.Second):
+		t.Fatal("register callback was never invoked")
+	}
+
+	var capturedCtx context.Context
+	select {
+	case capturedCtx = <-capturedCh:
+	case <-time.After(time.Second):
+		t.Fatal("could not capture syncCtx from callback")
+	}
+
+	// 取消父 ctx，期望 capturedCtx 也随之 Done。
+	parentCancel()
+
+	select {
+	case <-capturedCtx.Done():
+		// 期望路径：父 ctx 取消传播到回调派生的 syncCtx。
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("auto-sync callback ctx did not propagate parent cancellation " +
+			"(syncCtx 应从父 ctx 派生，而非 context.Background())")
+	}
+}
+
+// TestAutoSync_CallbackCtxCancelsOnStop 验证 Stop() 也能取消正在飞行中的回调 ctx。
+// 这是 #12 的另一面：即使没有外部父 ctx 取消，Stop() 也应主动停止后台工作。
+func TestAutoSync_CallbackCtxCancelsOnStop(t *testing.T) {
+	orch := newBridgeTestOrchestrator(t)
+	reg := newMockDiscoveryRegistry()
+
+	capturedCh := make(chan context.Context, 1)
+	registerEntered := make(chan struct{})
+	releaseRegister := make(chan struct{})
+
+	reg.registerFn = func(ctx context.Context, info *AgentRegistration) error {
+		select {
+		case capturedCh <- ctx:
+		default:
+		}
+		close(registerEntered)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-releaseRegister:
+			return nil
+		case <-time.After(2 * time.Second):
+			return nil
+		}
+	}
+
+	bridge := newBridgeTestBridge(t, orch, reg, BridgeConfig{
+		SyncInterval: time.Hour,
+		AutoSync:     true,
+	})
+
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
+	if err := bridge.Start(parentCtx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer close(releaseRegister)
+
+	orch.RegisterNode(testNode("n2", "node-2", "translate"))
+
+	select {
+	case <-registerEntered:
+	case <-time.After(time.Second):
+		t.Fatal("register callback was never invoked")
+	}
+
+	var capturedCtx context.Context
+	select {
+	case capturedCtx = <-capturedCh:
+	case <-time.After(time.Second):
+		t.Fatal("could not capture syncCtx from callback")
+	}
+
+	bridge.Stop()
+
+	select {
+	case <-capturedCtx.Done():
+		// 期望路径：Stop() 触发 lifecycle 取消，传播到 syncCtx。
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("auto-sync callback ctx did not cancel after Stop() " +
+			"(Stop 应取消所有派生 ctx)")
+	}
+}

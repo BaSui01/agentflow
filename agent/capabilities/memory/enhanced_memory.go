@@ -46,7 +46,7 @@ type EnhancedMemorySystem struct {
 	// 观测记忆 - 对话压缩与精炼
 	observationStore obs.ObservationStore
 	observer         *obs.Observer
-	reflector        *obs.Reflector
+	reflector        *obs.ObservationReflector
 
 	// 记忆整合器
 	consolidator     *MemoryConsolidator
@@ -515,7 +515,7 @@ func (m *EnhancedMemorySystem) EnableObservationPipeline(completeFn obs.Completi
 		cfg = obs.DefaultObserverConfig()
 	}
 	m.observer = obs.NewObserver(cfg, completeFn, m.logger)
-	m.reflector = obs.NewReflector(completeFn, m.logger)
+	m.reflector = obs.NewObservationReflector(completeFn, m.logger)
 }
 
 // ProcessObservation 对一批对话消息执行观测：Observer 压缩 -> Reflector 精炼 -> Store 持久化。

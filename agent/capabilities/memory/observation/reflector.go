@@ -8,18 +8,20 @@ import (
 	"go.uber.org/zap"
 )
 
-// Reflector refines draft observations by checking consistency and accuracy.
-type Reflector struct {
+// ObservationReflector refines draft observations by checking consistency and accuracy.
+// Renamed from Reflector to avoid confusion with agent/runtime ReflectionExecutor
+// (which handles quality evaluation and iterative improvement).
+type ObservationReflector struct {
 	complete CompletionFunc
 	logger   *zap.Logger
 }
 
-// NewReflector creates a reflector.
-func NewReflector(complete CompletionFunc, logger *zap.Logger) *Reflector {
+// NewObservationReflector creates an observation reflector.
+func NewObservationReflector(complete CompletionFunc, logger *zap.Logger) *ObservationReflector {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &Reflector{complete: complete, logger: logger}
+	return &ObservationReflector{complete: complete, logger: logger}
 }
 
 const reflectorSystemPrompt = `You are a memory reflector. Given an existing observation log and a new draft observation, produce a refined observation that:
@@ -32,7 +34,7 @@ const reflectorSystemPrompt = `You are a memory reflector. Given an existing obs
 Output only the refined observation text, nothing else.`
 
 // Reflect refines a draft observation against existing observations.
-func (r *Reflector) Reflect(ctx context.Context, existing []Observation, draft *Observation) (*Observation, error) {
+func (r *ObservationReflector) Reflect(ctx context.Context, existing []Observation, draft *Observation) (*Observation, error) {
 	if draft == nil {
 		return nil, nil
 	}
