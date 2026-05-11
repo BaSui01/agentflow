@@ -75,9 +75,9 @@ type Response struct {
 
 // InterruptStore定义了中断的存储接口.
 //
-// TODO(concurrency, #18): Persistence implementations (e.g. PostgreSQL) should support WithTransaction
-// for atomic Save+Update flows. CreateInterrupt does Save then later Update; ResolveInterrupt does Update.
-// InMemoryInterruptStore does not need transactions.
+// 持久化实现（如 PostgreSQL/MySQL）可以额外实现 TxInterruptStore 扩展接口（见
+// interrupt_tx.go）来支持事务，让 ResolveInterrupt 等关键路径的状态转换+持久化
+// 在事务边界内原子完成。InMemoryInterruptStore 不需要事务（issue #18）。
 type InterruptStore interface {
 	Save(ctx context.Context, interrupt *Interrupt) error
 	Load(ctx context.Context, interruptID string) (*Interrupt, error)
@@ -298,7 +298,11 @@ func (m *InterruptManager) ResolveInterrupt(ctx context.Context, interruptID str
 		zap.Bool("approved", response.Approved),
 	)
 
-	if err := m.store.Update(ctx, interrupt); err != nil {
+	// store.Update 包在事务内（如果 store 实现 TxInterruptStore），让"状态转换 + 持久化"
+	// 原子完成；并发场景下避免内存 pending 已删除但 PG Update 失败造成的不一致（issue #18）。
+	if err := RunInTransaction(ctx, m.store, func(s InterruptStore) error {
+		return s.Update(ctx, interrupt)
+	}); err != nil {
 		return fmt.Errorf("failed to update interrupt: %w", err)
 	}
 
@@ -328,7 +332,9 @@ func (m *InterruptManager) CancelInterrupt(ctx context.Context, interruptID stri
 	now := time.Now()
 	pending.interrupt.ResolvedAt = &now
 
-	if err := m.store.Update(ctx, pending.interrupt); err != nil {
+	if err := RunInTransaction(ctx, m.store, func(s InterruptStore) error {
+		return s.Update(ctx, pending.interrupt)
+	}); err != nil {
 		return err
 	}
 
@@ -398,7 +404,9 @@ func (m *InterruptManager) handleTimeout(ctx context.Context, interrupt *Interru
 	delete(m.pending, interrupt.ID)
 	m.mu.Unlock()
 
-	if err := m.store.Update(ctx, interrupt); err != nil {
+	if err := RunInTransaction(ctx, m.store, func(s InterruptStore) error {
+		return s.Update(ctx, interrupt)
+	}); err != nil {
 		m.logger.Error("failed to persist timeout interrupt", zap.Error(err), zap.String("id", interrupt.ID))
 	}
 	m.logger.Warn("interrupt timeout", zap.String("id", interrupt.ID))
