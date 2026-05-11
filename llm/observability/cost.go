@@ -6,8 +6,9 @@ import (
 
 // CostCalculator 成本计算器
 type CostCalculator struct {
-	mu     sync.RWMutex
-	prices map[string]*ModelPrice // key: provider:model
+	mu         sync.RWMutex
+	prices     map[string]*ModelPrice // key: provider:model
+	unitPrices map[string]*UnitPrice  // key: provider:model:capability
 }
 
 // ModelPrice 模型价格
@@ -18,10 +19,19 @@ type ModelPrice struct {
 	PriceOutput float64 // USD per 1K tokens
 }
 
+// UnitPrice 表示按能力单位计费的价格。
+type UnitPrice struct {
+	Provider   string
+	Model      string
+	Capability string
+	PriceUnit  float64 // USD per unit
+}
+
 // NewCostCalculator 创建成本计算器
 func NewCostCalculator() *CostCalculator {
 	c := &CostCalculator{
-		prices: make(map[string]*ModelPrice),
+		prices:     make(map[string]*ModelPrice),
+		unitPrices: make(map[string]*UnitPrice),
 	}
 	c.loadDefaultPrices()
 	return c
@@ -72,6 +82,18 @@ func (c *CostCalculator) loadDefaultPrices() {
 	for _, p := range defaults {
 		c.SetPrice(p.Provider, p.Model, p.PriceInput, p.PriceOutput)
 	}
+
+	unitDefaults := []UnitPrice{
+		// OpenAI 音频单位价格（按自然计费单位折算为单单位）
+		// tts-1 / tts-1-hd: USD per character
+		{Provider: "openai-tts", Model: "tts-1", Capability: "audio", PriceUnit: 0.000015},
+		{Provider: "openai-tts", Model: "tts-1-hd", Capability: "audio", PriceUnit: 0.00003},
+		// whisper-1: USD per second，按 0.006 USD / minute 折算
+		{Provider: "openai-stt", Model: "whisper-1", Capability: "audio", PriceUnit: 0.0001},
+	}
+	for _, p := range unitDefaults {
+		c.SetUnitPrice(p.Provider, p.Model, p.Capability, p.PriceUnit)
+	}
 }
 
 // SetPrice 设置模型价格
@@ -97,6 +119,29 @@ func (c *CostCalculator) GetPrice(provider, model string) *ModelPrice {
 	return c.prices[key]
 }
 
+// SetUnitPrice 设置按能力单位计费的价格。
+func (c *CostCalculator) SetUnitPrice(provider, model, capability string, priceUnit float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	key := provider + ":" + model + ":" + capability
+	c.unitPrices[key] = &UnitPrice{
+		Provider:   provider,
+		Model:      model,
+		Capability: capability,
+		PriceUnit:  priceUnit,
+	}
+}
+
+// GetUnitPrice 获取按能力单位计费的价格。
+func (c *CostCalculator) GetUnitPrice(provider, model, capability string) *UnitPrice {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	key := provider + ":" + model + ":" + capability
+	return c.unitPrices[key]
+}
+
 // Calculate 计算成本
 func (c *CostCalculator) Calculate(provider, model string, tokensInput, tokensOutput int) float64 {
 	price := c.GetPrice(provider, model)
@@ -108,6 +153,16 @@ func (c *CostCalculator) Calculate(provider, model string, tokensInput, tokensOu
 	outputCost := float64(tokensOutput) / 1000 * price.PriceOutput
 
 	return inputCost + outputCost
+}
+
+// CalculateUnits 按能力单位数量估算成本。
+func (c *CostCalculator) CalculateUnits(provider, model, capability string, units int) float64 {
+	price := c.GetUnitPrice(provider, model, capability)
+	if price == nil || units <= 0 {
+		return 0
+	}
+
+	return float64(units) * price.PriceUnit
 }
 
 // UpdatePrices 批量更新价格（从配置/数据库）
@@ -126,4 +181,18 @@ func (c *CostCalculator) UpdatePrices(prices []ModelPrice) {
 	}
 }
 
+// UpdateUnitPrices 批量更新按能力单位计费的价格。
+func (c *CostCalculator) UpdateUnitPrices(prices []UnitPrice) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	for _, p := range prices {
+		key := p.Provider + ":" + p.Model + ":" + p.Capability
+		c.unitPrices[key] = &UnitPrice{
+			Provider:   p.Provider,
+			Model:      p.Model,
+			Capability: p.Capability,
+			PriceUnit:  p.PriceUnit,
+		}
+	}
+}
