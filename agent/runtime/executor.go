@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -229,7 +230,7 @@ func (e *Executor) CreateExecution(name string, steps []StepFunc) *Execution {
 	e.executions[exec.ID] = exec
 	e.steps[exec.ID] = steps
 	e.pauseCh[exec.ID] = make(chan struct{}, 1)
-	e.resumeCh[exec.ID] = make(chan struct{})
+	e.resumeCh[exec.ID] = make(chan struct{}, 1)
 	e.mu.Unlock()
 
 	e.logger.Info("execution created",
@@ -270,7 +271,7 @@ func (e *Executor) CreateNamedExecution(name string, steps []NamedStep) *Executi
 	e.steps[exec.ID] = stepFuncs
 	e.namedSteps[exec.ID] = steps
 	e.pauseCh[exec.ID] = make(chan struct{}, 1)
-	e.resumeCh[exec.ID] = make(chan struct{})
+	e.resumeCh[exec.ID] = make(chan struct{}, 1)
 	e.mu.Unlock()
 
 	e.logger.Info("named execution created",
@@ -348,14 +349,6 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 			// Block until resume signal or context cancellation.
 			select {
 			case <-resumeCh:
-				// Allocate new channels for next pause/resume cycle.
-				e.mu.Lock()
-				e.pauseCh[exec.ID] = make(chan struct{}, 1)
-				e.resumeCh[exec.ID] = make(chan struct{})
-				pauseCh = e.pauseCh[exec.ID]
-				resumeCh = e.resumeCh[exec.ID]
-				e.mu.Unlock()
-
 				exec.mu.Lock()
 				exec.State = ExecutionStateRunning
 				exec.mu.Unlock()
@@ -399,10 +392,7 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 				Step: exec.CurrentStep, Timestamp: time.Now(), Error: err, State: currentState,
 			})
 			if retry < e.config.MaxRetries {
-				backoff := time.Duration(1<<uint(retry)) * time.Second
-				if backoff > 30*time.Second {
-					backoff = 30 * time.Second
-				}
+				backoff := retryBackoffDuration(retry)
 				select {
 				case <-time.After(backoff):
 				case <-ctx.Done():
@@ -464,17 +454,25 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 	)
 }
 
+func retryBackoffDuration(retry int) time.Duration {
+	if retry <= 0 {
+		return time.Second
+	}
+
+	shift := retry
+	if shift > 30 {
+		shift = 30
+	}
+
+	backoff := time.Duration(1<<uint(shift)) * time.Second
+	return time.Duration(math.Min(float64(backoff), float64(30*time.Second)))
+}
+
 func (e *Executor) cleanupExecutionChannels(execID string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if ch, ok := e.pauseCh[execID]; ok {
-		close(ch)
-		delete(e.pauseCh, execID)
-	}
-	if ch, ok := e.resumeCh[execID]; ok {
-		close(ch)
-		delete(e.resumeCh, execID)
-	}
+	delete(e.pauseCh, execID)
+	delete(e.resumeCh, execID)
 	delete(e.steps, execID)
 	delete(e.namedSteps, execID)
 }
@@ -524,11 +522,7 @@ func (e *Executor) Pause(execID string) error {
 	}
 
 	if hasCh {
-		select {
-		case pauseCh <- struct{}{}:
-		default:
-			// Already signaled.
-		}
+		signalExecutionControl(pauseCh)
 	}
 
 	e.logger.Info("execution pause signaled", zap.String("exec_id", execID))
@@ -555,13 +549,7 @@ func (e *Executor) Resume(execID string) error {
 	}
 
 	if hasCh {
-		// Close the channel to unblock the waiting goroutine.
-		select {
-		case <-resumeCh:
-			// Already closed.
-		default:
-			close(resumeCh)
-		}
+		signalExecutionControl(resumeCh)
 	}
 
 	e.logger.Info("execution resume signaled", zap.String("exec_id", execID))
@@ -581,7 +569,7 @@ func (e *Executor) LoadExecution(execID string) (*Execution, error) {
 	e.mu.Lock()
 	e.executions[exec.ID] = exec
 	e.pauseCh[exec.ID] = make(chan struct{}, 1)
-	e.resumeCh[exec.ID] = make(chan struct{})
+	e.resumeCh[exec.ID] = make(chan struct{}, 1)
 	e.mu.Unlock()
 
 	return exec, nil
@@ -695,7 +683,7 @@ func (e *Executor) AutoResumeAll(ctx context.Context) (int, error) {
 		e.mu.Lock()
 		e.executions[exec.ID] = exec
 		e.pauseCh[exec.ID] = make(chan struct{}, 1)
-		e.resumeCh[exec.ID] = make(chan struct{})
+		e.resumeCh[exec.ID] = make(chan struct{}, 1)
 		e.mu.Unlock()
 
 		// Determine last state from checkpoints.
@@ -738,5 +726,17 @@ func (e *Executor) drainTickers(exec *Execution, cpTicker, hbTicker *time.Ticker
 		default:
 			return
 		}
+	}
+}
+
+func signalExecutionControl(ch chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case ch <- struct{}{}:
+		return true
+	default:
+		return false
 	}
 }
