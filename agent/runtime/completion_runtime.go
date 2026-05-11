@@ -617,7 +617,8 @@ func reactToolLoopBudget(pr *preparedRequest) int {
 	if pr != nil && pr.maxReActIter > 0 {
 		return pr.maxReActIter
 	}
-	return 1
+	// Default to 10 to keep tool execution usable when MaxReActIterations is not set.
+	return 10
 }
 
 // StreamCompletion 流式调用 LLM。
