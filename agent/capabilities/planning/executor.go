@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -50,6 +49,8 @@ func (e *PlanExecutor) ExecuteWithAgents(ctx context.Context, planID string, exe
 	)
 
 	sem := make(chan struct{}, e.maxParallel)
+	completionCh := make(chan struct{}, len(plan.Tasks))
+	runningTasks := 0
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -68,33 +69,21 @@ func (e *PlanExecutor) ExecuteWithAgents(ctx context.Context, planID string, exe
 		}
 
 		readyTasks := plan.ReadyTasks()
-		if len(readyTasks) == 0 {
-			// Check for deadlock: if no tasks are running and none are ready, we're stuck
-			if plan.StatusReport().RunningTasks == 0 {
-				e.planner.SetPlanStatus(planID, PlanStatusFailed)
-				return nil, fmt.Errorf("plan deadlock: no ready or running tasks remain in plan %s", planID)
-			}
-			select {
-			case <-time.After(50 * time.Millisecond):
-			case <-ctx.Done():
-				e.planner.SetPlanStatus(planID, PlanStatusFailed)
-				return nil, fmt.Errorf("plan execution cancelled: %w", ctx.Err())
-			}
-			continue
-		}
-
-		var wg sync.WaitGroup
+		launched := 0
 		for _, task := range readyTasks {
+			if runningTasks >= e.maxParallel {
+				break
+			}
+
 			task := task // capture loop variable
 
-			// Mark as running
+			// Mark as running before dispatch so the task won't be scheduled twice.
 			e.setTaskStatus(planID, task.ID, TaskStatusRunning, "")
-
-			wg.Add(1)
+			runningTasks++
+			launched++
 			sem <- struct{}{} // acquire semaphore
 
 			go func() {
-				defer wg.Done()
 				defer func() { <-sem }() // release semaphore
 
 				e.logger.Debug("executing task",
@@ -110,18 +99,39 @@ func (e *PlanExecutor) ExecuteWithAgents(ctx context.Context, planID string, exe
 						zap.Error(err),
 					)
 					e.planner.SetTaskResult(planID, task.ID, TaskStatusFailed, nil, err.Error())
-					return
+				} else {
+					e.logger.Debug("task completed",
+						zap.String("task_id", task.ID),
+						zap.String("content_preview", truncate(output.Content, 100)),
+					)
+					e.planner.SetTaskResult(planID, task.ID, TaskStatusCompleted, output, "")
 				}
 
-				e.logger.Debug("task completed",
-					zap.String("task_id", task.ID),
-					zap.String("content_preview", truncate(output.Content, 100)),
-				)
-				e.planner.SetTaskResult(planID, task.ID, TaskStatusCompleted, output, "")
+				completionCh <- struct{}{}
 			}()
 		}
 
-		wg.Wait()
+		if runningTasks == 0 {
+			// Check for deadlock: if no tasks are running and none are ready, we're stuck
+			if len(readyTasks) == 0 {
+				e.planner.SetPlanStatus(planID, PlanStatusFailed)
+				return nil, fmt.Errorf("plan deadlock: no ready or running tasks remain in plan %s", planID)
+			}
+			continue
+		}
+
+		select {
+		case <-completionCh:
+			runningTasks--
+		case <-ctx.Done():
+			e.planner.SetPlanStatus(planID, PlanStatusFailed)
+			return nil, fmt.Errorf("plan execution cancelled: %w", ctx.Err())
+		case <-time.After(50 * time.Millisecond):
+			if launched == 0 {
+				// avoid busy looping when all capacity is occupied but no task has completed yet
+				continue
+			}
+		}
 	}
 
 	// Determine final status
