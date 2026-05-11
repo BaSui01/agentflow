@@ -87,3 +87,13 @@ func TestFinalizeDirectStreamingResponseEmitsMessageAndLoopStop(t *testing.T) {
 	assert.Equal(t, "completion_judge_decision", events[1].Data.(map[string]any)["status"])
 	assert.Equal(t, "loop_stopped", events[2].Data.(map[string]any)["status"])
 }
+
+func TestReactToolLoopBudget_DefaultsToTen(t *testing.T) {
+	assert.Equal(t, 10, reactToolLoopBudget(nil))
+	assert.Equal(t, 10, reactToolLoopBudget(&preparedRequest{}))
+	assert.Equal(t, 10, reactToolLoopBudget(&preparedRequest{maxReActIter: -1}))
+}
+
+func TestReactToolLoopBudget_UsesPreparedRequestOverride(t *testing.T) {
+	assert.Equal(t, 3, reactToolLoopBudget(&preparedRequest{maxReActIter: 3}))
+}
