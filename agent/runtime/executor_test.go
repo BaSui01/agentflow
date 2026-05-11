@@ -11,6 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testConfig(t *testing.T) ExecutorConfig {
@@ -164,6 +167,44 @@ func TestPauseResume(t *testing.T) {
 	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 }
 
+func TestPauseResume_MultipleSignalsDoNotPanic(t *testing.T) {
+	cfg := testConfig(t)
+	e := NewExecutor(cfg, nil)
+
+	step1Done := make(chan struct{})
+	step2Gate := make(chan struct{})
+
+	steps := []StepFunc{
+		func(_ context.Context, state any) (any, error) {
+			close(step1Done)
+			<-step2Gate
+			return "step1-done", nil
+		},
+		func(_ context.Context, _ any) (any, error) {
+			return "step2-done", nil
+		},
+	}
+
+	exec := e.CreateExecution("pause-race-test", steps)
+	ctx := context.Background()
+	if err := e.Start(ctx, exec.ID, nil); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	<-step1Done
+
+	require.NoError(t, e.Pause(exec.ID))
+	require.NoError(t, e.Pause(exec.ID))
+
+	close(step2Gate)
+	waitForState(t, exec, ExecutionStatePaused, 5*time.Second)
+
+	require.NoError(t, e.Resume(exec.ID))
+	require.NoError(t, e.Resume(exec.ID))
+
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
+}
+
 func TestCheckpointSaveLoad(t *testing.T) {
 	cfg := testConfig(t)
 	e := NewExecutor(cfg, nil)
@@ -259,6 +300,24 @@ func TestRetryExhausted(t *testing.T) {
 	exec.mu.Unlock()
 	if errMsg == "" {
 		t.Fatal("expected error message on failed execution")
+	}
+}
+
+func TestRetryBackoffDuration_CapsWithoutOverflow(t *testing.T) {
+	tests := []struct {
+		retry int
+		want  time.Duration
+	}{
+		{retry: 0, want: 1 * time.Second},
+		{retry: 1, want: 2 * time.Second},
+		{retry: 5, want: 30 * time.Second},
+		{retry: 63, want: 30 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("retry_%d", tt.retry), func(t *testing.T) {
+			assert.Equal(t, tt.want, retryBackoffDuration(tt.retry))
+		})
 	}
 }
 
