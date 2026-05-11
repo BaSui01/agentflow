@@ -104,6 +104,8 @@ const (
 	asyncTaskStatusProcessing = "processing"
 	asyncTaskStatusCompleted  = "completed"
 	asyncTaskStatusFailed     = "failed"
+	asyncTaskStatusCancelled  = "cancelled"
+	asyncTaskStatusTimeout    = "timeout"
 	maxA2ARequestBodyBytes    = 1 << 20 // 1 MiB
 )
 

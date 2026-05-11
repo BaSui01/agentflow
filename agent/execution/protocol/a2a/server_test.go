@@ -338,7 +338,80 @@ func TestHTTPServer_CancelTask(t *testing.T) {
 	require.NoError(t, err)
 
 	status, _ := server.GetTaskStatus(resp.TaskID)
-	assert.Equal(t, "failed", status)
+	assert.Equal(t, "cancelled", status)
+}
+
+func TestHTTPServer_HandleGetTaskResult_Cancelled(t *testing.T) {
+	server := NewHTTPServer(&ServerConfig{
+		BaseURL:        "http://localhost:8080",
+		RequestTimeout: 5 * time.Second,
+		Logger:         zap.NewNop(),
+	})
+
+	taskID := "task-cancelled"
+	server.asyncTasksMu.Lock()
+	server.asyncTasks[taskID] = &asyncTask{
+		ID:        taskID,
+		AgentID:   "agent-1",
+		Status:    asyncTaskStatusCancelled,
+		Error:     "task cancelled",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Message: &A2AMessage{
+			ID:        "msg-1",
+			From:      "client-agent",
+			Timestamp: time.Now().UTC(),
+		},
+	}
+	server.asyncTasksMu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/a2a/tasks/"+taskID+"/result", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result A2AMessage
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	require.NoError(t, err)
+	assert.Equal(t, A2AMessageTypeError, result.Type)
+	payload, ok := result.Payload.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "task cancelled", payload["error"])
+}
+
+func TestHTTPServer_AsyncTaskTimeoutPreservesStatus(t *testing.T) {
+	server := NewHTTPServer(&ServerConfig{
+		BaseURL:        "http://localhost:8080",
+		RequestTimeout: 20 * time.Millisecond,
+		Logger:         zap.NewNop(),
+	})
+
+	ag := newMockAgent("timeout-agent", "Timeout Agent")
+	ag.execFunc = func(ctx context.Context, input *ExecutionInput) (*ExecutionOutput, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+			return &ExecutionOutput{Content: "done"}, nil
+		}
+	}
+	_ = server.RegisterAgent(ag)
+
+	msg := NewTaskMessage("client-agent", "timeout-agent", "test")
+	body, _ := json.Marshal(msg)
+	req := httptest.NewRequest(http.MethodPost, "/a2a/messages/async", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	server.ServeHTTP(w, req)
+
+	var resp AsyncResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+	require.Eventually(t, func() bool {
+		status, err := server.GetTaskStatus(resp.TaskID)
+		return err == nil && status == asyncTaskStatusTimeout
+	}, time.Second, 20*time.Millisecond)
 }
 
 func TestAgentAdapter(t *testing.T) {
