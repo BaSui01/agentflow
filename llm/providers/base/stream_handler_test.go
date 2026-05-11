@@ -1,8 +1,11 @@
 package providerbase
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	llm "github.com/BaSui01/agentflow/llm/core"
@@ -89,6 +92,48 @@ func TestMapSDKError(t *testing.T) {
 			t.Error("expected retryable")
 		}
 	})
+}
+
+func TestStreamSSE_AggregatesFunctionToolCallDeltasBeforeEmitting(t *testing.T) {
+	body := io.NopCloser(strings.NewReader(strings.Join([]string{
+		`data: {"id":"resp-1","model":"gpt-4o-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":"{\"q\":\""}}]}}]}`,
+		`data: {"id":"resp-1","model":"gpt-4o-mini","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"type":"function","function":{"arguments":"agent"}}]}}]}`,
+		`data: {"id":"resp-1","model":"gpt-4o-mini","choices":[{"index":0,"finish_reason":"tool_calls","delta":{"tool_calls":[{"index":0,"type":"function","function":{"arguments":"flow\"}"}}]}}]}`,
+		`data: [DONE]`,
+	}, "\n")))
+
+	ch := StreamSSE(context.Background(), body, "openai-compat")
+
+	var chunks []llm.StreamChunk
+	for chunk := range ch {
+		if chunk.Err != nil {
+			t.Fatalf("unexpected stream error: %v", chunk.Err)
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d", len(chunks))
+	}
+	if len(chunks[0].Delta.ToolCalls) != 0 || len(chunks[1].Delta.ToolCalls) != 0 {
+		t.Fatalf("expected fragmented deltas to stay buffered until tool_calls stop, got %#v %#v", chunks[0].Delta.ToolCalls, chunks[1].Delta.ToolCalls)
+	}
+	if len(chunks[2].Delta.ToolCalls) != 1 {
+		t.Fatalf("expected exactly one assembled tool call, got %#v", chunks[2].Delta.ToolCalls)
+	}
+	call := chunks[2].Delta.ToolCalls[0]
+	if call.ID != "call_1" {
+		t.Fatalf("unexpected call id: %s", call.ID)
+	}
+	if call.Name != "search" {
+		t.Fatalf("unexpected call name: %s", call.Name)
+	}
+	if got, want := string(call.Arguments), `{"q":"agentflow"}`; got != want {
+		t.Fatalf("arguments mismatch: got=%s want=%s", got, want)
+	}
+	if chunks[2].FinishReason != "tool_calls" {
+		t.Fatalf("unexpected finish reason: %s", chunks[2].FinishReason)
+	}
 }
 
 func TestRewriteChainError(t *testing.T) {
