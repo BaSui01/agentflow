@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"fmt"
+	"sort"
 
 	"go.uber.org/zap"
 )
@@ -133,9 +134,19 @@ func (s *HTTPServer) getDefaultAgent() (Agent, error) {
 		}
 	}
 
-	// 返回第一个可用的代理
-	for _, ag := range s.agents {
-		return ag, nil
+	if len(s.agents) == 1 {
+		for _, ag := range s.agents {
+			return ag, nil
+		}
+	}
+
+	if len(s.agents) > 1 {
+		agentIDs := make([]string, 0, len(s.agents))
+		for id := range s.agents {
+			agentIDs = append(agentIDs, id)
+		}
+		sort.Strings(agentIDs)
+		return nil, fmt.Errorf("multiple agents registered (%d) but no default agent configured; set DefaultAgentID (available: %v)", len(agentIDs), agentIDs)
 	}
 
 	return nil, ErrAgentNotFound
