@@ -98,6 +98,23 @@ func TestToolResultCache_Eviction(t *testing.T) {
 	assert.True(t, stats.Evictions > 0)
 }
 
+func TestToolResultCache_GetReturnsDetachedResult(t *testing.T) {
+	cache := NewToolResultCache(DefaultToolCacheConfig(), nil)
+	args := json.RawMessage(`{"query":"test"}`)
+	result := json.RawMessage(`{"answer":"42"}`)
+
+	cache.Set("search", args, result, "")
+	cached, ok := cache.Get("search", args)
+	require.True(t, ok)
+	require.NotEmpty(t, cached.Result)
+
+	cached.Result[0] = '['
+
+	again, ok := cache.Get("search", args)
+	require.True(t, ok)
+	assert.JSONEq(t, `{"answer":"42"}`, string(again.Result))
+}
+
 func TestToolResultCache_Invalidate(t *testing.T) {
 	cache := NewToolResultCache(DefaultToolCacheConfig(), nil)
 
