@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	llmpkg "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -49,6 +51,72 @@ func (p *scriptedProvider) ListModels(_ context.Context) ([]llmpkg.Model, error)
 }
 
 func (p *scriptedProvider) Endpoints() llmpkg.ProviderEndpoints {
+	return llmpkg.ProviderEndpoints{}
+}
+
+type delayedCancelCloseProvider struct {
+	cancelCloseDelay time.Duration
+	streamCalls      atomic.Int32
+}
+
+func (p *delayedCancelCloseProvider) Completion(_ context.Context, _ *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (p *delayedCancelCloseProvider) Stream(ctx context.Context, _ *llmpkg.ChatRequest) (<-chan llmpkg.StreamChunk, error) {
+	call := p.streamCalls.Add(1)
+	ch := make(chan llmpkg.StreamChunk, 1)
+
+	switch call {
+	case 1:
+		go func() {
+			ch <- llmpkg.StreamChunk{
+				ID:       "c1",
+				Provider: "delayed",
+				Model:    "dummy",
+				Delta: llmpkg.Message{
+					Role:    llmpkg.RoleAssistant,
+					Content: "partial",
+				},
+			}
+			<-ctx.Done()
+			time.Sleep(p.cancelCloseDelay)
+			close(ch)
+		}()
+	case 2:
+		go func() {
+			defer close(ch)
+			ch <- llmpkg.StreamChunk{
+				ID:       "c2",
+				Provider: "delayed",
+				Model:    "dummy",
+				Delta: llmpkg.Message{
+					Role:    llmpkg.RoleAssistant,
+					Content: "done",
+				},
+				FinishReason: "stop",
+			}
+		}()
+	default:
+		close(ch)
+	}
+
+	return ch, nil
+}
+
+func (p *delayedCancelCloseProvider) HealthCheck(_ context.Context) (*llmpkg.HealthStatus, error) {
+	return &llmpkg.HealthStatus{Healthy: true}, nil
+}
+
+func (p *delayedCancelCloseProvider) Name() string { return "delayed-cancel-close" }
+
+func (p *delayedCancelCloseProvider) SupportsNativeFunctionCalling() bool { return true }
+
+func (p *delayedCancelCloseProvider) ListModels(_ context.Context) ([]llmpkg.Model, error) {
+	return nil, nil
+}
+
+func (p *delayedCancelCloseProvider) Endpoints() llmpkg.ProviderEndpoints {
 	return llmpkg.ProviderEndpoints{}
 }
 
@@ -463,6 +531,58 @@ func TestReActExecutor_ExecuteStream_PreservesReasoningMetadata(t *testing.T) {
 	}
 	if len(msg.ThinkingBlocks) != 1 || msg.ThinkingBlocks[0].Signature != "sig_1" {
 		t.Fatalf("unexpected thinking blocks: %#v", msg.ThinkingBlocks)
+	}
+}
+
+func TestReActExecutor_ExecuteStream_SteeringDoesNotBlockOnSlowProviderClose(t *testing.T) {
+	logger := zap.NewNop()
+	provider := &delayedCancelCloseProvider{cancelCloseDelay: 250 * time.Millisecond}
+	toolExec := &countingToolExecutor{}
+	executor := NewReActExecutor(provider, toolExec, ReActConfig{
+		MaxIterations:     2,
+		InactivityTimeout: time.Second,
+	}, logger)
+
+	steeringCh := make(chan SteeringMessage, 1)
+	executor.SetSteeringChannel(steeringCh)
+
+	eventCh, err := executor.ExecuteStream(context.Background(), &llmpkg.ChatRequest{
+		Model:    "dummy",
+		Messages: []llmpkg.Message{{Role: llmpkg.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream failed: %v", err)
+	}
+
+	doneCh := make(chan *llmpkg.ChatResponse, 1)
+	errCh := make(chan string, 1)
+	go func() {
+		for ev := range eventCh {
+			switch ev.Type {
+			case ReActEventLLMChunk:
+				select {
+				case steeringCh <- SteeringMessage{Type: types.SteeringTypeGuide, Content: "keep going"}:
+				default:
+				}
+			case ReActEventCompleted:
+				doneCh <- ev.FinalResponse
+				return
+			case ReActEventError:
+				errCh <- ev.Error
+				return
+			}
+		}
+	}()
+
+	select {
+	case final := <-doneCh:
+		if final == nil || len(final.Choices) == 0 || final.Choices[0].Message.Content != "done" {
+			t.Fatalf("unexpected final response: %#v", final)
+		}
+	case errMsg := <-errCh:
+		t.Fatalf("unexpected error event: %s", errMsg)
+	case <-time.After(150 * time.Millisecond):
+		t.Fatal("expected steering to continue the ReAct loop before provider closes the cancelled stream")
 	}
 }
 
