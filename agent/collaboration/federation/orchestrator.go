@@ -357,7 +357,10 @@ func (o *Orchestrator) GetTask(taskID string) (*FederatedTask, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	task, ok := o.tasks[taskID]
-	return task, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneFederatedTask(task), true
 }
 
 // ListNodes 返回所有已注册的节点 。
@@ -366,9 +369,46 @@ func (o *Orchestrator) ListNodes() []*FederatedNode {
 	defer o.mu.RUnlock()
 	nodes := make([]*FederatedNode, 0, len(o.nodes))
 	for _, n := range o.nodes {
-		nodes = append(nodes, n)
+		nodes = append(nodes, cloneFederatedNode(n))
 	}
 	return nodes
+}
+
+func cloneFederatedNode(node *FederatedNode) *FederatedNode {
+	if node == nil {
+		return nil
+	}
+	copyNode := *node
+	if node.Capabilities != nil {
+		copyNode.Capabilities = append([]string(nil), node.Capabilities...)
+	}
+	if node.Metadata != nil {
+		copyNode.Metadata = make(map[string]string, len(node.Metadata))
+		for k, v := range node.Metadata {
+			copyNode.Metadata[k] = v
+		}
+	}
+	return &copyNode
+}
+
+func cloneFederatedTask(task *FederatedTask) *FederatedTask {
+	if task == nil {
+		return nil
+	}
+	copyTask := *task
+	if task.TargetNodes != nil {
+		copyTask.TargetNodes = append([]string(nil), task.TargetNodes...)
+	}
+	if task.RequiredCaps != nil {
+		copyTask.RequiredCaps = append([]string(nil), task.RequiredCaps...)
+	}
+	if task.Results != nil {
+		copyTask.Results = make(map[string]any, len(task.Results))
+		for k, v := range task.Results {
+			copyTask.Results[k] = v
+		}
+	}
+	return &copyTask
 }
 
 // 开始指挥
