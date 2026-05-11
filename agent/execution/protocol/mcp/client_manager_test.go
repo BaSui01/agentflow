@@ -2,12 +2,46 @@ package mcp
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+type deadTransport struct{}
+
+func (deadTransport) Send(context.Context, *MCPMessage) error      { return nil }
+func (deadTransport) Receive(context.Context) (*MCPMessage, error) { return nil, nil }
+func (deadTransport) Close() error                                 { return nil }
+func (deadTransport) IsAlive() bool                                { return false }
+
+type blockingReconnectTransport struct {
+	entered atomic.Bool
+	enterCh chan struct{}
+	waitCh  chan struct{}
+}
+
+func (t *blockingReconnectTransport) Send(context.Context, *MCPMessage) error {
+	if t.entered.CompareAndSwap(false, true) {
+		close(t.enterCh)
+	}
+	return nil
+}
+
+func (t *blockingReconnectTransport) Receive(context.Context) (*MCPMessage, error) {
+	<-t.waitCh
+	return &MCPMessage{
+		JSONRPC: "2.0",
+		ID:      1,
+		Result:  map[string]any{},
+	}, nil
+}
+
+func (t *blockingReconnectTransport) Close() error  { return nil }
+func (t *blockingReconnectTransport) IsAlive() bool { return true }
 
 func TestMCPClientManager_RegisterAndGet(t *testing.T) {
 	mgr := NewMCPClientManager(zap.NewNop())
@@ -79,4 +113,93 @@ func TestMCPClientManager_RemoveAndCloseAll(t *testing.T) {
 	require.NoError(t, mgr.Register(ctx, "y", NewInProcessTransport(&echoHandler{})))
 	require.NoError(t, mgr.CloseAll())
 	assert.Len(t, mgr.ListServers(), 0)
+}
+
+func TestMCPClientManager_CheckAndReconnect_DoesNotBlockGet(t *testing.T) {
+	mgr := NewMCPClientManager(zap.NewNop())
+	enterCh := make(chan struct{})
+	waitCh := make(chan struct{})
+
+	mgr.clients["server-1"] = &clientEntry{
+		client: &DefaultMCPClient{
+			transport: deadTransport{},
+			logger:    zap.NewNop(),
+			notifDone: make(chan struct{}),
+		},
+		transportFactory: func() (Transport, error) {
+			return &blockingReconnectTransport{
+				enterCh: enterCh,
+				waitCh:  waitCh,
+			}, nil
+		},
+		failCount: -100,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		mgr.checkAndReconnect(context.Background())
+		close(done)
+	}()
+
+	<-enterCh
+
+	getDone := make(chan error, 1)
+	go func() {
+		_, err := mgr.Get("server-1")
+		getDone <- err
+	}()
+
+	select {
+	case err := <-getDone:
+		require.NoError(t, err)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Get should not block while reconnect initialization is in progress")
+	}
+
+	close(waitCh)
+	<-done
+}
+
+func TestMCPClientManager_CheckAndReconnect_DoesNotBlockListServers(t *testing.T) {
+	mgr := NewMCPClientManager(zap.NewNop())
+	enterCh := make(chan struct{})
+	waitCh := make(chan struct{})
+
+	mgr.clients["server-1"] = &clientEntry{
+		client: &DefaultMCPClient{
+			transport: deadTransport{},
+			logger:    zap.NewNop(),
+			notifDone: make(chan struct{}),
+		},
+		transportFactory: func() (Transport, error) {
+			return &blockingReconnectTransport{
+				enterCh: enterCh,
+				waitCh:  waitCh,
+			}, nil
+		},
+		failCount: -100,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		mgr.checkAndReconnect(context.Background())
+		close(done)
+	}()
+
+	<-enterCh
+
+	listDone := make(chan []string, 1)
+	go func() {
+		listDone <- mgr.ListServers()
+	}()
+
+	select {
+	case servers := <-listDone:
+		require.Equal(t, []string{"server-1"}, servers)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("ListServers should not block while reconnect initialization is in progress")
+	}
+
+	close(waitCh)
+	<-done
 }

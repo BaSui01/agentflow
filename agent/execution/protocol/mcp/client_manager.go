@@ -20,6 +20,13 @@ type clientEntry struct {
 	failCount        int
 }
 
+type reconnectCandidate struct {
+	name             string
+	client           *DefaultMCPClient
+	transportFactory TransportFactory
+	failCount        int
+}
+
 // MCPClientManager manages multiple MCP server connections by name,
 // with health checking and automatic reconnection support.
 type MCPClientManager struct {
@@ -166,57 +173,120 @@ func (m *MCPClientManager) healthLoop(ctx context.Context, interval time.Duratio
 const maxReconnectBackoff = 5 * time.Minute
 
 func (m *MCPClientManager) checkAndReconnect(ctx context.Context) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for name, entry := range m.clients {
-		if entry.client.transport != nil && entry.client.transport.IsAlive() {
-			entry.failCount = 0
-			continue
-		}
-
+	for _, candidate := range m.snapshotReconnectCandidates() {
 		m.logger.Warn("mcp transport dead, attempting reconnect",
-			zap.String("server", name),
-			zap.Int("fail_count", entry.failCount))
+			zap.String("server", candidate.name),
+			zap.Int("fail_count", candidate.failCount))
 
-		if entry.transportFactory == nil {
+		if candidate.transportFactory == nil {
 			m.logger.Warn("no transport factory for server, cannot reconnect",
-				zap.String("server", name))
+				zap.String("server", candidate.name))
 			continue
 		}
 
-		backoff := time.Duration(math.Min(
-			float64(time.Second)*math.Pow(2, float64(entry.failCount)),
-			float64(maxReconnectBackoff),
-		))
-		select {
-		case <-time.After(backoff):
-		case <-ctx.Done():
+		if err := waitReconnectBackoff(ctx, calculateReconnectBackoff(candidate.failCount)); err != nil {
 			return
 		}
 
-		newTransport, err := entry.transportFactory()
+		newTransport, err := candidate.transportFactory()
 		if err != nil {
-			entry.failCount++
+			m.incrementFailCount(candidate.name, candidate.client)
 			m.logger.Error("reconnect transport creation failed",
-				zap.String("server", name), zap.Error(err))
+				zap.String("server", candidate.name), zap.Error(err))
 			continue
 		}
 
-		_ = entry.client.Close()
 		newClient := NewDefaultMCPClient(newTransport, m.logger)
 		if err := newClient.Initialize(ctx); err != nil {
-			entry.failCount++
+			m.incrementFailCount(candidate.name, candidate.client)
 			_ = newClient.Close()
 			m.logger.Error("reconnect initialization failed",
-				zap.String("server", name), zap.Error(err))
+				zap.String("server", candidate.name), zap.Error(err))
 			continue
 		}
 
-		entry.client = newClient
-		entry.failCount = 0
-		m.logger.Info("reconnected mcp server", zap.String("server", name))
+		if !m.swapReconnectedClient(candidate.name, candidate.client, newClient) {
+			_ = newClient.Close()
+			continue
+		}
+
+		if candidate.client != nil {
+			_ = candidate.client.Close()
+		}
+		m.logger.Info("reconnected mcp server", zap.String("server", candidate.name))
 	}
+}
+
+func (m *MCPClientManager) snapshotReconnectCandidates() []reconnectCandidate {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	candidates := make([]reconnectCandidate, 0, len(m.clients))
+	for name, entry := range m.clients {
+		if entry == nil {
+			continue
+		}
+		if entry.client != nil && entry.client.transport != nil && entry.client.transport.IsAlive() {
+			entry.failCount = 0
+			continue
+		}
+		candidates = append(candidates, reconnectCandidate{
+			name:             name,
+			client:           entry.client,
+			transportFactory: entry.transportFactory,
+			failCount:        entry.failCount,
+		})
+	}
+	return candidates
+}
+
+func calculateReconnectBackoff(failCount int) time.Duration {
+	if failCount < 0 {
+		return 0
+	}
+	return time.Duration(math.Min(
+		float64(time.Second)*math.Pow(2, float64(failCount)),
+		float64(maxReconnectBackoff),
+	))
+}
+
+func waitReconnectBackoff(ctx context.Context, backoff time.Duration) error {
+	if backoff <= 0 {
+		return ctx.Err()
+	}
+
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (m *MCPClientManager) incrementFailCount(name string, current *DefaultMCPClient) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entry, ok := m.clients[name]
+	if !ok || entry == nil || entry.client != current {
+		return
+	}
+	entry.failCount++
+}
+
+func (m *MCPClientManager) swapReconnectedClient(name string, current *DefaultMCPClient, next *DefaultMCPClient) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entry, ok := m.clients[name]
+	if !ok || entry == nil || entry.client != current {
+		return false
+	}
+	entry.client = next
+	entry.failCount = 0
+	return true
 }
 
 // CloseAll shuts down all client connections and stops the health checker.
