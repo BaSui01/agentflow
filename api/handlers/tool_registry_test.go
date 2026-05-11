@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
-	"github.com/BaSui01/agentflow/internal/usecase"
+	appservice "github.com/BaSui01/agentflow/internal/app/service"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,13 +39,18 @@ func setupToolRegistryDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&hosted.ToolRegistration{}))
 	require.NoError(t, db.AutoMigrate(&hosted.ToolProviderConfig{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, sqlDB.Close())
+	})
 	return db
 }
 
 func TestToolRegistryHandler_CRUD_AutoReload(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval", "mcp_search"}}
-	handler := NewToolRegistryHandler(usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
+	handler := NewToolRegistryHandler(appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
 
 	createBody := []byte(`{"name":"knowledge_search","target":"retrieval","enabled":true}`)
 	w1 := httptest.NewRecorder()
@@ -67,7 +72,7 @@ func TestToolRegistryHandler_CRUD_AutoReload(t *testing.T) {
 func TestToolRegistryHandler_Create_InvalidTarget(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
-	handler := NewToolRegistryHandler(usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
+	handler := NewToolRegistryHandler(appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
 
 	body := []byte(`{"name":"bad_tool","target":"unknown_target"}`)
 	w := httptest.NewRecorder()
@@ -82,7 +87,7 @@ func TestToolRegistryHandler_Create_InvalidTarget(t *testing.T) {
 func TestToolRegistryHandler_Create_ReservedOrSelfName(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
-	handler := NewToolRegistryHandler(usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
+	handler := NewToolRegistryHandler(appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
 
 	body := []byte(`{"name":"retrieval","target":"retrieval"}`)
 	w := httptest.NewRecorder()
@@ -98,7 +103,7 @@ func TestToolRegistryHandler_Create_AuditLogFields(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
 	core, observed := observer.New(zap.InfoLevel)
-	handler := NewToolRegistryHandler(usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.New(core))
+	handler := NewToolRegistryHandler(appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.New(core))
 
 	body := []byte(`{"name":"knowledge_search","target":"retrieval","enabled":true}`)
 	w := httptest.NewRecorder()

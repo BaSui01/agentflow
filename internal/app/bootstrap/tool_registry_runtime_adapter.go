@@ -2,7 +2,7 @@ package bootstrap
 
 import "context"
 
-// ToolRegistryRuntimeAdapter adapts AgentToolingRuntime to usecase.ToolRegistryRuntime.
+// ToolRegistryRuntimeAdapter adapts AgentToolingRuntime to appservice.ToolRegistryRuntime.
 // It also supports an optional reload callback (for example resolver cache reset).
 type ToolRegistryRuntimeAdapter struct {
 	runtime  *AgentToolingRuntime

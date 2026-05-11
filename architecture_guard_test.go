@@ -1590,6 +1590,30 @@ func TestHostedToolRegistryExecuteStaysBehindAuthorizationAdapters(t *testing.T)
 	}
 }
 
+func TestToolRegistryServiceLivesUnderInternalAppService(t *testing.T) {
+	oldFiles := []string{
+		filepath.FromSlash("internal/usecase/tool_registry_service.go"),
+		filepath.FromSlash("internal/usecase/tool_registry_dto.go"),
+	}
+	for _, path := range oldFiles {
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("%s must be moved out of internal/usecase", filepath.ToSlash(path))
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", filepath.ToSlash(path), err)
+		}
+	}
+
+	newFiles := []string{
+		filepath.FromSlash("internal/app/service/tool_registry_service.go"),
+		filepath.FromSlash("internal/app/service/tool_registry_dto.go"),
+	}
+	for _, path := range newFiles {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("tool registry service artifact is required: %s: %v", filepath.ToSlash(path), err)
+		}
+	}
+}
+
 func TestHighRiskHostedToolConstructorsStayInAuthorizationRuntime(t *testing.T) {
 	allowedFiles := map[string]struct{}{
 		filepath.ToSlash("internal/app/bootstrap/agent_tooling_runtime_builder.go"): {},
