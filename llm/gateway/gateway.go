@@ -1219,13 +1219,19 @@ func costAmount(cost *llmcore.Cost) float64 {
 type ChatProviderAdapter struct {
 	gateway  llmcore.Gateway
 	fallback llmcore.Provider
+	logger   *zap.Logger
 }
 
 // NewChatProviderAdapter 创建适配器。
 func NewChatProviderAdapter(gw llmcore.Gateway, fallback llmcore.Provider) *ChatProviderAdapter {
+	logger := zap.NewNop()
+	if service, ok := gw.(*Service); ok && service != nil && service.logger != nil {
+		logger = service.logger
+	}
 	return &ChatProviderAdapter{
 		gateway:  gw,
 		fallback: fallback,
+		logger:   logger,
 	}
 }
 
@@ -1273,7 +1279,7 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llmcore.ChatReque
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				zap.L().Error("ChatProviderAdapter stream relay panic recovered", zap.Any("panic", r))
+				a.logger.Error("ChatProviderAdapter stream relay panic recovered", zap.Any("panic", r))
 			}
 			close(out)
 		}()

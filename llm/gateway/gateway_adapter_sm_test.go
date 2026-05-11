@@ -8,6 +8,8 @@ import (
 
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // ═══ StateMachine 测试 ═══
@@ -318,6 +320,18 @@ func TestChatProviderAdapter_WithoutFallback(t *testing.T) {
 	}
 	if _, err := adapter.CountTokens(context.Background(), &llmcore.ChatRequest{Model: "test"}); err == nil {
 		t.Fatal("expected CountTokens error without fallback")
+	}
+}
+
+func TestChatProviderAdapter_UsesGatewayServiceLogger(t *testing.T) {
+	core, _ := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	service := New(Config{Logger: logger})
+
+	adapter := NewChatProviderAdapter(service, nil)
+
+	if adapter.logger != logger {
+		t.Fatal("expected adapter to reuse gateway service logger")
 	}
 }
 
