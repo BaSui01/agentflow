@@ -146,7 +146,9 @@ func (s *ExecutionSession) IsRunning() bool {
 
 // SessionManager 管理活跃的流式执行会话（内存 map + 自动过期清理）。
 type SessionManager struct {
-	sessions sync.Map
+	mu       sync.RWMutex
+	sessions map[string]*ExecutionSession
+	stopped  bool
 	stopOnce sync.Once
 	stopCh   chan struct{}
 }
@@ -154,7 +156,8 @@ type SessionManager struct {
 // NewSessionManager 创建会话管理器并启动后台清理 goroutine。
 func NewSessionManager() *SessionManager {
 	m := &SessionManager{
-		stopCh: make(chan struct{}),
+		sessions: make(map[string]*ExecutionSession),
+		stopCh:   make(chan struct{}),
 	}
 	go m.cleanupLoop()
 	return m
@@ -162,48 +165,66 @@ func NewSessionManager() *SessionManager {
 
 // Create 创建一个新的执行会话。
 func (m *SessionManager) Create(agentID string) *ExecutionSession {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.stopped {
+		return nil
+	}
 	sess := &ExecutionSession{
 		ID:         fmt.Sprintf("exec_%s", uuid.New().String()[:12]),
 		AgentID:    agentID,
 		SteeringCh: NewSteeringChannel(4),
 		CreatedAt:  time.Now(),
 	}
-	m.sessions.Store(sess.ID, sess)
+	m.sessions[sess.ID] = sess
 	return sess
 }
 
 // Get 根据 ID 获取会话。
 func (m *SessionManager) Get(id string) (*ExecutionSession, bool) {
-	v, ok := m.sessions.Load(id)
-	if !ok {
-		return nil, false
-	}
-	return v.(*ExecutionSession), true
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	sess, ok := m.sessions[id]
+	return sess, ok
 }
 
 // Remove 移除会话并关闭其 steering channel。
 func (m *SessionManager) Remove(id string) {
-	if v, loaded := m.sessions.LoadAndDelete(id); loaded {
-		v.(*ExecutionSession).Complete()
+	m.mu.Lock()
+	sess, ok := m.sessions[id]
+	if ok {
+		delete(m.sessions, id)
+	}
+	m.mu.Unlock()
+	if ok {
+		sess.Complete()
 	}
 }
 
 // Cleanup 清理过期会话：已完成的超过 maxAge 清理，活跃的不强制终止。
 func (m *SessionManager) Cleanup(maxAge time.Duration) {
 	cutoff := time.Now().Add(-maxAge)
-	m.sessions.Range(func(key, value any) bool {
-		sess := value.(*ExecutionSession)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, sess := range m.sessions {
 		if sess.CreatedAt.Before(cutoff) && !sess.IsRunning() {
-			m.sessions.Delete(key)
+			delete(m.sessions, id)
 		}
-		return true
-	})
+	}
 }
 
-// Stop 停止后台清理 goroutine。
+// Stop 停止后台清理 goroutine并关闭全部活跃会话。
 func (m *SessionManager) Stop() {
 	m.stopOnce.Do(func() {
 		close(m.stopCh)
+		m.mu.Lock()
+		sessions := m.sessions
+		m.sessions = make(map[string]*ExecutionSession)
+		m.stopped = true
+		m.mu.Unlock()
+		for _, sess := range sessions {
+			sess.Complete()
+		}
 	})
 }
 

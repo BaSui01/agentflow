@@ -30,6 +30,7 @@ type PreparedToolProtocol struct {
 	HandoffTools map[string]RuntimeHandoffTarget
 	ToolRisks    map[string]string
 	AllowedTools []string
+	Authorize    AuthorizeFunc
 }
 
 // ToolProtocolRuntime resolves the tool execution contract for a prepared request.
@@ -75,7 +76,34 @@ func (DefaultToolProtocolRuntime) Execute(ctx context.Context, prepared *Prepare
 	if prepared == nil || prepared.Executor == nil {
 		return nil
 	}
+	if prepared.Authorize != nil {
+		return executeAuthorizedToolCalls(ctx, prepared, calls)
+	}
 	return prepared.Executor.Execute(ctx, calls)
+}
+
+func executeAuthorizedToolCalls(ctx context.Context, prepared *PreparedToolProtocol, calls []types.ToolCall) []types.ToolResult {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]types.ToolResult, 0, len(calls))
+	authz := NewAuthzMiddleware(prepared.Authorize)
+	for _, call := range calls {
+		result, err := authz.Execute(ctx, &toolAuthorizationInput{
+			ToolCall:  &call,
+			ToolRisks: prepared.ToolRisks,
+		})
+		if err != nil {
+			out = append(out, types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: err.Error()})
+			continue
+		}
+		if result.Action == HookActionAbort {
+			out = append(out, types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: result.Reason})
+			continue
+		}
+		out = append(out, prepared.Executor.ExecuteOne(ctx, call))
+	}
+	return out
 }
 
 func (DefaultToolProtocolRuntime) ToMessages(results []types.ToolResult) []types.Message {

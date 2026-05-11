@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	llm "github.com/BaSui01/agentflow/llm/core"
@@ -30,6 +31,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 		defer body.Close()
 		defer close(ch)
 		reader := bufio.NewReader(body)
+		toolCallAccumulator := NewToolCallDeltaAccumulator()
 		for {
 			line, err := reader.ReadString('\n')
 			if err != nil {
@@ -104,12 +106,29 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 					if len(choice.Delta.ToolCalls) > 0 {
 						chunk.Delta.ToolCalls = make([]types.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
-							chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, types.ToolCall{
-								Index:     tc.Index,
-								ID:        tc.ID,
-								Name:      tc.Function.Name,
-								Arguments: UnwrapStringifiedJSON(tc.Function.Arguments),
-							})
+							itemID := strconv.Itoa(tc.Index)
+							name := ""
+							arguments := json.RawMessage(nil)
+							if tc.Function != nil {
+								name = tc.Function.Name
+								arguments = tc.Function.Arguments
+							}
+							toolCallAccumulator.Register(itemID, types.ToolTypeFunction, name, tc.ID)
+							if len(arguments) > 0 {
+								var delta string
+								if err := json.Unmarshal(arguments, &delta); err == nil {
+									toolCallAccumulator.Append(itemID, delta)
+								} else {
+									toolCallAccumulator.Append(itemID, string(arguments))
+								}
+							}
+							if choice.FinishReason == "tool_calls" || json.Valid(toolCallAccumulator.payloads[itemID]) {
+								if complete, ok := toolCallAccumulator.CompleteFunction(itemID); ok {
+									complete.Index = tc.Index
+									complete.Arguments = UnwrapStringifiedJSON(complete.Arguments)
+									chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, complete)
+								}
+							}
 						}
 					}
 				}

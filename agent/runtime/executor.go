@@ -149,7 +149,7 @@ type Executor struct {
 	executions               map[string]*Execution
 	steps                    map[string][]StepFunc
 	namedSteps               map[string][]NamedStep
-	pauseCh                  map[string]chan struct{}
+	pauseRequested           map[string]bool
 	resumeCh                 map[string]chan struct{}
 	registry                 *StepRegistry
 	ExecutionCheckpointStore ExecutionCheckpointStore
@@ -171,14 +171,14 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger, opts ...ExecutorOpti
 	}
 
 	e := &Executor{
-		config:     config,
-		executions: make(map[string]*Execution),
-		steps:      make(map[string][]StepFunc),
-		namedSteps: make(map[string][]NamedStep),
-		pauseCh:    make(map[string]chan struct{}),
-		resumeCh:   make(map[string]chan struct{}),
-		registry:   NewStepRegistry(),
-		logger:     logger.With(zap.String("component", "longrunning")),
+		config:         config,
+		executions:     make(map[string]*Execution),
+		steps:          make(map[string][]StepFunc),
+		namedSteps:     make(map[string][]NamedStep),
+		pauseRequested: make(map[string]bool),
+		resumeCh:       make(map[string]chan struct{}),
+		registry:       NewStepRegistry(),
+		logger:         logger.With(zap.String("component", "longrunning")),
 	}
 	e.ExecutionCheckpointStore = NewFileCheckpointStore(config.CheckpointDir, logger)
 
@@ -229,7 +229,6 @@ func (e *Executor) CreateExecution(name string, steps []StepFunc) *Execution {
 	e.mu.Lock()
 	e.executions[exec.ID] = exec
 	e.steps[exec.ID] = steps
-	e.pauseCh[exec.ID] = make(chan struct{}, 1)
 	e.resumeCh[exec.ID] = make(chan struct{}, 1)
 	e.mu.Unlock()
 
@@ -270,7 +269,6 @@ func (e *Executor) CreateNamedExecution(name string, steps []NamedStep) *Executi
 	e.executions[exec.ID] = exec
 	e.steps[exec.ID] = stepFuncs
 	e.namedSteps[exec.ID] = steps
-	e.pauseCh[exec.ID] = make(chan struct{}, 1)
 	e.resumeCh[exec.ID] = make(chan struct{}, 1)
 	e.mu.Unlock()
 
@@ -314,7 +312,6 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 	defer heartbeatTicker.Stop()
 
 	e.mu.RLock()
-	pauseCh := e.pauseCh[exec.ID]
 	resumeCh := e.resumeCh[exec.ID]
 	e.mu.RUnlock()
 
@@ -335,35 +332,8 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		// Drain tickers without blocking.
 		e.drainTickers(exec, checkpointTicker, heartbeatTicker, currentState)
 
-		// Check for pause signal (channel-based, not busy-wait).
-		select {
-		case <-pauseCh:
-			exec.mu.Lock()
-			exec.State = ExecutionStatePaused
-			exec.mu.Unlock()
-			e.saveCheckpoint(exec, currentState)
-			e.emitEvent(ExecutionEvent{
-				Type: ExecutionEventPaused, ExecID: exec.ID,
-				Step: exec.CurrentStep, Timestamp: time.Now(), State: currentState,
-			})
-			// Block until resume signal or context cancellation.
-			select {
-			case <-resumeCh:
-				exec.mu.Lock()
-				exec.State = ExecutionStateRunning
-				exec.mu.Unlock()
-				e.emitEvent(ExecutionEvent{
-					Type: ExecutionEventResumed, ExecID: exec.ID,
-					Step: exec.CurrentStep, Timestamp: time.Now(), State: currentState,
-				})
-			case <-ctx.Done():
-				exec.mu.Lock()
-				exec.State = ExecutionStateCancelled
-				exec.mu.Unlock()
-				e.saveCheckpoint(exec, currentState)
-				return
-			}
-		default:
+		if !e.waitWhilePaused(ctx, exec, resumeCh, currentState) {
+			return
 		}
 
 		// Execute step with retry and exponential backoff.
@@ -471,10 +441,71 @@ func retryBackoffDuration(retry int) time.Duration {
 func (e *Executor) cleanupExecutionChannels(execID string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	delete(e.pauseCh, execID)
+	delete(e.pauseRequested, execID)
 	delete(e.resumeCh, execID)
 	delete(e.steps, execID)
 	delete(e.namedSteps, execID)
+}
+
+func (e *Executor) waitWhilePaused(ctx context.Context, exec *Execution, resumeCh <-chan struct{}, state any) bool {
+	e.mu.Lock()
+	exec.mu.Lock()
+	if e.pauseRequested[exec.ID] {
+		delete(e.pauseRequested, exec.ID)
+		if exec.State == ExecutionStateRunning || exec.State == ExecutionStateResuming {
+			exec.State = ExecutionStatePaused
+			exec.LastUpdate = time.Now()
+		}
+	}
+	paused := exec.State == ExecutionStatePaused
+	exec.mu.Unlock()
+	e.mu.Unlock()
+	if !paused {
+		return true
+	}
+
+	e.saveCheckpoint(exec, state)
+	e.emitEvent(ExecutionEvent{
+		Type:      ExecutionEventPaused,
+		ExecID:    exec.ID,
+		Step:      exec.CurrentStep,
+		Timestamp: time.Now(),
+		State:     state,
+	})
+
+	for {
+		select {
+		case <-resumeCh:
+			exec.mu.Lock()
+			current := exec.State
+			switch current {
+			case ExecutionStatePaused:
+				exec.mu.Unlock()
+				continue
+			case ExecutionStateRunning, ExecutionStateResuming:
+				exec.State = ExecutionStateRunning
+				exec.LastUpdate = time.Now()
+				exec.mu.Unlock()
+				e.emitEvent(ExecutionEvent{
+					Type:      ExecutionEventResumed,
+					ExecID:    exec.ID,
+					Step:      exec.CurrentStep,
+					Timestamp: time.Now(),
+					State:     state,
+				})
+				return true
+			default:
+				exec.mu.Unlock()
+				return false
+			}
+		case <-ctx.Done():
+			exec.mu.Lock()
+			exec.State = ExecutionStateCancelled
+			exec.mu.Unlock()
+			e.saveCheckpoint(exec, state)
+			return false
+		}
+	}
 }
 
 // saveCheckpoint persists execution state via the ExecutionCheckpointStore.
@@ -504,10 +535,10 @@ func (e *Executor) saveCheckpoint(exec *Execution, state any) {
 
 // Pause signals a running execution to pause.
 func (e *Executor) Pause(execID string) error {
-	e.mu.RLock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	exec, ok := e.executions[execID]
-	pauseCh, hasCh := e.pauseCh[execID]
-	e.mu.RUnlock()
 
 	if !ok {
 		return fmt.Errorf("execution not found: %s", execID)
@@ -515,15 +546,19 @@ func (e *Executor) Pause(execID string) error {
 
 	exec.mu.Lock()
 	state := exec.State
-	exec.mu.Unlock()
-
-	if state != ExecutionStateRunning {
+	switch state {
+	case ExecutionStateRunning:
+		e.pauseRequested[execID] = true
+		exec.LastUpdate = time.Now()
+	case ExecutionStatePaused:
+		exec.mu.Unlock()
+		e.logger.Info("execution pause already pending", zap.String("exec_id", execID))
+		return nil
+	default:
+		exec.mu.Unlock()
 		return fmt.Errorf("execution not running: %s", state)
 	}
-
-	if hasCh {
-		signalExecutionControl(pauseCh)
-	}
+	exec.mu.Unlock()
 
 	e.logger.Info("execution pause signaled", zap.String("exec_id", execID))
 	return nil
@@ -531,22 +566,41 @@ func (e *Executor) Pause(execID string) error {
 
 // Resume signals a paused execution to continue.
 func (e *Executor) Resume(execID string) error {
-	e.mu.RLock()
+	e.mu.Lock()
+
 	exec, ok := e.executions[execID]
 	resumeCh, hasCh := e.resumeCh[execID]
-	e.mu.RUnlock()
 
 	if !ok {
+		e.mu.Unlock()
 		return fmt.Errorf("execution not found: %s", execID)
 	}
 
 	exec.mu.Lock()
 	state := exec.State
-	exec.mu.Unlock()
-
-	if state != ExecutionStatePaused {
+	switch state {
+	case ExecutionStatePaused:
+		exec.State = ExecutionStateRunning
+		exec.LastUpdate = time.Now()
+	case ExecutionStateRunning:
+		delete(e.pauseRequested, execID)
+		exec.mu.Unlock()
+		e.mu.Unlock()
+		e.logger.Info("execution resume already pending", zap.String("exec_id", execID))
+		return nil
+	case ExecutionStateResuming:
+		delete(e.pauseRequested, execID)
+		exec.mu.Unlock()
+		e.mu.Unlock()
+		e.logger.Info("execution resume already pending", zap.String("exec_id", execID))
+		return nil
+	default:
+		exec.mu.Unlock()
+		e.mu.Unlock()
 		return fmt.Errorf("execution not paused: %s", state)
 	}
+	exec.mu.Unlock()
+	e.mu.Unlock()
 
 	if hasCh {
 		signalExecutionControl(resumeCh)
@@ -568,7 +622,6 @@ func (e *Executor) LoadExecution(execID string) (*Execution, error) {
 
 	e.mu.Lock()
 	e.executions[exec.ID] = exec
-	e.pauseCh[exec.ID] = make(chan struct{}, 1)
 	e.resumeCh[exec.ID] = make(chan struct{}, 1)
 	e.mu.Unlock()
 
@@ -682,7 +735,6 @@ func (e *Executor) AutoResumeAll(ctx context.Context) (int, error) {
 		// Register the execution in the executor.
 		e.mu.Lock()
 		e.executions[exec.ID] = exec
-		e.pauseCh[exec.ID] = make(chan struct{}, 1)
 		e.resumeCh[exec.ID] = make(chan struct{}, 1)
 		e.mu.Unlock()
 

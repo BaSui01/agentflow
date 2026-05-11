@@ -71,12 +71,12 @@ func DefaultBackpressureConfig() BackpressureConfig {
 
 // BackpressureStream 实现支持背压的流.
 type BackpressureStream struct {
-	config BackpressureConfig
-	buffer chan Token
-	done   chan struct{}
-	closed atomic.Bool
+	config    BackpressureConfig
+	buffer    chan Token
+	done      chan struct{}
+	closed    atomic.Bool
 	closeOnce sync.Once
-	mu     sync.RWMutex
+	mu        sync.RWMutex
 
 	// 指标
 	produced  atomic.Int64
@@ -327,15 +327,25 @@ func (m *StreamMultiplexer) Start(ctx context.Context) {
 
 func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	consumers := append([]*BackpressureStream(nil), m.consumers...)
+	m.mu.RUnlock()
 
-	for _, consumer := range m.consumers {
-		// 通过 Write() 方法发送 token，而非直接写 consumer.buffer。
-		// Write() 内部持有 RLock，与 Close() 的 Lock 互斥，
-		// 消除了 closed.Load() 与 channel 发送之间的 TOCTOU 窗口。
-		if err := consumer.Write(ctx, token); err != nil {
-			// consumer 已关闭或 ctx 取消 — 安全忽略
-		}
+	for _, consumer := range consumers {
+		consumer := consumer
+		go func() {
+			writeCtx := ctx
+			cancel := func() {}
+			if timeout := consumer.config.SlowConsumerTTL; timeout > 0 {
+				writeCtx, cancel = context.WithTimeout(ctx, timeout)
+			}
+			defer cancel()
+			// 通过 Write() 方法发送 token，而非直接写 consumer.buffer。
+			// Write() 内部持有 RLock，与 Close() 的 Lock 互斥，
+			// 消除了 closed.Load() 与 channel 发送之间的 TOCTOU 窗口。
+			if err := consumer.Write(writeCtx, token); err != nil {
+				// consumer 已关闭、过慢或 ctx 取消 — 安全忽略，避免拖慢其他消费者。
+			}
+		}()
 	}
 }
 
@@ -406,4 +416,3 @@ func (r *RateLimiter) refill() {
 	}
 	r.lastRefill = now
 }
-

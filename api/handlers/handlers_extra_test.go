@@ -86,7 +86,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 		return nil, fmt.Errorf("not found")
 	}
 
-	handler := newTestHandlerWithResolver(reg, resolver)
+	handler := newTestHandlerWithResolver(t, reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "test-agent",
@@ -123,7 +123,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_ExecutionError(t *testing.
 		return ma, nil
 	}
 
-	handler := newTestHandlerWithResolver(reg, resolver)
+	handler := newTestHandlerWithResolver(t, reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "err-agent",
@@ -149,7 +149,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_NotFound(t *testing.T) {
 		return nil, fmt.Errorf("agent not found")
 	}
 
-	handler := newTestHandlerWithResolver(reg, resolver)
+	handler := newTestHandlerWithResolver(t, reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing-agent",
@@ -173,7 +173,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_NotFound(t *testing.T) {
 func TestAgentHandler_HandleAgentStream_NoResolver_AgentExists(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "stream-agent",
@@ -194,7 +194,7 @@ func TestAgentHandler_HandleAgentStream_NoResolver_AgentExists(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_NoResolver_NotFound(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "nonexistent",
@@ -215,7 +215,7 @@ func TestAgentHandler_HandleAgentStream_NoResolver_NotFound(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_MissingBody(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute/stream", nil)
@@ -231,7 +231,7 @@ func TestAgentHandler_HandleAgentStream_MissingBody(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_InvalidAgentID(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "../../../etc/passwd",
@@ -252,7 +252,7 @@ func TestAgentHandler_HandleAgentStream_InvalidAgentID(t *testing.T) {
 
 func TestAgentHandler_HandleAgentStream_MissingFields(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "test",
@@ -276,7 +276,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_NotFound(t *testing.T) {
 	resolver := func(ctx context.Context, agentID string) (agent.Agent, error) {
 		return nil, fmt.Errorf("not found")
 	}
-	handler := newTestHandlerWithResolver(reg, resolver)
+	handler := newTestHandlerWithResolver(t, reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing",
@@ -297,7 +297,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_NotFound(t *testing.T) {
 
 func TestAgentHandler_HandleAgentHealth_InvalidID(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents/health?id=../../../etc", nil)
@@ -316,7 +316,7 @@ func TestAgentHandler_HandleListAgents_Error(t *testing.T) {
 		agents: make(map[string]*tools.AgentInfo),
 		err:    errors.New("registry error"),
 	}
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents", nil)
@@ -944,7 +944,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 		return ma, nil
 	}
 
-	handler := newTestHandlerWithResolver(reg, resolver)
+	handler := newTestHandlerWithResolver(t, reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "stream-agent",
@@ -979,7 +979,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T
 		return ma, nil
 	}
 
-	handler := newTestHandlerWithResolver(reg, resolver)
+	handler := newTestHandlerWithResolver(t, reg, resolver)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "err-stream",
@@ -1007,7 +1007,7 @@ func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 		agents: make(map[string]*tools.AgentInfo),
 		err:    errors.New("registry error"),
 	}
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/some-agent", nil)

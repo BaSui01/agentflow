@@ -172,16 +172,18 @@ func newTestAgentInfo(name string, status tools.AgentStatus) *tools.AgentInfo {
 	}
 }
 
-func newTestHandler(reg *mockRegistry) *AgentHandler {
+func newTestHandler(t testing.TB, reg *mockRegistry) *AgentHandler {
+	t.Helper()
 	sessionMgr := agent.NewSessionManager()
-	sessionMgr.Stop()
+	t.Cleanup(sessionMgr.Stop)
 	handler := NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, nil), sessionMgr, zap.NewNop())
 	return handler
 }
 
-func newTestHandlerWithResolver(reg tools.Registry, resolver usecase.AgentResolver) *AgentHandler {
+func newTestHandlerWithResolver(t testing.TB, reg tools.Registry, resolver usecase.AgentResolver) *AgentHandler {
+	t.Helper()
 	sessionMgr := agent.NewSessionManager()
-	sessionMgr.Stop()
+	t.Cleanup(sessionMgr.Stop)
 	handler := NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, resolver), sessionMgr, zap.NewNop())
 	return handler
 }
@@ -192,7 +194,7 @@ func newTestHandlerWithResolver(reg tools.Registry, resolver usecase.AgentResolv
 
 func TestAgentHandler_HandleListAgents_Empty(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents", nil)
@@ -218,7 +220,7 @@ func TestAgentHandler_HandleListAgents_WithAgents(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("agent-1", tools.AgentStatusOnline)).
 		withAgent(newTestAgentInfo("agent-2", tools.AgentStatusBusy))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents", nil)
@@ -243,7 +245,7 @@ func TestAgentHandler_HandleListAgents_WithAgents(t *testing.T) {
 func TestAgentHandler_HandleGetAgent_Found(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("test-id", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/test-id", nil)
@@ -287,7 +289,7 @@ func TestAgentHandler_HandleAgentInterrupt_MissingTypeUsesValidateRequest(t *tes
 
 func TestAgentHandler_HandleGetAgent_NotFound(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/nonexistent", nil)
@@ -306,7 +308,7 @@ func TestAgentHandler_HandleGetAgent_NotFound(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_MissingBody(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute", nil)
@@ -318,7 +320,7 @@ func TestAgentHandler_HandleExecuteAgent_MissingBody(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_AgentNotFound(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "nonexistent",
@@ -336,7 +338,7 @@ func TestAgentHandler_HandleExecuteAgent_AgentNotFound(t *testing.T) {
 func TestAgentHandler_HandleExecuteAgent_LocalAgent(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("local-agent", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "local-agent",
@@ -355,7 +357,7 @@ func TestAgentHandler_HandleExecuteAgent_LocalAgent(t *testing.T) {
 func TestAgentHandler_HandleAgentHealth_Online(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("healthy-agent", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents/health?id=healthy-agent", nil)
@@ -373,7 +375,7 @@ func TestAgentHandler_HandleAgentHealth_Online(t *testing.T) {
 func TestAgentHandler_HandleAgentHealth_Unhealthy(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("sick-agent", tools.AgentStatusUnhealthy))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents/health?id=sick-agent", nil)
@@ -385,7 +387,7 @@ func TestAgentHandler_HandleAgentHealth_Unhealthy(t *testing.T) {
 
 func TestAgentHandler_HandleAgentHealth_NotFound(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents/health?id=nonexistent", nil)
@@ -397,7 +399,7 @@ func TestAgentHandler_HandleAgentHealth_NotFound(t *testing.T) {
 
 func TestAgentHandler_HandleAgentHealth_MissingID(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/agents/health", nil)
@@ -408,7 +410,7 @@ func TestAgentHandler_HandleAgentHealth_MissingID(t *testing.T) {
 }
 
 func TestAgentHandler_HandleAgentError(t *testing.T) {
-	handler := newTestHandler(newMockRegistry())
+	handler := newTestHandler(t, newMockRegistry())
 
 	tests := []struct {
 		name           string
@@ -454,7 +456,7 @@ func TestAgentHandler_HandleAgentError(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_InvalidAgentID(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	tests := []struct {
 		name    string
@@ -488,7 +490,7 @@ func TestAgentHandler_HandleExecuteAgent_InvalidAgentID(t *testing.T) {
 func TestAgentHandler_HandleExecuteAgent_ValidAgentID(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("valid-agent-1", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "valid-agent-1",
@@ -506,7 +508,7 @@ func TestAgentHandler_HandleExecuteAgent_ValidAgentID(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_MultiAgentValidation(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	tests := []struct {
 		name string
@@ -555,7 +557,7 @@ func TestAgentHandler_HandleExecuteAgent_MultiAgentValid(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("agent-1", tools.AgentStatusOnline)).
 		withAgent(newTestAgentInfo("agent-2", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentIDs: []string{"agent-1", "agent-2"},
@@ -574,7 +576,7 @@ func TestAgentHandler_HandleExecuteAgent_MultiAgentValid(t *testing.T) {
 func TestAgentHandler_HandleAgentStream_EmbedsExecutionFieldsInPayload(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 	handler.service = &stubAgentService{
 		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
 			return nil, nil
@@ -624,7 +626,7 @@ func TestAgentHandler_HandleAgentStream_EmbedsExecutionFieldsInPayload(t *testin
 func TestAgentHandler_HandleAgentStream_EmitsStatusEventsWithStableExecutionFields(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 	handler.service = &stubAgentService{
 		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
 			return nil, nil
@@ -696,7 +698,7 @@ func TestAgentHandler_HandleAgentStream_EmitsStatusEventsWithStableExecutionFiel
 func TestAgentHandler_HandleAgentStream_StatusEventPayload(t *testing.T) {
 	reg := newMockRegistry().
 		withAgent(newTestAgentInfo("stream-agent", tools.AgentStatusOnline))
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 	handler.service = &stubAgentService{
 		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
 			return nil, nil
@@ -751,7 +753,7 @@ func TestAgentHandler_HandleAgentStream_StatusEventPayload(t *testing.T) {
 
 func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {
 	reg := newMockRegistry()
-	handler := newTestHandler(reg)
+	handler := newTestHandler(t, reg)
 
 	tests := []struct {
 		name string
@@ -789,7 +791,7 @@ func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {
 }
 
 func TestAgentHandler_HandleCapabilities(t *testing.T) {
-	handler := newTestHandler(newMockRegistry())
+	handler := newTestHandler(t, newMockRegistry())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/capabilities", nil)
 

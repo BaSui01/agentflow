@@ -587,3 +587,121 @@ func TestReActExecutor_ExecuteStream_SteeringDoesNotBlockOnSlowProviderClose(t *
 }
 
 func strPtr(s string) *string { return &s }
+
+func TestReActExecutor_ExecuteStream_SteeringInterruptsStreamingToolExecution(t *testing.T) {
+	logger := zap.NewNop()
+	stream1 := make(chan llmpkg.StreamChunk, 1)
+	go func() {
+		defer close(stream1)
+		stream1 <- llmpkg.StreamChunk{
+			ID:       "c1",
+			Provider: "scripted",
+			Model:    "dummy",
+			Delta: llmpkg.Message{
+				Role: llmpkg.RoleAssistant,
+				ToolCalls: []llmpkg.ToolCall{{
+					Index:     0,
+					ID:        "call_slow_1",
+					Name:      "slow_tool",
+					Arguments: json.RawMessage(`{"text":"hi"}`),
+				}},
+			},
+			FinishReason: "tool_calls",
+		}
+	}()
+	stream2 := make(chan llmpkg.StreamChunk, 1)
+	go func() {
+		defer close(stream2)
+		stream2 <- llmpkg.StreamChunk{
+			ID:           "c2",
+			Provider:     "scripted",
+			Model:        "dummy",
+			Delta:        llmpkg.Message{Role: llmpkg.RoleAssistant, Content: "steered"},
+			FinishReason: "stop",
+		}
+	}()
+
+	provider := &scriptedProvider{supportsNative: true, streamResponses: []<-chan llmpkg.StreamChunk{stream1, stream2}}
+	toolExec := &blockingStreamableToolExecutor{started: make(chan struct{}), done: make(chan struct{})}
+	executor := NewReActExecutor(provider, toolExec, ReActConfig{MaxIterations: 2, InactivityTimeout: time.Second}, logger)
+	steeringCh := make(chan SteeringMessage, 1)
+	executor.SetSteeringChannel(steeringCh)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	evCh, err := executor.ExecuteStream(ctx, &llmpkg.ChatRequest{
+		Model:    "dummy",
+		Messages: []llmpkg.Message{{Role: llmpkg.RoleUser, Content: "hi"}},
+		Tools:    []llmpkg.ToolSchema{{Name: "slow_tool", Parameters: json.RawMessage(`{"type":"object"}`)}},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream failed: %v", err)
+	}
+
+	select {
+	case <-toolExec.started:
+	case <-time.After(time.Second):
+		t.Fatal("tool execution did not start")
+	}
+	steeringCh <- SteeringMessage{Type: types.SteeringTypeGuide, Content: "skip slow tool"}
+
+	var (
+		completed bool
+		steered   bool
+	)
+	for ev := range evCh {
+		switch ev.Type {
+		case ReActEventSteering:
+			steered = true
+		case ReActEventCompleted:
+			completed = true
+			if ev.FinalResponse == nil || len(ev.FinalResponse.Choices) == 0 || ev.FinalResponse.Choices[0].Message.Content != "steered" {
+				t.Fatalf("unexpected final response: %#v", ev.FinalResponse)
+			}
+		case ReActEventError:
+			t.Fatalf("unexpected error event: %s", ev.Error)
+		}
+	}
+	if !steered || !completed {
+		t.Fatalf("expected steering and completion events, steered=%v completed=%v", steered, completed)
+	}
+	select {
+	case <-toolExec.done:
+	case <-time.After(time.Second):
+		t.Fatal("tool stream was not cancelled")
+	}
+}
+
+type blockingStreamableToolExecutor struct {
+	started chan struct{}
+	done    chan struct{}
+	once    sync.Once
+}
+
+func (e *blockingStreamableToolExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []llmpkg.ToolResult {
+	out := make([]llmpkg.ToolResult, 0, len(calls))
+	for _, call := range calls {
+		out = append(out, e.ExecuteOne(ctx, call))
+	}
+	return out
+}
+
+func (e *blockingStreamableToolExecutor) ExecuteOne(_ context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
+	return llmpkg.ToolResult{ToolCallID: call.ID, Name: call.Name, Result: json.RawMessage(`{"ok":true}`)}
+}
+
+func (e *blockingStreamableToolExecutor) ExecuteOneStream(ctx context.Context, call llmpkg.ToolCall) <-chan ToolStreamEvent {
+	ch := make(chan ToolStreamEvent)
+	go func() {
+		defer close(ch)
+		e.once.Do(func() { close(e.started) })
+		select {
+		case <-ctx.Done():
+			close(e.done)
+			return
+		case <-time.After(5 * time.Second):
+			ch <- ToolStreamEvent{Type: ToolStreamComplete, ToolName: call.Name, Data: llmpkg.ToolResult{ToolCallID: call.ID, Name: call.Name}}
+		}
+	}()
+	return ch
+}

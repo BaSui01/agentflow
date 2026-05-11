@@ -12,7 +12,7 @@
 go test -bench=. -benchmem -count=3 -timeout 120s \
   ./llm/providers/openaicompat/ \
   ./llm/capabilities/tools/ \
-  ./agent/memorycore/
+  ./agent/capabilities/memory/
 ```
 
 ## 对比基线

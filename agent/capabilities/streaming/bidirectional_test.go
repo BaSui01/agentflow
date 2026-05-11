@@ -193,32 +193,19 @@ func TestBidirectionalStream_Send(t *testing.T) {
 
 func TestBidirectionalStream_Send_BufferFull(t *testing.T) {
 	t.Parallel()
-	conn := &mockConn{
-		readFn: func(ctx context.Context) (*StreamChunk, error) {
-			<-ctx.Done()
-			return nil, ctx.Err()
-		},
-	}
 	cfg := DefaultStreamConfig()
-	cfg.EnableHeartbeat = false
 	cfg.BufferSize = 1
-	stream := NewBidirectionalStream(cfg, nil, conn, nil, zap.NewNop())
+	stream := NewBidirectionalStream(cfg, nil, &mockConn{}, nil, zap.NewNop())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	require.NoError(t, stream.Start(ctx))
-
-	// Fill the buffer
+	// Fill the outbound queue without starting processOutbound; Start drains the
+	// queue asynchronously, so using it here would make the full-buffer assertion flaky.
 	require.NoError(t, stream.Send(StreamChunk{Type: StreamTypeText, Text: "first"}))
 
-	// Second send should fail with buffer full
 	err := stream.Send(StreamChunk{Type: StreamTypeText, Text: "second"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "buffer full")
 
-	cancel()
-	time.Sleep(10 * time.Millisecond)
-	stream.Close()
+	require.NoError(t, stream.Close())
 }
 
 func TestBidirectionalStream_Close_Idempotent(t *testing.T) {

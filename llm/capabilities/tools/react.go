@@ -481,7 +481,18 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			// 获取工具执行结果（优先流式执行器）
 			var toolResults []types.ToolResult
 			if streamExec, ok := r.toolExecutor.(StreamableToolExecutor); ok {
-				toolResults = r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
+				var toolSteering *SteeringMessage
+				toolResults, toolSteering = r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
+				if toolSteering != nil {
+					rc := ""
+					if assembledMessage.ReasoningContent != nil {
+						rc = *assembledMessage.ReasoningContent
+					}
+					if newMsgs, ok := r.applySteering(*toolSteering, messages, assembledMessage.Content, rc, eventCh); ok {
+						messages = newMsgs
+						continue
+					}
+				}
 			} else {
 				toolResults = r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
 			}
@@ -580,51 +591,118 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 	streamExec StreamableToolExecutor,
 	calls []types.ToolCall,
 	eventCh chan<- ReActStreamEvent,
-) []types.ToolResult {
+) ([]types.ToolResult, *SteeringMessage) {
 	results := make([]types.ToolResult, len(calls))
+	steerCh := r.steerChOrNil()
 
 	for i, call := range calls {
-		streamCh := streamExec.ExecuteOneStream(ctx, call)
+		toolCtx, cancelTool := context.WithCancel(ctx)
+		streamCh := streamExec.ExecuteOneStream(toolCtx, call)
 		result := types.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 		}
 
-		for event := range streamCh {
-			switch event.Type {
-			case ToolStreamProgress:
-				// 转发中间进度事件
-				select {
-				case eventCh <- ReActStreamEvent{
-					Type:         ReActEventToolProgress,
-					ToolCallID:   call.ID,
-					ToolName:     call.Name,
-					ProgressData: event.Data,
-				}:
-				case <-ctx.Done():
-					return results
+		for {
+			select {
+			case event, ok := <-streamCh:
+				if !ok {
+					cancelTool()
+					results[i] = result
+					goto nextCall
 				}
-			case ToolStreamOutput:
-				// output 事件的 Data 是 json.RawMessage
-				if raw, ok := event.Data.(json.RawMessage); ok {
-					result.Result = raw
+
+				steering, cancelled := r.handleToolStreamEvent(ctx, steerCh, eventCh, call, event, &result)
+				if steering != nil {
+					cancelTool()
+					r.drainToolStreamAfterCancel(streamCh, call)
+					return results, steering
 				}
-			case ToolStreamComplete:
-				// complete 事件的 Data 是 types.ToolResult
-				if tr, ok := event.Data.(types.ToolResult); ok {
-					result = tr
+				if cancelled {
+					cancelTool()
+					return results, nil
 				}
-			case ToolStreamError:
-				if event.Error != nil {
-					result.Error = event.Error.Error()
+
+			case steerMsg, ok := <-steerCh:
+				if !ok || steerMsg.IsZero() {
+					steerCh = nil
+					continue
 				}
+				cancelTool()
+				r.drainToolStreamAfterCancel(streamCh, call)
+				return results, &steerMsg
+
+			case <-ctx.Done():
+				cancelTool()
+				return results, nil
 			}
 		}
 
-		results[i] = result
+	nextCall:
 	}
 
-	return results
+	return results, nil
+}
+
+func (r *ReActExecutor) handleToolStreamEvent(
+	ctx context.Context,
+	steerCh <-chan SteeringMessage,
+	eventCh chan<- ReActStreamEvent,
+	call types.ToolCall,
+	event ToolStreamEvent,
+	result *types.ToolResult,
+) (*SteeringMessage, bool) {
+	switch event.Type {
+	case ToolStreamProgress:
+		// 转发中间进度事件，同时允许 steering 在 eventCh 背压时打断工具执行.
+		select {
+		case eventCh <- ReActStreamEvent{
+			Type:         ReActEventToolProgress,
+			ToolCallID:   call.ID,
+			ToolName:     call.Name,
+			ProgressData: event.Data,
+		}:
+		case steerMsg, ok := <-steerCh:
+			if ok && !steerMsg.IsZero() {
+				return &steerMsg, false
+			}
+		case <-ctx.Done():
+			return nil, true
+		}
+	case ToolStreamOutput:
+		// output 事件的 Data 是 json.RawMessage
+		if raw, ok := event.Data.(json.RawMessage); ok {
+			result.Result = raw
+		}
+	case ToolStreamComplete:
+		// complete 事件的 Data 是 types.ToolResult
+		if tr, ok := event.Data.(types.ToolResult); ok {
+			*result = tr
+		}
+	case ToolStreamError:
+		if event.Error != nil {
+			result.Error = event.Error.Error()
+		}
+	}
+	return nil, false
+}
+
+func (r *ReActExecutor) drainToolStreamAfterCancel(streamCh <-chan ToolStreamEvent, call types.ToolCall) {
+	drainDone := make(chan struct{})
+	go func() {
+		defer close(drainDone)
+		for range streamCh {
+		}
+	}()
+	select {
+	case <-drainDone:
+	case <-time.After(steeringDrainTimeout):
+		r.logger.Warn("tool stream drain timed out after steering",
+			zap.Duration("timeout", steeringDrainTimeout),
+			zap.String("tool", call.Name),
+			zap.String("tool_call_id", call.ID),
+		)
+	}
 }
 
 func synthesizeHandoffFinalResponse(template *llm.ChatResponse, results []types.ToolResult, usage llm.ChatUsage) (*llm.ChatResponse, bool) {

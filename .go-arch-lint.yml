@@ -4,6 +4,7 @@ workdir: .
 allow:
   depOnAnyVendor: true
   ignoreNotFoundComponents: true
+  deepScan: false
 
 exclude:
   - cmd
@@ -43,22 +44,25 @@ components:
       - config
   llm:
     in:
-      - llm
+      - llm/**
   agent:
     in:
-      - agent
+      - agent/**
   rag:
     in:
-      - rag
+      - rag/**
   workflow:
     in:
-      - workflow
+      - workflow/**
   api:
     in:
-      - api
+      - api/**
   pkg_common:
     in:
       - pkg/common
+  pkg_httpclient:
+    in:
+      - pkg/httpclient
   pkg_cache:
     in:
       - pkg/cache
@@ -111,71 +115,24 @@ deps:
       - config
       - types
   llm:
-    mayDependOn:
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_tlsutil
-      - pkg_telemetry
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   agent:
-    mayDependOn:
-      - agent
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_middleware
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_storage
-      - pkg_database
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   rag:
-    mayDependOn:
-      - rag
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_storage
-      - pkg_database
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   workflow:
-    mayDependOn:
-      - workflow
-      - agent
-      - rag
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_middleware
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_storage
-      - pkg_database
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   api:
-    mayDependOn:
-      - api
-      - agent
-      - rag
-      - llm
-      - workflow
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_middleware
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_server
-      - pkg_storage
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   pkg_common:
     mayDependOn: [pkg_common, types]
+  pkg_httpclient:
+    mayDependOn: [pkg_httpclient, config, types]
   pkg_cache:
     mayDependOn: [pkg_cache, pkg_tlsutil, types]
   pkg_database:

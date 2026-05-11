@@ -81,16 +81,51 @@ func assertModuleRootNoGoFiles(t *testing.T, dir string) {
 }
 
 func TestRootLayoutBudget(t *testing.T) {
-	const maxTopLevelEntries = 56
+	const maxTrackedTopLevelEntries = 56
 
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("read repo root: %v", err)
+	tracked := trackedTopLevelEntries(t)
+	if len(tracked) > maxTrackedTopLevelEntries {
+		var names []string
+		for name := range tracked {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		t.Fatalf("repo root has %d tracked top-level entries, exceeds budget %d: %s", len(tracked), maxTrackedTopLevelEntries, strings.Join(names, ", "))
+	}
+}
+
+func trackedTopLevelEntries(t *testing.T) map[string]struct{} {
+	t.Helper()
+
+	entries := map[string]struct{}{}
+	if err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == "." {
+			return nil
+		}
+
+		name := d.Name()
+		if d.IsDir() {
+			switch name {
+			case ".git", ".ace-tool", ".codex", ".omx", ".pytest_cache", ".snow", ".tmp", ".vscode", "build", "test_artifacts":
+				return filepath.SkipDir
+			}
+		}
+		if strings.HasSuffix(name, ".exe") || name == "coverage.out" || strings.HasPrefix(name, "coverage-summary") {
+			return nil
+		}
+
+		rel := filepath.ToSlash(path)
+		root, _, _ := strings.Cut(rel, "/")
+		entries[root] = struct{}{}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk repo root: %v", err)
 	}
 
-	if len(entries) > maxTopLevelEntries {
-		t.Fatalf("repo root has %d top-level entries, exceeds budget %d", len(entries), maxTopLevelEntries)
-	}
+	return entries
 }
 
 func TestPkgOneFileDirectoryAllowlist(t *testing.T) {

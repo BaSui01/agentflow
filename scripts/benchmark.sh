@@ -12,7 +12,7 @@ mkdir -p "${OUTPUT_DIR}"
 BENCH_PKGS=(
   ./llm/providers/openaicompat/
   ./llm/capabilities/tools/
-  ./agent/memorycore/
+  ./agent/capabilities/memory/
 )
 
 echo "=== AgentFlow Benchmark Suite ==="

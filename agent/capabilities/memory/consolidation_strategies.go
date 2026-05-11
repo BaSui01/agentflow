@@ -220,6 +220,13 @@ func (s *PromoteShortTermVectorToLongTermStrategy) Consolidate(ctx context.Conte
 
 		if err := s.system.shortTerm.Delete(ctx, key); err != nil {
 			lastErr = err
+			if rollbackErr := s.system.longTerm.Delete(ctx, id); rollbackErr != nil {
+				s.logger.Warn("failed to rollback promoted long-term memory",
+					zap.String("agent_id", agentID),
+					zap.String("id", id),
+					zap.Error(rollbackErr),
+				)
+			}
 			s.logger.Warn("failed to delete short-term memory after promotion",
 				zap.String("agent_id", agentID),
 				zap.String("key", key),

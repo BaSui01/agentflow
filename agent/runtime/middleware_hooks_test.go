@@ -201,7 +201,7 @@ type stubHook struct {
 	exec  func(ctx context.Context, input any) (HookResult, error)
 }
 
-func (h *stubHook) Name() string    { return h.name }
+func (h *stubHook) Name() string     { return h.name }
 func (h *stubHook) Point() HookPoint { return h.point }
 func (h *stubHook) Execute(ctx context.Context, input any) (HookResult, error) {
 	return h.exec(ctx, input)
@@ -209,4 +209,24 @@ func (h *stubHook) Execute(ctx context.Context, input any) (HookResult, error) {
 
 func TestHookRegistry_DefaultTimeout(t *testing.T) {
 	assert.Equal(t, 5*time.Second, defaultHookTimeout)
+}
+
+func TestAuthzMiddleware_UsesClassifiedToolRiskTier(t *testing.T) {
+	t.Parallel()
+
+	var captured []types.AuthorizationRequest
+	authorize := func(_ context.Context, req types.AuthorizationRequest) (*types.AuthorizationDecision, error) {
+		captured = append(captured, req)
+		return &types.AuthorizationDecision{Decision: types.DecisionAllow, Reason: "ok"}, nil
+	}
+
+	m := NewAuthzMiddleware(authorize)
+	_, err := m.Execute(context.Background(), &types.ToolCall{Name: "read_file"})
+	require.NoError(t, err)
+	_, err = m.Execute(context.Background(), &types.ToolCall{Name: "run_command"})
+	require.NoError(t, err)
+
+	require.Len(t, captured, 2)
+	assert.Equal(t, types.RiskSafeRead, captured[0].RiskTier)
+	assert.Equal(t, types.RiskExecution, captured[1].RiskTier)
 }

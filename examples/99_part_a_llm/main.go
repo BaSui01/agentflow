@@ -85,7 +85,8 @@ func mkTools(lg *zap.Logger) *tools.DefaultRegistry {
 		Parameters: json.RawMessage(`{"type":"object","properties":{"expression":{"type":"string"}},"required":["expression"]}`)}, Timeout: 5 * time.Second})
 	r.Register("translate", func(_ context.Context, a json.RawMessage) (json.RawMessage, error) {
 		var p struct {
-			Text, To string `json:"text"`
+			Text string `json:"text"`
+			To   string `json:"to"`
 		}
 		json.Unmarshal(a, &p)
 		return json.Marshal(map[string]any{"translated": "[EN] " + p.Text})

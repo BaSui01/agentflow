@@ -72,18 +72,18 @@ type EnhancedMemoryConfig struct {
 	VectorDimension int  `json:"vector_dimension"`  // 向量维度
 
 	// 情节记忆配置
-	EpisodicEnabled   bool          `json:"episodic_enabled"`   // 是否启用情节记忆
-	EpisodicRetention time.Duration `json:"episodic_retention"` // 情节记忆保留时间
-	EpisodicMaxEntries int          `json:"episodic_max_entries"` // 情节记忆最大条目数
+	EpisodicEnabled    bool          `json:"episodic_enabled"`     // 是否启用情节记忆
+	EpisodicRetention  time.Duration `json:"episodic_retention"`   // 情节记忆保留时间
+	EpisodicMaxEntries int           `json:"episodic_max_entries"` // 情节记忆最大条目数
 
 	// 语义记忆配置
-	SemanticEnabled bool `json:"semantic_enabled"` // 是否启用语义记忆
-	SemanticMaxEntries int `json:"semantic_max_entries"` // 语义记忆最大实体数
+	SemanticEnabled    bool `json:"semantic_enabled"`     // 是否启用语义记忆
+	SemanticMaxEntries int  `json:"semantic_max_entries"` // 语义记忆最大实体数
 
 	// 观测记忆配置
-	ObservationEnabled bool           `json:"observation_enabled"` // 是否启用观测记忆
-	ObserverConfig     obs.ObserverConfig `json:"observer_config"`     // Observer 配置
-	ObservationMaxEntries int         `json:"observation_max_entries"` // 观测记忆最大条目数
+	ObservationEnabled    bool               `json:"observation_enabled"`     // 是否启用观测记忆
+	ObserverConfig        obs.ObserverConfig `json:"observer_config"`         // Observer 配置
+	ObservationMaxEntries int                `json:"observation_max_entries"` // 观测记忆最大条目数
 
 	// 记忆整合配置
 	ConsolidationEnabled  bool          `json:"consolidation_enabled"`  // 是否启用记忆整合
@@ -137,6 +137,10 @@ func toStoreEntries(raw []any) []types.MemoryEntry {
 		}
 		if v, ok := m["timestamp"].(time.Time); ok {
 			entry.Timestamp = v
+		} else if v, ok := m["timestamp"].(string); ok {
+			if parsed, err := time.Parse(time.RFC3339Nano, v); err == nil {
+				entry.Timestamp = parsed
+			}
 		}
 		entries = append(entries, entry)
 	}
@@ -188,7 +192,6 @@ type KnowledgeGraph interface {
 	// 路径查询
 	FindPath(ctx context.Context, fromID, toID string, maxDepth int) ([][]string, error)
 }
-
 
 type MemoryConsolidator struct {
 	system *EnhancedMemorySystem

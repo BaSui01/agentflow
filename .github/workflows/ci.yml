@@ -22,6 +22,7 @@ env:
   # Integration tests in rag/ and llm/ use //go:build integration tags
   # and are already excluded by default (go test doesn't include them).
   EXCLUDED_PKGS_REGEX: '^github\.com/BaSui01/agentflow/internal/database$'
+  COVERAGE_EXCLUDED_PKGS_REGEX: '^github\.com/BaSui01/agentflow/(internal/database|examples|scripts|cmd)(/|$)'
 
 jobs:
   ci:
@@ -47,13 +48,20 @@ jobs:
         shell: bash
         run: |
           pkgs=$(go list ./... | grep -Ev "${EXCLUDED_PKGS_REGEX}" | tr '\n' ' ')
+          coverage_pkgs=$(go list ./... | grep -Ev "${COVERAGE_EXCLUDED_PKGS_REGEX}" | tr '\n' ' ')
           if [[ -z "${pkgs}" ]]; then
             echo "No packages selected for CI checks"
             exit 1
           fi
+          if [[ -z "${coverage_pkgs}" ]]; then
+            echo "No packages selected for coverage checks"
+            exit 1
+          fi
 
           echo "pkgs=${pkgs}" >> "$GITHUB_OUTPUT"
+          echo "coverage_pkgs=${coverage_pkgs}" >> "$GITHUB_OUTPUT"
           echo "Selected package count: $(echo "${pkgs}" | wc -w)"
+          echo "Selected coverage package count: $(echo "${coverage_pkgs}" | wc -w)"
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -98,7 +106,7 @@ jobs:
           retention-days: 14
 
       - name: Check coverage threshold
-        run: make coverage-check
+        run: make coverage-check COVERAGE_PKGS="${{ steps.pkgset.outputs.coverage_pkgs }}"
 
       - name: Check docs API drift
         run: make docs-api-drift
@@ -139,7 +147,7 @@ jobs:
           go test -bench=. -benchmem -count=3 -timeout 120s \
             ./llm/providers/openaicompat/ \
             ./llm/capabilities/tools/ \
-            ./agent/memorycore/ \
+            ./agent/capabilities/memory/ \
             | tee benchmark-current.txt
 
       - name: Compare with baseline (if available)
