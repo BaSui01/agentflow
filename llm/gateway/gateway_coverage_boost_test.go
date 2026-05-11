@@ -108,13 +108,13 @@ func TestService_Stream_InvalidPayload(t *testing.T) {
 
 func TestNormalizeCost_NegativeAmount(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
-	cost := svc.normalizeCost(llmcore.ProviderDecision{}, llmcore.Usage{}, llmcore.Cost{AmountUSD: -5.0})
+	cost := svc.normalizeCost(llmcore.CapabilityChat, llmcore.ProviderDecision{}, llmcore.Usage{}, llmcore.Cost{AmountUSD: -5.0})
 	assert.Equal(t, 0.0, cost.AmountUSD)
 }
 
 func TestNormalizeCost_EmptyCurrency(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
-	cost := svc.normalizeCost(llmcore.ProviderDecision{}, llmcore.Usage{}, llmcore.Cost{Currency: ""})
+	cost := svc.normalizeCost(llmcore.CapabilityChat, llmcore.ProviderDecision{}, llmcore.Usage{}, llmcore.Cost{Currency: ""})
 	assert.Equal(t, "USD", cost.Currency)
 }
 
@@ -124,6 +124,7 @@ func TestNormalizeCost_NonUSDCurrency(t *testing.T) {
 	svc := New(Config{CostCalculator: calc, Logger: zap.NewNop()})
 
 	cost := svc.normalizeCost(
+		llmcore.CapabilityChat,
 		llmcore.ProviderDecision{Provider: "prov", Model: "model"},
 		llmcore.Usage{PromptTokens: 100, CompletionTokens: 50},
 		llmcore.Cost{AmountUSD: 0, Currency: "CREDITS"},
@@ -134,7 +135,7 @@ func TestNormalizeCost_NonUSDCurrency(t *testing.T) {
 
 func TestNormalizeCost_WhitespaceCurrency(t *testing.T) {
 	svc := New(Config{Logger: zap.NewNop()})
-	cost := svc.normalizeCost(llmcore.ProviderDecision{}, llmcore.Usage{}, llmcore.Cost{Currency: "  usd  "})
+	cost := svc.normalizeCost(llmcore.CapabilityChat, llmcore.ProviderDecision{}, llmcore.Usage{}, llmcore.Cost{Currency: "  usd  "})
 	assert.Equal(t, "USD", cost.Currency)
 }
 
@@ -144,11 +145,26 @@ func TestNormalizeCost_CalculatorFillsZeroUSD(t *testing.T) {
 	svc := New(Config{CostCalculator: calc, Logger: zap.NewNop()})
 
 	cost := svc.normalizeCost(
+		llmcore.CapabilityChat,
 		llmcore.ProviderDecision{Provider: "prov", Model: "model"},
 		llmcore.Usage{PromptTokens: 1000, CompletionTokens: 500},
 		llmcore.Cost{AmountUSD: 0, Currency: "USD"},
 	)
 	assert.Greater(t, cost.AmountUSD, 0.0)
+}
+
+func TestNormalizeCost_CalculatorFillsZeroUSDForUnitCapability(t *testing.T) {
+	calc := observability.NewCostCalculator()
+	calc.SetUnitPrice("prov", "model", string(llmcore.CapabilityAudio), 0.25)
+	svc := New(Config{CostCalculator: calc, Logger: zap.NewNop()})
+
+	cost := svc.normalizeCost(
+		llmcore.CapabilityAudio,
+		llmcore.ProviderDecision{Provider: "prov", Model: "model"},
+		llmcore.Usage{TotalUnits: 2},
+		llmcore.Cost{AmountUSD: 0, Currency: "USD"},
+	)
+	assert.Equal(t, 0.5, cost.AmountUSD)
 }
 
 // ═══ normalizeUsage ═══
@@ -738,6 +754,24 @@ func TestInvokeAudio_SynthesizeSuccess(t *testing.T) {
 	ttsResp, ok := resp.Output.(*speech.TTSResponse)
 	require.True(t, ok)
 	assert.Equal(t, "tts", ttsResp.Provider)
+	assert.Equal(t, 5, resp.Usage.InputUnits)
+	assert.Equal(t, 5, resp.Usage.TotalUnits)
+}
+
+func TestInvokeAudio_SynthesizeFallsBackToUnitCostCalculator(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	calc := observability.NewCostCalculator()
+	calc.SetUnitPrice("tts", "tts-1", string(llmcore.CapabilityAudio), 0.024)
+	svc.costCalculator = calc
+
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Synthesize: &speech.TTSRequest{Text: "hello", Model: "tts-1"}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, 0.12, resp.Cost.AmountUSD)
+	assert.Equal(t, "USD", resp.Cost.Currency)
 }
 
 func TestInvokeAudio_TranscribeSuccess(t *testing.T) {
@@ -751,6 +785,8 @@ func TestInvokeAudio_TranscribeSuccess(t *testing.T) {
 	sttResp, ok := resp.Output.(*speech.STTResponse)
 	require.True(t, ok)
 	assert.Equal(t, "stt", sttResp.Provider)
+	assert.Equal(t, 1, resp.Usage.InputUnits)
+	assert.Equal(t, 1, resp.Usage.TotalUnits)
 }
 
 // ═══ invokeEmbedding: nil capabilities / invalid payload / totalTokens fallback ═══
@@ -800,6 +836,29 @@ func TestInvokeModeration_NilCapabilities(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestInvokeModeration_FallsBackToUnitCostCalculator(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	calc := observability.NewCostCalculator()
+	calc.SetUnitPrice("mod", "mod-model", string(llmcore.CapabilityModeration), 0.08)
+	svc.costCalculator = calc
+
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityModeration,
+		Payload: &ModerationInput{
+			Request: &moderation.ModerationRequest{
+				Input: []string{"hello"},
+				Model: "mod-model",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, 1, resp.Usage.InputUnits)
+	assert.Equal(t, 1, resp.Usage.TotalUnits)
+	assert.Equal(t, 0.08, resp.Cost.AmountUSD)
+	assert.Equal(t, "USD", resp.Cost.Currency)
 }
 
 // ═══ invokeMusic: nil capabilities ═══
@@ -888,6 +947,26 @@ func TestRecordResponseUsage_Success(t *testing.T) {
 		},
 	)
 	// No panic = success; policyManager.RecordUsage was called
+}
+
+func TestRecordResponseUsage_NonUSDCostIgnored(t *testing.T) {
+	budgetCfg := llmpolicy.DefaultBudgetConfig()
+	budget := llmpolicy.NewTokenBudgetManager(budgetCfg, zap.NewNop())
+	manager := llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: budget})
+	svc := New(Config{PolicyManager: manager, Logger: zap.NewNop()})
+
+	svc.recordResponseUsage(
+		&llmcore.UnifiedRequest{TraceID: "t2"},
+		&llmcore.UnifiedResponse{
+			Usage:            llmcore.Usage{TotalTokens: 100},
+			Cost:             llmcore.Cost{AmountUSD: 7, Currency: "CREDITS"},
+			ProviderDecision: llmcore.ProviderDecision{Model: "music-01"},
+			TraceID:          "t2",
+		},
+	)
+
+	status := budget.GetStatus()
+	assert.Equal(t, 0.0, status.CostUsedDay)
 }
 
 func TestRecordResponseUsage_NilService(t *testing.T) {

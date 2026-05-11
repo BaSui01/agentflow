@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -183,7 +184,7 @@ func (s *Service) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llm
 		return nil, err
 	}
 	resp.Usage = normalizeUsage(resp.Usage)
-	resp.Cost = s.normalizeCost(resp.ProviderDecision, resp.Usage, resp.Cost)
+	resp.Cost = s.normalizeCost(req.Capability, resp.ProviderDecision, resp.Usage, resp.Cost)
 	s.recordResponseUsage(req, resp)
 	s.recordLedger(
 		ctx,
@@ -273,7 +274,7 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 				u := fromChatUsage(*chunk.Usage)
 				u = normalizeUsage(u)
 				usage = &u
-				c := s.normalizeCost(decision, u, llmcore.Cost{})
+				c := s.normalizeCost(req.Capability, decision, u, llmcore.Cost{})
 				cost = &c
 
 				uCopy := u
@@ -503,16 +504,22 @@ func (s *Service) invokeAudio(ctx context.Context, req *llmcore.UnifiedRequest) 
 		if err != nil {
 			return nil, err
 		}
+		charUnits := resp.CharCount
+		if charUnits == 0 {
+			charUnits = len(input.Synthesize.Text)
+		}
+		if charUnits <= 0 {
+			charUnits = 1
+		}
 		return &llmcore.UnifiedResponse{
 			Output: resp,
 			Usage: llmcore.Usage{
-				InputUnits:  1,
+				InputUnits:  charUnits,
 				OutputUnits: 1,
-				TotalUnits:  1,
+				TotalUnits:  charUnits,
 			},
 			Cost: llmcore.Cost{
-				AmountUSD: 0,
-				Currency:  "USD",
+				Currency: "USD",
 			},
 			TraceID: req.TraceID,
 			ProviderDecision: llmcore.ProviderDecision{
@@ -528,16 +535,19 @@ func (s *Service) invokeAudio(ctx context.Context, req *llmcore.UnifiedRequest) 
 		if err != nil {
 			return nil, err
 		}
+		durationUnits := int(math.Ceil(resp.Duration.Seconds()))
+		if durationUnits <= 0 {
+			durationUnits = 1
+		}
 		return &llmcore.UnifiedResponse{
 			Output: resp,
 			Usage: llmcore.Usage{
-				InputUnits:  1,
+				InputUnits:  durationUnits,
 				OutputUnits: 1,
-				TotalUnits:  1,
+				TotalUnits:  durationUnits,
 			},
 			Cost: llmcore.Cost{
-				AmountUSD: 0,
-				Currency:  "USD",
+				Currency: "USD",
 			},
 			TraceID: req.TraceID,
 			ProviderDecision: llmcore.ProviderDecision{
@@ -666,11 +676,10 @@ func (s *Service) invokeModeration(ctx context.Context, req *llmcore.UnifiedRequ
 		Usage: llmcore.Usage{
 			InputUnits:  inputUnits,
 			OutputUnits: outputUnits,
-			TotalUnits:  outputUnits,
+			TotalUnits:  inputUnits,
 		},
 		Cost: llmcore.Cost{
-			AmountUSD: 0,
-			Currency:  "USD",
+			Currency: "USD",
 		},
 		TraceID: req.TraceID,
 		ProviderDecision: llmcore.ProviderDecision{
@@ -870,7 +879,7 @@ func normalizeUsage(usage llmcore.Usage) llmcore.Usage {
 	return usage
 }
 
-func (s *Service) normalizeCost(decision llmcore.ProviderDecision, usage llmcore.Usage, cost llmcore.Cost) llmcore.Cost {
+func (s *Service) normalizeCost(capability llmcore.Capability, decision llmcore.ProviderDecision, usage llmcore.Usage, cost llmcore.Cost) llmcore.Cost {
 	if cost.AmountUSD < 0 {
 		cost.AmountUSD = 0
 	}
@@ -890,6 +899,19 @@ func (s *Service) normalizeCost(decision llmcore.ProviderDecision, usage llmcore
 		if cost.AmountUSD < 0 {
 			cost.AmountUSD = 0
 		}
+	}
+
+	if currency == "USD" && cost.AmountUSD == 0 && capability != llmcore.CapabilityChat {
+		unitCost := s.costCalculator.CalculateUnits(
+			decision.Provider,
+			decision.Model,
+			string(capability),
+			usage.TotalUnits,
+		)
+		if unitCost < 0 {
+			unitCost = 0
+		}
+		cost.AmountUSD = unitCost
 	}
 
 	cost.Currency = currency
@@ -1011,7 +1033,7 @@ func (s *Service) recordResponseUsage(req *llmcore.UnifiedRequest, resp *llmcore
 	s.policyManager.RecordUsage(llmpolicy.UsageRecord{
 		Timestamp: time.Now(),
 		Tokens:    resp.Usage.TotalTokens,
-		Cost:      resp.Cost.AmountUSD,
+		Cost:      costAmount(&resp.Cost),
 		Model:     resp.ProviderDecision.Model,
 		RequestID: firstNonEmpty(resp.TraceID, req.TraceID),
 		UserID:    metadataValue(req, "user_id"),
