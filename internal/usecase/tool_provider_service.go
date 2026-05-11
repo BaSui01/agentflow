@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent/integration/hosted"
+	appservice "github.com/BaSui01/agentflow/internal/app/service"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -20,10 +21,10 @@ type ToolProviderStore = hosted.ToolProviderStore
 
 type DefaultToolProviderService struct {
 	store   ToolProviderStore
-	runtime ToolRegistryRuntime
+	runtime appservice.ToolRegistryRuntime
 }
 
-func NewDefaultToolProviderService(store ToolProviderStore, runtime ToolRegistryRuntime) *DefaultToolProviderService {
+func NewDefaultToolProviderService(store ToolProviderStore, runtime appservice.ToolRegistryRuntime) *DefaultToolProviderService {
 	return &DefaultToolProviderService{store: store, runtime: runtime}
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/team"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	appservice "github.com/BaSui01/agentflow/internal/app/service"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -265,7 +266,7 @@ func BuildToolingHandlerBundle(in ToolingHandlerBundleInput) (*ToolingHandlerBun
 
 	if in.DB != nil && toolRuntimeAdapter != nil {
 		bundle.ToolRegistryHandler = handlers.NewToolRegistryHandler(
-			usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(in.DB), toolRuntimeAdapter),
+			appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(in.DB), toolRuntimeAdapter),
 			logger,
 		)
 	}

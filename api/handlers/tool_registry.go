@@ -6,17 +6,17 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
-	"github.com/BaSui01/agentflow/internal/usecase"
+	appservice "github.com/BaSui01/agentflow/internal/app/service"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // ToolRegistryHandler manages DB-backed hosted tool registrations.
 type ToolRegistryHandler struct {
-	BaseHandler[usecase.ToolRegistryService]
+	BaseHandler[appservice.ToolRegistryService]
 }
 
-func NewToolRegistryHandler(service usecase.ToolRegistryService, logger *zap.Logger) *ToolRegistryHandler {
+func NewToolRegistryHandler(service appservice.ToolRegistryService, logger *zap.Logger) *ToolRegistryHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -95,7 +95,7 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "name and target are required", h.logger)
 		return
 	}
-	row, svcErr := service.Create(usecase.CreateToolRegistrationInput{
+	row, svcErr := service.Create(appservice.CreateToolRegistrationInput{
 		Name:        req.Name,
 		Description: req.Description,
 		Target:      req.Target,
@@ -129,7 +129,7 @@ func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Reques
 	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
-	row, svcErr := service.Update(r.Context(), id, usecase.UpdateToolRegistrationInput{
+	row, svcErr := service.Update(r.Context(), id, appservice.UpdateToolRegistrationInput{
 		Name:        req.Name,
 		Description: req.Description,
 		Target:      req.Target,

@@ -12,6 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/observability/hitl"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	appservice "github.com/BaSui01/agentflow/internal/app/service"
 	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -44,17 +45,17 @@ func setupToolRegistryTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func newToolRegistryHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *handlers.ToolRegistryHandler {
+func newToolRegistryHandler(db *gorm.DB, runtime appservice.ToolRegistryRuntime) *handlers.ToolRegistryHandler {
 	if db == nil || runtime == nil {
 		return nil
 	}
 	return handlers.NewToolRegistryHandler(
-		usecase.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime),
+		appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime),
 		zap.NewNop(),
 	)
 }
 
-func newToolProviderHandler(db *gorm.DB, runtime usecase.ToolRegistryRuntime) *handlers.ToolProviderHandler {
+func newToolProviderHandler(db *gorm.DB, runtime appservice.ToolRegistryRuntime) *handlers.ToolProviderHandler {
 	if db == nil || runtime == nil {
 		return nil
 	}
