@@ -117,13 +117,13 @@ func TestBreaker_ClosedToOpen(t *testing.T) {
 
 	// Fail threshold-1 times: still closed
 	for i := 0; i < threshold-1; i++ {
-		err := cb.Call(context.Background(), func() error { return errFail })
+		err := cb.Call(context.Background(), func(context.Context) error { return errFail })
 		assert.ErrorIs(t, err, errFail)
 		assert.Equal(t, StateClosed, cb.State())
 	}
 
 	// One more failure trips the breaker
-	err := cb.Call(context.Background(), func() error { return errFail })
+	err := cb.Call(context.Background(), func(context.Context) error { return errFail })
 	assert.ErrorIs(t, err, errFail)
 	assert.Equal(t, StateOpen, cb.State())
 }
@@ -140,11 +140,11 @@ func TestBreaker_OpenRejectsCalls(t *testing.T) {
 	}, zap.NewNop())
 
 	// Trip the breaker
-	_ = cb.Call(context.Background(), func() error { return errors.New("fail") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("fail") })
 	require.Equal(t, StateOpen, cb.State())
 
 	// Subsequent calls rejected
-	err := cb.Call(context.Background(), func() error { return nil })
+	err := cb.Call(context.Background(), func(context.Context) error { return nil })
 	assert.ErrorIs(t, err, ErrCircuitOpen)
 }
 
@@ -161,14 +161,14 @@ func TestBreaker_OpenToHalfOpen(t *testing.T) {
 	}, zap.NewNop())
 
 	// Trip the breaker
-	_ = cb.Call(context.Background(), func() error { return errors.New("fail") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("fail") })
 	require.Equal(t, StateOpen, cb.State())
 
 	// Wait for reset timeout
 	time.Sleep(80 * time.Millisecond)
 
 	// Next call should transition to HalfOpen and execute
-	err := cb.Call(context.Background(), func() error { return nil })
+	err := cb.Call(context.Background(), func(context.Context) error { return nil })
 	assert.NoError(t, err)
 	// After success in half-open, should be closed
 	assert.Equal(t, StateClosed, cb.State())
@@ -186,13 +186,13 @@ func TestBreaker_HalfOpenToClosed(t *testing.T) {
 		HalfOpenMaxCalls: 2,
 	}, zap.NewNop())
 
-	_ = cb.Call(context.Background(), func() error { return errors.New("fail") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("fail") })
 	require.Equal(t, StateOpen, cb.State())
 
 	time.Sleep(80 * time.Millisecond)
 
 	// Succeed in half-open
-	err := cb.Call(context.Background(), func() error { return nil })
+	err := cb.Call(context.Background(), func(context.Context) error { return nil })
 	assert.NoError(t, err)
 	assert.Equal(t, StateClosed, cb.State())
 }
@@ -209,13 +209,13 @@ func TestBreaker_HalfOpenToOpen(t *testing.T) {
 		HalfOpenMaxCalls: 2,
 	}, zap.NewNop())
 
-	_ = cb.Call(context.Background(), func() error { return errors.New("fail") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("fail") })
 	require.Equal(t, StateOpen, cb.State())
 
 	time.Sleep(80 * time.Millisecond)
 
 	// Fail in half-open
-	err := cb.Call(context.Background(), func() error { return errors.New("fail again") })
+	err := cb.Call(context.Background(), func(context.Context) error { return errors.New("fail again") })
 	assert.Error(t, err)
 	assert.Equal(t, StateOpen, cb.State())
 }
@@ -232,7 +232,7 @@ func TestBreaker_HalfOpenMaxCalls(t *testing.T) {
 		HalfOpenMaxCalls: 1,
 	}, zap.NewNop())
 
-	_ = cb.Call(context.Background(), func() error { return errors.New("fail") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("fail") })
 	require.Equal(t, StateOpen, cb.State())
 
 	time.Sleep(80 * time.Millisecond)
@@ -248,7 +248,7 @@ func TestBreaker_HalfOpenMaxCalls(t *testing.T) {
 	b.halfOpenCallCount = 1 // simulate one call already in flight
 	b.mu.Unlock()
 
-	err := cb.Call(context.Background(), func() error { return nil })
+	err := cb.Call(context.Background(), func(context.Context) error { return nil })
 	assert.ErrorIs(t, err, ErrTooManyCallsInHalfOpen)
 }
 
@@ -264,7 +264,7 @@ func TestBreaker_Reset(t *testing.T) {
 	}, zap.NewNop())
 
 	// Trip the breaker
-	_ = cb.Call(context.Background(), func() error { return errors.New("fail") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("fail") })
 	require.Equal(t, StateOpen, cb.State())
 
 	// Reset
@@ -272,7 +272,7 @@ func TestBreaker_Reset(t *testing.T) {
 	assert.Equal(t, StateClosed, cb.State())
 
 	// Should accept calls again
-	err := cb.Call(context.Background(), func() error { return nil })
+	err := cb.Call(context.Background(), func(context.Context) error { return nil })
 	assert.NoError(t, err)
 }
 
@@ -298,12 +298,12 @@ func TestBreaker_OnStateChange(t *testing.T) {
 	}
 
 	// Trip: Closed -> Open
-	_ = cb.Call(context.Background(), func() error { return errors.New("f") })
-	_ = cb.Call(context.Background(), func() error { return errors.New("f") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("f") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("f") })
 
 	// Wait for reset timeout, then trigger HalfOpen -> Closed
 	time.Sleep(80 * time.Millisecond)
-	_ = cb.Call(context.Background(), func() error { return nil })
+	_ = cb.Call(context.Background(), func(context.Context) error { return nil })
 
 	// Give async callbacks time to execute
 	time.Sleep(50 * time.Millisecond)
@@ -326,7 +326,7 @@ func TestBreaker_CallWithResult(t *testing.T) {
 		Timeout:   5 * time.Second,
 	}, zap.NewNop())
 
-	result, err := cb.CallWithResult(context.Background(), func() (any, error) {
+	result, err := cb.CallWithResult(context.Background(), func(context.Context) (any, error) {
 		return 42, nil
 	})
 	require.NoError(t, err)
@@ -344,15 +344,15 @@ func TestBreaker_SuccessResetsFailureCount(t *testing.T) {
 	}, zap.NewNop())
 
 	// Fail twice
-	_ = cb.Call(context.Background(), func() error { return errors.New("f") })
-	_ = cb.Call(context.Background(), func() error { return errors.New("f") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("f") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("f") })
 
 	// Succeed (resets count)
-	_ = cb.Call(context.Background(), func() error { return nil })
+	_ = cb.Call(context.Background(), func(context.Context) error { return nil })
 
 	// Fail twice more — should still be closed (count was reset)
-	_ = cb.Call(context.Background(), func() error { return errors.New("f") })
-	_ = cb.Call(context.Background(), func() error { return errors.New("f") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("f") })
+	_ = cb.Call(context.Background(), func(context.Context) error { return errors.New("f") })
 	assert.Equal(t, StateClosed, cb.State())
 }
 
@@ -374,7 +374,7 @@ func TestBreaker_ConcurrentSafety(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := cb.Call(context.Background(), func() error { return nil })
+			err := cb.Call(context.Background(), func(context.Context) error { return nil })
 			if err == nil {
 				successCount.Add(1)
 			}
@@ -393,19 +393,19 @@ func TestBreaker_ConcurrentSafety(t *testing.T) {
 func TestCallWithResultTyped(t *testing.T) {
 	tests := []struct {
 		name    string
-		fn      func() (int, error)
+		fn      func(context.Context) (int, error)
 		wantVal int
 		wantErr bool
 	}{
 		{
 			name:    "success returns typed value",
-			fn:      func() (int, error) { return 42, nil },
+			fn:      func(context.Context) (int, error) { return 42, nil },
 			wantVal: 42,
 			wantErr: false,
 		},
 		{
 			name:    "error returns zero value",
-			fn:      func() (int, error) { return 0, errors.New("fail") },
+			fn:      func(context.Context) (int, error) { return 0, errors.New("fail") },
 			wantVal: 0,
 			wantErr: true,
 		},
@@ -428,7 +428,7 @@ func TestCallWithResultTyped(t *testing.T) {
 
 func TestCallWithResultTyped_String(t *testing.T) {
 	cb := NewCircuitBreaker(nil, zap.NewNop())
-	val, err := CallWithResultTyped[string](cb, context.Background(), func() (string, error) {
+	val, err := CallWithResultTyped[string](cb, context.Background(), func(context.Context) (string, error) {
 		return "hello", nil
 	})
 	assert.NoError(t, err)
@@ -442,7 +442,7 @@ func TestCallWithResultTyped_Struct(t *testing.T) {
 	}
 
 	cb := NewCircuitBreaker(nil, zap.NewNop())
-	val, err := CallWithResultTyped[response](cb, context.Background(), func() (response, error) {
+	val, err := CallWithResultTyped[response](cb, context.Background(), func(context.Context) (response, error) {
 		return response{Code: 200, Message: "ok"}, nil
 	})
 	assert.NoError(t, err)
@@ -458,16 +458,50 @@ func TestCallWithResultTyped_CircuitOpen(t *testing.T) {
 	}, zap.NewNop())
 
 	// Trip the breaker
-	_, _ = CallWithResultTyped[int](cb, context.Background(), func() (int, error) {
+	_, _ = CallWithResultTyped[int](cb, context.Background(), func(context.Context) (int, error) {
 		return 0, errors.New("fail")
 	})
 	require.Equal(t, StateOpen, cb.State())
 
 	// Should get ErrCircuitOpen
-	val, err := CallWithResultTyped[int](cb, context.Background(), func() (int, error) {
+	val, err := CallWithResultTyped[int](cb, context.Background(), func(context.Context) (int, error) {
 		return 99, nil
 	})
 	assert.ErrorIs(t, err, ErrCircuitOpen)
 	assert.Equal(t, 0, val)
 }
 
+func TestBreaker_CallWithResult_TimeoutCancelsWorkerContext(t *testing.T) {
+	cb := NewCircuitBreaker(&Config{
+		Threshold: 5,
+		Timeout:   20 * time.Millisecond,
+	}, zap.NewNop())
+
+	done := make(chan struct{})
+	start := time.Now()
+	_, err := cb.CallWithResult(context.Background(), func(ctx context.Context) (any, error) {
+		defer close(done)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "调用超时")
+	require.Eventually(t, func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+	assert.Less(t, time.Since(start), time.Second)
+}
+
+func TestCallWithResultTyped_NilInterfaceDoesNotPanic(t *testing.T) {
+	cb := NewCircuitBreaker(nil, zap.NewNop())
+	val, err := CallWithResultTyped[error](cb, context.Background(), func(context.Context) (error, error) {
+		return nil, nil
+	})
+	require.NoError(t, err)
+	assert.Nil(t, val)
+}
