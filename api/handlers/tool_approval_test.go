@@ -159,6 +159,9 @@ func TestToolApprovalHandler_ResponsePayloadIsJSON(t *testing.T) {
 		Type:       hitl.InterruptTypeApproval,
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = manager.CancelInterrupt(context.Background(), interrupt.ID)
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/"+interrupt.ID, nil)
 	req.SetPathValue("id", interrupt.ID)

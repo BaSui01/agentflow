@@ -72,7 +72,7 @@ func TestDoubaoProvider_EndpointPath(t *testing.T) {
 
 func TestDoubaoProvider_FallbackModel(t *testing.T) {
 	p := newDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
-	assert.Equal(t, "Doubao-1.5-pro-32k", p.Cfg.FallbackModel)
+	assert.Equal(t, "Doubao-1.5-pro-256k", p.Cfg.FallbackModel)
 }
 
 func TestDoubaoProvider_SupportsNativeFunctionCalling(t *testing.T) {
@@ -194,7 +194,7 @@ func TestDoubaoProvider_Completion(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
-			Model: "Doubao-1.5-pro-32k",
+			Model: "Doubao-1.5-pro-256k",
 			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
@@ -231,13 +231,13 @@ func TestDoubaoProvider_Completion(t *testing.T) {
 	require.NotNil(t, resp)
 
 	assert.Equal(t, "doubao", resp.Provider)
-	assert.Equal(t, "Doubao-1.5-pro-32k", resp.Model)
+	assert.Equal(t, "Doubao-1.5-pro-256k", resp.Model)
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from Doubao", resp.Choices[0].Message.Content)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
 
 	// Verify fallback model was used (no model in request, no default model in config)
-	assert.Equal(t, "Doubao-1.5-pro-32k", capturedRequest.Model)
+	assert.Equal(t, "Doubao-1.5-pro-256k", capturedRequest.Model)
 }
 
 // --- Stream via httptest ---

@@ -494,8 +494,15 @@ func TestHotReloadDocsImplementationConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read internal/app/bootstrap/serve_handler_set_builder.go: %v", err)
 	}
-	if !strings.Contains(string(serveBuilderData), "BuildToolingHandlerBundle(") {
-		t.Fatal("internal/app/bootstrap/serve_handler_set_builder.go must call BuildToolingHandlerBundle")
+	serveAdminBuilderData, err := os.ReadFile("internal/app/bootstrap/serve_handler_set_admin_builder.go")
+	if err != nil {
+		t.Fatalf("read internal/app/bootstrap/serve_handler_set_admin_builder.go: %v", err)
+	}
+	if !strings.Contains(string(serveBuilderData), "buildServeToolingBundle(") {
+		t.Fatal("internal/app/bootstrap/serve_handler_set_builder.go must delegate tooling assembly to buildServeToolingBundle")
+	}
+	if !strings.Contains(string(serveAdminBuilderData), "BuildToolingHandlerBundle(") {
+		t.Fatal("internal/app/bootstrap/serve_handler_set_admin_builder.go must call BuildToolingHandlerBundle")
 	}
 
 	if !strings.Contains(doc, "BuildReloadedResolver") {
@@ -1542,6 +1549,7 @@ func TestHostedToolRegistryExecuteStaysBehindAuthorizationAdapters(t *testing.T)
 	allowedFiles := map[string]struct{}{
 		filepath.ToSlash("internal/app/bootstrap/agent_tooling_runtime_builder.go"):      {},
 		filepath.ToSlash("internal/app/bootstrap/workflow_step_dependencies_builder.go"): {},
+		filepath.ToSlash("internal/app/bootstrap/workflow_tool_adapter.go"):              {},
 	}
 	hostedImport := `"github.com/BaSui01/agentflow/agent/integration/hosted"`
 	executeSnippets := []string{

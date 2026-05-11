@@ -22,6 +22,11 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&llm.LLMProvider{}, &llm.LLMProviderAPIKey{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, sqlDB.Close())
+	})
 
 	// 种子一个 provider
 	require.NoError(t, db.Create(&llm.LLMProvider{
@@ -45,6 +50,11 @@ func TestHandleListProviders_Empty(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&llm.LLMProvider{}, &llm.LLMProviderAPIKey{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, sqlDB.Close())
+	})
 
 	store := llmrouter.NewGormAPIKeyStore(db)
 	h := NewAPIKeyHandler(usecase.NewDefaultAPIKeyService(store), zap.NewNop())

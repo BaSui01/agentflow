@@ -54,7 +54,7 @@ func TestNewMistralProvider_Defaults(t *testing.T) {
 
 func TestMistralProvider_FallbackModel(t *testing.T) {
 	p := newMistralProvider(providers.MistralConfig{}, zap.NewNop())
-	assert.Equal(t, "mistral-medium-latest", p.Cfg.FallbackModel)
+	assert.Equal(t, "mistral-large-latest", p.Cfg.FallbackModel)
 }
 
 func TestMistralProvider_NilLogger(t *testing.T) {
@@ -92,7 +92,7 @@ func TestMistralProvider_Completion(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
-			Model: "mistral-medium-latest",
+			Model: "mistral-large-latest",
 			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
@@ -130,11 +130,11 @@ func TestMistralProvider_Completion(t *testing.T) {
 	require.NotNil(t, resp)
 
 	assert.Equal(t, "mistral", resp.Provider)
-	assert.Equal(t, "mistral-medium-latest", resp.Model)
+	assert.Equal(t, "mistral-large-latest", resp.Model)
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from Mistral", resp.Choices[0].Message.Content)
 	assert.Equal(t, 12, resp.Usage.TotalTokens)
-	assert.Equal(t, "mistral-medium-latest", capturedRequest.Model)
+	assert.Equal(t, "mistral-large-latest", capturedRequest.Model)
 }
 
 func TestMistralProvider_Completion_WithCustomModel(t *testing.T) {

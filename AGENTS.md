@@ -415,21 +415,25 @@ sdk.New(opts).Build(ctx)
 ```go
 agent/runtime
 ```
+正式入口写法：`agent/runtime`
 
 ### 多 Agent 正式入口
 ```go
 agent/team
 ```
+正式入口写法：`agent/team`
 
 ### 显式编排正式入口
 ```go
 workflow/runtime
 ```
+正式入口写法：`workflow/runtime`
 
 ### 统一授权入口
 ```go
 internal/usecase/authorization_service.go
 ```
+正式入口写法：`internal/usecase/authorization_service.go`
 
 ## 开发工作流（Trellis）
 

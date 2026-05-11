@@ -234,6 +234,8 @@ func TestChatService_Stream_RoutesByParams(t *testing.T) {
 	assert.Equal(t, "openai", gw.streamReq.ProviderHint)
 	assert.Equal(t, llmcore.RoutePolicyBalanced, gw.streamReq.RoutePolicy)
 	assert.Equal(t, "chat_completions", gw.streamReq.Metadata["endpoint_mode"])
+	for range stream {
+	}
 }
 
 func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
