@@ -493,24 +493,8 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 // @Security ApiKeyAuth
 // @Router /api/v1/agents/execute/interrupt [post]
 func (h *AgentHandler) HandleAgentInterrupt(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ExecutionID string `json:"execution_id"`
-		Type        string `json:"type"`
-		Content     string `json:"content"`
-	}
+	var req agentInterruptRequest
 	if !ValidateRequest(w, r, &req, h.logger) {
-		return
-	}
-
-	if req.ExecutionID == "" || req.Type == "" || req.Content == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-			"execution_id, type, and content are required", h.logger)
-		return
-	}
-
-	if req.Type != "guide" && req.Type != "stop_and_send" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-			"type must be 'guide' or 'stop_and_send'", h.logger)
 		return
 	}
 
@@ -599,6 +583,19 @@ func toAgentInfo(info *discovery.AgentInfo) AgentInfo {
 		ai.CreatedAt = info.RegisteredAt.UTC().Format(time.RFC3339)
 	}
 	return ai
+}
+
+type agentInterruptRequest struct {
+	ExecutionID string `json:"execution_id" binding:"required"`
+	Type        string `json:"type" binding:"required"`
+	Content     string `json:"content" binding:"required"`
+}
+
+func (r *agentInterruptRequest) Validate() *types.Error {
+	if r.Type != "guide" && r.Type != "stop_and_send" {
+		return types.NewInvalidRequestError("type must be 'guide' or 'stop_and_send'")
+	}
+	return nil
 }
 
 // extractAgentID extracts the agent ID from the URL path.

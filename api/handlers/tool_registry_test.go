@@ -84,6 +84,26 @@ func TestToolRegistryHandler_Create_InvalidTarget(t *testing.T) {
 	assert.Equal(t, 0, runtime.reloadCalls)
 }
 
+func TestToolRegistryHandler_Create_MissingTargetUsesValidateRequest(t *testing.T) {
+	db := setupToolRegistryDB(t)
+	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
+	handler := NewToolRegistryHandler(appservice.NewDefaultToolRegistryService(hosted.NewGormToolRegistryStore(db), runtime), zap.NewNop())
+
+	body := []byte(`{"name":"knowledge_search"}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/tools", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	handler.HandleCreate(w, r)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, 0, runtime.reloadCalls)
+
+	var resp Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, "target is required", resp.Error.Message)
+}
+
 func TestToolRegistryHandler_Create_ReservedOrSelfName(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
