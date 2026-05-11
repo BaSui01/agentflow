@@ -50,6 +50,35 @@ func (m *mockExecutor) Execute(ctx context.Context, content string, taskCtx map[
 	}, nil
 }
 
+type gatingExecutor struct {
+	id        string
+	name      string
+	output    string
+	startedCh chan<- string
+	releaseCh <-chan struct{}
+}
+
+func (g *gatingExecutor) ID() string   { return g.id }
+func (g *gatingExecutor) Name() string { return g.name }
+func (g *gatingExecutor) Execute(ctx context.Context, content string, taskCtx map[string]any) (*TaskOutput, error) {
+	if g.startedCh != nil {
+		g.startedCh <- g.id
+	}
+	if g.releaseCh != nil {
+		select {
+		case <-g.releaseCh:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return &TaskOutput{
+		Content:    g.output,
+		TokensUsed: 10,
+		Cost:       0.001,
+		Duration:   time.Millisecond,
+	}, nil
+}
+
 // =============================================================================
 // Plan Tests
 // =============================================================================
@@ -429,6 +458,65 @@ func TestPlanExecutor_ParallelTasks(t *testing.T) {
 
 	updated, _ := tp.GetPlan(plan.ID)
 	assert.Equal(t, PlanStatusCompleted, updated.Status)
+}
+
+func TestPlanExecutor_StartsDownstreamBeforeSiblingBatchFinishes(t *testing.T) {
+	d := NewDefaultDispatcher(StrategyByRole, zap.NewNop())
+	tp := NewTaskPlanner(d, zap.NewNop())
+
+	plan, err := tp.CreatePlan(context.Background(), CreatePlanArgs{
+		Title: "Pipeline",
+		Tasks: []CreateTaskArgs{
+			{ID: "t1", Title: "fast-root", Description: "finishes first", AssignTo: "fast"},
+			{ID: "t2", Title: "slow-root", Description: "blocks batch", AssignTo: "slow"},
+			{ID: "t3", Title: "downstream", Description: "depends on fast only", AssignTo: "downstream", Dependencies: []string{"t1"}},
+		},
+	})
+	require.NoError(t, err)
+
+	startedCh := make(chan string, 3)
+	fastRelease := make(chan struct{})
+	slowRelease := make(chan struct{})
+
+	executors := map[string]Executor{
+		"fast":       &gatingExecutor{id: "t1", name: "fast", output: "fast-done", startedCh: startedCh, releaseCh: fastRelease},
+		"slow":       &gatingExecutor{id: "t2", name: "slow", output: "slow-done", startedCh: startedCh, releaseCh: slowRelease},
+		"downstream": &gatingExecutor{id: "t3", name: "downstream", output: "downstream-done", startedCh: startedCh},
+	}
+
+	executor := NewPlanExecutor(tp, d, 2, zap.NewNop())
+	done := make(chan error, 1)
+	go func() {
+		_, execErr := executor.ExecuteWithAgents(context.Background(), plan.ID, executors)
+		done <- execErr
+	}()
+
+	require.Eventually(t, func() bool { return len(startedCh) >= 2 }, time.Second, 10*time.Millisecond)
+
+	select {
+	case started := <-startedCh:
+		require.Contains(t, []string{"t1", "t2"}, started)
+	case <-time.After(time.Second):
+		t.Fatal("expected initial ready tasks to start")
+	}
+	select {
+	case started := <-startedCh:
+		require.Contains(t, []string{"t1", "t2"}, started)
+	case <-time.After(time.Second):
+		t.Fatal("expected both initial ready tasks to start")
+	}
+
+	close(fastRelease)
+
+	select {
+	case started := <-startedCh:
+		assert.Equal(t, "t3", started, "downstream task should start once its dependency completes, even while sibling root task is still running")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected downstream task to start before slow sibling completed")
+	}
+
+	close(slowRelease)
+	require.NoError(t, <-done)
 }
 
 func TestPlanExecutor_TaskFailure(t *testing.T) {
