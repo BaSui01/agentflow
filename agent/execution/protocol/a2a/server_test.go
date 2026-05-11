@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -180,6 +181,48 @@ func TestHTTPServer_HandleAsyncMessage(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.TaskID)
 	assert.Equal(t, "accepted", resp.Status)
+}
+
+func TestHTTPServer_HandleAsyncMessage_PersistsTaskWithLifecycleContext(t *testing.T) {
+	server := NewHTTPServer(&ServerConfig{
+		BaseURL:        "http://localhost:8080",
+		RequestTimeout: 5 * time.Second,
+		Logger:         zap.NewNop(),
+	})
+
+	ag := newMockAgent("test-agent", "Test Agent")
+	_ = server.RegisterAgent(ag)
+
+	saveCalled := false
+	server.SetTaskStore(&mockTaskStore{
+		saveFn: func(ctx context.Context, task *persistence.AsyncTask) error {
+			saveCalled = true
+			if err := ctx.Err(); err != nil {
+				t.Fatalf("expected lifecycle context for persistence, got canceled ctx: %v", err)
+			}
+			if task == nil || task.ID == "" {
+				t.Fatalf("expected persisted task with id, got %#v", task)
+			}
+			return nil
+		},
+	})
+
+	msg := NewTaskMessage("client-agent", "test-agent", map[string]string{
+		"content": "Hello, async!",
+	})
+
+	body, _ := json.Marshal(msg)
+	req := httptest.NewRequest(http.MethodPost, "/a2a/messages/async", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	cancelledCtx, cancel := context.WithCancel(req.Context())
+	cancel()
+	req = req.WithContext(cancelledCtx)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.True(t, saveCalled)
+	assert.Equal(t, http.StatusAccepted, w.Code)
 }
 
 func TestHTTPServer_HandleGetTaskResult(t *testing.T) {
