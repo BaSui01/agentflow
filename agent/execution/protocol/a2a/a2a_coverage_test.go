@@ -257,6 +257,38 @@ func TestHTTPServer_ConvertToPersistTask(t *testing.T) {
 	}
 }
 
+func TestHTTPServer_ConvertTaskRoundTrip_PreservesMessageMetadata(t *testing.T) {
+	server := NewHTTPServer(nil)
+	now := time.Now().UTC().Round(0)
+	task := &asyncTask{
+		ID:        "task-1",
+		AgentID:   "agent-1",
+		Status:    "pending",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Message: &A2AMessage{
+			ID:        "msg-1",
+			Type:      A2AMessageTypeTask,
+			From:      "agent-a",
+			To:        "agent-b",
+			Payload:   map[string]any{"key": "val"},
+			Timestamp: now,
+			ReplyTo:   "msg-0",
+		},
+	}
+
+	persisted := server.convertToPersistTask(task)
+	recovered := server.convertFromPersistTask(persisted)
+
+	require.NotNil(t, recovered.Message)
+	assert.Equal(t, task.Message.From, recovered.Message.From)
+	assert.Equal(t, task.Message.To, recovered.Message.To)
+	assert.Equal(t, task.Message.Type, recovered.Message.Type)
+	assert.True(t, recovered.Message.Timestamp.Equal(task.Message.Timestamp))
+	assert.Equal(t, task.Message.ReplyTo, recovered.Message.ReplyTo)
+	assert.Equal(t, task.Message.Payload, recovered.Message.Payload)
+}
+
 func TestHTTPServer_ConvertFromPersistTask(t *testing.T) {
 	server := NewHTTPServer(nil)
 
