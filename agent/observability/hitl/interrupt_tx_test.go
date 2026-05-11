@@ -168,3 +168,71 @@ func TestResolveInterrupt_UsesTransactionWhenSupported(t *testing.T) {
 		t.Errorf("status inside tx: want resolved, got %s", tx.updated[0].Status)
 	}
 }
+
+// TestCancelInterrupt_UsesTransactionWhenSupported 验证 CancelInterrupt 在 store
+// 支持事务时同样使用 WithTransaction 包裹 Update，避免取消路径把 pending 删除后持久化失败。
+func TestCancelInterrupt_UsesTransactionWhenSupported(t *testing.T) {
+	tx := &fakeTxStore{}
+	mgr := NewInterruptManager(tx, nil)
+
+	interrupt := &Interrupt{ID: "int_cancel", Type: InterruptTypeApproval, Status: InterruptStatusPending}
+	pending := &pendingInterrupt{
+		interrupt:  interrupt,
+		responseCh: make(chan *Response, 1),
+		cancelFn:   func() {},
+		timeoutCtx: context.Background(),
+	}
+	mgr.mu.Lock()
+	mgr.pending[interrupt.ID] = pending
+	mgr.mu.Unlock()
+
+	err := mgr.CancelInterrupt(context.Background(), interrupt.ID)
+	if err != nil {
+		t.Fatalf("CancelInterrupt: %v", err)
+	}
+
+	if tx.beginCnt != 1 {
+		t.Errorf("CancelInterrupt should open exactly 1 tx, got begin=%d", tx.beginCnt)
+	}
+	if tx.commitCnt != 1 {
+		t.Errorf("CancelInterrupt should commit, got commit=%d", tx.commitCnt)
+	}
+	if len(tx.updated) != 1 {
+		t.Errorf("Update inside tx: want 1, got %d", len(tx.updated))
+	}
+	if tx.updated[0].Status != InterruptStatusCanceled {
+		t.Errorf("status inside tx: want canceled, got %s", tx.updated[0].Status)
+	}
+}
+
+// TestHandleTimeout_UsesTransactionWhenSupported 验证 timeout 路径也走事务包装，
+// 保证后台超时回调的状态落库与内存态切换保持一致。
+func TestHandleTimeout_UsesTransactionWhenSupported(t *testing.T) {
+	tx := &fakeTxStore{}
+	mgr := NewInterruptManager(tx, nil)
+
+	interrupt := &Interrupt{ID: "int_timeout", Type: InterruptTypeApproval, Status: InterruptStatusPending}
+	mgr.mu.Lock()
+	mgr.pending[interrupt.ID] = &pendingInterrupt{
+		interrupt:  interrupt,
+		responseCh: make(chan *Response, 1),
+		cancelFn:   func() {},
+		timeoutCtx: context.Background(),
+	}
+	mgr.mu.Unlock()
+
+	mgr.handleTimeout(context.Background(), interrupt)
+
+	if tx.beginCnt != 1 {
+		t.Errorf("handleTimeout should open exactly 1 tx, got begin=%d", tx.beginCnt)
+	}
+	if tx.commitCnt != 1 {
+		t.Errorf("handleTimeout should commit, got commit=%d", tx.commitCnt)
+	}
+	if len(tx.updated) != 1 {
+		t.Errorf("Update inside tx: want 1, got %d", len(tx.updated))
+	}
+	if tx.updated[0].Status != InterruptStatusTimeout {
+		t.Errorf("status inside tx: want timeout, got %s", tx.updated[0].Status)
+	}
+}

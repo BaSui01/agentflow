@@ -332,7 +332,9 @@ func (m *InterruptManager) CancelInterrupt(ctx context.Context, interruptID stri
 	now := time.Now()
 	pending.interrupt.ResolvedAt = &now
 
-	if err := m.store.Update(ctx, pending.interrupt); err != nil {
+	if err := RunInTransaction(ctx, m.store, func(s InterruptStore) error {
+		return s.Update(ctx, pending.interrupt)
+	}); err != nil {
 		return err
 	}
 
@@ -402,7 +404,9 @@ func (m *InterruptManager) handleTimeout(ctx context.Context, interrupt *Interru
 	delete(m.pending, interrupt.ID)
 	m.mu.Unlock()
 
-	if err := m.store.Update(ctx, interrupt); err != nil {
+	if err := RunInTransaction(ctx, m.store, func(s InterruptStore) error {
+		return s.Update(ctx, interrupt)
+	}); err != nil {
 		m.logger.Error("failed to persist timeout interrupt", zap.Error(err), zap.String("id", interrupt.ID))
 	}
 	m.logger.Warn("interrupt timeout", zap.String("id", interrupt.ID))
