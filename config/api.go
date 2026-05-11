@@ -1021,11 +1021,11 @@ func (h *ConfigAPIHandler) logAuditInfo(r *http.Request, action, result string, 
 	h.logger.Info("config api request completed", h.auditFields(r, action, result, extra...)...)
 }
 
-func (h *ConfigAPIHandler) logAuditWarn(r *http.Request, action, result string, extra ...zap.Field) {
+func (h *ConfigAPIHandler) logAuditWarn(r *http.Request, action, _ string, extra ...zap.Field) {
 	if h.logger == nil {
 		return
 	}
-	h.logger.Warn("config api request completed", h.auditFields(r, action, result, extra...)...)
+	h.logger.Warn("config api request completed", h.auditFields(r, action, "failed", extra...)...)
 }
 
 func requestPath(r *http.Request) string {

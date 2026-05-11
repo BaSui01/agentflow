@@ -28,11 +28,11 @@ func logToolRequestInfo(logger *zap.Logger, r *http.Request, resource, action, r
 	logger.Info(message, toolAuditFields(r, resource, action, result, extra...)...)
 }
 
-func logToolRequestWarn(logger *zap.Logger, r *http.Request, resource, action, result, message string, extra ...zap.Field) {
+func logToolRequestWarn(logger *zap.Logger, r *http.Request, resource, action, _ string, message string, extra ...zap.Field) {
 	if logger == nil {
 		return
 	}
-	logger.Warn(message, toolAuditFields(r, resource, action, result, extra...)...)
+	logger.Warn(message, toolAuditFields(r, resource, action, "failed", extra...)...)
 }
 
 func toolRequestPath(r *http.Request) string {

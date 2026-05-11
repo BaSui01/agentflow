@@ -26,7 +26,7 @@ func buildServeAPIKeyHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput)
 }
 
 func buildServeProtocolHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput) *ProtocolRuntime {
-	protocolRuntime := BuildProtocolRuntime(in.Logger)
+	protocolRuntime := BuildProtocolRuntime(in.lifecycleCtx(), in.Logger)
 	set.ProtocolHandler = handlers.NewProtocolHandler(protocolRuntime.MCPServer, protocolRuntime.A2AServer, in.Logger)
 	in.Logger.Info("Protocol handler initialized (MCP + A2A)")
 	return protocolRuntime

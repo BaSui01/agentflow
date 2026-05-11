@@ -155,7 +155,7 @@ func readString(runes []rune, start int) (string, int, error) {
 	return "", 0, fmt.Errorf("unterminated string starting at position %d", start)
 }
 
-func readNumber(runes []rune, start int) (string, int) {
+func readNumber(runes []rune, start int) (val string, lastPos int) {
 	i := start
 	if i < len(runes) && runes[i] == '-' {
 		i++
@@ -172,7 +172,7 @@ func readNumber(runes []rune, start int) (string, int) {
 	return string(runes[start:i]), i
 }
 
-func readIdent(runes []rune, start int) (string, int) {
+func readIdent(runes []rune, start int) (ident string, lastPos int) {
 	i := start
 	for i < len(runes) && isIdentPart(runes[i]) {
 		i++
@@ -212,10 +212,8 @@ func (p *exprParser) peek() *token {
 	return nil
 }
 
-func (p *exprParser) advance() token {
-	t := p.tokens[p.pos]
+func (p *exprParser) advance() {
 	p.pos++
-	return t
 }
 
 // parseOr handles: expr || expr
@@ -355,42 +353,15 @@ func resolveVar(path string, vars map[string]any) any {
 // evalComparison evaluates a comparison between two values.
 // nil is treated as less than any non-nil value; two nils are equal.
 func evalComparison(left any, op string, right any) bool {
-	// Handle nil: nil compared to anything non-nil is only equal via ==
-	if left == nil && right == nil {
-		return op == "==" || op == ">=" || op == "<="
-	}
 	if left == nil || right == nil {
-		if op == "!=" {
-			return true
-		}
-		if op == "==" {
-			return false
-		}
-		// For ordering comparisons, nil is "less than" any value
-		if left == nil {
-			return op == "<" || op == "<="
-		}
-		return op == ">" || op == ">="
+		return evalNilComparison(left, op, right)
 	}
 
 	// Try numeric comparison first
 	lf, lok := toFloat64(left)
 	rf, rok := toFloat64(right)
 	if lok && rok {
-		switch op {
-		case "==":
-			return lf == rf
-		case "!=":
-			return lf != rf
-		case ">":
-			return lf > rf
-		case "<":
-			return lf < rf
-		case ">=":
-			return lf >= rf
-		case "<=":
-			return lf <= rf
-		}
+		return evalNumericComparison(lf, op, rf)
 	}
 
 	// Fall back to string comparison
@@ -409,6 +380,41 @@ func evalComparison(left any, op string, right any) bool {
 		return ls >= rs
 	case "<=":
 		return ls <= rs
+	}
+	return false
+}
+
+func evalNilComparison(left any, op string, right any) bool {
+	if left == nil && right == nil {
+		return op == "==" || op == ">=" || op == "<="
+	}
+	if op == "!=" {
+		return true
+	}
+	if op == "==" {
+		return false
+	}
+	// For ordering comparisons, nil is "less than" any value
+	if left == nil {
+		return op == "<" || op == "<="
+	}
+	return op == ">" || op == ">="
+}
+
+func evalNumericComparison(lf float64, op string, rf float64) bool {
+	switch op {
+	case "==":
+		return lf == rf
+	case "!=":
+		return lf != rf
+	case ">":
+		return lf > rf
+	case "<":
+		return lf < rf
+	case ">=":
+		return lf >= rf
+	case "<=":
+		return lf <= rf
 	}
 	return false
 }

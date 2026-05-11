@@ -166,7 +166,8 @@ func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) 
 
 	// 创建同步任务
 	taskID := uuid.New().String()
-	ctx, cancel := context.WithTimeout(context.Background(), s.config.RequestTimeout)
+	// 从服务 lifecycle 派生 async task ctx，使 Shutdown 能取消飞行任务（issue #12）。
+	ctx, cancel := context.WithTimeout(s.lifecycleContext(), s.config.RequestTimeout)
 
 	task := &asyncTask{
 		ID:        taskID,
