@@ -43,11 +43,11 @@ type ConfigAPIHandler struct {
 }
 
 type apiResponse struct {
-	Success   bool       `json:"success"`
-	Data      any        `json:"data,omitempty"`
-	Error     *apiError  `json:"error,omitempty"`
-	Timestamp time.Time  `json:"timestamp"`
-	RequestID string     `json:"request_id,omitempty"`
+	Success   bool      `json:"success"`
+	Data      any       `json:"data,omitempty"`
+	Error     *apiError `json:"error,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	RequestID string    `json:"request_id,omitempty"`
 }
 
 type apiError struct {

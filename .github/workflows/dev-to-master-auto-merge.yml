@@ -1,0 +1,81 @@
+name: Dev -> Master Auto Merge
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-dev-to-master:
+    name: Open PR and enable auto-merge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure dev -> master PR exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          repo="${{ github.repository }}"
+          head_branch="dev"
+          base_branch="master"
+          pr_title="chore(release): merge dev into master"
+          pr_body=$(cat <<'EOF'
+          ## 自动同步 PR
+
+          此 PR 由 GitHub Actions 自动创建，用于将 `dev` 分支在 CI 通过后自动合并到 `master`。
+
+          ### 说明
+          - 来源分支：`dev`
+          - 目标分支：`master`
+          - 触发条件：推送到 `dev`
+          - 合并方式：Auto-merge（等待 `master` 分支保护规则要求的检查全部通过）
+
+          > 如需阻止本次自动合并，直接关闭 PR 或移除 auto-merge。
+          EOF
+          )
+
+          pr_number="$(gh pr list \
+            --repo "${repo}" \
+            --base "${base_branch}" \
+            --head "${head_branch}" \
+            --state open \
+            --json number \
+            --jq '.[0].number')"
+
+          if [[ -z "${pr_number}" || "${pr_number}" == "null" ]]; then
+            pr_number="$(gh pr create \
+              --repo "${repo}" \
+              --base "${base_branch}" \
+              --head "${head_branch}" \
+              --title "${pr_title}" \
+              --body "${pr_body}")"
+            pr_number="${pr_number##*/}"
+          else
+            gh pr edit "${pr_number}" \
+              --repo "${repo}" \
+              --title "${pr_title}" \
+              --body "${pr_body}"
+          fi
+
+          echo "pr_number=${pr_number}" >> "$GITHUB_ENV"
+
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr merge "${pr_number}" \
+            --repo "${{ github.repository }}" \
+            --auto \
+            --merge

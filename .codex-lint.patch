@@ -1,0 +1,69 @@
+diff --git a/.arts/settings.json b/.arts/settings.json
+deleted file mode 100644
+index c2c6386d..00000000
+--- a/.arts/settings.json
++++ /dev/null
+@@ -1,4 +0,0 @@
+-{
+-    "clawMode.mode": "editor",
+-    "workbench.activityBar.location": "default"
+-}
+\ No newline at end of file
+diff --git a/.codeartsdoer/.codebaseignore b/.codeartsdoer/.codebaseignore
+deleted file mode 100644
+index e69de29b..00000000
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 1b54355a..5990c716 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -59,6 +59,7 @@ jobs:
+         uses: golangci/golangci-lint-action@v6
+         with:
+           version: latest
++          only-new-issues: true
+ 
+       - name: Build all packages
+         run: go build ./...
+diff --git a/.gitignore b/.gitignore
+index 494ce726..ad768ff4 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -44,3 +44,4 @@ benchmarks/latest.txt
+ # Temporary files
+ .tmp/
+ .omx/
++.issue-tmp/
+diff --git a/.golangci.yml b/.golangci.yml
+index 85e8605d..5424306b 100644
+--- a/.golangci.yml
++++ b/.golangci.yml
+@@ -42,7 +42,7 @@ linters:
+ 
+     # ========== 最佳实践 ==========
+     - nolintlint     # 🆕 检查 nolint 指令的规范性
+-    - exportloopref  # 🆕 检查循环变量导出问题
++    - copyloopvar    # Go 1.22+ 用于检查循环变量复制场景
+     - prealloc       # 🆕 建议预分配切片容量
+     - unconvert      # 🆕 检测不必要的类型转换
+     - unparam        # 🆕 检测未使用的函数参数
+diff --git a/config/api.go b/config/api.go
+index b554e3ab..9d715ca3 100644
+--- a/config/api.go
++++ b/config/api.go
+@@ -43,11 +43,11 @@ type ConfigAPIHandler struct {
+ }
+ 
+ type apiResponse struct {
+-	Success   bool       `json:"success"`
+-	Data      any        `json:"data,omitempty"`
+-	Error     *apiError  `json:"error,omitempty"`
+-	Timestamp time.Time  `json:"timestamp"`
+-	RequestID string     `json:"request_id,omitempty"`
++	Success   bool      `json:"success"`
++	Data      any       `json:"data,omitempty"`
++	Error     *apiError `json:"error,omitempty"`
++	Timestamp time.Time `json:"timestamp"`
++	RequestID string    `json:"request_id,omitempty"`
+ }
+ 
+ type apiError struct {

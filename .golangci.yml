@@ -42,7 +42,7 @@ linters:
 
     # ========== 最佳实践 ==========
     - nolintlint     # 🆕 检查 nolint 指令的规范性
-    - exportloopref  # 🆕 检查循环变量导出问题
+    - copyloopvar    # Go 1.22+ 用于检查循环变量复制场景
     - prealloc       # 🆕 建议预分配切片容量
     - unconvert      # 🆕 检测不必要的类型转换
     - unparam        # 🆕 检测未使用的函数参数
