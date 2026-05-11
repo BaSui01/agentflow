@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	discovery "github.com/BaSui01/agentflow/agent/capabilities/tools"
@@ -17,6 +20,12 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
+
+var agentStreamJSONBufferPool = sync.Pool{
+	New: func() any {
+		return bytes.NewBuffer(make([]byte, 0, 256))
+	},
+}
 
 // validAgentID validates agent ID format: alphanumeric start, up to 128 chars.
 var validAgentID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
@@ -297,44 +306,8 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 
 	// Build the RuntimeStreamEmitter that bridges agent events to SSE
 	emitter := func(event agent.RuntimeStreamEvent) {
-		var sseEvent string
-		var data []byte
-		var err error
-
-		switch event.Type {
-		case agent.RuntimeStreamToken:
-			sseEvent = "token"
-			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"content": event.Delta}, event)))
-		case agent.RuntimeStreamReasoning:
-			sseEvent = "reasoning"
-			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"reasoning_content": event.Reasoning}, event)))
-		case agent.RuntimeStreamToolCall:
-			sseEvent = "tool_call"
-			if event.ToolCall != nil {
-				data, err = json.Marshal(streamPayload(mergeExecutionFields(toolCallPayload(event.ToolCall), event)))
-			}
-		case agent.RuntimeStreamToolResult:
-			sseEvent = "tool_result"
-			if event.ToolResult != nil {
-				data, err = json.Marshal(streamPayload(mergeExecutionFields(toolResultPayload(event.ToolResult), event)))
-			}
-		case agent.RuntimeStreamToolProgress:
-			sseEvent = "tool_progress"
-			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{
-				"tool_call_id": event.ToolCallID,
-				"tool_name":    event.ToolName,
-				"progress":     event.Data,
-			}, event)))
-		case agent.RuntimeStreamStatus:
-			sseEvent = "status"
-			fields := map[string]any{}
-			if event.Data != nil {
-				if payload, ok := event.Data.(map[string]any); ok {
-					for key, value := range payload {
-						fields[key] = value
-					}
-				}
-			}
+		sseEvent, data, err := buildAgentStreamEventData(event)
+		if event.Type == agent.RuntimeStreamStatus {
 			h.logger.Debug("agent stream status",
 				zap.String("agent_id", req.AgentID),
 				zap.String("current_stage", event.CurrentStage),
@@ -342,18 +315,8 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 				zap.String("selected_reasoning_mode", event.SelectedMode),
 				zap.String("stop_reason", event.StopReason),
 			)
-			data, err = json.Marshal(streamPayload(mergeExecutionFields(fields, event)))
-		case agent.RuntimeStreamSteering:
-			sseEvent = "steering"
-			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"content": event.SteeringContent}, event)))
-		case agent.RuntimeStreamStopAndSend:
-			sseEvent = "stop_and_send"
-			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"status": "restarting"}, event)))
-		default:
-			return
 		}
-
-		if err != nil || data == nil {
+		if err != nil || data == nil || sseEvent == "" {
 			return
 		}
 
@@ -708,6 +671,108 @@ func mergeExecutionFields(fields map[string]any, event agent.RuntimeStreamEvent)
 		fields["sdk_event_name"] = event.SDKEventName
 	}
 	return fields
+}
+
+func buildAgentStreamEventData(event agent.RuntimeStreamEvent) (string, []byte, error) {
+	switch event.Type {
+	case agent.RuntimeStreamToken:
+		return "token", marshalAgentTokenStreamPayload(event), nil
+	case agent.RuntimeStreamReasoning:
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"reasoning_content": event.Reasoning}, event)))
+		return "reasoning", data, err
+	case agent.RuntimeStreamToolCall:
+		if event.ToolCall == nil {
+			return "", nil, nil
+		}
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(toolCallPayload(event.ToolCall), event)))
+		return "tool_call", data, err
+	case agent.RuntimeStreamToolResult:
+		if event.ToolResult == nil {
+			return "", nil, nil
+		}
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(toolResultPayload(event.ToolResult), event)))
+		return "tool_result", data, err
+	case agent.RuntimeStreamToolProgress:
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(map[string]any{
+			"tool_call_id": event.ToolCallID,
+			"tool_name":    event.ToolName,
+			"progress":     event.Data,
+		}, event)))
+		return "tool_progress", data, err
+	case agent.RuntimeStreamStatus:
+		fields := map[string]any{}
+		if payload, ok := event.Data.(map[string]any); ok {
+			for key, value := range payload {
+				fields[key] = value
+			}
+		}
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(fields, event)))
+		return "status", data, err
+	case agent.RuntimeStreamSteering:
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"content": event.SteeringContent}, event)))
+		return "steering", data, err
+	case agent.RuntimeStreamStopAndSend:
+		data, err := json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"status": "restarting"}, event)))
+		return "stop_and_send", data, err
+	default:
+		return "", nil, nil
+	}
+}
+
+func marshalAgentTokenStreamPayload(event agent.RuntimeStreamEvent) []byte {
+	buf := agentStreamJSONBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer agentStreamJSONBufferPool.Put(buf)
+
+	buf.WriteByte('{')
+	appendJSONStringField(buf, "content", event.Delta)
+	buf.WriteByte(',')
+	appendJSONStringField(buf, "current_stage", event.CurrentStage)
+	buf.WriteByte(',')
+	appendJSONIntField(buf, "iteration_count", event.IterationCount)
+	buf.WriteByte(',')
+	appendJSONStringField(buf, "selected_reasoning_mode", event.SelectedMode)
+	buf.WriteByte(',')
+	appendJSONStringField(buf, "stop_reason", event.StopReason)
+	buf.WriteByte(',')
+	appendJSONStringField(buf, "checkpoint_id", event.CheckpointID)
+	buf.WriteByte(',')
+	appendJSONBoolField(buf, "resumable", event.Resumable)
+	if event.SDKEventType != "" {
+		buf.WriteByte(',')
+		appendJSONStringField(buf, "sdk_event_type", string(event.SDKEventType))
+	}
+	if event.SDKEventName != "" {
+		buf.WriteByte(',')
+		appendJSONStringField(buf, "sdk_event_name", string(event.SDKEventName))
+	}
+	buf.WriteByte('}')
+
+	data := make([]byte, buf.Len())
+	copy(data, buf.Bytes())
+	return data
+}
+
+func appendJSONStringField(buf *bytes.Buffer, key, value string) {
+	buf.WriteString(strconv.Quote(key))
+	buf.WriteByte(':')
+	buf.WriteString(strconv.Quote(value))
+}
+
+func appendJSONIntField(buf *bytes.Buffer, key string, value int) {
+	buf.WriteString(strconv.Quote(key))
+	buf.WriteByte(':')
+	buf.WriteString(strconv.Itoa(value))
+}
+
+func appendJSONBoolField(buf *bytes.Buffer, key string, value bool) {
+	buf.WriteString(strconv.Quote(key))
+	buf.WriteByte(':')
+	if value {
+		buf.WriteString("true")
+		return
+	}
+	buf.WriteString("false")
 }
 
 func streamSessionPayload(executionID string) map[string]any {
