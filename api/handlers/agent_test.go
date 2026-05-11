@@ -749,6 +749,58 @@ func TestAgentHandler_HandleAgentStream_StatusEventPayload(t *testing.T) {
 	assert.Equal(t, true, statusPayload["resumable"])
 }
 
+func TestBuildAgentStreamEventData_TokenFastPathPayload(t *testing.T) {
+	eventType, data, err := buildAgentStreamEventData(agent.RuntimeStreamEvent{
+		Type:           agent.RuntimeStreamToken,
+		Delta:          "hello",
+		CurrentStage:   "reasoning",
+		IterationCount: 2,
+		SelectedMode:   "react",
+		StopReason:     "solved",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "token", eventType)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(data, &payload))
+	assert.Equal(t, "hello", payload["content"])
+	assert.Equal(t, "reasoning", payload["current_stage"])
+	assert.Equal(t, float64(2), payload["iteration_count"])
+	assert.Equal(t, "react", payload["selected_reasoning_mode"])
+	assert.Equal(t, "solved", payload["stop_reason"])
+	assert.Equal(t, "", payload["checkpoint_id"])
+	assert.Equal(t, false, payload["resumable"])
+}
+
+func TestBuildAgentStreamEventData_StatusPayload(t *testing.T) {
+	eventType, data, err := buildAgentStreamEventData(agent.RuntimeStreamEvent{
+		Type:           agent.RuntimeStreamStatus,
+		CurrentStage:   "evaluate",
+		IterationCount: 2,
+		SelectedMode:   "dynamic_planner",
+		StopReason:     "blocked",
+		CheckpointID:   "cp-2",
+		Resumable:      true,
+		Data: map[string]any{
+			"status":   "loop_stopped",
+			"decision": "replan",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "status", eventType)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(data, &payload))
+	assert.Equal(t, "loop_stopped", payload["status"])
+	assert.Equal(t, "replan", payload["decision"])
+	assert.Equal(t, "evaluate", payload["current_stage"])
+	assert.Equal(t, float64(2), payload["iteration_count"])
+	assert.Equal(t, "dynamic_planner", payload["selected_reasoning_mode"])
+	assert.Equal(t, "blocked", payload["stop_reason"])
+	assert.Equal(t, "cp-2", payload["checkpoint_id"])
+	assert.Equal(t, true, payload["resumable"])
+}
+
 func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)
