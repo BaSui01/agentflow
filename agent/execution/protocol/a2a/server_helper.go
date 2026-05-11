@@ -46,6 +46,10 @@ func toPersistenceTaskStatus(status string) persistence.TaskStatus {
 		return persistence.TaskStatusCompleted
 	case asyncTaskStatusFailed:
 		return persistence.TaskStatusFailed
+	case asyncTaskStatusCancelled:
+		return persistence.TaskStatusCancelled
+	case asyncTaskStatusTimeout:
+		return persistence.TaskStatusTimeout
 	default:
 		return persistence.TaskStatusFailed
 	}
@@ -61,6 +65,10 @@ func fromPersistenceTaskStatus(status persistence.TaskStatus) string {
 		return asyncTaskStatusCompleted
 	case persistence.TaskStatusFailed:
 		return asyncTaskStatusFailed
+	case persistence.TaskStatusCancelled:
+		return asyncTaskStatusCancelled
+	case persistence.TaskStatusTimeout:
+		return asyncTaskStatusTimeout
 	default:
 		return asyncTaskStatusFailed
 	}
@@ -144,6 +152,11 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag Agent, task *async
 	s.asyncTasksMu.Lock()
 	if err != nil {
 		task.Status = asyncTaskStatusFailed
+		if ctxErr := ctx.Err(); ctxErr == context.Canceled {
+			task.Status = asyncTaskStatusCancelled
+		} else if ctxErr == context.DeadlineExceeded {
+			task.Status = asyncTaskStatusTimeout
+		}
 		task.Error = err.Error()
 	} else {
 		task.Status = asyncTaskStatusCompleted
@@ -364,7 +377,7 @@ func (s *HTTPServer) CancelTask(taskID string) error {
 
 	if task.Status == asyncTaskStatusPending || task.Status == asyncTaskStatusProcessing {
 		task.cancel()
-		task.Status = asyncTaskStatusFailed
+		task.Status = asyncTaskStatusCancelled
 		task.Error = "task cancelled"
 		task.UpdatedAt = time.Now()
 	}

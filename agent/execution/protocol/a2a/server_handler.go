@@ -242,7 +242,7 @@ func (s *HTTPServer) handleGetTaskResult(w http.ResponseWriter, r *http.Request)
 	case asyncTaskStatusCompleted:
 		// 返回结果
 		s.writeJSON(w, http.StatusOK, task.Result)
-	case asyncTaskStatusFailed:
+	case asyncTaskStatusFailed, asyncTaskStatusCancelled, asyncTaskStatusTimeout:
 		// 返回错误
 		errMsg := &A2AMessage{
 			ID:        uuid.New().String(),
@@ -315,4 +315,3 @@ func (s *HTTPServer) routeMessage(msg *A2AMessage) (Agent, error) {
 
 	return nil, fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)
 }
-
