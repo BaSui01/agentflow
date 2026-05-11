@@ -105,6 +105,21 @@ type AsyncTask struct {
 	// 输入包含任务输入数据
 	Input map[string]any `json:"input,omitempty"`
 
+	// MessageFrom 是 A2A 原始消息的发送方
+	MessageFrom string `json:"message_from,omitempty"`
+
+	// MessageTo 是 A2A 原始消息的接收方
+	MessageTo string `json:"message_to,omitempty"`
+
+	// MessageType 是 A2A 原始消息类型
+	MessageType string `json:"message_type,omitempty"`
+
+	// MessageTimestamp 是 A2A 原始消息时间戳
+	MessageTimestamp time.Time `json:"message_timestamp,omitempty"`
+
+	// MessageReplyTo 是 A2A 原始消息的 ReplyTo 字段
+	MessageReplyTo string `json:"message_reply_to,omitempty"`
+
 	// 结果包含任务结果(完成后)
 	Result any `json:"result,omitempty"`
 
