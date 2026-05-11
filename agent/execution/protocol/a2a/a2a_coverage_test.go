@@ -568,6 +568,21 @@ func TestHTTPServer_GetDefaultAgent_WithDefaultID(t *testing.T) {
 	assert.Equal(t, "default-agent", defaultAg.ID())
 }
 
+func TestHTTPServer_GetDefaultAgent_MultipleAgentsWithoutDefaultReturnsError(t *testing.T) {
+	server := NewHTTPServer(&ServerConfig{
+		BaseURL: "http://localhost:8080",
+		Logger:  zap.NewNop(),
+	})
+
+	_ = server.RegisterAgent(newMockAgent("agent-a", "Agent A"))
+	_ = server.RegisterAgent(newMockAgent("agent-b", "Agent B"))
+
+	ag, err := server.getDefaultAgent()
+	require.Error(t, err)
+	assert.Nil(t, ag)
+	assert.Contains(t, err.Error(), "multiple agents registered")
+}
+
 // --- AgentCard discovery with agent_id query param ---
 
 func TestHTTPServer_HandleAgentCardDiscovery_WithAgentID(t *testing.T) {

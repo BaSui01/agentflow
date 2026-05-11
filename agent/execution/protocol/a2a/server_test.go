@@ -123,6 +123,24 @@ func TestHTTPServer_HandleAgentCardDiscovery(t *testing.T) {
 	assert.Equal(t, "Test Agent", card.Name)
 }
 
+func TestHTTPServer_HandleAgentCardDiscovery_MultipleAgentsWithoutDefaultReturnsNotFound(t *testing.T) {
+	server := NewHTTPServer(&ServerConfig{
+		BaseURL: "http://localhost:8080",
+		Logger:  zap.NewNop(),
+	})
+
+	_ = server.RegisterAgent(newMockAgent("agent-a", "Agent A"))
+	_ = server.RegisterAgent(newMockAgent("agent-b", "Agent B"))
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "multiple agents registered")
+}
+
 func TestHTTPServer_HandleSyncMessage(t *testing.T) {
 	server := NewHTTPServer(&ServerConfig{
 		BaseURL:        "http://localhost:8080",
