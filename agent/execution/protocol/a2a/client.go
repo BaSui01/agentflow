@@ -203,23 +203,20 @@ func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, er
 		return nil, fmt.Errorf("failed to serialize message: %w", err)
 	}
 
-	// 创建请求
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, messageURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// 添加信头
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	for k, v := range c.config.Headers {
-		req.Header.Set(k, v)
-	}
-
 	// 通过重试执行请求
 	var resp *http.Response
 	var lastErr error
 	for i := 0; i <= c.config.RetryCount; i++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, messageURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		for k, v := range c.config.Headers {
+			req.Header.Set(k, v)
+		}
+
 		resp, lastErr = c.httpClient.Do(req)
 		if lastErr == nil && (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted) {
 			break

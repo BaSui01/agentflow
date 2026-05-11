@@ -3,6 +3,7 @@ package a2a
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -229,6 +230,63 @@ func TestHTTPClient_Send(t *testing.T) {
 		_, err := client.Send(context.Background(), msg)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrRemoteUnavailable)
+	})
+
+	t.Run("retry reuses full request body on second attempt", func(t *testing.T) {
+		var (
+			serverURL string
+			bodies    []string
+			calls     int
+		)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/.well-known/agent.json" {
+				card := &AgentCard{
+					Name:        "remote-agent",
+					Description: "Remote agent",
+					URL:         serverURL,
+					Version:     "1.0.0",
+				}
+				err := json.NewEncoder(w).Encode(card)
+				require.NoError(t, err)
+				return
+			}
+
+			if r.URL.Path != "/a2a/messages" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			payload, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			bodies = append(bodies, string(payload))
+			calls++
+
+			if calls == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte("retry later"))
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			err = json.NewEncoder(w).Encode(NewResultMessage("remote-agent", "local-agent", map[string]string{"result": "ok"}, "msg-123"))
+			require.NoError(t, err)
+		}))
+		defer server.Close()
+		serverURL = server.URL
+
+		client := NewHTTPClient(&ClientConfig{
+			Timeout:    1 * time.Second,
+			RetryCount: 1,
+			RetryDelay: 10 * time.Millisecond,
+		})
+		msg := NewTaskMessage("local-agent", server.URL, map[string]string{"task": "retry"})
+
+		result, err := client.Send(context.Background(), msg)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Len(t, bodies, 2)
+		assert.Equal(t, bodies[0], bodies[1])
+		assert.Contains(t, bodies[0], `"task":"retry"`)
 	})
 }
 
