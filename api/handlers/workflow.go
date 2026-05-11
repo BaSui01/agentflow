@@ -28,6 +28,18 @@ type workflowExecuteRequest struct {
 	Input   any    `json:"input"`
 }
 
+const maxWorkflowDSLBytes = 512 * 1024
+
+func (r *workflowExecuteRequest) Validate() *types.Error {
+	if r.DSL == "" && r.DSLFile == "" && r.DAGJSON == "" && r.DAGYAML == "" && r.DAGFile == "" {
+		return types.NewInvalidRequestError("dsl/dsl_file/dag_json/dag_yaml/dag_file is required")
+	}
+	if len(r.DSL) > maxWorkflowDSLBytes || len(r.DAGJSON) > maxWorkflowDSLBytes || len(r.DAGYAML) > maxWorkflowDSLBytes {
+		return types.NewInvalidRequestError("dsl/dag_json/dag_yaml exceeds maximum length of 512KB")
+	}
+	return nil
+}
+
 // HandleExecute handles POST /api/v1/workflows/execute
 func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost, h.logger) {
@@ -38,16 +50,6 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// V-014: Input size is bounded by DecodeJSONBody's MaxBytesReader (1MB in common.go)
-
-	if req.DSL == "" && req.DSLFile == "" && req.DAGJSON == "" && req.DAGYAML == "" && req.DAGFile == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl/dsl_file/dag_json/dag_yaml/dag_file is required", h.logger)
-		return
-	}
-	const maxDSLLen = 512 * 1024 // 512KB
-	if len(req.DSL) > maxDSLLen || len(req.DAGJSON) > maxDSLLen || len(req.DAGYAML) > maxDSLLen {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl/dag_json/dag_yaml exceeds maximum length of 512KB", h.logger)
-		return
-	}
 
 	service, svcErr := h.currentServiceOrUnavailable("workflow")
 	if svcErr != nil {
@@ -98,7 +100,7 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 
 // workflowParseRequest is the request body for HandleParse.
 type workflowParseRequest struct {
-	DSL string `json:"dsl"`
+	DSL string `json:"dsl" binding:"required"`
 }
 
 // HandleParse handles POST /api/v1/workflows/parse (validate DSL)
@@ -106,17 +108,8 @@ func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost, h.logger) {
 		return
 	}
-	if !ValidateContentType(w, r, h.logger) {
-		return
-	}
-
 	var req workflowParseRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
-		return
-	}
-
-	if req.DSL == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl is required", h.logger)
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
 

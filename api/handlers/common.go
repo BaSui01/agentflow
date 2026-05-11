@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
@@ -88,7 +90,11 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 
 const maxRequestBodyBytes = 1 << 20 // 1 MB
 
-// TODO(V-008, #16): 引入统一的 ValidateRequest 中间件，替代在每个 handler 中手动校验。
+// RequestValidator allows request DTOs to attach handler-local validation hooks
+// after Content-Type and JSON decoding succeed.
+type RequestValidator interface {
+	Validate() *types.Error
+}
 
 // DecodeJSONBody 解码 JSON 请求体
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
@@ -133,7 +139,7 @@ func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Log
 	return true
 }
 
-// ValidateRequest 统一请求校验：Content-Type 检查 + JSON 解码。
+// ValidateRequest 统一请求校验：Content-Type 检查 + JSON 解码 + 标签/钩子验证。
 // 适用于需要 application/json 的 POST/PUT 请求。
 // 返回 false 表示校验失败，调用方应直接 return；dst 为解码目标。
 func ValidateRequest(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) bool {
@@ -143,7 +149,194 @@ func ValidateRequest(w http.ResponseWriter, r *http.Request, dst any, logger *za
 	if err := DecodeJSONBody(w, r, dst, logger); err != nil {
 		return false
 	}
+	if apiErr := validateDecodedRequest(dst); apiErr != nil {
+		WriteError(w, apiErr, logger)
+		return false
+	}
 	return true
+}
+
+func validateDecodedRequest(dst any) *types.Error {
+	if apiErr := validateTaggedFields(reflect.ValueOf(dst), ""); apiErr != nil {
+		return apiErr
+	}
+	if validator, ok := dst.(RequestValidator); ok {
+		if apiErr := validator.Validate(); apiErr != nil {
+			return apiErr
+		}
+	}
+	return nil
+}
+
+func validateTaggedFields(value reflect.Value, path string) *types.Error {
+	value = unwrapValidationValue(value)
+	if !value.IsValid() || value.Kind() != reflect.Struct {
+		return nil
+	}
+
+	var missing []string
+	structType := value.Type()
+	for i := 0; i < value.NumField(); i++ {
+		fieldType := structType.Field(i)
+		if !fieldType.IsExported() {
+			continue
+		}
+
+		fieldValue := value.Field(i)
+		rules := validationRules(fieldType)
+		fieldPath := validationFieldPath(path, fieldType)
+
+		if rules.required && fieldValue.CanSet() && fieldValue.Kind() == reflect.String {
+			fieldValue.SetString(strings.TrimSpace(fieldValue.String()))
+		}
+		if rules.required && isMissingValidationValue(fieldValue) {
+			missing = append(missing, fieldPath)
+		}
+	}
+	if len(missing) > 0 {
+		return types.NewInvalidRequestError(requiredFieldsMessage(missing))
+	}
+
+	for i := 0; i < value.NumField(); i++ {
+		fieldType := structType.Field(i)
+		if !fieldType.IsExported() {
+			continue
+		}
+
+		fieldValue := value.Field(i)
+		rules := validationRules(fieldType)
+		fieldPath := validationFieldPath(path, fieldType)
+
+		if rules.dive {
+			if apiErr := validateDiveField(fieldValue, fieldPath); apiErr != nil {
+				return apiErr
+			}
+			continue
+		}
+		if apiErr := validateNestedField(fieldValue, fieldPath); apiErr != nil {
+			return apiErr
+		}
+	}
+
+	return nil
+}
+
+type fieldValidationRules struct {
+	required bool
+	dive     bool
+}
+
+func validationRules(field reflect.StructField) fieldValidationRules {
+	rules := fieldValidationRules{}
+	parseValidationTag := func(tag string) {
+		for _, part := range strings.Split(tag, ",") {
+			switch strings.TrimSpace(part) {
+			case "required":
+				rules.required = true
+			case "dive":
+				rules.dive = true
+			}
+		}
+	}
+
+	parseValidationTag(field.Tag.Get("binding"))
+	parseValidationTag(field.Tag.Get("validate"))
+	if strings.EqualFold(strings.TrimSpace(field.Tag.Get("required")), "true") {
+		rules.required = true
+	}
+	return rules
+}
+
+func validateDiveField(value reflect.Value, path string) *types.Error {
+	value = unwrapValidationValue(value)
+	if !value.IsValid() {
+		return nil
+	}
+	switch value.Kind() {
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < value.Len(); i++ {
+			if apiErr := validateNestedField(value.Index(i), fmt.Sprintf("%s[%d]", path, i)); apiErr != nil {
+				return apiErr
+			}
+		}
+	}
+	return nil
+}
+
+func validateNestedField(value reflect.Value, path string) *types.Error {
+	value = unwrapValidationValue(value)
+	if !value.IsValid() {
+		return nil
+	}
+	switch value.Kind() {
+	case reflect.Struct:
+		return validateTaggedFields(value, path)
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < value.Len(); i++ {
+			if apiErr := validateNestedField(value.Index(i), fmt.Sprintf("%s[%d]", path, i)); apiErr != nil {
+				return apiErr
+			}
+		}
+	}
+	return nil
+}
+
+func unwrapValidationValue(value reflect.Value) reflect.Value {
+	for value.IsValid() && (value.Kind() == reflect.Pointer || value.Kind() == reflect.Interface) {
+		if value.IsNil() {
+			return reflect.Value{}
+		}
+		value = value.Elem()
+	}
+	return value
+}
+
+func validationFieldPath(prefix string, field reflect.StructField) string {
+	name := field.Name
+	if tag := field.Tag.Get("json"); tag != "" {
+		if before, _, ok := strings.Cut(tag, ","); ok {
+			tag = before
+		}
+		if tag != "" && tag != "-" {
+			name = tag
+		}
+	}
+	if prefix == "" {
+		return name
+	}
+	return prefix + "." + name
+}
+
+func isMissingValidationValue(value reflect.Value) bool {
+	if !value.IsValid() {
+		return true
+	}
+	switch value.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if value.IsNil() {
+			return true
+		}
+		return isMissingValidationValue(value.Elem())
+	case reflect.String:
+		return strings.TrimSpace(value.String()) == ""
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return value.Len() == 0
+	default:
+		return value.IsZero()
+	}
+}
+
+func requiredFieldsMessage(fields []string) string {
+	switch len(fields) {
+	case 0:
+		return "required field is missing"
+	case 1:
+		return fmt.Sprintf("%s is required", fields[0])
+	case 2:
+		return fmt.Sprintf("%s and %s are required", fields[0], fields[1])
+	default:
+		return fmt.Sprintf("%s, and %s are required", strings.Join(fields[:len(fields)-1], ", "), fields[len(fields)-1])
+	}
 }
 
 // ValidateURL validates that s is a well-formed HTTP or HTTPS URL.

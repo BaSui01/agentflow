@@ -14,6 +14,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type validateRequestHookTestRequest struct {
+	Type string `json:"type" binding:"required"`
+}
+
+func (r *validateRequestHookTestRequest) Validate() *types.Error {
+	if r.Type != "guide" {
+		return types.NewInvalidRequestError("type must be guide")
+	}
+	return nil
+}
+
 // =============================================================================
 // 🧪 Common 函数测试
 // =============================================================================
@@ -225,6 +236,111 @@ func TestValidateContentType(t *testing.T) {
 			assert.Equal(t, tt.want, result)
 		})
 	}
+}
+
+func TestValidateRequest_TrimRequiredStringFields(t *testing.T) {
+	logger := zap.NewNop()
+
+	type request struct {
+		Name   string `json:"name" binding:"required"`
+		Target string `json:"target" binding:"required"`
+		Note   string `json:"note,omitempty"`
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"name":" knowledge_search ","target":" retrieval ","note":" keep spaces "}`))
+	r.Header.Set("Content-Type", "application/json")
+
+	var result request
+	ok := ValidateRequest(w, r, &result, logger)
+
+	require.True(t, ok)
+	assert.Equal(t, "knowledge_search", result.Name)
+	assert.Equal(t, "retrieval", result.Target)
+	assert.Equal(t, " keep spaces ", result.Note)
+}
+
+func TestValidateRequest_RejectsMissingRequiredStringFields(t *testing.T) {
+	logger := zap.NewNop()
+
+	type request struct {
+		Name   string `json:"name" binding:"required"`
+		Target string `json:"target" binding:"required"`
+	}
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing name", body: `{"target":"retrieval"}`},
+		{name: "blank name", body: `{"name":"   ","target":"retrieval"}`},
+		{name: "blank target", body: `{"name":"knowledge_search","target":"   "}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(tt.body))
+			r.Header.Set("Content-Type", "application/json")
+
+			var result request
+			ok := ValidateRequest(w, r, &result, logger)
+
+			require.False(t, ok)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+
+			var resp Response
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+			require.NotNil(t, resp.Error)
+			assert.Equal(t, string(types.ErrInvalidRequest), resp.Error.Code)
+			assert.Contains(t, resp.Error.Message, "required")
+		})
+	}
+}
+
+func TestValidateRequest_UsesRequestValidatorHook(t *testing.T) {
+	logger := zap.NewNop()
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"type":"stop"}`))
+	r.Header.Set("Content-Type", "application/json")
+
+	var req validateRequestHookTestRequest
+	ok := ValidateRequest(w, r, &req, logger)
+
+	require.False(t, ok)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, "type must be guide", resp.Error.Message)
+}
+
+func TestValidateRequest_RejectsMissingNestedRequiredFields(t *testing.T) {
+	logger := zap.NewNop()
+
+	type document struct {
+		Content string `json:"content" binding:"required"`
+	}
+	type request struct {
+		Documents []document `json:"documents" binding:"required"`
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(`{"documents":[{"content":"   "}]} `))
+	r.Header.Set("Content-Type", "application/json")
+
+	var req request
+	ok := ValidateRequest(w, r, &req, logger)
+
+	require.False(t, ok)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, "documents[0].content is required", resp.Error.Message)
 }
 
 func TestResponseWriter(t *testing.T) {

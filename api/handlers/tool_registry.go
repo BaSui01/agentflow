@@ -24,9 +24,9 @@ func NewToolRegistryHandler(service appservice.ToolRegistryService, logger *zap.
 }
 
 type createToolRegistrationRequest struct {
-	Name        string          `json:"name"`
+	Name        string          `json:"name" binding:"required"`
 	Description string          `json:"description"`
-	Target      string          `json:"target"`
+	Target      string          `json:"target" binding:"required"`
 	Parameters  json.RawMessage `json:"parameters"`
 	Enabled     *bool           `json:"enabled"`
 }
@@ -89,10 +89,6 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 	}
 	var req createToolRegistrationRequest
 	if !ValidateRequest(w, r, &req, h.logger) {
-		return
-	}
-	if req.Name == "" || req.Target == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "name and target are required", h.logger)
 		return
 	}
 	row, svcErr := service.Create(appservice.CreateToolRegistrationInput{

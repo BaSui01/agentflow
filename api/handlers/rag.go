@@ -23,7 +23,7 @@ func NewRAGHandler(service usecase.RAGService, logger *zap.Logger) *RAGHandler {
 
 // ragQueryRequest is the request body for HandleQuery.
 type ragQueryRequest struct {
-	Query      string `json:"query"`
+	Query      string `json:"query" binding:"required"`
 	TopK       int    `json:"top_k"`
 	Strategy   string `json:"strategy,omitempty"`
 	Collection string `json:"collection"`
@@ -49,10 +49,6 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	var req ragQueryRequest
 	if !ValidateRequest(w, r, &req, h.logger) {
-		return
-	}
-	if req.Query == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "query is required", h.logger)
 		return
 	}
 	req.TopK = boundedOrDefault(req.TopK, 5, 256)
@@ -97,14 +93,21 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 // ragIndexDocument is a single document in the index request.
 type ragIndexDocument struct {
 	ID       string         `json:"id"`
-	Content  string         `json:"content"`
+	Content  string         `json:"content" binding:"required"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // ragIndexRequest is the request body for HandleIndex.
 type ragIndexRequest struct {
-	Documents  []ragIndexDocument `json:"documents"`
+	Documents  []ragIndexDocument `json:"documents" binding:"required"`
 	Collection string             `json:"collection"`
+}
+
+func (r *ragIndexRequest) Validate() *types.Error {
+	if len(r.Documents) > 1000 {
+		return types.NewInvalidRequestError("documents count exceeds limit of 1000")
+	}
+	return nil
 }
 
 // HandleIndex handles POST /api/v1/rag/index
@@ -121,21 +124,9 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
-	if len(req.Documents) == 0 {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "documents cannot be empty", h.logger)
-		return
-	}
-	if len(req.Documents) > 1000 {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "documents count exceeds limit of 1000", h.logger)
-		return
-	}
 
 	docs := make([]core.Document, len(req.Documents))
 	for i, doc := range req.Documents {
-		if doc.Content == "" {
-			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "document content is required", h.logger)
-			return
-		}
 		docs[i] = core.Document{
 			ID:       doc.ID,
 			Content:  doc.Content,

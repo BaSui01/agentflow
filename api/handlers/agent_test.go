@@ -173,11 +173,17 @@ func newTestAgentInfo(name string, status tools.AgentStatus) *tools.AgentInfo {
 }
 
 func newTestHandler(reg *mockRegistry) *AgentHandler {
-	return NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, nil), nil, zap.NewNop())
+	sessionMgr := agent.NewSessionManager()
+	sessionMgr.Stop()
+	handler := NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, nil), sessionMgr, zap.NewNop())
+	return handler
 }
 
 func newTestHandlerWithResolver(reg tools.Registry, resolver usecase.AgentResolver) *AgentHandler {
-	return NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, resolver), nil, zap.NewNop())
+	sessionMgr := agent.NewSessionManager()
+	sessionMgr.Stop()
+	handler := NewAgentHandlerWithService(usecase.NewDefaultAgentService(reg, resolver), sessionMgr, zap.NewNop())
+	return handler
 }
 
 // =============================================================================
@@ -258,6 +264,25 @@ func TestAgentHandler_HandleGetAgent_Found(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test-id", info.ID)
 	assert.Equal(t, "online", info.State)
+}
+
+func TestAgentHandler_HandleAgentInterrupt_MissingTypeUsesValidateRequest(t *testing.T) {
+	sessionMgr := agent.NewSessionManager()
+	t.Cleanup(sessionMgr.Stop)
+	handler := NewAgentHandlerWithService(&stubAgentService{}, sessionMgr, zap.NewNop())
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/agents/execute/interrupt", bytes.NewBufferString(`{"execution_id":"exec-1","content":"continue"}`))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandleAgentInterrupt(w, r)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp Response
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, "type is required", resp.Error.Message)
 }
 
 func TestAgentHandler_HandleGetAgent_NotFound(t *testing.T) {
