@@ -16,6 +16,7 @@ import (
 // DefaultInactivityTimeout 是流式响应的默认空闲超时时间.
 // 只要还在收到数据，就不会超时；只有在超过此时间没有新数据时才触发超时.
 const DefaultInactivityTimeout = 5 * time.Minute
+const steeringDrainTimeout = 100 * time.Millisecond
 
 // ReActConfig 定义了 ReAct 循环配置.
 type ReActConfig struct {
@@ -272,7 +273,6 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				inactivityTimeout = DefaultInactivityTimeout
 			}
 			inactivityTimer := time.NewTimer(inactivityTimeout)
-			defer inactivityTimer.Stop()
 
 		chunkLoop:
 			for {
@@ -388,8 +388,19 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				case steerMsg := <-r.steerChOrNil():
 					steering = &steerMsg
 					cancelStream()
-					// drain 剩余 chunks 防止 goroutine 泄漏
-					for range streamCh {
+					drainDone := make(chan struct{})
+					go func() {
+						defer close(drainDone)
+						for range streamCh {
+						}
+					}()
+					select {
+					case <-drainDone:
+					case <-time.After(steeringDrainTimeout):
+						r.logger.Warn("stream drain timed out after steering",
+							zap.Duration("timeout", steeringDrainTimeout),
+							zap.Int("iteration", i+1),
+						)
 					}
 					break chunkLoop
 
@@ -411,6 +422,12 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				}
 			}
 			cancelStream()
+			if !inactivityTimer.Stop() {
+				select {
+				case <-inactivityTimer.C:
+				default:
+				}
+			}
 
 			// 如果收到 steering，处理后继续外层循环
 			if steering != nil {
