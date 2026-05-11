@@ -238,7 +238,7 @@ func (m *InterruptManager) createPendingInterrupt(
 		return nil, fmt.Errorf("failed to save interrupt: %w", err)
 	}
 
-	timeoutParent := ctx
+	timeoutParent := context.Background()
 	if bindToParent {
 		timeoutParent = ctx
 	}
