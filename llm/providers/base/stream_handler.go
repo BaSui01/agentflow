@@ -29,6 +29,10 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 		}()
 		defer body.Close()
 		defer close(ch)
+		toolAccumulator := NewToolCallDeltaAccumulator()
+		toolTypesByItemID := make(map[string]string)
+		toolOrderByChoice := make(map[int][]string)
+		toolSeenByChoice := make(map[int]map[string]struct{})
 		reader := bufio.NewReader(body)
 		for {
 			line, err := reader.ReadString('\n')
@@ -102,14 +106,63 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 					chunk.Delta.Refusal = choice.Delta.Refusal
 					chunk.Delta.ReasoningContent = choice.Delta.ReasoningContent
 					if len(choice.Delta.ToolCalls) > 0 {
-						chunk.Delta.ToolCalls = make([]types.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
-							chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, types.ToolCall{
-								Index:     tc.Index,
-								ID:        tc.ID,
-								Name:      tc.Function.Name,
-								Arguments: UnwrapStringifiedJSON(tc.Function.Arguments),
-							})
+							itemID := streamToolCallItemID(choice.Index, tc.Index)
+							if _, ok := toolSeenByChoice[choice.Index]; !ok {
+								toolSeenByChoice[choice.Index] = make(map[string]struct{})
+							}
+							if _, seen := toolSeenByChoice[choice.Index][itemID]; !seen {
+								toolSeenByChoice[choice.Index][itemID] = struct{}{}
+								toolOrderByChoice[choice.Index] = append(toolOrderByChoice[choice.Index], itemID)
+							}
+							toolType := NormalizeToolType(tc.Type)
+							toolTypesByItemID[itemID] = toolType
+							switch toolType {
+							case types.ToolTypeCustom:
+								name := ""
+								inputDelta := ""
+								if tc.Custom != nil {
+									name = tc.Custom.Name
+									inputDelta = tc.Custom.Input
+								}
+								toolAccumulator.Register(itemID, toolType, name, tc.ID)
+								toolAccumulator.Append(itemID, inputDelta)
+							default:
+								name := ""
+								argDelta := ""
+								if tc.Function != nil {
+									name = tc.Function.Name
+									argDelta = toolJSONDeltaFromRaw(tc.Function.Arguments)
+								}
+								toolAccumulator.Register(itemID, toolType, name, tc.ID)
+								toolAccumulator.Append(itemID, argDelta)
+							}
+						}
+					}
+					if choice.FinishReason == "tool_calls" || NormalizeFinishReason(choice.FinishReason) == "tool_calls" {
+						order := toolOrderByChoice[choice.Index]
+						if len(order) > 0 {
+							chunk.Delta.ToolCalls = make([]types.ToolCall, 0, len(order))
+							for _, itemID := range order {
+								var (
+									call types.ToolCall
+									ok   bool
+								)
+								switch toolTypesByItemID[itemID] {
+								case types.ToolTypeCustom:
+									call, ok = toolAccumulator.CompleteCustom(itemID)
+								default:
+									call, ok = toolAccumulator.CompleteFunction(itemID)
+								}
+								if !ok {
+									continue
+								}
+								call.Index = parseStreamToolCallIndex(itemID)
+								chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, call)
+								delete(toolTypesByItemID, itemID)
+							}
+							delete(toolOrderByChoice, choice.Index)
+							delete(toolSeenByChoice, choice.Index)
 						}
 					}
 				}
@@ -129,6 +182,29 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 		}
 	}()
 	return ch
+}
+
+func streamToolCallItemID(choiceIndex, toolIndex int) string {
+	return fmt.Sprintf("%d:%d", choiceIndex, toolIndex)
+}
+
+func parseStreamToolCallIndex(itemID string) int {
+	var choiceIndex, toolIndex int
+	if _, err := fmt.Sscanf(itemID, "%d:%d", &choiceIndex, &toolIndex); err != nil {
+		return 0
+	}
+	return toolIndex
+}
+
+func toolJSONDeltaFromRaw(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(UnwrapStringifiedJSON(raw))
 }
 
 func NormalizeFinishReason(reason string) string {
