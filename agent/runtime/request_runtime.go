@@ -7,6 +7,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	planningcap "github.com/BaSui01/agentflow/agent/capabilities/planning"
 	toolcap "github.com/BaSui01/agentflow/agent/capabilities/tools"
+	agentcore "github.com/BaSui01/agentflow/agent/core"
 	agentcontext "github.com/BaSui01/agentflow/agent/execution/context"
 	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
@@ -338,6 +339,20 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		return nil, NewError(types.ErrInputValidation, "input content is empty")
 	}
 	startTime := time.Now()
+	defer func() {
+		if r := recover(); r != nil {
+			panicErr := agentcore.PanicPayloadToError(r)
+			b.logger.Error("executeCore panic recovered",
+				zap.Any("panic", r),
+				zap.Error(panicErr),
+				zap.String("trace_id", strings.TrimSpace(input.TraceID)),
+				zap.Stack("stack"),
+			)
+			if execErr == nil {
+				execErr = NewErrorWithCause(types.ErrAgentExecution, "react execution panic", panicErr)
+			}
+		}
+	}()
 
 	if input.TraceID != "" {
 		ctx = types.WithTraceID(ctx, input.TraceID)
@@ -370,6 +385,13 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 			return nil, err
 		}
 	}
+	defer func() {
+		if atomic.AddInt64(&b.execCount, -1) == 0 {
+			if err := b.Transition(context.Background(), StateReady); err != nil {
+				b.logger.Error("failed to transition to ready", zap.Error(err))
+			}
+		}
+	}()
 
 	activeBundle := b.promptBundle
 	if doc := b.persistence.LoadPrompt(ctx, b.config.Core.Type, b.config.Core.Name, ""); doc != nil {
@@ -386,13 +408,6 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 
 	persistenceSession := b.beginRuntimePersistence(ctx, input, startTime)
 	restoredMessages := persistenceSession.restoredMessages
-	defer func() {
-		if atomic.AddInt64(&b.execCount, -1) == 0 {
-			if err := b.Transition(context.Background(), StateReady); err != nil {
-				b.logger.Error("failed to transition to ready", zap.Error(err))
-			}
-		}
-	}()
 	defer b.finishRuntimePersistenceOnExit(ctx, persistenceSession, &execErr)
 
 	b.logger.Info("executing task",
