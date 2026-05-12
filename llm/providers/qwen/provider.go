@@ -12,6 +12,7 @@ import (
 // Qwen 使用 OpenAI 兼容的 API 格式.
 type QwenProvider struct {
 	*openaicompat.Provider
+	*providerbase.MultimodalAdapter
 }
 
 // newQwenCapabilityHost 创建 Qwen capability host。
@@ -33,6 +34,7 @@ func newQwenCapabilityHost(cfg providers.QwenConfig, logger *zap.Logger) *QwenPr
 			EndpointPath:  "/compatible-mode/v1/chat/completions",
 			RequestHook:   qwenRequestHook,
 		}, logger),
+		MultimodalAdapter: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "qwen"}),
 	}
 }
 

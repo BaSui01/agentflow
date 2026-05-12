@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	tooldiscovery "github.com/BaSui01/agentflow/agent/capabilities/tools/discovery"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -296,45 +297,12 @@ func (s *Skill) GetResourceAsJSON(name string, target any) error {
 
 // MatchesTask 检查技能是否匹配任务
 func (s *Skill) MatchesTask(task string) float64 {
-	task = strings.ToLower(task)
-	score := 0.0
-
-	// 检查名称匹配
-	if strings.Contains(task, strings.ToLower(s.Name)) {
-		score += 0.3
-	}
-
-	// 检查描述匹配
-	descWords := strings.Fields(strings.ToLower(s.Description))
-	taskWords := strings.Fields(task)
-
-	matchCount := 0
-	for _, tw := range taskWords {
-		for _, dw := range descWords {
-			if tw == dw || strings.Contains(dw, tw) || strings.Contains(tw, dw) {
-				matchCount++
-				break
-			}
-		}
-	}
-
-	if len(taskWords) > 0 {
-		score += 0.4 * float64(matchCount) / float64(len(taskWords))
-	}
-
-	// 检查标签匹配
-	for _, tag := range s.Tags {
-		if strings.Contains(task, strings.ToLower(tag)) {
-			score += 0.1
-		}
-	}
-
-	// 检查分类匹配
-	if s.Category != "" && strings.Contains(task, strings.ToLower(s.Category)) {
-		score += 0.2
-	}
-
-	return score
+	return tooldiscovery.ScoreSkillProfileMatch(tooldiscovery.SkillSearchProfile{
+		Name:        s.Name,
+		Description: s.Description,
+		Category:    s.Category,
+		Tags:        s.Tags,
+	}, task)
 }
 
 // Clone 克隆技能（用于隔离修改）

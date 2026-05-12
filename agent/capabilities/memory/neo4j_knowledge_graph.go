@@ -138,7 +138,7 @@ func (g *Neo4jKnowledgeGraph) QueryEntity(ctx context.Context, id string) (*Enti
 	return nil, fmt.Errorf("unexpected entity row type")
 }
 
-func (g *Neo4jKnowledgeGraph) QueryRelations(ctx context.Context, entityID string, relationType string) ([]Relation, error) {
+func (g *Neo4jKnowledgeGraph) QueryRelations(ctx context.Context, entityID, relationType string) ([]Relation, error) {
 	if entityID == "" {
 		return nil, fmt.Errorf("entity id is required")
 	}

@@ -238,8 +238,8 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 	}
 
 	// 检查率限制
-	if reg, ok := p.registry.(*DefaultRegistry); ok {
-		if err := reg.checkRateLimit(call.Name); err != nil {
+	if reg, ok := p.registry.(RateLimitedRegistry); ok {
+		if err := reg.CheckRateLimit(call.Name); err != nil {
 			result.Error = fmt.Sprintf("rate limit exceeded: %s", err.Error())
 			result.Duration = time.Since(start)
 			return result

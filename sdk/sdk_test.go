@@ -215,3 +215,19 @@ func TestSDK_Build_AgentOptionsExposeToolManager(t *testing.T) {
 	require.Equal(t, []string{"lookup"}, ag.Config().Tools.AllowedTools)
 	require.Equal(t, []string{"lookup"}, ag.Config().Runtime.Tools)
 }
+
+func TestIsZeroAgentBuildOptions_AllowsNonComparableCallbacks(t *testing.T) {
+	zero := runtime.BuildOptions{}
+	if !isZeroAgentBuildOptions(zero) {
+		t.Fatal("zero BuildOptions should be treated as unset")
+	}
+
+	withAuthorize := runtime.BuildOptions{
+		Authorize: func(context.Context, types.AuthorizationRequest) (*types.AuthorizationDecision, error) {
+			return &types.AuthorizationDecision{Decision: types.DecisionAllow}, nil
+		},
+	}
+	if isZeroAgentBuildOptions(withAuthorize) {
+		t.Fatal("BuildOptions with Authorize callback should not be treated as zero")
+	}
+}

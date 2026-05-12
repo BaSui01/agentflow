@@ -331,8 +331,7 @@ func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 	m.mu.RUnlock()
 
 	for _, consumer := range consumers {
-		consumer := consumer
-		go func() {
+		go func(consumer *BackpressureStream) {
 			writeCtx := ctx
 			cancel := func() {}
 			if timeout := consumer.config.SlowConsumerTTL; timeout > 0 {
@@ -345,7 +344,7 @@ func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 			if err := consumer.Write(writeCtx, token); err != nil {
 				// consumer 已关闭、过慢或 ctx 取消 — 安全忽略，避免拖慢其他消费者。
 			}
-		}()
+		}(consumer)
 	}
 }
 

@@ -75,7 +75,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	for i := 0; i < r.config.MaxIterations; i++ {
 		select {
 		case <-ctx.Done():
-			return lastResp, steps, fmt.Errorf("context cancelled: %w", ctx.Err())
+			return lastResp, steps, fmt.Errorf("context canceled: %w", ctx.Err())
 		default:
 		}
 
@@ -225,7 +225,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 		for i := 0; i < r.config.MaxIterations; i++ {
 			select {
 			case <-ctx.Done():
-				eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
+				eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context canceled: %v", ctx.Err())}
 				return
 			default:
 			}
@@ -417,7 +417,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				case <-ctx.Done():
 					// 用户主动取消或父 context 超时
 					cancelStream()
-					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context canceled: %v", ctx.Err())}
 					return
 				}
 			}
@@ -612,13 +612,13 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 					goto nextCall
 				}
 
-				steering, cancelled := r.handleToolStreamEvent(ctx, steerCh, eventCh, call, event, &result)
+				steering, canceled := r.handleToolStreamEvent(ctx, steerCh, eventCh, call, event, &result)
 				if steering != nil {
 					cancelTool()
 					r.drainToolStreamAfterCancel(streamCh, call)
 					return results, steering
 				}
-				if cancelled {
+				if canceled {
 					cancelTool()
 					return results, nil
 				}

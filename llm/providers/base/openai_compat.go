@@ -1,7 +1,6 @@
 package providerbase
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	llm "github.com/BaSui01/agentflow/llm/core"
+	"github.com/BaSui01/agentflow/pkg/jsonutil"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -683,22 +683,5 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 // （如 `"{\\"city\\":\\"北京\\"}"` ）而非原始 JSON 对象。
 // 此函数尝试将其解包为原始 JSON 字节，确保下游 schema 校验和工具执行正常。
 func UnwrapStringifiedJSON(raw json.RawMessage) json.RawMessage {
-	if len(raw) == 0 {
-		return raw
-	}
-	// 快速路径：如果首字节是 { 或 [，说明已经是正常的 JSON 对象/数组
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
-		return raw
-	}
-	// 慢路径：尝试解码为字符串（双重序列化的特征）
-	var strVal string
-	if err := json.Unmarshal(raw, &strVal); err == nil && len(strVal) > 0 {
-		// 成功解码为字符串，检查内容是否为有效 JSON 对象/数组
-		inner := bytes.TrimSpace([]byte(strVal))
-		if len(inner) > 0 && (inner[0] == '{' || inner[0] == '[') && json.Valid(inner) {
-			return json.RawMessage(inner)
-		}
-	}
-	return raw
+	return jsonutil.UnwrapStringifiedRawMessage(raw)
 }

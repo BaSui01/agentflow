@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -592,14 +593,9 @@ func getMetadataString(metadata map[string]any, key string) string {
 	return str
 }
 
-// sortResultsByFinalScore 按最终分数排序
+// sortResultsByFinalScore 按最终分数降序排序。
 func sortResultsByFinalScore(results []RetrievalResult) {
-	n := len(results)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if results[j].FinalScore < results[j+1].FinalScore {
-				results[j], results[j+1] = results[j+1], results[j]
-			}
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].FinalScore > results[j].FinalScore
+	})
 }

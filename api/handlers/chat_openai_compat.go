@@ -25,6 +25,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
+	"go.uber.org/zap"
 )
 
 type openAICompatChatCompletionsRequest struct {
@@ -329,7 +330,9 @@ func (h *ChatHandler) HandleOpenAICompatChatCompletions(w http.ResponseWriter, r
 		return
 	}
 	out := toOpenAICompatChatResponse(h.converter.ToAPIResponseFromUsecase(result.Response))
-	writeOpenAICompatJSON(w, http.StatusOK, out)
+	if err := writeOpenAICompatJSON(w, http.StatusOK, out); err != nil {
+		h.logger.Debug("OpenAI compatible response write failed", zap.Error(err))
+	}
 }
 
 func (h *ChatHandler) HandleOpenAICompatResponses(w http.ResponseWriter, r *http.Request) {
@@ -371,7 +374,9 @@ func (h *ChatHandler) HandleOpenAICompatResponses(w http.ResponseWriter, r *http
 		return
 	}
 	out := toOpenAICompatResponsesResponse(h.converter.ToAPIResponseFromUsecase(result.Response))
-	writeOpenAICompatJSON(w, http.StatusOK, out)
+	if err := writeOpenAICompatJSON(w, http.StatusOK, out); err != nil {
+		h.logger.Debug("OpenAI compatible response write failed", zap.Error(err))
+	}
 }
 
 func decodeOpenAICompatJSON(w http.ResponseWriter, r *http.Request, out any) *types.Error {
@@ -396,31 +401,19 @@ func decodeOpenAICompatJSON(w http.ResponseWriter, r *http.Request, out any) *ty
 	return nil
 }
 
-func writeOpenAICompatJSON(w http.ResponseWriter, status int, payload any) {
+func writeOpenAICompatJSON(w http.ResponseWriter, status int, payload any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	return json.NewEncoder(w).Encode(payload)
 }
 
 func writeOpenAICompatError(w http.ResponseWriter, err *types.Error) {
-	if err == nil {
-		err = types.NewInternalError("internal error")
+	status, payload := openAICompatErrorEnvelopeFromTypes(err)
+	if writeErr := writeOpenAICompatJSON(w, status, payload); writeErr != nil {
+		// Response writing can fail after the status has been sent; callers cannot
+		// recover here, but keeping the error visible prevents silent encoder loss.
+		return
 	}
-	status := err.HTTPStatus
-	if status == 0 {
-		status = mapErrorCodeToHTTPStatus(err.Code)
-	}
-	if status == 0 {
-		status = http.StatusInternalServerError
-	}
-	payload := openAICompatErrorEnvelope{
-		Error: openAICompatError{
-			Message: err.Message,
-			Type:    openAICompatErrorType(err),
-			Code:    string(err.Code),
-		},
-	}
-	writeOpenAICompatJSON(w, status, payload)
 }
 
 // openAICompatErrorType 把内部 types.ErrorCode 显式映射到 OpenAI 规范的 error.type。

@@ -1,14 +1,12 @@
 package middleware
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,20 +20,6 @@ import (
 
 	"github.com/BaSui01/agentflow/types"
 )
-
-type flushTrackingWriter struct {
-	*httptest.ResponseRecorder
-	flushed bool
-}
-
-func (w *flushTrackingWriter) Flush() {
-	w.flushed = true
-	w.ResponseRecorder.Flush()
-}
-
-func (w *flushTrackingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return nil, nil, nil
-}
 
 func encodeRSAPublicKeyPEM(pub *rsa.PublicKey) ([]byte, error) {
 	der, err := x509.MarshalPKIXPublicKey(pub)
@@ -110,58 +94,6 @@ func TestRequestLogger(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest("GET", "/test", nil))
 	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-// --- responseWriter ---
-
-func TestResponseWriter_WriteHeader(t *testing.T) {
-	rec := httptest.NewRecorder()
-	rw := &responseWriter{ResponseWriter: rec, statusCode: http.StatusOK}
-	rw.WriteHeader(http.StatusNotFound)
-	assert.Equal(t, http.StatusNotFound, rw.statusCode)
-	assert.Equal(t, http.StatusNotFound, rec.Code)
-}
-
-func TestResponseWriter_Flush(t *testing.T) {
-	rec := &flushTrackingWriter{ResponseRecorder: httptest.NewRecorder()}
-	rw := &responseWriter{ResponseWriter: rec, statusCode: http.StatusOK}
-	rw.Flush()
-	assert.True(t, rec.flushed)
-}
-
-// --- metricsResponseWriter ---
-
-func TestMetricsResponseWriter_WriteHeader_OnlyOnce(t *testing.T) {
-	rec := httptest.NewRecorder()
-	mrw := &metricsResponseWriter{ResponseWriter: rec, statusCode: http.StatusOK}
-	mrw.WriteHeader(http.StatusCreated)
-	mrw.WriteHeader(http.StatusNotFound) // should be ignored
-	assert.Equal(t, http.StatusCreated, mrw.statusCode)
-	assert.True(t, mrw.wroteHeader)
-}
-
-func TestMetricsResponseWriter_Write(t *testing.T) {
-	rec := httptest.NewRecorder()
-	mrw := &metricsResponseWriter{ResponseWriter: rec, statusCode: http.StatusOK}
-	n, err := mrw.Write([]byte("hello"))
-	require.NoError(t, err)
-	assert.Equal(t, 5, n)
-	assert.Equal(t, int64(5), mrw.bytesWritten)
-	assert.True(t, mrw.wroteHeader) // auto-set on first Write
-}
-
-func TestMetricsResponseWriter_Flush(t *testing.T) {
-	rec := httptest.NewRecorder()
-	mrw := &metricsResponseWriter{ResponseWriter: rec}
-	// Should not panic even if underlying doesn't implement Flusher
-	mrw.Flush()
-}
-
-func TestTracingResponseWriter_Flush(t *testing.T) {
-	rec := &flushTrackingWriter{ResponseRecorder: httptest.NewRecorder()}
-	rw := newTracingResponseWriter(rec)
-	rw.Flush()
-	assert.True(t, rec.flushed)
 }
 
 // --- normalizePath ---

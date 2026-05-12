@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	tooldiscovery "github.com/BaSui01/agentflow/agent/capabilities/tools/discovery"
+	toolremote "github.com/BaSui01/agentflow/agent/capabilities/tools/remote"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
@@ -346,10 +348,10 @@ func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Requ
 	// 从查询参数解析过滤器
 	filter := &DiscoveryFilter{}
 	if caps := r.URL.Query().Get("capabilities"); caps != "" {
-		filter.Capabilities = splitAndTrim(caps, ",")
+		filter.Capabilities = toolremote.SplitAndTrimCSV(caps)
 	}
 	if tags := r.URL.Query().Get("tags"); tags != "" {
-		filter.Tags = splitAndTrim(tags, ",")
+		filter.Tags = toolremote.SplitAndTrimCSV(tags)
 	}
 
 	agents, err := p.Discover(ctx, filter)
@@ -613,73 +615,7 @@ func (p *DiscoveryProtocol) matchesFilter(agent *AgentInfo, filter *DiscoveryFil
 	if filter == nil {
 		return true
 	}
-
-	// 检查本地过滤器
-	if filter.Local != nil {
-		if *filter.Local && !agent.IsLocal {
-			return false
-		}
-	}
-
-	// 检查远程过滤器
-	if filter.Remote != nil {
-		if *filter.Remote && agent.IsLocal {
-			return false
-		}
-	}
-
-	// 检查状态过滤器
-	if len(filter.Status) > 0 {
-		matched := false
-		for _, status := range filter.Status {
-			if agent.Status == status {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	// 检查能力过滤器
-	if len(filter.Capabilities) > 0 {
-		for _, reqCap := range filter.Capabilities {
-			found := false
-			for _, agentCap := range agent.Capabilities {
-				if agentCap.Capability.Name == reqCap {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		}
-	}
-
-	// 检查标签过滤器
-	if len(filter.Tags) > 0 {
-		for _, reqTag := range filter.Tags {
-			found := false
-			for _, agentCap := range agent.Capabilities {
-				for _, tag := range agentCap.Tags {
-					if tag == reqTag {
-						found = true
-						break
-					}
-				}
-				if found {
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		}
-	}
-
-	return true
+	return tooldiscovery.MatchesAgentFilter(discoveryFilterAgent(agent), discoveryAgentFilter(filter))
 }
 
 // 通知所有登记在册的经办人 通知代理人
@@ -698,32 +634,12 @@ func (p *DiscoveryProtocol) notifyHandlers(info *AgentInfo) {
 
 // 和Trim从每个部分分割出一个字符串并修剪白空间。
 func splitAndTrim(s, sep string) []string {
-	parts := make([]string, 0)
-	for _, part := range bytes.Split([]byte(s), []byte(sep)) {
-		trimmed := bytes.TrimSpace(part)
-		if len(trimmed) > 0 {
-			parts = append(parts, string(trimmed))
-		}
-	}
-	return parts
+	return toolremote.SplitAndTrim(s, sep)
 }
 
 // DiscoverRemote从远程发现服务器中发现了特工.
 func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string, filter *DiscoveryFilter) ([]*AgentInfo, error) {
-	// 以查询参数构建 URL
-	url := serverURL + "/discovery/agents"
-	if filter != nil {
-		params := make([]string, 0)
-		if len(filter.Capabilities) > 0 {
-			params = append(params, "capabilities="+joinStrings(filter.Capabilities, ","))
-		}
-		if len(filter.Tags) > 0 {
-			params = append(params, "tags="+joinStrings(filter.Tags, ","))
-		}
-		if len(params) > 0 {
-			url += "?" + joinStrings(params, "&")
-		}
-	}
+	url := toolremote.DiscoveryAgentsURL(serverURL, remoteDiscoveryQueryFilter(filter))
 
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -754,7 +670,7 @@ func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string
 
 // 宣告向远程发现服务器发布代理消息.
 func (p *DiscoveryProtocol) AnnounceRemote(ctx context.Context, serverURL string, info *AgentInfo) error {
-	url := serverURL + "/discovery/announce"
+	url := toolremote.DiscoveryAnnounceURL(serverURL)
 
 	// 序列化代理信息
 	body, err := json.Marshal(info)
@@ -786,14 +702,17 @@ func (p *DiscoveryProtocol) AnnounceRemote(ctx context.Context, serverURL string
 
 // 加入 Strings 用分隔符加入字符串 。
 func joinStrings(strs []string, sep string) string {
-	if len(strs) == 0 {
-		return ""
+	return toolremote.JoinStrings(strs, sep)
+}
+
+func remoteDiscoveryQueryFilter(filter *DiscoveryFilter) toolremote.DiscoveryQueryFilter {
+	if filter == nil {
+		return toolremote.DiscoveryQueryFilter{}
 	}
-	result := strs[0]
-	for i := 1; i < len(strs); i++ {
-		result += sep + strs[i]
+	return toolremote.DiscoveryQueryFilter{
+		Capabilities: filter.Capabilities,
+		Tags:         filter.Tags,
 	}
-	return result
 }
 
 // 确保发现协议执行协议接口。

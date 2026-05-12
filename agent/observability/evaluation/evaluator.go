@@ -3,6 +3,7 @@ package evaluation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -583,6 +584,12 @@ func (e *Evaluator) EvaluateBatch(ctx context.Context, suites []*EvalSuite, agen
 			mu.Lock()
 			if err != nil {
 				errs = append(errs, fmt.Errorf("suite %s: %w", s.ID, err))
+			} else if report != nil {
+				for _, result := range report.Results {
+					if result.Error != "" {
+						errs = append(errs, fmt.Errorf("suite %s task %s: %s", s.ID, result.TaskID, result.Error))
+					}
+				}
 			}
 			reports[idx] = report
 			mu.Unlock()
@@ -592,7 +599,7 @@ func (e *Evaluator) EvaluateBatch(ctx context.Context, suites []*EvalSuite, agen
 	wg.Wait()
 
 	if len(errs) > 0 {
-		return reports, fmt.Errorf("batch evaluation had %d errors", len(errs))
+		return reports, fmt.Errorf("batch evaluation had %d errors: %w", len(errs), errors.Join(errs...))
 	}
 	return reports, nil
 }

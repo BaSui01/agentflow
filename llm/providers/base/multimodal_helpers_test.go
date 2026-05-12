@@ -169,6 +169,52 @@ func TestCreateEmbeddingOpenAICompat_Success(t *testing.T) {
 	require.Len(t, resp.Data, 1)
 }
 
+func TestFineTuningOpenAICompat_Success(t *testing.T) {
+	var seenPaths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPaths = append(seenPaths, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.URL.Path {
+		case "POST /v1/fine_tuning/jobs":
+			json.NewEncoder(w).Encode(llm.FineTuningJob{ID: "ft-job-1"})
+		case "GET /v1/fine_tuning/jobs":
+			json.NewEncoder(w).Encode(struct {
+				Data []llm.FineTuningJob `json:"data"`
+			}{Data: []llm.FineTuningJob{{ID: "ft-job-1"}}})
+		case "GET /v1/fine_tuning/jobs/ft-job-1":
+			json.NewEncoder(w).Encode(llm.FineTuningJob{ID: "ft-job-1"})
+		case "POST /v1/fine_tuning/jobs/ft-job-1/cancel":
+			json.NewEncoder(w).Encode(llm.FineTuningJob{ID: "ft-job-1"})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	params := OpenAICompatParams{Client: server.Client(), BaseURL: server.URL, APIKey: "key", ProviderName: "test", Endpoint: "/v1/fine_tuning/jobs", BuildHeadersFunc: BearerTokenHeaders}
+
+	created, err := CreateFineTuningJobOpenAICompat(context.Background(), params, &llm.FineTuningJobRequest{Model: "m", TrainingFile: "file-1"})
+	require.NoError(t, err)
+	assert.Equal(t, "ft-job-1", created.ID)
+
+	jobs, err := ListFineTuningJobsOpenAICompat(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, jobs, 1)
+
+	got, err := GetFineTuningJobOpenAICompat(context.Background(), params, "ft-job-1")
+	require.NoError(t, err)
+	assert.Equal(t, "ft-job-1", got.ID)
+
+	err = CancelFineTuningJobOpenAICompat(context.Background(), params, "ft-job-1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"/v1/fine_tuning/jobs",
+		"/v1/fine_tuning/jobs",
+		"/v1/fine_tuning/jobs/ft-job-1",
+		"/v1/fine_tuning/jobs/ft-job-1/cancel",
+	}, seenPaths)
+}
+
 func TestNotSupportedError_Details(t *testing.T) {
 	err := NotSupportedError("test-provider", "video generation")
 	assert.Equal(t, llm.ErrInvalidRequest, err.Code)

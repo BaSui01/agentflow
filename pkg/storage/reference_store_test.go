@@ -31,17 +31,29 @@ func TestMemoryReferenceStore_SaveGetDelete(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestMemoryReferenceStore_SaveNilIsNoop(t *testing.T) {
+	store := NewMemoryReferenceStore()
+	require.NoError(t, store.Save(nil))
+	_, ok := store.Get("")
+	assert.False(t, ok)
+}
+
 func TestMemoryReferenceStore_Cleanup(t *testing.T) {
 	store := NewMemoryReferenceStore()
-	oldRef := &ReferenceAsset{ID: "old", CreatedAt: time.Now().Add(-3 * time.Hour)}
-	newRef := &ReferenceAsset{ID: "new", CreatedAt: time.Now()}
+	cutoff := time.Now().Add(-2 * time.Hour)
+	oldRef := &ReferenceAsset{ID: "old", CreatedAt: cutoff.Add(-time.Nanosecond)}
+	equalRef := &ReferenceAsset{ID: "equal", CreatedAt: cutoff}
+	newRef := &ReferenceAsset{ID: "new", CreatedAt: cutoff.Add(time.Nanosecond)}
 	require.NoError(t, store.Save(oldRef))
+	require.NoError(t, store.Save(equalRef))
 	require.NoError(t, store.Save(newRef))
 
-	store.Cleanup(time.Now().Add(-2 * time.Hour))
+	store.Cleanup(cutoff)
 
 	_, okOld := store.Get("old")
+	_, okEqual := store.Get("equal")
 	_, okNew := store.Get("new")
 	assert.False(t, okOld)
+	assert.True(t, okEqual, "Cleanup should only remove entries strictly before cutoff")
 	assert.True(t, okNew)
 }

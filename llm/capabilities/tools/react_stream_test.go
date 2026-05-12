@@ -384,7 +384,7 @@ func TestReActExecutor_ExecuteStream_StreamableToolEventsAreRaceSafe(t *testing.
 	}
 	toolExec := &asyncStreamableToolExecutor{progressCount: 8}
 	executor := NewReActExecutor(provider, toolExec, ReActConfig{
-		MaxIterations:     2,
+		MaxIterations:     3,
 		InactivityTimeout: time.Second,
 	}, logger)
 
@@ -582,7 +582,7 @@ func TestReActExecutor_ExecuteStream_SteeringDoesNotBlockOnSlowProviderClose(t *
 	case errMsg := <-errCh:
 		t.Fatalf("unexpected error event: %s", errMsg)
 	case <-time.After(150 * time.Millisecond):
-		t.Fatal("expected steering to continue the ReAct loop before provider closes the cancelled stream")
+		t.Fatal("expected steering to continue the ReAct loop before provider closes the canceled stream")
 	}
 }
 
@@ -668,7 +668,7 @@ func TestReActExecutor_ExecuteStream_SteeringInterruptsStreamingToolExecution(t 
 	select {
 	case <-toolExec.done:
 	case <-time.After(time.Second):
-		t.Fatal("tool stream was not cancelled")
+		t.Fatal("tool stream was not canceled")
 	}
 }
 

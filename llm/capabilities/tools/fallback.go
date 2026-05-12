@@ -170,8 +170,8 @@ func (e *ResilientExecutor) tryExecute(ctx context.Context, call llmpkg.ToolCall
 	}
 
 	// 检查速率限制
-	if reg, ok := e.registry.(*DefaultRegistry); ok {
-		if err := reg.checkRateLimit(call.Name); err != nil {
+	if reg, ok := e.registry.(RateLimitedRegistry); ok {
+		if err := reg.CheckRateLimit(call.Name); err != nil {
 			result.Error = fmt.Sprintf("rate limit exceeded: %s", err.Error())
 			return result
 		}

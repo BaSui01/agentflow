@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -200,4 +201,13 @@ func TestSaveSkillToDirectory_WithResources(t *testing.T) {
 	loaded, err := LoadSkillFromDirectory(dir)
 	require.NoError(t, err)
 	assert.Equal(t, "res-skill", loaded.ID)
+}
+
+func TestSkillMatchesTaskDelegatesToDiscoveryProfileScorer(t *testing.T) {
+	source, err := os.ReadFile("skill.go")
+	require.NoError(t, err)
+	body := string(source)
+
+	assert.Contains(t, body, "tooldiscovery.ScoreSkillProfileMatch")
+	assert.NotContains(t, body, "descWords :=")
 }

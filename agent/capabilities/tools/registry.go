@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	toolregistry "github.com/BaSui01/agentflow/agent/capabilities/tools/registry"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +21,7 @@ type CapabilityRegistry struct {
 	agents map[string]*AgentInfo
 
 	// 能力 按名称索引快速检索的能力。
-	capabilityIndex map[string]map[string]*CapabilityInfo // capability name -> agent ID -> capability
+	capabilityIndex *toolregistry.CapabilityIndex[*CapabilityInfo]
 
 	// 事件 Handlers 存储事件处理器。
 	eventHandlers map[string]DiscoveryEventHandler
@@ -123,7 +124,7 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger, opts ...R
 
 	r := &CapabilityRegistry{
 		agents:          make(map[string]*AgentInfo),
-		capabilityIndex: make(map[string]map[string]*CapabilityInfo),
+		capabilityIndex: toolregistry.NewCapabilityIndex[*CapabilityInfo](),
 		eventHandlers:   make(map[string]DiscoveryEventHandler),
 		config:          config,
 		logger:          logger.With(zap.String("component", "capability_registry")),

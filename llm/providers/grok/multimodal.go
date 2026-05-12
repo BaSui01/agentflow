@@ -137,39 +137,9 @@ func (p *GrokProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 	return result, nil
 }
 
-// GenerateAudio Grok 不支持音频生成.
-func (p *GrokProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "audio generation")
-}
-
-// TranscribeAudio Grok 不支持音频转录.
-func (p *GrokProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "audio transcription")
-}
-
 // CreateEmbedding creates embeddings using xAI Grok.
 // Endpoint: POST /v1/embeddings
 // Models: grok-embedding-beta
 func (p *GrokProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
 	return providerbase.CreateEmbeddingOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/v1/embeddings", BuildHeadersFunc: p.ApplyHeaders}, req)
-}
-
-// CreateFineTuningJob Grok 不支持微调.
-func (p *GrokProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// ListFineTuningJobs Grok 不支持微调.
-func (p *GrokProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// GetFineTuningJob Grok 不支持微调.
-func (p *GrokProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// CancelFineTuningJob Grok 不支持微调.
-func (p *GrokProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	return providerbase.NotSupportedError(p.Name(), "fine-tuning")
 }

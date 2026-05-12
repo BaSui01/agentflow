@@ -272,9 +272,47 @@ func (b *Builder) Build(ctx context.Context) (*Runtime, error) {
 }
 
 func isZeroAgentBuildOptions(o runtime.BuildOptions) bool {
-	// Treat the struct zero value as "not set".
-	// DefaultBuildOptions() sets EnableAll=true etc.
-	return o == (runtime.BuildOptions{})
+	// Treat the struct zero value as "not set". BuildOptions contains callback
+	// fields, so keep this explicit instead of comparing the struct directly.
+	return !o.EnableAll &&
+		!o.EnableReflection &&
+		!o.EnableToolSelection &&
+		!o.EnablePromptEnhancer &&
+		!o.EnableSkills &&
+		!o.EnableMCP &&
+		!o.EnableLSP &&
+		!o.EnableEnhancedMemory &&
+		!o.EnableObservability &&
+		o.SkillsDirectory == "" &&
+		o.SkillsConfig == nil &&
+		o.MCPServerName == "" &&
+		o.MCPServerVersion == "" &&
+		o.LSPServerName == "" &&
+		o.LSPServerVersion == "" &&
+		o.EnhancedMemoryConfig == nil &&
+		o.ObservabilitySystem == nil &&
+		o.MaxReActIterations == 0 &&
+		o.MaxLoopIterations == 0 &&
+		o.MaxConcurrency == 0 &&
+		o.MemoryManager == nil &&
+		o.ToolManager == nil &&
+		o.RetrievalProvider == nil &&
+		o.ToolStateProvider == nil &&
+		o.EventBus == nil &&
+		o.LSPClient == nil &&
+		o.ExecutionOptionsResolver == nil &&
+		o.ChatRequestAdapter == nil &&
+		o.ToolProtocolRuntime == nil &&
+		o.Authorize == nil &&
+		o.ReasoningRuntime == nil &&
+		o.ModelCatalog == nil &&
+		o.PromptStore == nil &&
+		o.ConversationStore == nil &&
+		o.RunStore == nil &&
+		o.CheckpointManager == nil &&
+		o.Orchestrator == nil &&
+		o.ReasoningRegistry == nil &&
+		o.ReasoningExposure == ""
 }
 
 type gatewayBackedProvider interface {

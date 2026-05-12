@@ -143,7 +143,6 @@ func demoFullModuleIntegrationReachability() {
 	var ref_rag_KnowledgeGraph rag.KnowledgeGraph
 	var ref_rag_LLMContextProvider rag.LLMContextProvider
 	var ref_rag_LLMReranker rag.LLMReranker
-	var ref_rag_LLMTokenizerAdapter rag.LLMTokenizerAdapter
 	var ref_rag_MultiHopReasoner rag.MultiHopReasoner
 	var ref_rag_QueryRouter rag.QueryRouter
 	var ref_rag_QueryTransformer rag.QueryTransformer
@@ -423,8 +422,6 @@ func demoFullModuleIntegrationReachability() {
 	_ = ref_rag_KnowledgeGraph.QueryByType
 	_ = ref_rag_LLMContextProvider.GenerateContext
 	_ = ref_rag_LLMReranker.Rerank
-	_ = ref_rag_LLMTokenizerAdapter.CountTokens
-	_ = ref_rag_LLMTokenizerAdapter.Encode
 	_ = ref_rag_loader_ArxivSourceAdapter.Load
 	_ = ref_rag_loader_ArxivSourceAdapter.SupportedTypes
 	_ = ref_rag_loader_CSVLoader.Load
@@ -678,19 +675,16 @@ func demoFullModuleIntegrationReachability() {
 	_ = rag.NewContextualRetrieval
 	_ = rag.NewCrossEncoderReranker
 	_ = rag.NewDocumentChunker
-	_ = rag.NewEstimatorAdapter
 	_ = rag.NewGraphRAG
 	_ = rag.NewHNSWIndex
 	_ = rag.NewLLMContextProvider
 	_ = rag.NewLLMReranker
-	_ = rag.NewLLMTokenizerAdapter
 	_ = rag.NewMultiHopReasoner
 	_ = rag.NewQueryRouter
 	_ = rag.NewQueryTransformer
 	_ = rag.NewSimpleContextProvider
 	_ = rag.NewSimpleGraphEmbedder
 	_ = rag.NewSimpleReranker
-	_ = rag.NewTiktokenAdapter
 	_ = rag.NewWebRetriever
 
 	// runtime-gated real invocations to keep module integrations on the executable chain
@@ -867,19 +861,16 @@ func demoFullModuleIntegrationReachability() {
 		rag.NewContextualRetrieval(nil, nil, rag.ContextualRetrievalConfig{}, nil)
 		rag.NewCrossEncoderReranker(nil, rag.CrossEncoderConfig{}, nil)
 		rag.NewDocumentChunker(rag.ChunkingConfig{}, nil, nil)
-		rag.NewEstimatorAdapter("", 0, nil)
 		rag.NewGraphRAG(nil, nil, nil, rag.GraphRAGConfig{}, nil)
 		rag.NewHNSWIndex(rag.HNSWConfig{}, nil)
 		rag.NewLLMContextProvider(nil, nil)
 		rag.NewLLMReranker(nil, rag.LLMRerankerConfig{}, nil)
-		rag.NewLLMTokenizerAdapter(nil, nil)
 		rag.NewMultiHopReasoner(rag.MultiHopConfig{}, nil, nil, nil, nil, nil)
 		rag.NewQueryRouter(rag.QueryRouterConfig{}, nil, nil, nil)
 		rag.NewQueryTransformer(rag.QueryTransformConfig{}, nil, nil)
 		rag.NewSimpleContextProvider(nil)
 		rag.NewSimpleGraphEmbedder(rag.SimpleGraphEmbedderConfig{}, nil)
 		rag.NewSimpleReranker(nil)
-		rag.NewTiktokenAdapter("", nil)
 		rag.NewWebRetriever(rag.WebRetrieverConfig{}, nil, nil, nil)
 		rag_core.BuildSharedEvalMetrics(rag_core.EvalMetrics{})
 		rag_core.BuildSharedRetrievalRecords(nil, af_types.RetrievalTrace{})

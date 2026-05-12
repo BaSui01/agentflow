@@ -5,25 +5,17 @@ import (
 	"fmt"
 	"time"
 
+	toolregistry "github.com/BaSui01/agentflow/agent/capabilities/tools/registry"
 	"go.uber.org/zap"
 )
 
 func (r *CapabilityRegistry) indexCapability(cap *CapabilityInfo) {
-	capName := cap.Capability.Name
-	if r.capabilityIndex[capName] == nil {
-		r.capabilityIndex[capName] = make(map[string]*CapabilityInfo)
-	}
-	r.capabilityIndex[capName][cap.AgentID] = cap
+	r.capabilityIndex.Add(cap.Capability.Name, cap.AgentID, cap)
 }
 
 // 从Index中去掉Capability,从索引中去掉一个能力.
 func (r *CapabilityRegistry) removeCapabilityFromIndex(capabilityName, agentID string) {
-	if agentCaps, exists := r.capabilityIndex[capabilityName]; exists {
-		delete(agentCaps, agentID)
-		if len(agentCaps) == 0 {
-			delete(r.capabilityIndex, capabilityName)
-		}
-	}
+	r.capabilityIndex.Remove(capabilityName, agentID)
 }
 
 // Event向所有订阅者发布发现事件。
@@ -92,10 +84,7 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 }
 
 func recoveredPanicToError(v any) error {
-	if err, ok := v.(error); ok {
-		return err
-	}
-	return fmt.Errorf("panic: %v", v)
+	return toolregistry.RecoveredPanicToError(v)
 }
 
 // 复制 AgentInfo 创建 AgentInfo 的深层副本.
@@ -141,8 +130,8 @@ func (r *CapabilityRegistry) GetAgentsByCapability(ctx context.Context, capabili
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	agentCaps, exists := r.capabilityIndex[capabilityName]
-	if !exists {
+	agentCaps := r.capabilityIndex.Capabilities(capabilityName)
+	if len(agentCaps) == 0 {
 		return []*AgentInfo{}, nil
 	}
 

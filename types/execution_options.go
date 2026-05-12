@@ -1,6 +1,9 @@
 package types
 
+//go:generate python ../scripts/generate_execution_options_clone.py
+
 import (
+	"reflect"
 	"strings"
 	"time"
 )
@@ -113,34 +116,34 @@ type ModelOptions struct {
 
 // AgentControlOptions contains runtime loop, validation, and context controls.
 type AgentControlOptions struct {
-	SystemPrompt       string                `json:"system_prompt,omitempty"`
-	Timeout            time.Duration         `json:"timeout,omitempty"`
-	MaxReActIterations int                   `json:"max_react_iterations,omitempty"`
-	MaxLoopIterations  int                   `json:"max_loop_iterations,omitempty"`
-	MaxConcurrency     int                   `json:"max_concurrency,omitempty"`
-	ApprovalPolicy     string                `json:"approval_policy,omitempty"`
-	SandboxMode        string                `json:"sandbox_mode,omitempty"`
-	DisablePlanner     bool                  `json:"disable_planner,omitempty"`
-	Context            *ContextConfig        `json:"context,omitempty"`
-	Reflection         *ReflectionConfig     `json:"reflection,omitempty"`
-	Guardrails         *GuardrailsConfig     `json:"guardrails,omitempty"`
-	Memory             *MemoryConfig         `json:"memory,omitempty"`
+	SystemPrompt          string                       `json:"system_prompt,omitempty"`
+	Timeout               time.Duration                `json:"timeout,omitempty"`
+	MaxReActIterations    int                          `json:"max_react_iterations,omitempty"`
+	MaxLoopIterations     int                          `json:"max_loop_iterations,omitempty"`
+	MaxConcurrency        int                          `json:"max_concurrency,omitempty"`
+	ApprovalPolicy        string                       `json:"approval_policy,omitempty"`
+	SandboxMode           string                       `json:"sandbox_mode,omitempty"`
+	DisablePlanner        bool                         `json:"disable_planner,omitempty"`
+	Context               *ContextConfig               `json:"context,omitempty"`
+	Reflection            *ReflectionConfig            `json:"reflection,omitempty"`
+	Guardrails            *GuardrailsConfig            `json:"guardrails,omitempty"`
+	Memory                *MemoryConfig                `json:"memory,omitempty"`
 	MemoryExternalContext *MemoryExternalContextPolicy `json:"memory_external_context,omitempty"`
-	ToolSelection      *ToolSelectionConfig  `json:"tool_selection,omitempty"`
-	PromptEnhancer     *PromptEnhancerConfig `json:"prompt_enhancer,omitempty"`
+	ToolSelection         *ToolSelectionConfig         `json:"tool_selection,omitempty"`
+	PromptEnhancer        *PromptEnhancerConfig        `json:"prompt_enhancer,omitempty"`
 }
 
 // ToolProtocolOptions contains tool exposure and invocation controls.
 type ToolProtocolOptions struct {
-	AllowedTools      []string     `json:"allowed_tools,omitempty"`
-	ToolWhitelist     []string     `json:"tool_whitelist,omitempty"`
-	DisableTools      bool         `json:"disable_tools,omitempty"`
-	Handoffs          []string     `json:"handoffs,omitempty"`
+	AllowedTools      []string                 `json:"allowed_tools,omitempty"`
+	ToolWhitelist     []string                 `json:"tool_whitelist,omitempty"`
+	DisableTools      bool                     `json:"disable_tools,omitempty"`
+	Handoffs          []string                 `json:"handoffs,omitempty"`
 	Subagents         *SubagentExecutionPolicy `json:"subagents,omitempty"`
-	ToolModel         string       `json:"tool_model,omitempty"`
-	ToolChoice        *ToolChoice  `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool        `json:"parallel_tool_calls,omitempty"`
-	ToolCallMode      ToolCallMode `json:"tool_call_mode,omitempty"`
+	ToolModel         string                   `json:"tool_model,omitempty"`
+	ToolChoice        *ToolChoice              `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool                    `json:"parallel_tool_calls,omitempty"`
+	ToolCallMode      ToolCallMode             `json:"tool_call_mode,omitempty"`
 }
 
 func (o ToolProtocolOptions) SubagentsMaxDepth() int {
@@ -201,18 +204,18 @@ func (c AgentConfig) ExecutionOptions() ExecutionOptions {
 			Stop:        cloneExecutionStrings(c.LLM.Stop),
 		},
 		Control: AgentControlOptions{
-			SystemPrompt:       c.Runtime.SystemPrompt,
-			MaxReActIterations: c.Runtime.MaxReActIterations,
-			MaxLoopIterations:  c.Runtime.MaxLoopIterations,
-			ApprovalPolicy:     strings.TrimSpace(c.Runtime.ApprovalPolicy),
-			SandboxMode:        strings.TrimSpace(c.Runtime.SandboxMode),
-			Context:            cloneContextConfig(c.Context),
-			Reflection:         cloneReflectionConfig(c.Features.Reflection),
-			Guardrails:         cloneGuardrailsConfig(c.Features.Guardrails),
-			Memory:             cloneMemoryConfig(c.Features.Memory),
+			SystemPrompt:          c.Runtime.SystemPrompt,
+			MaxReActIterations:    c.Runtime.MaxReActIterations,
+			MaxLoopIterations:     c.Runtime.MaxLoopIterations,
+			ApprovalPolicy:        strings.TrimSpace(c.Runtime.ApprovalPolicy),
+			SandboxMode:           strings.TrimSpace(c.Runtime.SandboxMode),
+			Context:               cloneContextConfig(c.Context),
+			Reflection:            cloneReflectionConfig(c.Features.Reflection),
+			Guardrails:            cloneGuardrailsConfig(c.Features.Guardrails),
+			Memory:                cloneMemoryConfig(c.Features.Memory),
 			MemoryExternalContext: memoryConfigToExternalContextPolicy(c.Features.Memory),
-			ToolSelection:      cloneToolSelectionConfig(c.Features.ToolSelection),
-			PromptEnhancer:     clonePromptEnhancerConfig(c.Features.PromptEnhancer),
+			ToolSelection:         cloneToolSelectionConfig(c.Features.ToolSelection),
+			PromptEnhancer:        clonePromptEnhancerConfig(c.Features.PromptEnhancer),
 		},
 		Tools: ToolProtocolOptions{
 			AllowedTools: cloneExecutionStrings(c.Runtime.Tools),
@@ -253,34 +256,34 @@ func (o ModelOptions) clone() ModelOptions {
 		Model:                o.Model,
 		RoutePolicy:          o.RoutePolicy,
 		MaxTokens:            o.MaxTokens,
-		MaxCompletionTokens:  cloneExecutionIntPtr(o.MaxCompletionTokens),
+		MaxCompletionTokens:  cloneExecutionScalarPtr(o.MaxCompletionTokens),
 		Temperature:          o.Temperature,
 		TopP:                 o.TopP,
 		Stop:                 cloneExecutionStrings(o.Stop),
-		FrequencyPenalty:     cloneExecutionFloat32Ptr(o.FrequencyPenalty),
-		PresencePenalty:      cloneExecutionFloat32Ptr(o.PresencePenalty),
-		RepetitionPenalty:    cloneExecutionFloat32Ptr(o.RepetitionPenalty),
-		N:                    cloneExecutionIntPtr(o.N),
-		LogProbs:             cloneExecutionBoolPtr(o.LogProbs),
-		TopLogProbs:          cloneExecutionIntPtr(o.TopLogProbs),
+		FrequencyPenalty:     cloneExecutionScalarPtr(o.FrequencyPenalty),
+		PresencePenalty:      cloneExecutionScalarPtr(o.PresencePenalty),
+		RepetitionPenalty:    cloneExecutionScalarPtr(o.RepetitionPenalty),
+		N:                    cloneExecutionScalarPtr(o.N),
+		LogProbs:             cloneExecutionScalarPtr(o.LogProbs),
+		TopLogProbs:          cloneExecutionScalarPtr(o.TopLogProbs),
 		User:                 o.User,
 		ResponseFormat:       cloneResponseFormat(o.ResponseFormat),
 		StreamOptions:        cloneStreamOptions(o.StreamOptions),
-		ServiceTier:          cloneExecutionStringPtr(o.ServiceTier),
+		ServiceTier:          cloneExecutionScalarPtr(o.ServiceTier),
 		ReasoningEffort:      o.ReasoningEffort,
 		ReasoningSummary:     o.ReasoningSummary,
 		ReasoningDisplay:     o.ReasoningDisplay,
 		ReasoningMode:        o.ReasoningMode,
 		ThinkingType:         o.ThinkingType,
 		ThinkingLevel:        o.ThinkingLevel,
-		ThinkingBudget:       cloneExecutionInt32Ptr(o.ThinkingBudget),
-		IncludeThoughts:      cloneExecutionBoolPtr(o.IncludeThoughts),
+		ThinkingBudget:       cloneExecutionScalarPtr(o.ThinkingBudget),
+		IncludeThoughts:      cloneExecutionScalarPtr(o.IncludeThoughts),
 		MediaResolution:      o.MediaResolution,
 		SafetySettings:       cloneSafetySettings(o.SafetySettings),
 		OutputSpeech:         cloneOutputSpeechOptions(o.OutputSpeech),
 		OutputImage:          cloneOutputImageOptions(o.OutputImage),
 		InferenceSpeed:       o.InferenceSpeed,
-		Store:                cloneExecutionBoolPtr(o.Store),
+		Store:                cloneExecutionScalarPtr(o.Store),
 		Modalities:           cloneExecutionStrings(o.Modalities),
 		PromptCacheKey:       o.PromptCacheKey,
 		PromptCacheRetention: o.PromptCacheRetention,
@@ -299,21 +302,21 @@ func (o ModelOptions) clone() ModelOptions {
 
 func (o AgentControlOptions) clone() AgentControlOptions {
 	return AgentControlOptions{
-		SystemPrompt:       o.SystemPrompt,
-		Timeout:            o.Timeout,
-		MaxReActIterations: o.MaxReActIterations,
-		MaxLoopIterations:  o.MaxLoopIterations,
-		MaxConcurrency:     o.MaxConcurrency,
-		ApprovalPolicy:     o.ApprovalPolicy,
-		SandboxMode:        o.SandboxMode,
-		DisablePlanner:     o.DisablePlanner,
-		Context:            cloneContextConfig(o.Context),
-		Reflection:         cloneReflectionConfig(o.Reflection),
-		Guardrails:         cloneGuardrailsConfig(o.Guardrails),
-		Memory:             cloneMemoryConfig(o.Memory),
+		SystemPrompt:          o.SystemPrompt,
+		Timeout:               o.Timeout,
+		MaxReActIterations:    o.MaxReActIterations,
+		MaxLoopIterations:     o.MaxLoopIterations,
+		MaxConcurrency:        o.MaxConcurrency,
+		ApprovalPolicy:        o.ApprovalPolicy,
+		SandboxMode:           o.SandboxMode,
+		DisablePlanner:        o.DisablePlanner,
+		Context:               cloneContextConfig(o.Context),
+		Reflection:            cloneReflectionConfig(o.Reflection),
+		Guardrails:            cloneGuardrailsConfig(o.Guardrails),
+		Memory:                cloneMemoryConfig(o.Memory),
 		MemoryExternalContext: cloneMemoryExternalContextPolicy(o.MemoryExternalContext),
-		ToolSelection:      cloneToolSelectionConfig(o.ToolSelection),
-		PromptEnhancer:     clonePromptEnhancerConfig(o.PromptEnhancer),
+		ToolSelection:         cloneToolSelectionConfig(o.ToolSelection),
+		PromptEnhancer:        clonePromptEnhancerConfig(o.PromptEnhancer),
 	}
 }
 
@@ -326,81 +329,56 @@ func (o ToolProtocolOptions) clone() ToolProtocolOptions {
 		Subagents:         cloneSubagentExecutionPolicy(o.Subagents),
 		ToolModel:         o.ToolModel,
 		ToolChoice:        cloneToolChoice(o.ToolChoice),
-		ParallelToolCalls: cloneExecutionBoolPtr(o.ParallelToolCalls),
+		ParallelToolCalls: cloneExecutionScalarPtr(o.ParallelToolCalls),
 		ToolCallMode:      o.ToolCallMode,
 	}
 }
 
 func (c AgentConfig) hasFormalMainFace() bool {
-	return strings.TrimSpace(c.Model.Model) != "" ||
-		strings.TrimSpace(c.Model.Provider) != "" ||
-		strings.TrimSpace(c.Model.RoutePolicy) != "" ||
-		c.Model.MaxTokens != 0 ||
-		c.Model.MaxCompletionTokens != nil ||
-		c.Model.Temperature != 0 ||
-		c.Model.TopP != 0 ||
-		len(c.Model.Stop) > 0 ||
-		c.Model.FrequencyPenalty != nil ||
-		c.Model.PresencePenalty != nil ||
-		c.Model.RepetitionPenalty != nil ||
-		c.Model.N != nil ||
-		c.Model.LogProbs != nil ||
-		c.Model.TopLogProbs != nil ||
-		strings.TrimSpace(c.Model.User) != "" ||
-		c.Model.ResponseFormat != nil ||
-		c.Model.StreamOptions != nil ||
-		c.Model.ServiceTier != nil ||
-		strings.TrimSpace(c.Model.ReasoningEffort) != "" ||
-		strings.TrimSpace(c.Model.ReasoningSummary) != "" ||
-		strings.TrimSpace(c.Model.ReasoningDisplay) != "" ||
-		strings.TrimSpace(c.Model.ReasoningMode) != "" ||
-		strings.TrimSpace(c.Model.ThinkingType) != "" ||
-		strings.TrimSpace(c.Model.ThinkingLevel) != "" ||
-		c.Model.ThinkingBudget != nil ||
-		c.Model.IncludeThoughts != nil ||
-		strings.TrimSpace(c.Model.MediaResolution) != "" ||
-		len(c.Model.SafetySettings) > 0 ||
-		c.Model.OutputSpeech != nil ||
-		c.Model.OutputImage != nil ||
-		strings.TrimSpace(c.Model.InferenceSpeed) != "" ||
-		c.Model.Store != nil ||
-		len(c.Model.Modalities) > 0 ||
-		strings.TrimSpace(c.Model.PromptCacheKey) != "" ||
-		strings.TrimSpace(c.Model.PromptCacheRetention) != "" ||
-		c.Model.CacheControl != nil ||
-		strings.TrimSpace(c.Model.CachedContent) != "" ||
-		len(c.Model.Include) > 0 ||
-		strings.TrimSpace(c.Model.Truncation) != "" ||
-		strings.TrimSpace(c.Model.PreviousResponseID) != "" ||
-		strings.TrimSpace(c.Model.ConversationID) != "" ||
-		len(c.Model.ThoughtSignatures) > 0 ||
-		strings.TrimSpace(c.Model.Verbosity) != "" ||
-		strings.TrimSpace(c.Model.Phase) != "" ||
-		c.Model.WebSearchOptions != nil ||
-		strings.TrimSpace(c.Control.SystemPrompt) != "" ||
-		c.Control.Timeout != 0 ||
-		c.Control.MaxReActIterations != 0 ||
-		c.Control.MaxLoopIterations != 0 ||
-		c.Control.MaxConcurrency != 0 ||
-		strings.TrimSpace(c.Control.ApprovalPolicy) != "" ||
-		strings.TrimSpace(c.Control.SandboxMode) != "" ||
-		c.Control.DisablePlanner ||
-		c.Control.Context != nil ||
-		c.Control.Reflection != nil ||
-		c.Control.Guardrails != nil ||
-		c.Control.Memory != nil ||
-		c.Control.MemoryExternalContext != nil ||
-		c.Control.ToolSelection != nil ||
-		c.Control.PromptEnhancer != nil ||
-		len(c.Tools.AllowedTools) > 0 ||
-		len(c.Tools.ToolWhitelist) > 0 ||
-		c.Tools.DisableTools ||
-		len(c.Tools.Handoffs) > 0 ||
-		c.Tools.Subagents != nil ||
-		strings.TrimSpace(c.Tools.ToolModel) != "" ||
-		c.Tools.ToolChoice != nil ||
-		c.Tools.ParallelToolCalls != nil ||
-		c.Tools.ToolCallMode != ""
+	return formalSurfaceHasValues(c.Model) ||
+		formalSurfaceHasValues(c.Control) ||
+		formalSurfaceHasValues(c.Tools)
+}
+
+func formalSurfaceHasValues(surface any) bool {
+	return formalValueHasValue(reflect.ValueOf(surface))
+}
+
+func formalValueHasValue(value reflect.Value) bool {
+	if !value.IsValid() {
+		return false
+	}
+	for value.Kind() == reflect.Interface {
+		if value.IsNil() {
+			return false
+		}
+		value = value.Elem()
+	}
+	switch value.Kind() {
+	case reflect.Pointer:
+		return !value.IsNil()
+	case reflect.String:
+		return strings.TrimSpace(value.String()) != ""
+	case reflect.Slice, reflect.Map:
+		return value.Len() > 0
+	case reflect.Bool:
+		return value.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return value.Int() != 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return value.Uint() != 0
+	case reflect.Float32, reflect.Float64:
+		return value.Float() != 0
+	case reflect.Struct:
+		for i := 0; i < value.NumField(); i++ {
+			if formalValueHasValue(value.Field(i)) {
+				return true
+			}
+		}
+		return false
+	default:
+		return !value.IsZero()
+	}
 }
 
 func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
@@ -418,7 +396,7 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 		out.MaxTokens = override.MaxTokens
 	}
 	if override.MaxCompletionTokens != nil {
-		out.MaxCompletionTokens = cloneExecutionIntPtr(override.MaxCompletionTokens)
+		out.MaxCompletionTokens = cloneExecutionScalarPtr(override.MaxCompletionTokens)
 	}
 	if override.Temperature != 0 {
 		out.Temperature = override.Temperature
@@ -430,22 +408,22 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 		out.Stop = cloneExecutionStrings(override.Stop)
 	}
 	if override.FrequencyPenalty != nil {
-		out.FrequencyPenalty = cloneExecutionFloat32Ptr(override.FrequencyPenalty)
+		out.FrequencyPenalty = cloneExecutionScalarPtr(override.FrequencyPenalty)
 	}
 	if override.PresencePenalty != nil {
-		out.PresencePenalty = cloneExecutionFloat32Ptr(override.PresencePenalty)
+		out.PresencePenalty = cloneExecutionScalarPtr(override.PresencePenalty)
 	}
 	if override.RepetitionPenalty != nil {
-		out.RepetitionPenalty = cloneExecutionFloat32Ptr(override.RepetitionPenalty)
+		out.RepetitionPenalty = cloneExecutionScalarPtr(override.RepetitionPenalty)
 	}
 	if override.N != nil {
-		out.N = cloneExecutionIntPtr(override.N)
+		out.N = cloneExecutionScalarPtr(override.N)
 	}
 	if override.LogProbs != nil {
-		out.LogProbs = cloneExecutionBoolPtr(override.LogProbs)
+		out.LogProbs = cloneExecutionScalarPtr(override.LogProbs)
 	}
 	if override.TopLogProbs != nil {
-		out.TopLogProbs = cloneExecutionIntPtr(override.TopLogProbs)
+		out.TopLogProbs = cloneExecutionScalarPtr(override.TopLogProbs)
 	}
 	if strings.TrimSpace(override.User) != "" {
 		out.User = strings.TrimSpace(override.User)
@@ -457,7 +435,7 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 		out.StreamOptions = cloneStreamOptions(override.StreamOptions)
 	}
 	if override.ServiceTier != nil {
-		out.ServiceTier = cloneExecutionStringPtr(override.ServiceTier)
+		out.ServiceTier = cloneExecutionScalarPtr(override.ServiceTier)
 	}
 	if strings.TrimSpace(override.ReasoningEffort) != "" {
 		out.ReasoningEffort = strings.TrimSpace(override.ReasoningEffort)
@@ -478,10 +456,10 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 		out.ThinkingLevel = strings.TrimSpace(override.ThinkingLevel)
 	}
 	if override.ThinkingBudget != nil {
-		out.ThinkingBudget = cloneExecutionInt32Ptr(override.ThinkingBudget)
+		out.ThinkingBudget = cloneExecutionScalarPtr(override.ThinkingBudget)
 	}
 	if override.IncludeThoughts != nil {
-		out.IncludeThoughts = cloneExecutionBoolPtr(override.IncludeThoughts)
+		out.IncludeThoughts = cloneExecutionScalarPtr(override.IncludeThoughts)
 	}
 	if strings.TrimSpace(override.MediaResolution) != "" {
 		out.MediaResolution = strings.TrimSpace(override.MediaResolution)
@@ -499,7 +477,7 @@ func mergeModelOptions(base ModelOptions, override ModelOptions) ModelOptions {
 		out.InferenceSpeed = strings.TrimSpace(override.InferenceSpeed)
 	}
 	if override.Store != nil {
-		out.Store = cloneExecutionBoolPtr(override.Store)
+		out.Store = cloneExecutionScalarPtr(override.Store)
 	}
 	if len(override.Modalities) > 0 {
 		out.Modalities = cloneExecutionStrings(override.Modalities)
@@ -618,191 +596,12 @@ func mergeToolProtocolOptions(base ToolProtocolOptions, override ToolProtocolOpt
 		out.ToolChoice = cloneToolChoice(override.ToolChoice)
 	}
 	if override.ParallelToolCalls != nil {
-		out.ParallelToolCalls = cloneExecutionBoolPtr(override.ParallelToolCalls)
+		out.ParallelToolCalls = cloneExecutionScalarPtr(override.ParallelToolCalls)
 	}
 	if override.ToolCallMode != "" {
 		out.ToolCallMode = override.ToolCallMode
 	}
 	return out
-}
-
-func cloneExecutionStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	return append([]string(nil), values...)
-}
-
-func cloneExecutionMetadata(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string]string, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
-	return cloned
-}
-
-func cloneExecutionIntPtr(value *int) *int {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	return &out
-}
-
-func cloneExecutionFloat32Ptr(value *float32) *float32 {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	return &out
-}
-
-func cloneExecutionInt32Ptr(value *int32) *int32 {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	return &out
-}
-
-func cloneExecutionStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	return &out
-}
-
-func cloneExecutionBoolPtr(value *bool) *bool {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	return &out
-}
-
-func cloneToolChoice(choice *ToolChoice) *ToolChoice {
-	if choice == nil {
-		return nil
-	}
-	cloned := *choice
-	cloned.AllowedTools = cloneExecutionStrings(choice.AllowedTools)
-	cloned.DisableParallelToolUse = cloneExecutionBoolPtr(choice.DisableParallelToolUse)
-	cloned.IncludeServerSideToolInvocations = cloneExecutionBoolPtr(choice.IncludeServerSideToolInvocations)
-	return &cloned
-}
-
-func cloneResponseFormat(value *ResponseFormat) *ResponseFormat {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	if value.JSONSchema != nil {
-		schema := *value.JSONSchema
-		if len(value.JSONSchema.Schema) > 0 {
-			schema.Schema = cloneJSONSchemaMap(value.JSONSchema.Schema)
-		}
-		if value.JSONSchema.Strict != nil {
-			strict := *value.JSONSchema.Strict
-			schema.Strict = &strict
-		}
-		cloned.JSONSchema = &schema
-	}
-	return &cloned
-}
-
-func cloneStreamOptions(value *StreamOptions) *StreamOptions {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneCacheControl(value *CacheControl) *CacheControl {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneJSONSchemaMap(value map[string]any) map[string]any {
-	if len(value) == 0 {
-		return nil
-	}
-	cloned := make(map[string]any, len(value))
-	for key, item := range value {
-		cloned[key] = item
-	}
-	return cloned
-}
-
-func cloneWebSearchOptions(value *WebSearchOptions) *WebSearchOptions {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	cloned.AllowedDomains = cloneExecutionStrings(value.AllowedDomains)
-	cloned.BlockedDomains = cloneExecutionStrings(value.BlockedDomains)
-	if value.UserLocation != nil {
-		location := *value.UserLocation
-		cloned.UserLocation = &location
-	}
-	return &cloned
-}
-
-func cloneContextConfig(value *ContextConfig) *ContextConfig {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneReflectionConfig(value *ReflectionConfig) *ReflectionConfig {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneGuardrailsConfig(value *GuardrailsConfig) *GuardrailsConfig {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	cloned.BlockedKeywords = cloneExecutionStrings(value.BlockedKeywords)
-	return &cloned
-}
-
-func cloneMemoryConfig(value *MemoryConfig) *MemoryConfig {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneMemoryExternalContextPolicy(value *MemoryExternalContextPolicy) *MemoryExternalContextPolicy {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneSubagentExecutionPolicy(value *SubagentExecutionPolicy) *SubagentExecutionPolicy {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	cloned.AllowHandoffs = cloneExecutionBoolPtr(value.AllowHandoffs)
-	return &cloned
 }
 
 func memoryConfigToExternalContextPolicy(value *MemoryConfig) *MemoryExternalContextPolicy {
@@ -863,6 +662,6 @@ func cloneOutputImageOptions(value *OutputImageOptions) *OutputImageOptions {
 		return nil
 	}
 	cloned := *value
-	cloned.CompressionQuality = cloneExecutionInt32Ptr(value.CompressionQuality)
+	cloned.CompressionQuality = cloneExecutionScalarPtr(value.CompressionQuality)
 	return &cloned
 }

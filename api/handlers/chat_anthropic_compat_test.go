@@ -266,6 +266,16 @@ func TestChatHandler_AnthropicCompatMessages_Stream(t *testing.T) {
 	assert.Contains(t, text, "event: message_stop")
 }
 
+func TestWriteAnthropicCompatJSON_ReturnsEncodeError(t *testing.T) {
+	w := &failingOpenAICompatResponseWriter{}
+
+	err := writeAnthropicCompatJSON(w, http.StatusAccepted, map[string]string{"ok": "true"})
+
+	require.Error(t, err)
+	assert.Equal(t, http.StatusAccepted, w.status)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+}
+
 func TestChatHandler_AnthropicCompatMessages_Error(t *testing.T) {
 	handler, err := NewChatHandler(&openAICompatServiceStub{}, zap.NewNop())
 	if err != nil {

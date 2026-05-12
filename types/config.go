@@ -1,6 +1,9 @@
 package types
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ============================================================
 // Agent Configuration Types
@@ -34,6 +37,30 @@ type AgentConfig struct {
 
 	// Metadata for custom data
 	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// UnmarshalJSON accepts both the legacy runtime surface and the formal
+// Model/Control/Tools surface, then normalizes legacy-only payloads into the
+// formal surface at decode time.
+func (c *AgentConfig) UnmarshalJSON(data []byte) error {
+	type agentConfigAlias AgentConfig
+	var decoded agentConfigAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*c = AgentConfig(decoded)
+	c.normalizeFormalRuntimeSurface()
+	return nil
+}
+
+func (c *AgentConfig) normalizeFormalRuntimeSurface() {
+	if c.hasFormalMainFace() {
+		return
+	}
+	options := c.ExecutionOptions()
+	c.Model = options.Model
+	c.Control = options.Control
+	c.Tools = options.Tools
 }
 
 // CoreConfig contains essential agent identity and behavior settings.
@@ -224,15 +251,15 @@ func (c *GuardrailsConfig) IsEnabled() bool { return c != nil && c.Enabled }
 
 // MemoryConfig configures the memory system.
 type MemoryConfig struct {
-	Enabled          bool          `json:"enabled"`
-	ShortTermTTL     time.Duration `json:"short_term_ttl,omitempty"`
-	MaxShortTermSize int           `json:"max_short_term_size,omitempty"`
-	EnableLongTerm   bool          `json:"enable_long_term,omitempty"`
-	EnableEpisodic   bool          `json:"enable_episodic,omitempty"`
-	DecayEnabled     bool          `json:"decay_enabled,omitempty"`
-	DisableOnExternalContext bool `json:"disable_on_external_context,omitempty"`
-	DisableRecallOnExternalContext bool `json:"disable_recall_on_external_context,omitempty"`
-	DisableWriteOnExternalContext bool `json:"disable_write_on_external_context,omitempty"`
+	Enabled                        bool          `json:"enabled"`
+	ShortTermTTL                   time.Duration `json:"short_term_ttl,omitempty"`
+	MaxShortTermSize               int           `json:"max_short_term_size,omitempty"`
+	EnableLongTerm                 bool          `json:"enable_long_term,omitempty"`
+	EnableEpisodic                 bool          `json:"enable_episodic,omitempty"`
+	DecayEnabled                   bool          `json:"decay_enabled,omitempty"`
+	DisableOnExternalContext       bool          `json:"disable_on_external_context,omitempty"`
+	DisableRecallOnExternalContext bool          `json:"disable_recall_on_external_context,omitempty"`
+	DisableWriteOnExternalContext  bool          `json:"disable_write_on_external_context,omitempty"`
 }
 
 // DefaultMemoryConfig returns sensible defaults.

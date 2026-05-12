@@ -5,15 +5,16 @@ import (
 	"sync"
 )
 
-// Tokenizer是统一的代号计数界面.
+// Tokenizer 是 LLM 层完整 tokenizer 接口。
 //
-// 注意：项目中存在三个 Tokenizer 接口，各自服务不同层次，无法统一：
-//   - types.Tokenizer          — 框架层，面向 Message/ToolSchema，无 error 返回
-//   - llm/tokenizer.Tokenizer（本接口）— LLM 层，完整编解码 + error 返回 + 模型感知
-//   - rag.Tokenizer            — RAG 分块专用，最小接口（CountTokens + Encode），无 error
+// 跨包共享的最小契约位于 pkg/tokenizer.Tokenizer；本接口在共享契约
+// CountTokens/Encode/Decode/MaxTokens/Name 之上补充 CountMessages，用于 LLM
+// 消息级 token 估算。types.Tokenizer 与 rag.Tokenizer 仍保持各自无 error 的
+// 层内形状，并通过 pkg/tokenizer 的 adapter 统一边界。
 //
 // 本接口返回 error 以支持真实 tokenizer（如 tiktoken）的错误处理。
-// 使用 rag.NewLLMTokenizerAdapter() 可将本接口适配为 rag.Tokenizer。
+// 使用 rag/runtime.NewSharedTokenizerAdapter() 可将
+// 本接口适配为 RAG 分块 tokenizer。
 type Tokenizer interface {
 	// CountTokens 返回给定文本的 token 数.
 	CountTokens(text string) (int, error)

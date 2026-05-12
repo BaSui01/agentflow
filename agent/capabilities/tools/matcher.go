@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	tooldiscovery "github.com/BaSui01/agentflow/agent/capabilities/tools/discovery"
 	"go.uber.org/zap"
 )
 
@@ -320,96 +321,21 @@ func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *Agen
 
 // 能力 匹配一个匹配所需能力的能力名称 。
 func (m *CapabilityMatcher) capabilityMatches(capName, required string) bool {
-	// 准确匹配
-	if strings.EqualFold(capName, required) {
-		return true
-	}
-
-	// 前缀匹配(例如"code review"与"code review python"相匹配)
-	if strings.HasPrefix(strings.ToLower(capName), strings.ToLower(required)) {
-		return true
-	}
-
-	// 包含匹配
-	if strings.Contains(strings.ToLower(capName), strings.ToLower(required)) {
-		return true
-	}
-
-	return false
+	return tooldiscovery.CapabilityMatches(capName, required)
 }
 
 // 计算SemanticScore计算出代理能力和任务描述之间的语义相似性.
 func (m *CapabilityMatcher) calculateSemanticScore(agent *AgentInfo, taskDescription string) (float64, float64) {
-	// 基于简单关键字的语义匹配
-	// 在生产中,将使用嵌入或LLM
-	taskWords := m.tokenize(taskDescription)
-	if len(taskWords) == 0 {
-		return 0, 0
-	}
-
-	var totalScore float64
-	var matchCount int
-
-	// 检查代理描述
-	agentWords := m.tokenize(agent.Card.Description)
-	for _, tw := range taskWords {
-		for _, aw := range agentWords {
-			if strings.EqualFold(tw, aw) {
-				matchCount++
-				break
-			}
-		}
-	}
-
-	// 检查能力描述
+	capabilityDescriptions := make([]string, 0, len(agent.Capabilities))
 	for _, cap := range agent.Capabilities {
-		capWords := m.tokenize(cap.Capability.Description)
-		for _, tw := range taskWords {
-			for _, cw := range capWords {
-				if strings.EqualFold(tw, cw) {
-					matchCount++
-					break
-				}
-			}
-		}
+		capabilityDescriptions = append(capabilityDescriptions, cap.Capability.Description)
 	}
-
-	if matchCount > 0 {
-		totalScore = float64(matchCount) / float64(len(taskWords))
-		totalScore = math.Min(1.0, totalScore)
-	}
-
-	// 自信是建立在几句话匹配的基础上的
-	confidence := math.Min(1.0, float64(matchCount)/5.0)
-
-	return totalScore, confidence
+	return tooldiscovery.SemanticScore(agent.Card.Description, capabilityDescriptions, taskDescription)
 }
 
 // 将文本分割成文字进行匹配。
 func (m *CapabilityMatcher) tokenize(text string) []string {
-	// 简单的符号化 - 在白空和平分
-	text = strings.ToLower(text)
-	words := strings.FieldsFunc(text, func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
-	})
-
-	// 过滤出常见的句子
-	stopWords := map[string]bool{
-		"the": true, "a": true, "an": true, "and": true, "or": true,
-		"is": true, "are": true, "was": true, "were": true, "be": true,
-		"to": true, "of": true, "in": true, "for": true, "on": true,
-		"with": true, "as": true, "at": true, "by": true, "from": true,
-		"this": true, "that": true, "it": true, "its": true,
-	}
-
-	filtered := make([]string, 0, len(words))
-	for _, w := range words {
-		if len(w) > 2 && !stopWords[w] {
-			filtered = append(filtered, w)
-		}
-	}
-
-	return filtered
+	return tooldiscovery.TokenizeForSemanticMatch(text)
 }
 
 // 排序结果类型匹配基于策略的结果。
@@ -459,12 +385,7 @@ func (m *CapabilityMatcher) sortResults(results []*MatchResult, strategy MatchSt
 
 // isexcused checked 如果被排除在外的名单上有代理ID。
 func (m *CapabilityMatcher) isExcluded(agentID string, excluded []string) bool {
-	for _, ex := range excluded {
-		if ex == agentID {
-			return true
-		}
-	}
-	return false
+	return tooldiscovery.IsExcludedAgent(agentID, excluded)
 }
 
 // GetNextRound Robin 返回一个给定能力的下一个代理。

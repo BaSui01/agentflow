@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/jsonschema"
+	"github.com/BaSui01/agentflow/pkg/jsonutil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -46,6 +46,18 @@ type ToolRegistry interface {
 	Get(name string) (ToolFunc, ToolMetadata, error)
 	List() []types.ToolSchema
 	Has(name string) bool
+}
+
+// RateLimitedRegistry exposes optional registry-owned rate limiting without
+// coupling executors to a concrete registry implementation.
+type RateLimitedRegistry interface {
+	CheckRateLimit(name string) error
+}
+
+// StreamingRegistry exposes optional streaming tool lookup without coupling
+// executors to a concrete registry implementation.
+type StreamingRegistry interface {
+	GetStreaming(name string) (StreamingToolFunc, bool)
 }
 
 // ToolExecutor 定义工具执行器接口.
@@ -226,8 +238,8 @@ func (r *DefaultRegistry) Has(name string) bool {
 	return ok
 }
 
-// checkRateLimit 检查是否触发速率限制
-func (r *DefaultRegistry) checkRateLimit(name string) error {
+// CheckRateLimit 检查是否触发速率限制。
+func (r *DefaultRegistry) CheckRateLimit(name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -338,8 +350,8 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) t
 	}
 
 	// 2. 检查速率限制（如果注册表支持）
-	if reg, ok := e.registry.(*DefaultRegistry); ok {
-		if err := reg.checkRateLimit(call.Name); err != nil {
+	if reg, ok := e.registry.(RateLimitedRegistry); ok {
+		if err := reg.CheckRateLimit(call.Name); err != nil {
 			result.Error = fmt.Sprintf("rate limit exceeded: %s", err.Error())
 			result.Duration = time.Since(start)
 			e.logger.Warn("rate limit exceeded", zap.String("name", call.Name))
@@ -453,7 +465,7 @@ func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call types.ToolC
 
 		// 检查是否有流式版本
 		var streamingFn StreamingToolFunc
-		if reg, ok := e.registry.(*DefaultRegistry); ok {
+		if reg, ok := e.registry.(StreamingRegistry); ok {
 			streamingFn, _ = reg.GetStreaming(call.Name) // error means no streaming variant; fall through to non-streaming path
 		}
 
@@ -481,8 +493,8 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call types.T
 	}
 
 	// 检查速率限制
-	if reg, ok := e.registry.(*DefaultRegistry); ok {
-		if err := reg.checkRateLimit(call.Name); err != nil {
+	if reg, ok := e.registry.(RateLimitedRegistry); ok {
+		if err := reg.CheckRateLimit(call.Name); err != nil {
 			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("rate limit exceeded: %w", err)}
 			return
 		}
@@ -696,19 +708,5 @@ func (tb *tokenBucketLimiter) Reset() {
 // 作为防御层，处理上游可能遗漏的双重序列化 JSON 字符串。
 // 例如 `"{\\"city\\":\\"北京\\"}"` → `{"city":"北京"}`
 func normalizeToolArguments(raw json.RawMessage) json.RawMessage {
-	if len(raw) == 0 {
-		return raw
-	}
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
-		return raw // 已经是正常的 JSON 对象/数组
-	}
-	var strVal string
-	if err := json.Unmarshal(raw, &strVal); err == nil && len(strVal) > 0 {
-		inner := bytes.TrimSpace([]byte(strVal))
-		if len(inner) > 0 && (inner[0] == '{' || inner[0] == '[') && json.Valid(inner) {
-			return json.RawMessage(inner)
-		}
-	}
-	return raw
+	return jsonutil.UnwrapStringifiedRawMessage(raw)
 }

@@ -1,12 +1,14 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 
 	agent "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -99,7 +101,22 @@ func buildServeAgentHandler(set *ServeHandlerSet, in ServeHandlerSetBuildInput, 
 		if llmRuntime != nil {
 			ledger = llmRuntime.Ledger
 		}
-		RegisterDefaultRuntimeAgentFactory(set.AgentRegistry, llmRuntime.Gateway, llmRuntime.ToolGateway, set.CheckpointManager, set.ModelCatalog, ledger, in.Logger)
+		var authorizationService interface {
+			Authorize(context.Context, types.AuthorizationRequest) (*types.AuthorizationDecision, error)
+		}
+		if set.ToolingRuntime != nil {
+			authorizationService = set.ToolingRuntime.AuthorizationService
+		}
+		RegisterDefaultRuntimeAgentFactoryWithAuthorization(
+			set.AgentRegistry,
+			llmRuntime.Gateway,
+			llmRuntime.ToolGateway,
+			set.CheckpointManager,
+			set.ModelCatalog,
+			ledger,
+			authorizationService,
+			in.Logger,
+		)
 		in.Logger.Info("Default runtime agent factory registered")
 
 		set.AgentHandler = handlers.NewAgentHandlerWithService(BuildAgentService(set.DiscoveryRegistry, set.Resolver.Resolve), nil, in.Logger)

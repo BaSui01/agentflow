@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -18,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/httputil"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
@@ -108,132 +108,19 @@ func RequestLogger(logger *zap.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			rw := httputil.NewResponseRecorder(w)
 			next.ServeHTTP(rw, r)
 			traceLogger := telemetry.LoggerWithTrace(r.Context(), logger)
 			traceLogger.Info("request",
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
-				zap.Int("status", rw.statusCode),
+				zap.Int("status", rw.StatusCode()),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("remote_addr", r.RemoteAddr),
 				zap.String("request_id", RequestIDFromContext(r.Context())),
 			)
 		})
 	}
-}
-
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-// Flush implements http.Flusher for SSE streaming support.
-func (rw *responseWriter) Flush() {
-	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// Hijack implements http.Hijacker so WebSocket upgrades work through the logging middleware.
-func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
-		return hj.Hijack()
-	}
-	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
-}
-
-// =============================================================================
-// MetricsMiddleware — records HTTP request metrics via metrics.Collector
-// =============================================================================
-
-// metricsResponseWriter wraps http.ResponseWriter to capture status code and
-// response body size for metrics recording.
-type metricsResponseWriter struct {
-	http.ResponseWriter
-	statusCode   int
-	wroteHeader  bool
-	bytesWritten int64
-}
-
-func (w *metricsResponseWriter) WriteHeader(code int) {
-	if !w.wroteHeader {
-		w.statusCode = code
-		w.wroteHeader = true
-		w.ResponseWriter.WriteHeader(code)
-	}
-}
-
-func (w *metricsResponseWriter) Write(b []byte) (int, error) {
-	if !w.wroteHeader {
-		w.WriteHeader(http.StatusOK)
-	}
-	n, err := w.ResponseWriter.Write(b)
-	w.bytesWritten += int64(n)
-	return n, err
-}
-
-// Flush implements http.Flusher for SSE streaming support.
-func (w *metricsResponseWriter) Flush() {
-	if f, ok := w.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// Hijack implements http.Hijacker so WebSocket upgrades work through the metrics middleware.
-func (w *metricsResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
-		return hj.Hijack()
-	}
-	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
-}
-
-type tracingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-	written    bool
-}
-
-func newTracingResponseWriter(w http.ResponseWriter) *tracingResponseWriter {
-	return &tracingResponseWriter{
-		ResponseWriter: w,
-		statusCode:     http.StatusOK,
-	}
-}
-
-func (w *tracingResponseWriter) WriteHeader(code int) {
-	if w.written {
-		return
-	}
-	w.statusCode = code
-	w.written = true
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *tracingResponseWriter) Write(b []byte) (int, error) {
-	if !w.written {
-		w.WriteHeader(http.StatusOK)
-	}
-	return w.ResponseWriter.Write(b)
-}
-
-// Flush implements http.Flusher for SSE streaming support.
-func (w *tracingResponseWriter) Flush() {
-	if f, ok := w.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-func (w *tracingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
-		return hj.Hijack()
-	}
-	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
 // MetricsMiddleware records HTTP request duration, status, and sizes via the
@@ -243,10 +130,7 @@ func MetricsMiddleware(collector *metrics.Collector) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			mrw := &metricsResponseWriter{
-				ResponseWriter: w,
-				statusCode:     http.StatusOK,
-			}
+			mrw := httputil.NewResponseRecorder(w)
 
 			next.ServeHTTP(mrw, r)
 
@@ -260,10 +144,10 @@ func MetricsMiddleware(collector *metrics.Collector) Middleware {
 			collector.RecordHTTPRequest(
 				r.Method,
 				path,
-				mrw.statusCode,
+				mrw.StatusCode(),
 				duration,
 				requestSize,
-				mrw.bytesWritten,
+				mrw.BytesWritten(),
 			)
 		})
 	}
@@ -375,11 +259,11 @@ func OTelTracing() Middleware {
 			defer span.End()
 			ctx = types.WithTraceID(ctx, span.SpanContext().TraceID().String())
 
-			rw := newTracingResponseWriter(w)
+			rw := httputil.NewResponseRecorder(w)
 			next.ServeHTTP(rw, r.WithContext(ctx))
 
 			span.SetAttributes(
-				attribute.Int("http.response.status_code", rw.statusCode),
+				attribute.Int("http.response.status_code", rw.StatusCode()),
 			)
 		})
 	}

@@ -17,16 +17,16 @@ import (
 
 // 查询路由阈值常量
 const (
-	wordCountShortThreshold  = 5
-	wordCountMediumThreshold = 15
-	complexityEntitiesMany   = 2
-	complexityScoreLong      = 0.3
-	complexityScoreMedium    = 0.15
+	wordCountShortThreshold     = 5
+	wordCountMediumThreshold    = 15
+	complexityEntitiesMany      = 2
+	complexityScoreLong         = 0.3
+	complexityScoreMedium       = 0.15
 	complexityScoreEntitiesMany = 0.2
 	complexityScoreEntitiesSome = 0.1
 	complexityScoreAnalytical   = 0.3
-	complexityScoreComparison  = 0.25
-	complexityScoreCausal      = 0.3
+	complexityScoreComparison   = 0.25
+	complexityScoreCausal       = 0.3
 	complexityScoreHypothetical = 0.25
 	complexityScoreAggregation  = 0.2
 	complexityScorePattern      = 0.1
@@ -38,43 +38,43 @@ const (
 type RetrievalStrategy string
 
 const (
-	StrategyVector      RetrievalStrategy = "vector"       // Pure vector/semantic search
-	StrategyBM25        RetrievalStrategy = "bm25"         // Pure keyword/BM25 search
-	StrategyHybrid      RetrievalStrategy = "hybrid"       // Combined vector + BM25
-	StrategyMultiHop    RetrievalStrategy = "multi_hop"    // Multi-hop reasoning
-	StrategyGraphRAG    RetrievalStrategy = "graph_rag"    // Graph-based retrieval
-	StrategyContextual  RetrievalStrategy = "contextual"   // Contextual retrieval
-	StrategyDense       RetrievalStrategy = "dense"        // Dense passage retrieval
-	StrategySparse      RetrievalStrategy = "sparse"       // Sparse retrieval (TF-IDF)
+	StrategyVector     RetrievalStrategy = "vector"     // Pure vector/semantic search
+	StrategyBM25       RetrievalStrategy = "bm25"       // Pure keyword/BM25 search
+	StrategyHybrid     RetrievalStrategy = "hybrid"     // Combined vector + BM25
+	StrategyMultiHop   RetrievalStrategy = "multi_hop"  // Multi-hop reasoning
+	StrategyGraphRAG   RetrievalStrategy = "graph_rag"  // Graph-based retrieval
+	StrategyContextual RetrievalStrategy = "contextual" // Contextual retrieval
+	StrategyDense      RetrievalStrategy = "dense"      // Dense passage retrieval
+	StrategySparse     RetrievalStrategy = "sparse"     // Sparse retrieval (TF-IDF)
 )
 
 // 运行决定代表查询的路径决定
 type RoutingDecision struct {
-	Query            string                       `json:"query"`
-	SelectedStrategy RetrievalStrategy            `json:"selected_strategy"`
-	Confidence       float64                      `json:"confidence"`
+	Query            string                        `json:"query"`
+	SelectedStrategy RetrievalStrategy             `json:"selected_strategy"`
+	Confidence       float64                       `json:"confidence"`
 	Scores           map[RetrievalStrategy]float64 `json:"scores"`
-	Reasoning        string                       `json:"reasoning,omitempty"`
-	Metadata         map[string]any               `json:"metadata,omitempty"`
-	Timestamp        time.Time                    `json:"timestamp"`
+	Reasoning        string                        `json:"reasoning,omitempty"`
+	Metadata         map[string]any                `json:"metadata,omitempty"`
+	Timestamp        time.Time                     `json:"timestamp"`
 }
 
 // 策略Config 配置检索策略
 type StrategyConfig struct {
-	Strategy    RetrievalStrategy `json:"strategy"`
-	Enabled     bool              `json:"enabled"`
-	Weight      float64           `json:"weight"`       // Base weight for this strategy
-	MinScore    float64           `json:"min_score"`    // Minimum score to use this strategy
-	MaxTokens   int               `json:"max_tokens"`   // Max query tokens for this strategy
-	Conditions  []RoutingCondition `json:"conditions"`  // Conditions that favor this strategy
+	Strategy   RetrievalStrategy  `json:"strategy"`
+	Enabled    bool               `json:"enabled"`
+	Weight     float64            `json:"weight"`     // Base weight for this strategy
+	MinScore   float64            `json:"min_score"`  // Minimum score to use this strategy
+	MaxTokens  int                `json:"max_tokens"` // Max query tokens for this strategy
+	Conditions []RoutingCondition `json:"conditions"` // Conditions that favor this strategy
 }
 
 // 路由条件代表了路由条件
 type RoutingCondition struct {
-	Type      string  `json:"type"`       // "intent", "keyword", "length", "complexity"
-	Value     string  `json:"value"`      // Value to match
-	Weight    float64 `json:"weight"`     // Weight adjustment when matched
-	Operator  string  `json:"operator"`   // "equals", "contains", "greater", "less"
+	Type     string  `json:"type"`     // "intent", "keyword", "length", "complexity"
+	Value    string  `json:"value"`    // Value to match
+	Weight   float64 `json:"weight"`   // Weight adjustment when matched
+	Operator string  `json:"operator"` // "equals", "contains", "greater", "less"
 }
 
 // 查询路透社 Config 配置查询路由器
@@ -86,9 +86,9 @@ type QueryRouterConfig struct {
 	DefaultStrategy RetrievalStrategy `json:"default_strategy"`
 
 	// 运行设置
-	EnableLLMRouting     bool    `json:"enable_llm_routing"`      // Use LLM for routing decisions
-	EnableAdaptiveRouting bool   `json:"enable_adaptive_routing"` // Learn from feedback
-	ConfidenceThreshold  float64 `json:"confidence_threshold"`    // Min confidence for routing
+	EnableLLMRouting      bool    `json:"enable_llm_routing"`      // Use LLM for routing decisions
+	EnableAdaptiveRouting bool    `json:"enable_adaptive_routing"` // Learn from feedback
+	ConfidenceThreshold   float64 `json:"confidence_threshold"`    // Min confidence for routing
 
 	// 缓存
 	EnableCache bool          `json:"enable_cache"`
@@ -357,8 +357,13 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 		decision.Scores[strategyConfig.Strategy] = score
 	}
 
-	// 在复杂的路由决定中使用 LLM
-	if r.config.EnableLLMRouting && r.llmProvider != nil {
+	// 先评估规则路由置信度。规则已经足够明确时不再调用 LLM，避免简单查询承担额外路由开销。
+	ruleStrategy, ruleScore := r.selectBestStrategy(decision.Scores)
+	decision.Metadata["rule_strategy"] = ruleStrategy
+	decision.Metadata["rule_confidence"] = ruleScore
+
+	// 仅当规则低置信时使用 LLM 辅助路由。
+	if r.shouldUseLLMRouter(ruleScore) {
 		llmDecision, err := r.routeWithLLM(ctx, query, queryFeatures)
 		if err == nil && llmDecision != nil {
 			// 将 LLM 决定与基于规则的分数合并
@@ -370,7 +375,10 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 				}
 			}
 			decision.Reasoning = llmDecision.Reasoning
+			decision.Metadata["llm_router_used"] = true
 		}
+	} else if r.config.EnableLLMRouting && r.llmProvider != nil {
+		decision.Metadata["llm_router_skipped"] = "rules_confident"
 	}
 
 	// 选择最佳策略
@@ -404,8 +412,8 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 // 查询Features 代表已分析的查询特性
 type QueryFeatures struct {
 	Intent      QueryIntent `json:"intent"`
-	Complexity  string      `json:"complexity"`  // "low", "medium", "high"
-	Length      string      `json:"length"`      // "short", "medium", "long"
+	Complexity  string      `json:"complexity"` // "low", "medium", "high"
+	Length      string      `json:"length"`     // "short", "medium", "long"
 	HasEntities bool        `json:"has_entities"`
 	HasKeywords bool        `json:"has_keywords"`
 	IsQuestion  bool        `json:"is_question"`
@@ -561,6 +569,10 @@ func (r *QueryRouter) matchCondition(condition RoutingCondition, features QueryF
 }
 
 // 路由 WithLLM 在路由决定中使用LLM
+func (r *QueryRouter) shouldUseLLMRouter(ruleScore float64) bool {
+	return r.config.EnableLLMRouting && r.llmProvider != nil && ruleScore < r.config.ConfidenceThreshold
+}
+
 func (r *QueryRouter) routeWithLLM(ctx context.Context, query string, features QueryFeatures) (*RoutingDecision, error) {
 	// 构建战略说明
 	strategyDescriptions := `
@@ -720,10 +732,10 @@ type StrategyStats struct {
 
 // 多战略决定代表使用多战略的决定
 type MultiStrategyDecision struct {
-	Query      string                        `json:"query"`
-	Strategies []StrategyWithWeight          `json:"strategies"`
-	Reasoning  string                        `json:"reasoning,omitempty"`
-	Timestamp  time.Time                     `json:"timestamp"`
+	Query      string               `json:"query"`
+	Strategies []StrategyWithWeight `json:"strategies"`
+	Reasoning  string               `json:"reasoning,omitempty"`
+	Timestamp  time.Time            `json:"timestamp"`
 }
 
 // 战略 用Weight代表着一个有分量的策略
@@ -872,4 +884,3 @@ func (d *RoutingDecision) ToJSON() ([]byte, error) {
 func (d *RoutingDecision) FromJSON(data []byte) error {
 	return json.Unmarshal(data, d)
 }
-

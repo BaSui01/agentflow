@@ -8,47 +8,7 @@ import (
 	llm "github.com/BaSui01/agentflow/llm/core"
 )
 
-// GenerateImage MiniMax 不支持图像生成.
-func (p *MiniMaxProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "image generation")
-}
-
-// GenerateVideo MiniMax 不支持视频生成.
-func (p *MiniMaxProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "video generation")
-}
-
 // GenerateAudio 使用 MiniMax 生成音频.
 func (p *MiniMaxProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
 	return providerbase.GenerateAudioOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/v1/audio/speech", BuildHeadersFunc: p.ApplyHeaders}, req)
-}
-
-// TranscribeAudio MiniMax 不支持音频转录.
-func (p *MiniMaxProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "audio transcription")
-}
-
-// CreateEmbedding MiniMax 不支持嵌入.
-func (p *MiniMaxProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "embeddings")
-}
-
-// CreateFineTuningJob MiniMax 不支持微调.
-func (p *MiniMaxProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// ListFineTuningJobs MiniMax 不支持微调.
-func (p *MiniMaxProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// GetFineTuningJob MiniMax 不支持微调.
-func (p *MiniMaxProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// CancelFineTuningJob MiniMax 不支持微调.
-func (p *MiniMaxProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	return providerbase.NotSupportedError(p.Name(), "fine-tuning")
 }

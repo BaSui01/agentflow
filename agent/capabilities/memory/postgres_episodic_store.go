@@ -144,9 +144,9 @@ LIMIT $%d`, strings.Join(where, " AND "), len(args))
 	return scanEpisodicRows(rows)
 }
 
-func buildEpisodicWhere(agentID, eventType string, start, end time.Time) ([]string, []any) {
-	where := []string{"1=1"}
-	args := make([]any, 0, 4)
+func buildEpisodicWhere(agentID, eventType string, start, end time.Time) (where []string, args []any) {
+	where = []string{"1=1"}
+	args = make([]any, 0, 4)
 	add := func(clause string, arg any) {
 		args = append(args, arg)
 		where = append(where, fmt.Sprintf(clause, len(args)))

@@ -38,6 +38,8 @@ func TestQwenProvider_MultimodalNotSupported(t *testing.T) {
 			llmErr, ok := err.(*types.Error)
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
+			assert.Equal(t, http.StatusNotImplemented, llmErr.HTTPStatus)
+			assert.Equal(t, "qwen", llmErr.Provider)
 		})
 	}
 }

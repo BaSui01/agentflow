@@ -379,19 +379,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 
 		// If headers are already sent (SSE mode), write error as SSE event.
 		// Use api.ErrorInfo for consistency with JSON API error format.
-		status := execErr.HTTPStatus
-		if status == 0 {
-			status = api.HTTPStatusFromErrorCode(execErr.Code)
-		}
-		errInfo := api.ErrorInfoFromTypesError(execErr, status)
-		errPayload, marshalErr := json.Marshal(struct {
-			Error     *api.ErrorInfo `json:"error"`
-			RequestID string         `json:"request_id"`
-		}{Error: errInfo, RequestID: requestID})
-		if marshalErr != nil {
-			errPayload = []byte(`{"error":{"code":"INTERNAL_ERROR","message":"agent execution failed"},"request_id":"` + requestID + `"}`)
-		}
-		if _, writeErr := fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload); writeErr != nil {
+		if writeErr := writeSSETypesErrorEvent(w, execErr, requestID); writeErr != nil {
 			h.logger.Debug("SSE error event write failed (client disconnected)", zap.Error(writeErr))
 			return
 		}

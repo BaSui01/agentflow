@@ -922,8 +922,8 @@ func TestResponseWriter_WriteWithoutHeader(t *testing.T) {
 	n, err := rw.Write([]byte("hello"))
 	assert.NoError(t, err)
 	assert.Equal(t, 5, n)
-	assert.True(t, rw.Written)
-	assert.Equal(t, http.StatusOK, rw.StatusCode)
+	assert.True(t, rw.Written())
+	assert.Equal(t, http.StatusOK, rw.StatusCode())
 }
 
 // =============================================================================

@@ -124,11 +124,7 @@ func NewAuthzMiddleware(authorize AuthorizeFunc) *AuthzMiddleware {
 	return &AuthzMiddleware{authorize: authorize}
 }
 
-func authzRiskTierForTool(name string) types.RiskTier {
-	return authzRiskTierForToolRisk(name, classifyToolRiskByName(name))
-}
-
-func authzRiskTierForToolRisk(name string, risk string) types.RiskTier {
+func authzRiskTierForToolRisk(name, risk string) types.RiskTier {
 	switch strings.TrimSpace(risk) {
 	case toolRiskSafeRead:
 		return types.RiskSafeRead
@@ -149,7 +145,7 @@ func authzRiskTierForToolRisk(name string, risk string) types.RiskTier {
 	}
 }
 
-func authzToolCallInput(input any) (*types.ToolCall, map[string]string, string, bool) {
+func authzToolCallInput(input any) (call *types.ToolCall, risks map[string]string, agentID string, ok bool) {
 	switch v := input.(type) {
 	case *types.ToolCall:
 		return v, nil, "", v != nil
@@ -192,16 +188,22 @@ func (m *AuthzMiddleware) Execute(ctx context.Context, input any) (HookResult, e
 	}
 
 	toolRisk := authzToolRiskFromMap(toolCall.Name, toolRisks)
+	if agentID == "" {
+		if ctxAgentID, ok := types.AgentID(ctx); ok {
+			agentID = strings.TrimSpace(ctxAgentID)
+		}
+	}
+	metadata := map[string]string{
+		"runtime":          "agent_runtime",
+		"hosted_tool_risk": firstNonEmpty(toolRisk, classifyToolRiskByName(toolCall.Name)),
+	}
 	reqContext := map[string]any{
 		"tool_call_id": toolCall.ID,
-		"metadata": map[string]string{
-			"runtime":          "agent_runtime",
-			"hosted_tool_risk": firstNonEmpty(toolRisk, classifyToolRiskByName(toolCall.Name)),
-		},
+		"metadata":     metadata,
 	}
 	if agentID != "" {
 		reqContext["agent_id"] = agentID
-		reqContext["metadata"].(map[string]string)["agent_id"] = agentID
+		metadata["agent_id"] = agentID
 	}
 
 	req := types.AuthorizationRequest{

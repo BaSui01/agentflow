@@ -141,8 +141,15 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 		return nil, err
 	}
 
-	// Execute from entry node
-	result, err := e.executeNode(ctx, graph, entryNode, input)
+	var result any
+	var err error
+	if supportsDependencyDrivenScheduling(graph, graph.entry) {
+		// Execute reachable action/checkpoint DAG nodes with dependency-driven scheduling.
+		result, err = e.executeTopological(ctx, graph, input)
+	} else {
+		// Keep established control-node semantics for condition/loop/parallel graphs.
+		result, err = e.executeNode(ctx, graph, entryNode, input)
+	}
 
 	// Complete history
 	e.history.Complete(err)
@@ -166,6 +173,241 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 	)
 
 	return result, nil
+}
+
+type dagNodeCompletion struct {
+	nodeID string
+	output any
+	err    error
+}
+
+func (e *DAGExecutor) executeTopological(ctx context.Context, graph *DAGGraph, input any) (any, error) {
+	reachable := collectReachableNodes(graph, graph.entry)
+	indegree := make(map[string]int, len(reachable))
+	parents := make(map[string][]string, len(reachable))
+	for nodeID := range reachable {
+		indegree[nodeID] = 0
+	}
+	for fromID := range reachable {
+		fromNode, _ := graph.GetNode(fromID)
+		if fromNode != nil && fromNode.Type == NodeTypeCondition {
+			continue
+		}
+		for _, toID := range graph.GetEdges(fromID) {
+			if !reachable[toID] {
+				continue
+			}
+			indegree[toID]++
+			parents[toID] = append(parents[toID], fromID)
+		}
+	}
+
+	ready := []string{graph.entry}
+	running := 0
+	completed := 0
+	lastOutput := input
+	completionCh := make(chan dagNodeCompletion, len(reachable))
+
+	startNode := func(nodeID string) error {
+		node, exists := graph.GetNode(nodeID)
+		if !exists {
+			return fmt.Errorf("node not found: %s", nodeID)
+		}
+		nodeInput := e.topologicalNodeInput(nodeID, parents[nodeID], input)
+		running++
+		go func() {
+			output, err := e.executeSingleNode(ctx, graph, node, nodeInput)
+			completionCh <- dagNodeCompletion{nodeID: nodeID, output: output, err: err}
+		}()
+		return nil
+	}
+
+	for completed < len(reachable) {
+		for len(ready) > 0 {
+			nodeID := ready[0]
+			ready = ready[1:]
+			if err := startNode(nodeID); err != nil {
+				return nil, err
+			}
+		}
+
+		if running == 0 {
+			return nil, fmt.Errorf("DAG scheduling stalled with %d/%d nodes completed", completed, len(reachable))
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case done := <-completionCh:
+			running--
+			if done.err != nil {
+				return nil, done.err
+			}
+			completed++
+			lastOutput = done.output
+			for _, childID := range graph.GetEdges(done.nodeID) {
+				if !reachable[childID] {
+					continue
+				}
+				indegree[childID]--
+				if indegree[childID] == 0 {
+					ready = append(ready, childID)
+				}
+			}
+		}
+	}
+
+	return lastOutput, nil
+}
+
+func collectReachableNodes(graph *DAGGraph, entry string) map[string]bool {
+	reachable := make(map[string]bool)
+	var walk func(string)
+	walk = func(nodeID string) {
+		if reachable[nodeID] {
+			return
+		}
+		reachable[nodeID] = true
+		for _, childID := range graph.GetEdges(nodeID) {
+			walk(childID)
+		}
+	}
+	walk(entry)
+	return reachable
+}
+
+func supportsDependencyDrivenScheduling(graph *DAGGraph, entry string) bool {
+	for nodeID := range collectReachableNodes(graph, entry) {
+		node, exists := graph.GetNode(nodeID)
+		if !exists {
+			continue
+		}
+		switch node.Type {
+		case NodeTypeCondition, NodeTypeLoop, NodeTypeParallel:
+			return false
+		}
+	}
+	return true
+}
+
+func (e *DAGExecutor) topologicalNodeInput(nodeID string, parents []string, entryInput any) any {
+	if len(parents) == 0 {
+		return entryInput
+	}
+	if len(parents) == 1 {
+		if result, ok := e.GetNodeResult(parents[0]); ok {
+			return result
+		}
+		return nil
+	}
+	inputs := make(map[string]any, len(parents))
+	for _, parentID := range parents {
+		if result, ok := e.GetNodeResult(parentID); ok {
+			inputs[parentID] = result
+		}
+	}
+	return inputs
+}
+
+func (e *DAGExecutor) executeSingleNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
+	waitCh, shouldExecute := e.beginNodeExecution(node.ID)
+	if !shouldExecute {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-waitCh:
+			return e.getNodeOutcome(node.ID)
+		}
+	}
+
+	var nodeExec *NodeExecution
+	if e.history != nil {
+		nodeExec = e.history.RecordNodeStart(node.ID, node.Type, input)
+	}
+
+	traceID, _ := types.TraceID(ctx)
+	e.logger.Debug("executing node",
+		zap.String("trace_id", traceID),
+		zap.String("workflow_id", e.executionID),
+		zap.String("node_id", node.ID),
+		zap.String("node_type", string(node.Type)),
+	)
+
+	if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+		emitter(WorkflowStreamEvent{Type: WorkflowEventNodeStart, NodeID: node.ID, Data: input})
+	}
+	observability.EmitNodeStart(ctx, e.executionID, node.ID, string(node.Type))
+
+	cb := e.circuitBreakers.GetOrCreate(node.ID)
+	allowed, cbErr := cb.AllowRequest()
+	if !allowed {
+		if nodeExec != nil {
+			e.history.RecordNodeEnd(nodeExec, nil, cbErr)
+		}
+		if node.ErrorConfig != nil && node.ErrorConfig.FallbackValue != nil {
+			result := node.ErrorConfig.FallbackValue
+			e.finishNodeExecution(node.ID, result, nil)
+			return result, nil
+		}
+		e.finishNodeExecution(node.ID, nil, cbErr)
+		return nil, cbErr
+	}
+
+	startTime := time.Now()
+	var result any
+	var err error
+	switch node.Type {
+	case NodeTypeAction:
+		result, err = e.executeActionStepOnly(ctx, node, input)
+	case NodeTypeCheckpoint:
+		result, err = e.executeCheckpointNode(ctx, node, input)
+	case NodeTypeSubGraph:
+		result, err = e.executeSubGraphNode(ctx, node, input)
+	case NodeTypeCondition:
+		result, err = e.executeConditionNode(ctx, graph, node, input)
+	case NodeTypeLoop:
+		result, err = e.executeLoopNode(ctx, graph, node, input)
+	case NodeTypeParallel:
+		// These control nodes keep their established specialized semantics.
+		result, err = e.executeParallelNode(ctx, graph, node, input)
+	default:
+		err = fmt.Errorf("unknown node type: %s", node.Type)
+	}
+
+	duration := time.Since(startTime)
+	if err != nil {
+		result, err = e.handleNodeError(ctx, graph, node, input, err, duration)
+		if err != nil {
+			cb.RecordFailure()
+			if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+				emitter(WorkflowStreamEvent{Type: WorkflowEventNodeError, NodeID: node.ID, Error: err})
+			}
+			observability.EmitNodeError(ctx, e.executionID, node.ID, string(node.Type), duration.Milliseconds(), err)
+			if nodeExec != nil {
+				e.history.RecordNodeEnd(nodeExec, nil, err)
+			}
+			e.finishNodeExecution(node.ID, nil, err)
+			return nil, err
+		}
+	}
+
+	cb.RecordSuccess()
+	if nodeExec != nil {
+		e.history.RecordNodeEnd(nodeExec, result, nil)
+	}
+	e.finishNodeExecution(node.ID, result, nil)
+	if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+		emitter(WorkflowStreamEvent{Type: WorkflowEventNodeComplete, NodeID: node.ID, Data: result})
+	}
+	observability.EmitNodeComplete(ctx, e.executionID, node.ID, string(node.Type), duration.Milliseconds())
+	return result, nil
+}
+
+func (e *DAGExecutor) executeActionStepOnly(ctx context.Context, node *DAGNode, input any) (any, error) {
+	if node.Step == nil {
+		return nil, fmt.Errorf("action node %s has no step", node.ID)
+	}
+	return node.Step.Execute(ctx, input)
 }
 
 // GetHistory returns the execution history for the current execution

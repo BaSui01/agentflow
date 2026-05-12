@@ -153,7 +153,16 @@ func (s *Server) reloadLLMRuntime(cfg *config.Config) error {
 
 	if s.tooling.agentRegistry != nil {
 		if gateway != nil {
-			bootstrap.RegisterDefaultRuntimeAgentFactory(s.tooling.agentRegistry, gateway, toolGateway, s.workflow.checkpointManager, s.text.modelCatalog, ledger, s.logger)
+			bootstrap.RegisterDefaultRuntimeAgentFactoryWithAuthorization(
+				s.tooling.agentRegistry,
+				gateway,
+				toolGateway,
+				s.workflow.checkpointManager,
+				s.text.modelCatalog,
+				ledger,
+				s.currentWorkflowAuthorizationService(),
+				s.logger,
+			)
 		} else {
 			s.tooling.agentRegistry.Unregister(agent.TypeGeneric)
 		}

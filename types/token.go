@@ -26,16 +26,13 @@ type TokenCounter interface {
 	CountTokens(text string) int
 }
 
-// Tokenizer defines the interface for token counting.
+// Tokenizer defines the framework-level token counting interface.
 //
-// Note: Three Tokenizer interfaces exist in the project, each serving a different layer:
-//   - types.Tokenizer (this)    — Framework-level, Message/ToolSchema-aware, no error returns
-//   - llm/tokenizer.Tokenizer   — LLM-level, full encode/decode with errors, model-aware
-//   - rag.Tokenizer             — RAG chunking, minimal (CountTokens + Encode), no errors
-//
-// These cannot be unified without introducing circular dependencies (rag -> types.Message)
-// or forcing incompatible method signatures (error vs no-error returns).
-// Use rag.NewLLMTokenizerAdapter() to bridge llm/tokenizer.Tokenizer to rag.Tokenizer.
+// The cross-package minimum contract lives in pkg/tokenizer.Tokenizer. This
+// interface keeps the types layer Message/ToolSchema helpers and no-error return
+// shape, while pkg/tokenizer.NewTypesAdapter bridges shared tokenizers into this
+// framework-facing contract. RAG keeps its smaller chunking shape and uses the
+// shared RAG adapter at its runtime boundary.
 type Tokenizer interface {
 	// CountTokens counts tokens in a text string.
 	CountTokens(text string) int
@@ -115,4 +112,3 @@ func (t *EstimateTokenizer) EstimateToolTokens(tools []ToolSchema) int {
 	}
 	return total
 }
-

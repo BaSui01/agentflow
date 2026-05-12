@@ -17,6 +17,7 @@ import (
 // Doubao 使用 OpenAI 兼容的 API 格式.
 type DoubaoProvider struct {
 	*openaicompat.Provider
+	*providerbase.MultimodalAdapter
 }
 
 // newDoubaoCapabilityHost 创建 Doubao capability host。
@@ -58,6 +59,7 @@ func newDoubaoCapabilityHost(cfg providers.DoubaoConfig, logger *zap.Logger) *Do
 			RequestHook:   doubaoRequestHook,
 			BuildHeaders:  buildHeaders,
 		}, logger),
+		MultimodalAdapter: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "doubao"}),
 	}
 }
 

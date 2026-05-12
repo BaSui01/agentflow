@@ -44,6 +44,10 @@ type ToolProtocolRuntime interface {
 // centralizing handoff + tool manager orchestration behind a single interface.
 type DefaultToolProtocolRuntime struct{}
 
+type authorizedToolExecutor struct {
+	prepared *PreparedToolProtocol
+}
+
 func NewDefaultToolProtocolRuntime() ToolProtocolRuntime {
 	return DefaultToolProtocolRuntime{}
 }
@@ -69,6 +73,7 @@ func (DefaultToolProtocolRuntime) Prepare(owner *BaseAgent, pr *preparedRequest)
 		HandoffTools: cloneRuntimeHandoffMap(pr.handoffTools),
 		ToolRisks:    cloneStringMap(pr.toolRisks),
 		AllowedTools: allowed,
+		Authorize:    owner.authorize,
 	}
 }
 
@@ -104,6 +109,21 @@ func executeAuthorizedToolCalls(ctx context.Context, prepared *PreparedToolProto
 		out = append(out, prepared.Executor.ExecuteOne(ctx, call))
 	}
 	return out
+}
+
+func (e authorizedToolExecutor) Execute(ctx context.Context, calls []types.ToolCall) []types.ToolResult {
+	if e.prepared == nil {
+		return nil
+	}
+	return executeAuthorizedToolCalls(ctx, e.prepared, calls)
+}
+
+func (e authorizedToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) types.ToolResult {
+	results := e.Execute(ctx, []types.ToolCall{call})
+	if len(results) == 0 {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: "no tool result"}
+	}
+	return results[0]
 }
 
 func (DefaultToolProtocolRuntime) ToMessages(results []types.ToolResult) []types.Message {

@@ -12,6 +12,8 @@ import (
 // GLM 使用 OpenAI 兼容的 API 格式.
 type GLMProvider struct {
 	*openaicompat.Provider
+	multimodal *providerbase.MultimodalAdapter
+	fineTuning *providerbase.FineTuningAdapter
 }
 
 // newGLMCapabilityHost 创建 GLM capability host。
@@ -21,7 +23,7 @@ func newGLMCapabilityHost(cfg providers.GLMConfig, logger *zap.Logger) *GLMProvi
 		cfg.BaseURL = "https://open.bigmodel.cn"
 	}
 
-	return &GLMProvider{
+	p := &GLMProvider{
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "glm",
 			APIKey:        cfg.APIKey,
@@ -33,7 +35,11 @@ func newGLMCapabilityHost(cfg providers.GLMConfig, logger *zap.Logger) *GLMProvi
 			EndpointPath:  "/api/paas/v4/chat/completions",
 			RequestHook:   glmRequestHook,
 		}, logger),
+		multimodal: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "glm"}),
+		fineTuning: providerbase.NewFineTuningAdapter(providerbase.FineTuningAdapterConfig{Endpoint: "/api/paas/v4/fine_tuning/jobs"}),
 	}
+	p.fineTuning.BindProvider(p.Provider)
+	return p
 }
 
 // newGLMProvider 仅供本包测试与能力承载复用；公共 chat 入口统一走 vendor factory。

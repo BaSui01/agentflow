@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -15,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/pkg/httputil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -364,56 +363,12 @@ func ValidateNonNegative(value float64) bool {
 // 📊 响应包装器（用于捕获状态码）
 // =============================================================================
 
-// ResponseWriter 包装 http.ResponseWriter 以捕获状态码
-type ResponseWriter struct {
-	http.ResponseWriter
-	StatusCode int
-	Written    bool
-}
+// ResponseWriter aliases the shared HTTP response recorder used across handlers and middleware.
+type ResponseWriter = httputil.ResponseRecorder
 
-var (
-	_ http.Hijacker = (*ResponseWriter)(nil)
-	_ http.Flusher  = (*ResponseWriter)(nil)
-)
-
-// NewResponseWriter 创建新的 ResponseWriter
+// NewResponseWriter 创建新的 ResponseWriter。
 func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
-	return &ResponseWriter{
-		ResponseWriter: w,
-		StatusCode:     http.StatusOK,
-	}
-}
-
-// WriteHeader 重写 WriteHeader 以捕获状态码
-func (rw *ResponseWriter) WriteHeader(code int) {
-	if !rw.Written {
-		rw.StatusCode = code
-		rw.Written = true
-		rw.ResponseWriter.WriteHeader(code)
-	}
-}
-
-// Write 重写 Write 以标记已写入
-func (rw *ResponseWriter) Write(b []byte) (int, error) {
-	if !rw.Written {
-		rw.WriteHeader(http.StatusOK)
-	}
-	return rw.ResponseWriter.Write(b)
-}
-
-// Flush implements http.Flusher by forwarding to the underlying writer when supported.
-func (rw *ResponseWriter) Flush() {
-	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// Hijack implements http.Hijacker so WebSocket upgrades work through wrapped ResponseWriters.
-func (rw *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
-		return hj.Hijack()
-	}
-	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+	return httputil.NewResponseRecorder(w)
 }
 
 // enforceTenantID overrides TenantID and UserID in an api.ChatRequest with values

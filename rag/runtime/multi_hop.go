@@ -147,6 +147,7 @@ type MultiHopReasoner struct {
 	queryTransformer *QueryTransformer
 	llmProvider      QueryLLMProvider
 	embeddingFunc    func(context.Context, string) ([]float64, error)
+	embeddingCache   sync.Map // key: document identity/content -> []float64
 	cache            *reasoningCache
 	logger           *zap.Logger
 }
@@ -600,14 +601,30 @@ func (r *MultiHopReasoner) computeContentSimilarity(
 	}
 
 	if r.embeddingFunc != nil {
-		emb1, err1 := r.embeddingFunc(ctx, doc1.Content)
-		emb2, err2 := r.embeddingFunc(ctx, doc2.Content)
+		emb1, err1 := r.embeddingForDocument(ctx, doc1)
+		emb2, err2 := r.embeddingForDocument(ctx, doc2)
 		if err1 == nil && err2 == nil && len(emb1) == len(emb2) {
 			return cosineSimilarity(emb1, emb2)
 		}
 	}
 
 	return 0
+}
+
+func (r *MultiHopReasoner) embeddingForDocument(ctx context.Context, doc Document) ([]float64, error) {
+	key := doc.ID
+	if key == "" {
+		key = doc.Content
+	}
+	if cached, ok := r.embeddingCache.Load(key); ok {
+		return cached.([]float64), nil
+	}
+	embedding, err := r.embeddingFunc(ctx, doc.Content)
+	if err != nil {
+		return nil, err
+	}
+	r.embeddingCache.Store(key, embedding)
+	return embedding, nil
 }
 
 // 精细查询根据累积上下文生成精细查询

@@ -2,12 +2,109 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 )
+
+type failingOpenAICompatResponseWriter struct {
+	header http.Header
+	status int
+}
+
+func (w *failingOpenAICompatResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *failingOpenAICompatResponseWriter) WriteHeader(statusCode int) {
+	w.status = statusCode
+}
+
+func (w *failingOpenAICompatResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("forced write failure")
+}
+
+func TestCompatErrorStatus_UsesMainAPIStatusMapping(t *testing.T) {
+	cases := []struct {
+		name string
+		err  *types.Error
+		want int
+	}{
+		{
+			name: "explicit status wins",
+			err:  types.NewError(types.ErrInvalidRequest, "method not allowed").WithHTTPStatus(http.StatusMethodNotAllowed),
+			want: http.StatusMethodNotAllowed,
+		},
+		{
+			name: "falls back to main api mapping",
+			err:  types.NewError(types.ErrRateLimit, "too many"),
+			want: api.HTTPStatusFromErrorCode(types.ErrRateLimit),
+		},
+		{
+			name: "nil becomes internal server error",
+			err:  nil,
+			want: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := compatErrorStatus(tc.err); got != tc.want {
+				t.Fatalf("status: want %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestCompatErrorAdaptersShareStatusAndPreserveWireFormats(t *testing.T) {
+	err := types.NewError(types.ErrUnauthorized, "missing api key")
+	status := compatErrorStatus(err)
+
+	openAIStatus, openAIEnv := openAICompatErrorEnvelopeFromTypes(err)
+	if openAIStatus != status {
+		t.Fatalf("OpenAI status: want shared status %d, got %d", status, openAIStatus)
+	}
+	if openAIEnv.Error.Type != "authentication_error" {
+		t.Fatalf("OpenAI error.type: want authentication_error, got %q", openAIEnv.Error.Type)
+	}
+	if openAIEnv.Error.Code != string(types.ErrUnauthorized) || openAIEnv.Error.Message != "missing api key" {
+		t.Fatalf("OpenAI envelope did not preserve code/message: %+v", openAIEnv.Error)
+	}
+
+	anthropicStatus, anthropicEnv := anthropicCompatErrorEnvelopeFromTypes(err)
+	if anthropicStatus != status {
+		t.Fatalf("Anthropic status: want shared status %d, got %d", status, anthropicStatus)
+	}
+	if anthropicEnv.Type != "error" || anthropicEnv.Error.Type != "authentication_error" {
+		t.Fatalf("Anthropic envelope did not preserve wire format/type: %+v", anthropicEnv)
+	}
+	if anthropicEnv.Error.Message != "missing api key" {
+		t.Fatalf("Anthropic message: want missing api key, got %q", anthropicEnv.Error.Message)
+	}
+}
+
+func TestWriteOpenAICompatJSON_ReturnsEncodeError(t *testing.T) {
+	w := &failingOpenAICompatResponseWriter{}
+
+	err := writeOpenAICompatJSON(w, http.StatusAccepted, map[string]string{"ok": "true"})
+
+	if err == nil {
+		t.Fatal("expected encode error")
+	}
+	if w.status != http.StatusAccepted {
+		t.Fatalf("status: want %d, got %d", http.StatusAccepted, w.status)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type: want application/json, got %q", ct)
+	}
+}
 
 // TestOpenAICompatErrorType_FullMapping 验证 GitHub Issue #17：
 // OpenAI 兼容端点必须把 *每一个* 主 API 使用的 types.ErrorCode 显式映射到 OpenAI 规范的
