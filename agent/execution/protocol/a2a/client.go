@@ -232,10 +232,14 @@ func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, er
 			resp.Body.Close()
 		}
 		if i < c.config.RetryCount {
+			timer := time.NewTimer(c.config.RetryDelay)
 			select {
 			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return nil, ctx.Err()
-			case <-time.After(c.config.RetryDelay):
+			case <-timer.C:
 			}
 		}
 	}

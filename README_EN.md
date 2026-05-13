@@ -89,7 +89,7 @@ English | [中文](README.md)
 - **Provider Retry Wrapper** - RetryableProvider with exponential backoff, only retries recoverable errors
 - **Provider Factory Functions** - Configuration-driven Provider instantiation (standard chat entry: `llm/providers/vendor.NewChatProviderFromConfig`)
 - **OpenAI Compatibility Layer** - Unified adapter for OpenAI-compatible APIs (9 providers slimmed to ~30 lines)
-- **Protocol-Compatible HTTP Inbounds** - `/v1/chat/completions`, `/v1/responses`, and `/v1/messages` all converge on the same `ChatService -> llm/gateway` chain, while Gemini / Vertex `generateContent` paths remain provider outbound protocols
+- **Protocol-Compatible HTTP Inbounds** - `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, and `/v1beta/models/{model}:generateContent` all converge on the same `ChatService -> llm/gateway` chain, while Vertex AI `generateContent` paths remain provider outbound protocols
 - **API Key Pool** - Multi-key rotation, rate limit detection
 
 ### 🎨 Multimodal Capabilities

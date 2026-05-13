@@ -26,6 +26,9 @@ type DAGExecutor struct {
 	// (visitedNodes, nodeResults, etc.) causing data races. (P0 — non-reentrant safety)
 	executeMu sync.Mutex
 
+	// maxParallel limits the number of concurrent node executions in topological scheduling.
+	maxParallel int
+
 	// Execution state — protected by mu for concurrent access within a single execution
 	// (e.g. parallel nodes sharing visitedNodes map).
 	executionID  string
@@ -70,6 +73,7 @@ func NewDAGExecutor(checkpointMgr CheckpointManager, logger *zap.Logger) *DAGExe
 		nodeRunning:     make(map[string]chan struct{}),
 		visitedNodes:    make(map[string]bool),
 		circuitBreakers: NewCircuitBreakerRegistry(DefaultCircuitBreakerConfig(), nil, logger),
+		maxParallel:     10,
 	}
 }
 
@@ -208,6 +212,11 @@ func (e *DAGExecutor) executeTopological(ctx context.Context, graph *DAGGraph, i
 	lastOutput := input
 	completionCh := make(chan dagNodeCompletion, len(reachable))
 
+	var sem chan struct{}
+	if e.maxParallel > 0 {
+		sem = make(chan struct{}, e.maxParallel)
+	}
+
 	startNode := func(nodeID string) error {
 		node, exists := graph.GetNode(nodeID)
 		if !exists {
@@ -215,7 +224,15 @@ func (e *DAGExecutor) executeTopological(ctx context.Context, graph *DAGGraph, i
 		}
 		nodeInput := e.topologicalNodeInput(nodeID, parents[nodeID], input)
 		running++
+		if sem != nil {
+			sem <- struct{}{}
+		}
 		go func() {
+			defer func() {
+				if sem != nil {
+					<-sem
+				}
+			}()
 			output, err := e.executeSingleNode(ctx, graph, node, nodeInput)
 			completionCh <- dagNodeCompletion{nodeID: nodeID, output: output, err: err}
 		}()

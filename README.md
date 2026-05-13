@@ -92,7 +92,7 @@
 - **API Key 池** - 多 Key 轮询、限流检测
 - **Provider 工厂函数** — 配置驱动的 Provider 实例化（标准 chat 入口：`llm/providers/vendor.NewChatProviderFromConfig`）
 - **OpenAI 兼容层** — 统一适配 OpenAI 兼容 API（9 个 provider 瘦身至 ~30 行）
-- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages` 统一收口到同一 `ChatService -> llm/gateway` 主链；Gemini / Vertex `generateContent` 路径保持 provider 出站协议边界
+- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1beta/models/{model}:generateContent` 统一收口到同一 `ChatService -> llm/gateway` 主链；Vertex AI `generateContent` 路径保持 provider 出站协议边界
 
 ### 🎨 多模态能力
 

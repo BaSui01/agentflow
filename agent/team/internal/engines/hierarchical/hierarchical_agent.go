@@ -420,6 +420,7 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 			break
 		}
 
+		timer := time.NewTimer(time.Duration(attempt+1) * time.Second)
 		select {
 		case <-timer.C:
 		case <-ctx.Done():

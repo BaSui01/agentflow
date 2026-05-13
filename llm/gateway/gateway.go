@@ -103,6 +103,7 @@ type Service struct {
 	ledger         observability.Ledger
 	policyManager  *llmpolicy.Manager
 	logger         *zap.Logger
+	handlers       map[llmcore.Capability]func(context.Context, *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error)
 }
 
 var _ llmcore.Gateway = (*Service)(nil)
@@ -128,6 +129,7 @@ func New(cfg Config) *Service {
 		ledger:         ledger,
 		policyManager:  cfg.PolicyManager,
 		logger:         logger,
+		handlers:       make(map[llmcore.Capability]func(context.Context, *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error)),
 	}
 }
 
@@ -137,6 +139,14 @@ func (s *Service) ChatProvider() llmcore.Provider {
 		return nil
 	}
 	return s.chatProvider
+}
+
+// RegisterCapability registers a custom capability handler, overriding the default.
+func (s *Service) RegisterCapability(capability llmcore.Capability, handler func(context.Context, *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error)) {
+	if s.handlers == nil {
+		s.handlers = make(map[llmcore.Capability]func(context.Context, *llmcore.UnifiedRequest) (*llmcore.UnifiedResponse, error))
+	}
+	s.handlers[capability] = handler
 }
 
 // Invoke 执行统一同步调用。
@@ -153,31 +163,35 @@ func (s *Service) Invoke(ctx context.Context, req *llmcore.UnifiedRequest) (*llm
 		resp *llmcore.UnifiedResponse
 		err  error
 	)
-	switch req.Capability {
-	case llmcore.CapabilityChat:
-		resp, err = s.invokeChat(ctx, req)
-	case llmcore.CapabilityTools:
-		resp, err = s.invokeTools(ctx, req)
-	case llmcore.CapabilityImage:
-		resp, err = s.invokeImage(ctx, req)
-	case llmcore.CapabilityVideo:
-		resp, err = s.invokeVideo(ctx, req)
-	case llmcore.CapabilityAudio:
-		resp, err = s.invokeAudio(ctx, req)
-	case llmcore.CapabilityEmbedding:
-		resp, err = s.invokeEmbedding(ctx, req)
-	case llmcore.CapabilityRerank:
-		resp, err = s.invokeRerank(ctx, req)
-	case llmcore.CapabilityModeration:
-		resp, err = s.invokeModeration(ctx, req)
-	case llmcore.CapabilityMusic:
-		resp, err = s.invokeMusic(ctx, req)
-	case llmcore.CapabilityThreeD:
-		resp, err = s.invokeThreeD(ctx, req)
-	case llmcore.CapabilityAvatar:
-		resp, err = s.invokeAvatar(ctx, req)
-	default:
-		return nil, llmcore.InvalidCapabilityError(req.Capability)
+	if handler, ok := s.handlers[req.Capability]; ok {
+		resp, err = handler(ctx, req)
+	} else {
+		switch req.Capability {
+		case llmcore.CapabilityChat:
+			resp, err = s.invokeChat(ctx, req)
+		case llmcore.CapabilityTools:
+			resp, err = s.invokeTools(ctx, req)
+		case llmcore.CapabilityImage:
+			resp, err = s.invokeImage(ctx, req)
+		case llmcore.CapabilityVideo:
+			resp, err = s.invokeVideo(ctx, req)
+		case llmcore.CapabilityAudio:
+			resp, err = s.invokeAudio(ctx, req)
+		case llmcore.CapabilityEmbedding:
+			resp, err = s.invokeEmbedding(ctx, req)
+		case llmcore.CapabilityRerank:
+			resp, err = s.invokeRerank(ctx, req)
+		case llmcore.CapabilityModeration:
+			resp, err = s.invokeModeration(ctx, req)
+		case llmcore.CapabilityMusic:
+			resp, err = s.invokeMusic(ctx, req)
+		case llmcore.CapabilityThreeD:
+			resp, err = s.invokeThreeD(ctx, req)
+		case llmcore.CapabilityAvatar:
+			resp, err = s.invokeAvatar(ctx, req)
+		default:
+			return nil, llmcore.InvalidCapabilityError(req.Capability)
+		}
 	}
 	if err != nil {
 		return nil, err

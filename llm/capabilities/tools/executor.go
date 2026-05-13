@@ -315,6 +315,7 @@ func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call types.ToolC
 			zap.Int("max_retries", e.config.MaxRetries),
 			zap.String("last_error", result.Error))
 
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			result.Error = fmt.Sprintf("retry cancelled: %v", ctx.Err())
@@ -327,7 +328,6 @@ func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call types.ToolC
 		}
 
 		delay = time.Duration(float64(delay) * e.config.RetryBackoff)
-	}
 	}
 
 	return result

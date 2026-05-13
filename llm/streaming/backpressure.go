@@ -393,6 +393,8 @@ func (r *RateLimiter) Allow() bool {
 
 // Wait 阻塞直到一个 token 可用.
 func (r *RateLimiter) Wait(ctx context.Context) error {
+	timer := time.NewTimer(time.Duration(1000/r.tokensPerSec) * time.Millisecond)
+	defer timer.Stop()
 	for {
 		if r.Allow() {
 			return nil

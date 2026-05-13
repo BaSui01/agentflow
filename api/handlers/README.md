@@ -17,7 +17,7 @@
 路由注册在 `api/routes/routes.go`，统一挂载到 `/api/v1/*`：
 
 - Chat: `/api/v1/chat/capabilities`、`/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
-- 兼容入站：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`（分别适配 OpenAI Chat / OpenAI Responses / Anthropic Messages，到同一 ChatService/gateway 链路）
+- 兼容入站：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1beta/models/{model}:generateContent`、`/v1beta/models/{model}:streamGenerateContent`（分别适配 OpenAI Chat / OpenAI Responses / Anthropic Messages / Gemini generateContent，到同一 ChatService/gateway 链路）
 - Agent: `/api/v1/agents`、`/api/v1/agents/{id}`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/execute/interrupt`、`/api/v1/agents/health`
 - RAG: `/api/v1/rag/capabilities`、`/api/v1/rag/query`、`/api/v1/rag/index`
 - Workflow: `/api/v1/workflows/capabilities`、`/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`
@@ -31,7 +31,7 @@
 - Cost: `/api/v1/cost/summary`、`/api/v1/cost/records`、`/api/v1/cost/reset`
 - Config API: `/api/v1/config*`
 
-补充：Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` 以及 Vertex AI `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` 等路径属于 provider 出站协议，不在 `api/routes` 注册项目级 `/v1beta/models/*`、`/v1/projects/*` 或 `/v1/google/*` HTTP 入站路由。
+补充：Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` 已作为 HTTP 入站兼容端点注册在 `api/routes`（统一收口到同一 `ChatService -> llm/gateway` 主链）；Vertex AI `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` 等路径仍属于 provider 出站协议。
 
 ## 工具共用与自动生效
 

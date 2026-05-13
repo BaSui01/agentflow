@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/tokenizer"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -82,6 +83,9 @@ type HybridRetriever struct {
 
 	// 向量存储（可选）
 	vectorStore VectorStore
+
+	// Tokenizer（可选，用于精确估算 token 数）
+	tokenizer *tokenizer.RAGAdapter
 
 	logger *zap.Logger
 }
@@ -193,28 +197,42 @@ func mergeIndexedDocuments(existing []Document, incoming []Document) []Document 
 func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]RetrievalResult, error) {
 	retrievalStart := time.Now()
 
+	// 1. Copy-on-Read: 快速复制检索所需数据，缩小锁持有时间
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	config := r.config
+	documents := make([]Document, len(r.documents))
+	copy(documents, r.documents)
+	docTermFreqs := make([]map[string]int, len(r.docTermFreqs))
+	copy(docTermFreqs, r.docTermFreqs)
+	docLens := make([]int, len(r.docLens))
+	copy(docLens, r.docLens)
+	idf := make(map[string]float64, len(r.idf))
+	for k, v := range r.idf {
+		idf[k] = v
+	}
+	avgDocLen := r.avgDocLen
+	vectorStore := r.vectorStore
+	r.mu.RUnlock()
 
 	results := []RetrievalResult{}
 
-	// 1+2. 并行执行 BM25 检索和向量检索
+	// 2. 并行执行 BM25 检索和向量检索（无锁）
 	var bm25Results, vectorResults map[string]float64
 	var wg sync.WaitGroup
 
-	if r.config.UseBM25 {
+	if config.UseBM25 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			bm25Results = r.bm25Retrieve(query)
+			bm25Results = r.bm25RetrieveWithData(query, documents, docTermFreqs, docLens, idf, avgDocLen, config)
 		}()
 	}
 
-	if r.config.UseVector && queryEmbedding != nil {
+	if config.UseVector && queryEmbedding != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			vectorResults = r.vectorRetrieve(ctx, queryEmbedding)
+			vectorResults = r.vectorRetrieveWithData(ctx, queryEmbedding, documents, vectorStore, config)
 		}()
 	}
 
@@ -225,7 +243,7 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 
 	// 4. 转换为 RetrievalResult
 	for docID, scores := range merged {
-		doc := r.getDocumentByID(docID)
+		doc := r.getDocumentByIDFromList(documents, docID)
 		if doc == nil {
 			continue
 		}
@@ -268,7 +286,7 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 	for _, res := range results {
 		if res.FinalScore >= r.config.MinScore {
 			filtered = append(filtered, res)
-			contextTokens += estimateTokens(res.Document.Content)
+			contextTokens += r.estimateTokens(res.Document.Content)
 		}
 	}
 
@@ -325,32 +343,48 @@ func (r *HybridRetriever) computeBM25Stats() {
 	}
 }
 
-// bm25Retrieve BM25 检索
-// 🚀 性能优化：使用预计算的词频，避免每次检索都重新分词
-// 复杂度从 O(n*m) 降低到 O(n)，其中 n=文档数，m=平均文档长度
+// bm25Retrieve BM25 检索（向后兼容包装）
 func (r *HybridRetriever) bm25Retrieve(query string) map[string]float64 {
-	queryTerms := r.tokenize(query)
-	scores := make(map[string]float64, len(r.documents))
+	r.mu.RLock()
+	config := r.config
+	documents := make([]Document, len(r.documents))
+	copy(documents, r.documents)
+	docTermFreqs := make([]map[string]int, len(r.docTermFreqs))
+	copy(docTermFreqs, r.docTermFreqs)
+	docLens := make([]int, len(r.docLens))
+	copy(docLens, r.docLens)
+	idf := make(map[string]float64, len(r.idf))
+	for k, v := range r.idf {
+		idf[k] = v
+	}
+	avgDocLen := r.avgDocLen
+	r.mu.RUnlock()
+	return r.bm25RetrieveWithData(query, documents, docTermFreqs, docLens, idf, avgDocLen, config)
+}
 
-	for i, doc := range r.documents {
-		// 🎯 直接使用预计算的词频，不再重新分词！
-		termFreq := r.docTermFreqs[i]
+// bm25RetrieveWithData BM25 检索（无锁，数据通过参数传入）
+func (r *HybridRetriever) bm25RetrieveWithData(query string, documents []Document, docTermFreqs []map[string]int, docLens []int, idf map[string]float64, avgDocLen float64, config HybridRetrievalConfig) map[string]float64 {
+	queryTerms := r.tokenize(query)
+	scores := make(map[string]float64, len(documents))
+
+	for i, doc := range documents {
+		termFreq := docTermFreqs[i]
 		if termFreq == nil {
 			continue
 		}
 
 		score := 0.0
-		docLen := float64(r.docLens[i])
+		docLen := float64(docLens[i])
 
 		for _, qTerm := range queryTerms {
 			if tf, ok := termFreq[qTerm]; ok {
-				idf := r.idf[qTerm]
+				idfVal := idf[qTerm]
 
 				// BM25 公式
-				numerator := float64(tf) * (r.config.BM25K1 + 1.0)
-				denominator := float64(tf) + r.config.BM25K1*(1.0-r.config.BM25B+r.config.BM25B*(docLen/r.avgDocLen))
+				numerator := float64(tf) * (config.BM25K1 + 1.0)
+				denominator := float64(tf) + config.BM25K1*(1.0-config.BM25B+config.BM25B*(docLen/avgDocLen))
 
-				score += idf * (numerator / denominator)
+				score += idfVal * (numerator / denominator)
 			}
 		}
 
@@ -360,13 +394,24 @@ func (r *HybridRetriever) bm25Retrieve(query string) map[string]float64 {
 	return scores
 }
 
-// vectorRetrieve 向量检索（余弦相似度）
+// vectorRetrieve 向量检索（向后兼容包装）
 func (r *HybridRetriever) vectorRetrieve(ctx context.Context, queryEmbedding []float64) map[string]float64 {
+	r.mu.RLock()
+	documents := make([]Document, len(r.documents))
+	copy(documents, r.documents)
+	vectorStore := r.vectorStore
+	config := r.config
+	r.mu.RUnlock()
+	return r.vectorRetrieveWithData(ctx, queryEmbedding, documents, vectorStore, config)
+}
+
+// vectorRetrieveWithData 向量检索（无锁，数据通过参数传入）
+func (r *HybridRetriever) vectorRetrieveWithData(ctx context.Context, queryEmbedding []float64, documents []Document, vectorStore VectorStore, config HybridRetrievalConfig) map[string]float64 {
 	scores := make(map[string]float64)
 
 	// 优先使用向量存储
-	if r.vectorStore != nil {
-		results, err := r.vectorStore.Search(ctx, queryEmbedding, r.config.RerankTopK)
+	if vectorStore != nil {
+		results, err := vectorStore.Search(ctx, queryEmbedding, config.RerankTopK)
 		if err != nil {
 			r.logger.Warn("vector store search failed", zap.Error(err))
 			return scores
@@ -378,7 +423,7 @@ func (r *HybridRetriever) vectorRetrieve(ctx context.Context, queryEmbedding []f
 	}
 
 	// 使用内存向量作为主路径（未配置向量存储时）
-	for _, doc := range r.documents {
+	for _, doc := range documents {
 		if doc.Embedding == nil {
 			continue
 		}
@@ -389,6 +434,16 @@ func (r *HybridRetriever) vectorRetrieve(ctx context.Context, queryEmbedding []f
 	}
 
 	return scores
+}
+
+// getDocumentByIDFromList 根据 ID 从文档列表中获取文档
+func (r *HybridRetriever) getDocumentByIDFromList(documents []Document, id string) *Document {
+	for i := range documents {
+		if documents[i].ID == id {
+			return &documents[i]
+		}
+	}
+	return nil
 }
 
 func (r *HybridRetriever) buildDocIndex() {
@@ -653,10 +708,20 @@ func collectRetrievalMetrics(
 	return m
 }
 
-// estimateTokens 粗略估算文本 token 数（英文约 4 字符/token）。
-func estimateTokens(text string) int {
+// SetTokenizer 设置 tokenizer，用于精确估算 token 数。
+func (r *HybridRetriever) SetTokenizer(t *tokenizer.RAGAdapter) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tokenizer = t
+}
+
+// estimateTokens 估算文本 token 数。如果配置了 tokenizer，则使用精确计数；否则回退到字符数估算。
+func (r *HybridRetriever) estimateTokens(text string) int {
 	if len(text) == 0 {
 		return 0
+	}
+	if r.tokenizer != nil {
+		return r.tokenizer.CountTokens(text)
 	}
 	return (len(text) + 3) / 4
 }
