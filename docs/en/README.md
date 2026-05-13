@@ -14,50 +14,50 @@
 
 ### 🎯 Getting Started
 
-| Document | Description | Time |
-|----------|-------------|------|
-| [⚡ Five-Minute Quick Start](./getting-started/00.FiveMinuteQuickStart.md) | From zero to your first program | 5 min |
-| [📦 Installation & Setup](./getting-started/01.InstallationAndSetup.md) | Detailed installation and configuration | 10 min |
+| Document                                                                   | Description                             | Time   |
+| -------------------------------------------------------------------------- | --------------------------------------- | ------ |
+| [⚡ Five-Minute Quick Start](./getting-started/00.FiveMinuteQuickStart.md) | From zero to your first program         | 5 min  |
+| [📦 Installation & Setup](./getting-started/01.InstallationAndSetup.md)    | Detailed installation and configuration | 10 min |
 
 ### 📚 Tutorials
 
-| Document | Description | Difficulty |
-|----------|-------------|------------|
-| [🚀 Quick Start](./tutorials/01.QuickStart.md) | Core concepts and basic usage | ⭐ |
-| [🔌 Provider Configuration](./tutorials/02.ProviderConfiguration.md) | 13+ LLM provider setup guide | ⭐⭐ |
-| [🤖 Agent Development](./tutorials/03.AgentDevelopment.md) | Complete guide to creating agents | ⭐⭐ |
-| [🔧 Tool Integration](./tutorials/04.ToolIntegration.md) | Tool registration, execution, ReAct loop | ⭐⭐⭐ |
-| [📊 Workflow Orchestration](./tutorials/05.WorkflowOrchestration.md) | Chain, parallel, DAG workflows | ⭐⭐⭐ |
-| [🖼️ Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | Image, audio, video processing | ⭐⭐⭐ |
-| [🎬 Multimodal Framework API](./tutorials/21.MultimodalFrameworkAPI.md) | Capability-layer multimodal HTTP API | ⭐⭐⭐ |
-| [🔍 RAG](./tutorials/07.RAG.md) | Vector storage and knowledge retrieval | ⭐⭐⭐⭐ |
-| [👥 Team Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Official team facade and multi-agent collaboration modes | ⭐⭐⭐⭐ |
+| Document                                                                       | Description                                              | Difficulty |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------- | ---------- |
+| [🚀 Quick Start](./tutorials/01.QuickStart.md)                                 | Core concepts and basic usage                            | ⭐         |
+| [🔌 Provider Configuration](./tutorials/02.ProviderConfiguration.md)           | 13+ LLM provider setup guide                             | ⭐⭐       |
+| [🤖 Agent Development](./tutorials/03.AgentDevelopment.md)                     | Complete guide to creating agents                        | ⭐⭐       |
+| [🔧 Tool Integration](./tutorials/04.ToolIntegration.md)                       | Tool registration, execution, ReAct loop                 | ⭐⭐⭐     |
+| [📊 Workflow Orchestration](./tutorials/05.WorkflowOrchestration.md)           | Chain, parallel, DAG workflows                           | ⭐⭐⭐     |
+| [🖼️ Multimodal Processing](./tutorials/06.MultimodalProcessing.md)             | Image, audio, video processing                           | ⭐⭐⭐     |
+| [🎬 Multimodal Framework API](./tutorials/21.MultimodalFrameworkAPI.md)        | Capability-layer multimodal HTTP API                     | ⭐⭐⭐     |
+| [🔍 RAG](./tutorials/07.RAG.md)                                                | Vector storage and knowledge retrieval                   | ⭐⭐⭐⭐   |
+| [👥 Team Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Official team facade and multi-agent collaboration modes | ⭐⭐⭐⭐   |
 
 ### 🏗️ Architecture
 
-| Document | Description | When to use it |
-|----------|-------------|----------------|
-| [`../architecture/README.md`](../architecture/README.md) | Current architecture index and official entrypoints | Start here when choosing an architecture document |
-| [`../architecture/Agent框架现状与收口改进计划-2026-04-25.md`](../architecture/Agent框架现状与收口改进计划-2026-04-25.md) | Agent framework status, gaps, and closure checklist | Planning Agent framework closure work |
-| [`../architecture/ADRs/004-多Agent团队抽象.md`](../architecture/ADRs/004-多Agent团队抽象.md) | `agent/team` public surface and multi-agent boundary contract | Changing TeamBuilder, execution modes, or the team facade |
-| [`../architecture/FunctionCalling回归矩阵说明-2026-04-25.md`](../architecture/FunctionCalling回归矩阵说明-2026-04-25.md) | Provider tool/function calling regression matrix | Validating OpenAI / Anthropic / Gemini / XML fallback tool calling |
+| Document                                                                                                                 | Description                                                   | When to use it                                                     |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`../architecture/README.md`](../architecture/README.md)                                                                 | Current architecture index and official entrypoints           | Start here when choosing an architecture document                  |
+| [`../architecture/Agent框架现状与收口改进计划-2026-04-25.md`](../architecture/Agent框架现状与收口改进计划-2026-04-25.md) | Agent framework status, gaps, and closure checklist           | Planning Agent framework closure work                              |
+| [`../architecture/ADRs/004-多Agent团队抽象.md`](../architecture/ADRs/004-多Agent团队抽象.md)                             | `agent/team` public surface and multi-agent boundary contract | Changing TeamBuilder, execution modes, or the team facade          |
+| [`../architecture/FunctionCalling回归矩阵说明-2026-04-25.md`](../architecture/FunctionCalling回归矩阵说明-2026-04-25.md) | Provider tool/function calling regression matrix              | Validating OpenAI / Anthropic / Gemini / XML fallback tool calling |
 
 ### 📘 Guides
 
-| Document | Description | Difficulty |
-|----------|-------------|------------|
-| [🧭 Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | Official 12-month snapshot for chat, image, video, TTS, STT, and realtime model families | ⭐ |
+| Document                                                                                       | Description                                                                              | Difficulty |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------- |
+| [🧭 Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | Official 12-month snapshot for chat, image, video, TTS, STT, and realtime model families | ⭐         |
 
 ### 🧭 Documentation Layers
 
-| Layer | Start here | When to use it |
-|------|------------|----------------|
-| Official recent model families | [Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md) | You need a 12-month official snapshot for chat / image / video / speech families |
-| Unified project overview | [`../cn/guides/模型与媒体端点参考.md`](../cn/guides/模型与媒体端点参考.md) | You need the provider `/models` view plus unified media overview |
-| Current implemented capabilities | [`../cn/guides/多模态能力端点参考.md`](../cn/guides/多模态能力端点参考.md) | You need to know what the codebase actually implements today |
-| Image / video vendor integration | [`../cn/guides/视频与图像厂商及端点说明.md`](../cn/guides/视频与图像厂商及端点说明.md) | You need provider onboarding, shared keys, endpoint, and config details |
-| Hands-on tutorials | [Provider Configuration](./tutorials/02.ProviderConfiguration.md) / [Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | You want examples you can copy quickly |
-| Historical background | [`../cn/guides/多模态能力端点参考.md`](../cn/guides/多模态能力端点参考.md) | You need design history and implementation milestones |
+| Layer                            | Start here                                                                                                                          | When to use it                                                                   |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Official recent model families   | [Recent Model Families and Multimodal Matrix](./guides/RecentModelFamiliesAndModalities.md)                                         | You need a 12-month official snapshot for chat / image / video / speech families |
+| Unified project overview         | [`../cn/guides/模型与媒体端点参考.md`](../cn/guides/模型与媒体端点参考.md)                                                          | You need the provider `/models` view plus unified media overview                 |
+| Current implemented capabilities | [`../cn/guides/多模态能力端点参考.md`](../cn/guides/多模态能力端点参考.md)                                                          | You need to know what the codebase actually implements today                     |
+| Image / video vendor integration | [`../cn/guides/视频与图像厂商及端点说明.md`](../cn/guides/视频与图像厂商及端点说明.md)                                              | You need provider onboarding, shared keys, endpoint, and config details          |
+| Hands-on tutorials               | [Provider Configuration](./tutorials/02.ProviderConfiguration.md) / [Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | You want examples you can copy quickly                                           |
+| Historical background            | [`../archive/归档说明.md`](../archive/归档说明.md)                                                                                  | You need design history and archived implementation milestones                   |
 
 ---
 
@@ -138,18 +138,20 @@
 
 ## HTTP API Overview
 
-| Group | Endpoints |
-|-------|-----------|
-| **System** | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version` |
-| **Chat** | `GET /api/v1/chat/capabilities`, `POST /api/v1/chat/completions`, `POST /api/v1/chat/completions/stream`, `POST /v1/chat/completions` (OpenAI Chat compat), `POST /v1/responses` (OpenAI Responses compat), `POST /v1/messages` (Anthropic Messages compat) |
-| **Agent** | `GET /api/v1/agents`, `GET /api/v1/agents/{id}`, `GET /api/v1/agents/capabilities`, `POST /api/v1/agents/execute`, `POST /api/v1/agents/execute/stream`, `GET /api/v1/agents/health` |
-| **Provider** | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys`, etc. |
-| **Tools** | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `GET /api/v1/tools/providers`, etc. |
-| **Multimodal** | `GET /api/v1/multimodal/capabilities`, `POST /api/v1/multimodal/image`, `POST /api/v1/multimodal/video`, `POST /api/v1/multimodal/chat`, etc. |
-| **Protocol** | `GET /api/v1/mcp/resources`, `GET /api/v1/mcp/tools`, `POST /api/v1/mcp/tools/`, `GET /api/v1/a2a/.well-known/agent.json`, `POST /api/v1/a2a/tasks` |
-| **RAG** | `GET /api/v1/rag/capabilities`, `POST /api/v1/rag/query`, `POST /api/v1/rag/index` |
-| **Workflow** | `GET /api/v1/workflows/capabilities`, `POST /api/v1/workflows/execute`, `POST /api/v1/workflows/parse`, `GET /api/v1/workflows` |
-| **Config** | `GET/PUT /api/v1/config`, `POST /api/v1/config/reload`, `POST /api/v1/config/rollback`, `GET /api/v1/config/fields`, `GET /api/v1/config/changes` |
+| Group             | Endpoints                                                                                                                                                                                                                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **System**        | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version`                                                                                                                                                                                                  |
+| **Chat**          | `GET /api/v1/chat/capabilities`, `POST /api/v1/chat/completions`, `POST /api/v1/chat/completions/stream`, `POST /v1/chat/completions` (OpenAI Chat compat), `POST /v1/responses` (OpenAI Responses compat), `POST /v1/messages` (Anthropic Messages compat) |
+| **Agent**         | `GET /api/v1/agents`, `GET /api/v1/agents/{id}`, `GET /api/v1/agents/capabilities`, `POST /api/v1/agents/execute`, `POST /api/v1/agents/execute/stream`, `POST /api/v1/agents/execute/interrupt`, `GET /api/v1/agents/health`                               |
+| **Provider**      | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys`, etc.                                                                                                                                                                                   |
+| **Tools**         | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `GET /api/v1/tools/providers`, etc.                                                                                                                                                                  |
+| **Multimodal**    | `GET /api/v1/multimodal/capabilities`, `POST /api/v1/multimodal/image`, `POST /api/v1/multimodal/video`, `POST /api/v1/multimodal/chat`, etc.                                                                                                               |
+| **Protocol**      | `GET /api/v1/mcp/resources`, `GET /api/v1/mcp/tools`, `POST /api/v1/mcp/tools/`, `GET /api/v1/a2a/.well-known/agent.json`, `POST /api/v1/a2a/tasks`                                                                                                         |
+| **RAG**           | `GET /api/v1/rag/capabilities`, `POST /api/v1/rag/query`, `POST /api/v1/rag/index`                                                                                                                                                                          |
+| **Workflow**      | `GET /api/v1/workflows/capabilities`, `POST /api/v1/workflows/execute`, `POST /api/v1/workflows/parse`, `GET /api/v1/workflows`                                                                                                                             |
+| **Authorization** | `GET /api/v1/authorization/audit`                                                                                                                                                                                                                           |
+| **Cost**          | `GET /api/v1/cost/summary`, `GET /api/v1/cost/records`, `POST /api/v1/cost/reset`                                                                                                                                                                           |
+| **Config**        | `GET/PUT /api/v1/config`, `POST /api/v1/config/reload`, `POST /api/v1/config/rollback`, `GET /api/v1/config/fields`, `GET /api/v1/config/changes`                                                                                                           |
 
 Note: Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`, `POST /v1beta/models/{model}:streamGenerateContent`, and Vertex AI paths such as `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` remain provider outbound protocol paths owned by `llm/providers/gemini` / `llm/providers/vendor`, not new inbound HTTP routes in this project.
 
@@ -172,7 +174,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/BaSui01/agentflow/llm"
+    llm "github.com/BaSui01/agentflow/llm/core"
     "github.com/BaSui01/agentflow/llm/providers"
     "github.com/BaSui01/agentflow/llm/providers/openai"
     "go.uber.org/zap"

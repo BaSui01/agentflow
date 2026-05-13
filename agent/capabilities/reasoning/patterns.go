@@ -280,7 +280,7 @@ Return the thought candidates using the provided structured output schema.`, tas
 
 	parseResult, err := generateStructured[[]thoughtCandidate](ctx, t.gateway, newGatewayChatRequest(
 		defaultModel(t.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.8
 			req.MaxTokens = 1000
@@ -353,7 +353,7 @@ Return the score using the provided structured output schema.`, task, thought.Co
 
 	parseResult, err := generateStructured[reflexionScore](ctx, t.gateway, newGatewayChatRequest(
 		defaultModel(t.config.EvalModel),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.1
 			req.MaxTokens = 10

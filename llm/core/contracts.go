@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Capability 标识统一入口支持的能力类型。
 type Capability string
@@ -34,6 +37,25 @@ const (
 type Gateway interface {
 	Invoke(ctx context.Context, req *UnifiedRequest) (*UnifiedResponse, error)
 	Stream(ctx context.Context, req *UnifiedRequest) (<-chan UnifiedChunk, error)
+}
+
+// InvokeChat is a convenience helper that wraps a ChatRequest into a UnifiedRequest,
+// invokes the gateway, and unwraps the ChatResponse from the unified result.
+func InvokeChat(ctx context.Context, gateway Gateway, req *ChatRequest) (*ChatResponse, error) {
+	resp, err := gateway.Invoke(ctx, &UnifiedRequest{
+		Capability: CapabilityChat,
+		ModelHint:  req.Model,
+		TraceID:    req.TraceID,
+		Payload:    req,
+	})
+	if err != nil {
+		return nil, err
+	}
+	chatResp, ok := resp.Output.(*ChatResponse)
+	if !ok || chatResp == nil {
+		return nil, fmt.Errorf("invalid chat response from gateway")
+	}
+	return chatResp, nil
 }
 
 // ChatRerankBinding 定义 chat provider 到 rerank provider 的显式绑定关系。

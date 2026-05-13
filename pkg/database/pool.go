@@ -303,10 +303,14 @@ func (pm *PoolManager) WithTransactionRetry(ctx context.Context, maxRetries int,
 
 		// 指数退避
 		backoff := time.Duration(1<<uint(i)) * 100 * time.Millisecond
+		timer := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+					<-timer.C
+				}
 			return ctx.Err()
-		case <-time.After(backoff):
+		case <-timer.C:
 		}
 	}
 

@@ -18,15 +18,17 @@
 
 - Chat: `/api/v1/chat/capabilities`、`/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
 - 兼容入站：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`（分别适配 OpenAI Chat / OpenAI Responses / Anthropic Messages，到同一 ChatService/gateway 链路）
-- Agent: `/api/v1/agents`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/health`
-- RAG: `/api/v1/rag/query`、`/api/v1/rag/index`
-- Workflow: `/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`
+- Agent: `/api/v1/agents`、`/api/v1/agents/{id}`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/execute/interrupt`、`/api/v1/agents/health`
+- RAG: `/api/v1/rag/capabilities`、`/api/v1/rag/query`、`/api/v1/rag/index`
+- Workflow: `/api/v1/workflows/capabilities`、`/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`
 - Multimodal: `/api/v1/multimodal/*`
 - Protocol: `/api/v1/mcp/*`、`/api/v1/a2a/*`
 - Provider API Key: `/api/v1/providers/*`
 - Tool Registry: `/api/v1/tools*`
   - Tool Provider Config: `/api/v1/tools/providers`、`/api/v1/tools/providers/{provider}`、`/api/v1/tools/providers/reload`
   - Tool Approval: `/api/v1/tools/approvals`、`/api/v1/tools/approvals/{id}`、`/api/v1/tools/approvals/{id}/resolve`
+- Authorization: `/api/v1/authorization/audit`
+- Cost: `/api/v1/cost/summary`、`/api/v1/cost/records`、`/api/v1/cost/reset`
 - Config API: `/api/v1/config*`
 
 补充：Google Gemini Developer API `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` 以及 Vertex AI `POST /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` 等路径属于 provider 出站协议，不在 `api/routes` 注册项目级 `/v1beta/models/*`、`/v1/projects/*` 或 `/v1/google/*` HTTP 入站路由。

@@ -81,7 +81,7 @@ func (s *StructuredOutput[T]) Schema() *JSONSchema {
 // provider 差异由 llm 层处理。
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
 	return s.GenerateWithRequest(ctx, newStructuredChatRequest([]types.Message{
-		{Role: llmcore.RoleUser, Content: prompt},
+		types.NewUserMessage(prompt),
 	}))
 }
 
@@ -105,7 +105,7 @@ func (s *StructuredOutput[T]) GenerateWithRequest(ctx context.Context, req *llmc
 // 生成 WithParse 生成结构化输出并返回详细解析结果 。
 func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt string) (*ParseResult[T], error) {
 	return s.GenerateWithRequestAndParse(ctx, newStructuredChatRequest([]types.Message{
-		{Role: llmcore.RoleUser, Content: prompt},
+		types.NewUserMessage(prompt),
 	}))
 }
 
@@ -178,20 +178,7 @@ func (s *StructuredOutput[T]) invokeChat(ctx context.Context, req *llmcore.ChatR
 	if s.gateway == nil {
 		return nil, fmt.Errorf("gateway is not configured")
 	}
-	resp, err := s.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  req.Model,
-		TraceID:    req.TraceID,
-		Payload:    req,
-	})
-	if err != nil {
-		return nil, err
-	}
-	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
-	if !ok || chatResp == nil {
-		return nil, fmt.Errorf("invalid chat response from gateway")
-	}
-	return chatResp, nil
+	return llmcore.InvokeChat(ctx, s.gateway, req)
 }
 
 // 解析AndValidate 解析JSON 并验证与计划。

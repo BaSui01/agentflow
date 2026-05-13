@@ -421,8 +421,11 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 		}
 
 		select {
-		case <-time.After(time.Duration(attempt+1) * time.Second):
+		case <-timer.C:
 		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return nil, ctx.Err()
 		}
 	}

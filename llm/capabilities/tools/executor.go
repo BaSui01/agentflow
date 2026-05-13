@@ -319,15 +319,15 @@ func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call types.ToolC
 		case <-ctx.Done():
 			result.Error = fmt.Sprintf("retry cancelled: %v", ctx.Err())
 			return result
-		case <-time.After(delay):
+		case <-timer.C:
 		}
-
 		result = e.ExecuteOne(ctx, call)
 		if !result.IsError() {
 			return result
 		}
 
 		delay = time.Duration(float64(delay) * e.config.RetryBackoff)
+	}
 	}
 
 	return result

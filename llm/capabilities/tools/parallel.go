@@ -184,14 +184,18 @@ func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.Too
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
+			timer := time.NewTimer(p.config.RetryDelay)
 			select {
 			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return llmpkg.ToolResult{
 					ToolCallID: call.ID,
 					Name:       call.Name,
 					Error:      "context cancelled during retry",
 				}
-			case <-time.After(p.config.RetryDelay):
+			case <-timer.C:
 			}
 			p.logger.Debug("retrying tool execution",
 				zap.String("tool", call.Name),

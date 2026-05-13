@@ -665,10 +665,14 @@ func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGN
 		)
 
 		// Wait before retry
+		timer := time.NewTimer(retryDelay)
 		select {
 		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return nil, ctx.Err()
-		case <-time.After(retryDelay):
+		case <-timer.C:
 		}
 
 		// Unmark as visited to allow re-execution

@@ -401,8 +401,9 @@ func (r *RateLimiter) Wait(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(1000/r.tokensPerSec) * time.Millisecond):
+		case <-timer.C:
 		}
+		timer.Reset(time.Duration(1000/r.tokensPerSec) * time.Millisecond)
 	}
 }
 

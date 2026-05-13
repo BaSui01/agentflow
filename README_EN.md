@@ -43,6 +43,7 @@ English | [中文](README.md)
 - **Context Runtime** - Unified assembly of conversation, memory, retrieval, and tool-state under one token budget
 
 ### 🧩 Reasoning Patterns
+
 - **Official default** - `ReAct` is the only default reasoning/execution chain
 - **Advanced opt-in** - `Reflexion`, `ReWOO`, `Plan-Execute`
 - **Experimental** - `Dynamic Planner`, `Iterative Deepening`
@@ -92,6 +93,7 @@ English | [中文](README.md)
 - **API Key Pool** - Multi-key rotation, rate limit detection
 
 ### 🎨 Multimodal Capabilities
+
 - **Embedding** - OpenAI, Gemini, Cohere, Jina, Voyage
 - **Image** - `gpt-image-1`, Imagen 4, Flux, Stability, Ideogram, Tongyi, Zhipu, Baidu, Doubao, Tencent Hunyuan, Kling
 - **Video** - `sora-2`, Runway Gen-4.5 / `gen4_turbo`, Veo 3.1, Gemini, Kling, Luma, MiniMax, Seedance
@@ -467,16 +469,16 @@ Dependency shorthand:
 
 ### Allowed / forbidden dependency matrix
 
-| Source | Allowed to depend on | Forbidden to depend on |
-| --- | --- | --- |
-| `types/` | none | `llm/`, `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/`, `config/`, `pkg/` |
-| `llm/` | `types/`, `pkg/`, `config/` | `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/` |
-| `agent/` | `types/`, `llm/`, `rag/`, `pkg/`, `config/` | `workflow/`, `api/`, `cmd/`, `internal/` |
-| `rag/` | `types/`, `llm/`, `pkg/`, `config/` | `agent/`, `workflow/`, `api/`, `cmd/`, `internal/` |
-| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |
-| `api/` | `types/`, `llm/`, `agent/`, `rag/`, `workflow/`, `config/` | provider implementation details, composition-root logic |
-| `cmd/` | all runtime assembly through `internal/app/bootstrap` | hidden business implementation, bypassing bootstrap wiring |
-| `pkg/` | `types/` and necessary `pkg/*` | `api/`, `cmd/` |
+| Source      | Allowed to depend on                                       | Forbidden to depend on                                                                |
+| ----------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `types/`    | none                                                       | `llm/`, `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/`, `config/`, `pkg/` |
+| `llm/`      | `types/`, `pkg/`, `config/`                                | `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/`                            |
+| `agent/`    | `types/`, `llm/`, `rag/`, `pkg/`, `config/`                | `workflow/`, `api/`, `cmd/`, `internal/`                                              |
+| `rag/`      | `types/`, `llm/`, `pkg/`, `config/`                        | `agent/`, `workflow/`, `api/`, `cmd/`, `internal/`                                    |
+| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/`      | `api/`, `cmd/`, `internal/`, `agent/persistence`                                      |
+| `api/`      | `types/`, `llm/`, `agent/`, `rag/`, `workflow/`, `config/` | provider implementation details, composition-root logic                               |
+| `cmd/`      | all runtime assembly through `internal/app/bootstrap`      | hidden business implementation, bypassing bootstrap wiring                            |
+| `pkg/`      | `types/` and necessary `pkg/*`                             | `api/`, `cmd/`                                                                        |
 
 ```
 agentflow/
@@ -490,31 +492,46 @@ agentflow/
 │
 ├── llm/                      # Layer 1: LLM abstraction layer (directory-only container; no root Go files)
 │   ├── batch/                # Batch request processing
-│   ├── providers/            # Provider implementations
-│   │   ├── openai/
-│   │   ├── anthropic/
-│   │   ├── gemini/
-│   │   ├── openaicompat/     # Compat chat base
-│   │   ├── vendor/           # Chat factory + vendor profiles
-│   │   └── ...               # Multimodal / vendor-specific capability code
-│   ├── runtime/              # Router / policy / compose
-│   ├── gateway/              # Unified capability entry
-│   ├── capabilities/         # Image / Video / Audio / Rerank ...
+│   ├── cache/                # Prompt cache / tool cache
+│   ├── capabilities/         # Image / Video / Audio / Embedding / Rerank / Moderation / 3D / Music / Avatar
+│   ├── circuitbreaker/       # Circuit breaker
+│   ├── config/               # LLM config policies
 │   ├── core/                 # Provider / request-response / gateway contracts
-│   ├── tokenizer/            # Unified token counter
-│   │   ├── tokenizer.go      # Tokenizer interface + global registry
-│   │   ├── tiktoken.go       # tiktoken adapter (OpenAI models)
-│   │   └── estimator.go      # CJK estimator
-│   └── tools/                # Tool execution
+│   ├── gateway/              # Unified capability entry
+│   ├── idempotency/          # Idempotent requests
+│   ├── internal/             # Official SDK wrappers (anthropicofficial / googlegenai / openaiofficial)
+│   ├── middleware/           # XML tool format / rewriter chain
+│   ├── observability/        # Cost tracking / metrics / distributed tracing
+│   ├── providers/            # Provider implementations
+│   │   ├── anthropic/        # Claude
+│   │   ├── anthropiccompat/  # Anthropic Messages API compat base
+│   │   ├── base/             # Provider base
+│   │   ├── doubao/           # ByteDance Doubao
+│   │   ├── gemini/           # Gemini
+│   │   ├── geminicompat/     # Gemini generateContent API compat base
+│   │   ├── glm/              # Zhipu GLM
+│   │   ├── grok/             # xAI Grok
+│   │   ├── minimax/          # MiniMax
+│   │   ├── mistral/          # Mistral
+│   │   ├── openai/           # OpenAI
+│   │   ├── openaicompat/     # Compat chat base
+│   │   ├── qwen/             # Qwen (Tongyi)
+│   │   └── vendor/           # Chat factory + vendor profiles
+│   ├── runtime/              # Router / policy / compose
+│   ├── streaming/            # Streaming backpressure / zero-copy
+│   └── tokenizer/            # Unified token counter
+│       ├── tokenizer.go      # Tokenizer interface + global registry
+│       ├── tiktoken.go       # tiktoken adapter (OpenAI models)
+│       └── estimator.go      # CJK estimator
 │
 ├── agent/                    # Layer 2: Agent core (directory-only container; no root Go files)
 │   ├── adapters/             # Adapter layer (chat/declarative/structured/handoff)
-│   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming)
+│   ├── capabilities/         # Capability layer (memory/reasoning/planning/tools/guardrails/streaming/prompt)
 │   ├── collaboration/        # Collaboration layer (federation orchestration)
 │   ├── core/                 # Core layer (registry/helpers/extension contracts)
-│   ├── execution/            # Execution layer (runtime/context/loop/protocol/orchestration)
+│   ├── execution/            # Execution layer (context/loop/protocol + pipeline.go)
 │   ├── integration/          # Integration layer (deployment/hosted/k8s/lsp/voice)
-│   ├── observability/        # Observability layer (monitoring/evaluation/hitl)
+│   ├── observability/        # Observability layer (monitoring/evaluation/hitl/events)
 │   └── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
 │
 ├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)
@@ -538,18 +555,38 @@ agentflow/
 │   └── routes/               # Route registration
 │
 ├── internal/                 # Composition-root support: startup builders / bridges
-│   └── app/bootstrap/        # Runtime assembly, dependency wiring, handler construction
+│   ├── app/bootstrap/        # Runtime assembly, dependency wiring, handler construction
+│   ├── app/service/          # Internal service layer (tool registry, etc.)
+│   └── usecase/              # Use-case layer (chat/workflow/authorization, etc.)
 │
 ├── config/                   # Configuration management
 │   ├── loader.go             # Configuration loader
 │   ├── defaults.go           # Default values
 │   ├── watcher.go            # File watcher
 │   ├── hotreload.go          # Hot-reload & rollback
-│   └── api.go                # Configuration API
+│   ├── api.go                # Configuration API
+│   └── doc.go                # Package documentation
 │
 ├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)
+│   ├── cache/                # Cache abstractions
+│   ├── common/               # Common utilities
+│   ├── database/             # Database utilities
+│   ├── httpclient/           # HTTP client
+│   ├── httputil/             # HTTP utilities
+│   ├── jsonschema/           # JSON Schema
+│   ├── jsonutil/             # JSON utilities
+│   ├── metrics/              # Metrics collection
+│   ├── middleware/            # Middleware
+│   ├── migration/            # Database migrations
+│   ├── mongodb/              # MongoDB utilities
+│   ├── openapi/              # OpenAPI tool generator
+│   ├── scheduler/            # Scheduler
+│   ├── server/               # Server utilities
 │   ├── service/              # Lifecycle registry and service bus
-│   └── openapi/              # OpenAPI tool generator
+│   ├── storage/              # Storage abstractions
+│   ├── telemetry/            # Telemetry
+│   ├── tlsutil/              # TLS utilities
+│   └── tokenizer/            # Token counting utilities
 │
 ├── cmd/agentflow/            # Application entry and runtime wiring
 │   ├── main.go               # CLI entry (serve/migrate/health/version)
@@ -564,32 +601,34 @@ agentflow/
 │   ├── server_hotreload.go   # Hot-reload manager initialization
 │   └── server_shutdown.go    # Graceful shutdown flow
 │
-└── examples/                 # Example code
+└── examples/                 # Example code (22+ scenarios + auxiliary dirs)
 ```
 
 ## 📖 Examples
 
-| Example | Description |
-|---------|-------------|
-| [01_simple_chat](examples/01_simple_chat/) | Basic Chat |
-| [02_streaming](examples/02_streaming/) | Streaming Response |
-| [03_tool_use](examples/03_tool_use/) | Tool Use / Function Calling |
-| [04_custom_agent](examples/04_custom_agent/) | Custom Agent |
-| [05_workflow](examples/05_workflow/) | Workflow Orchestration |
-| [06_advanced_features](examples/06_advanced_features/) | Advanced Features |
-| [07_mid_priority_features](examples/07_mid_priority_features/) | Mid-Priority Features |
-| [08_low_priority_features](examples/08_low_priority_features/) | Low-Priority Features |
-| [09_full_integration](examples/09_full_integration/) | Full Integration |
-| [11_multi_provider_apis](examples/11_multi_provider_apis/) | Multi-Provider APIs |
-| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG System |
-| [13_new_providers](examples/13_new_providers/) | New Providers |
-| [14_guardrails](examples/14_guardrails/) | Safety Guardrails |
-| [15_structured_output](examples/15_structured_output/) | Structured Output |
-| [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A Protocol          |
-| [18_advanced_agent_features](examples/18_advanced_agent_features/) | Advanced Agent Features |
-| [19_2026_features](examples/19_2026_features/) | 2026 Features |
-| [20_multimodal_providers](examples/20_multimodal_providers/) | Multimodal Providers |
-| [21_research_workflow](examples/21_research_workflow/) | Research Workflow |
+| Example                                                            | Description                 |
+| ------------------------------------------------------------------ | --------------------------- |
+| [01_simple_chat](examples/01_simple_chat/)                         | Basic Chat                  |
+| [02_streaming](examples/02_streaming/)                             | Streaming Response          |
+| [03_tool_use](examples/03_tool_use/)                               | Tool Use / Function Calling |
+| [04_custom_agent](examples/04_custom_agent/)                       | Custom Agent                |
+| [05_workflow](examples/05_workflow/)                               | Workflow Orchestration      |
+| [06_advanced_features](examples/06_advanced_features/)             | Advanced Features           |
+| [07_mid_priority_features](examples/07_mid_priority_features/)     | Mid-Priority Features       |
+| [08_low_priority_features](examples/08_low_priority_features/)     | Low-Priority Features       |
+| [09_full_integration](examples/09_full_integration/)               | Full Integration            |
+| [11_multi_provider_apis](examples/11_multi_provider_apis/)         | Multi-Provider APIs         |
+| [12_complete_rag_system](examples/12_complete_rag_system/)         | RAG System                  |
+| [13_new_providers](examples/13_new_providers/)                     | New Providers               |
+| [14_guardrails](examples/14_guardrails/)                           | Safety Guardrails           |
+| [15_structured_output](examples/15_structured_output/)             | Structured Output           |
+| [16_a2a_protocol](examples/16_a2a_protocol/)                       | A2A Protocol                |
+| [17_high_priority_features](examples/17_high_priority_features/)   | High-Priority Features      |
+| [18_advanced_agent_features](examples/18_advanced_agent_features/) | Advanced Agent Features     |
+| [19_2026_features](examples/19_2026_features/)                     | 2026 Features               |
+| [20_multimodal_providers](examples/20_multimodal_providers/)       | Multimodal Providers        |
+| [21_research_workflow](examples/21_research_workflow/)             | Research Workflow           |
+| [22_sdk_official_surface](examples/22_sdk_official_surface/)       | SDK Official Entry          |
 
 ## 📚 Documentation
 
@@ -629,5 +668,3 @@ agentflow/
 ## 📄 License
 
 MIT License - See [LICENSE](LICENSE)
-
-

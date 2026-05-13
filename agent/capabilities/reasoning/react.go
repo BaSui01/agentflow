@@ -69,8 +69,8 @@ func (r *ReAct) Execute(ctx context.Context, task string) (*ReasoningResult, err
 	}
 
 	messages := []types.Message{
-		{Role: llmcore.RoleSystem, Content: "You are a helpful assistant that can use tools to solve tasks. Think step by step."},
-		{Role: llmcore.RoleUser, Content: task},
+		types.NewSystemMessage("You are a helpful assistant that can use tools to solve tasks. Think step by step."),
+		types.NewUserMessage(task),
 	}
 
 	var totalUsage llmcore.ChatUsage

@@ -198,17 +198,27 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 
 	results := []RetrievalResult{}
 
-	// 1. BM25 检索
-	var bm25Results map[string]float64
+	// 1+2. 并行执行 BM25 检索和向量检索
+	var bm25Results, vectorResults map[string]float64
+	var wg sync.WaitGroup
+
 	if r.config.UseBM25 {
-		bm25Results = r.bm25Retrieve(query)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bm25Results = r.bm25Retrieve(query)
+		}()
 	}
 
-	// 2. 向量检索
-	var vectorResults map[string]float64
 	if r.config.UseVector && queryEmbedding != nil {
-		vectorResults = r.vectorRetrieve(ctx, queryEmbedding)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			vectorResults = r.vectorRetrieve(ctx, queryEmbedding)
+		}()
 	}
+
+	wg.Wait()
 
 	// 3. 合并结果
 	merged := r.mergeResults(bm25Results, vectorResults)

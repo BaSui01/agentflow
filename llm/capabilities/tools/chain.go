@@ -126,10 +126,14 @@ func (e *ChainExecutor) executeStepWithRetry(ctx context.Context, step ChainStep
 		}
 		lastErr = err
 		if attempt < maxAttempts-1 && e.config.RetryDelay > 0 {
+			timer := time.NewTimer(e.config.RetryDelay)
 			select {
 			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return nil, ctx.Err()
-			case <-time.After(e.config.RetryDelay):
+			case <-timer.C:
 			}
 		}
 	}

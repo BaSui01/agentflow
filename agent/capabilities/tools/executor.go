@@ -21,6 +21,7 @@ type AgentExecutor interface {
 type CompositionExecutor struct {
 	agentExecutor AgentExecutor
 	logger        *zap.Logger
+	maxParallel   int
 }
 
 // NewCompositionExecutor creates a new CompositionExecutor.
@@ -31,6 +32,7 @@ func NewCompositionExecutor(executor AgentExecutor, logger *zap.Logger) *Composi
 	return &CompositionExecutor{
 		agentExecutor: executor,
 		logger:        logger.With(zap.String("component", "composition_executor")),
+		maxParallel:   10,
 	}
 }
 
@@ -114,10 +116,20 @@ func (e *CompositionExecutor) Execute(ctx context.Context, result *CompositionRe
 		)
 
 		var wg sync.WaitGroup
+		var sem chan struct{}
+		if e.maxParallel > 0 {
+			sem = make(chan struct{}, e.maxParallel)
+		}
 		for _, capName := range runnable {
 			wg.Add(1)
+			if sem != nil {
+				sem <- struct{}{}
+			}
 			go func(cap string) {
 				defer wg.Done()
+				if sem != nil {
+					defer func() { <-sem }()
+				}
 
 				agentID, ok := result.CapabilityMap[cap]
 				if !ok {

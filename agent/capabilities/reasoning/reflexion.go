@@ -176,7 +176,7 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 
 	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Tools = append([]types.ToolSchema(nil), r.toolSchemas...)
 			req.Temperature = 0.3
@@ -213,7 +213,7 @@ func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, tria
 	prompt := fmt.Sprintf("Rate this response on a 0.0-1.0 scale.\nTask: %s\nResponse: %s", task, trial.Result)
 	parseResult, err := generateStructured[reflexionScore](ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.1
 			req.MaxTokens = 100
@@ -229,7 +229,7 @@ func (r *ReflexionExecutor) generateReflection(ctx context.Context, task string,
 	prompt := fmt.Sprintf("Analyze this attempt.\nTask: %s\nResult: %s\nScore: %.2f", task, trial.Result, trial.Score)
 	parseResult, err := generateStructured[Reflection](ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 500

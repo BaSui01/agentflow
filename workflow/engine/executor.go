@@ -52,7 +52,7 @@ func NewExecutor() *Executor {
 		strategies: make(map[ExecutionMode]ScheduleStrategy),
 	}
 	e.RegisterStrategy(ModeSequential, &SequentialStrategy{})
-	e.RegisterStrategy(ModeParallel, &ParallelStrategy{})
+	e.RegisterStrategy(ModeParallel, NewParallelStrategy(0))
 	e.RegisterStrategy(ModeRouting, &RoutingStrategy{})
 	return e
 }
@@ -134,7 +134,17 @@ func (s *SequentialStrategy) Schedule(ctx context.Context, nodes []*ExecutionNod
 }
 
 // ParallelStrategy 无依赖步骤并发执行。
-type ParallelStrategy struct{}
+type ParallelStrategy struct {
+	maxConcurrency int
+}
+
+// NewParallelStrategy 创建并行策略，maxConcurrency <= 0 时使用默认值 10。
+func NewParallelStrategy(maxConcurrency int) *ParallelStrategy {
+	if maxConcurrency <= 0 {
+		maxConcurrency = 10
+	}
+	return &ParallelStrategy{maxConcurrency: maxConcurrency}
+}
 
 func (s *ParallelStrategy) Schedule(ctx context.Context, nodes []*ExecutionNode, runner StepRunner) (*ExecutionResult, error) {
 	result := &ExecutionResult{
@@ -155,10 +165,21 @@ func (s *ParallelStrategy) Schedule(ctx context.Context, nodes []*ExecutionNode,
 	ch := make(chan nodeResult, len(nodes))
 	var wg sync.WaitGroup
 
+	var sem chan struct{}
+	if s.maxConcurrency > 0 {
+		sem = make(chan struct{}, s.maxConcurrency)
+	}
+
 	for _, node := range nodes {
 		wg.Add(1)
+		if sem != nil {
+			sem <- struct{}{}
+		}
 		go func(n *ExecutionNode) {
 			defer wg.Done()
+			if sem != nil {
+				defer func() { <-sem }()
+			}
 			defer func() {
 				if r := recover(); r != nil {
 					ch <- nodeResult{

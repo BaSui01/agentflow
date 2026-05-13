@@ -363,9 +363,13 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 			})
 			if retry < e.config.MaxRetries {
 				backoff := retryBackoffDuration(retry)
+				timer := time.NewTimer(backoff)
 				select {
-				case <-time.After(backoff):
+				case <-timer.C:
 				case <-ctx.Done():
+					if !timer.Stop() {
+						<-timer.C
+					}
 					exec.mu.Lock()
 					exec.State = ExecutionStateCancelled
 					exec.mu.Unlock()
