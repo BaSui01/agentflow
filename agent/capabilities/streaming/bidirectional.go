@@ -20,6 +20,11 @@ const (
 	StreamTypeMixed StreamType = "mixed"
 )
 
+// streamChunkPool reduces GC pressure for frequently allocated StreamChunk values.
+var streamChunkPool = sync.Pool{
+	New: func() any { return new(StreamChunk) },
+}
+
 // StreamChunk代表了一整批流数据.
 type StreamChunk struct {
 	ID        string         `json:"id"`
@@ -390,12 +395,13 @@ func (s *BidirectionalStream) processHeartbeat(ctx context.Context) {
 			return
 		case <-ticker.C:
 			// 发送心跳
-			heartbeat := StreamChunk{
-				Type:      "heartbeat",
-				Timestamp: time.Now(),
-				Metadata:  map[string]any{"ping": true},
-			}
-			if err := s.conn.WriteChunk(ctx, heartbeat); err != nil {
+			heartbeat := streamChunkPool.Get().(*StreamChunk)
+			heartbeat.Type = "heartbeat"
+			heartbeat.Timestamp = time.Now()
+			heartbeat.Metadata = map[string]any{"ping": true}
+			err := s.conn.WriteChunk(ctx, *heartbeat)
+			streamChunkPool.Put(heartbeat)
+			if err != nil {
 				s.logger.Warn("heartbeat send failed", zap.Error(err))
 				s.errChan <- fmt.Errorf("heartbeat failed: %w", err)
 			}
@@ -541,7 +547,7 @@ type StreamManager struct {
 // NewStreamManager创建了新流管理器.
 func NewStreamManager(logger *zap.Logger) *StreamManager {
 	if logger == nil {
-		panic("agent.StreamManager: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 	return &StreamManager{
 		streams: make(map[string]*BidirectionalStream),
@@ -624,14 +630,16 @@ func (a *AudioStreamAdapter) SendAudio(pcm []byte) error {
 			return err
 		}
 	}
-	return a.stream.Send(StreamChunk{
-		Type: StreamTypeAudio,
-		Data: data,
-		Metadata: map[string]any{
-			"sample_rate": a.sampleRate,
-			"channels":    a.channels,
-		},
-	})
+	chunk := streamChunkPool.Get().(*StreamChunk)
+	chunk.Type = StreamTypeAudio
+	chunk.Data = data
+	chunk.Metadata = map[string]any{
+		"sample_rate": a.sampleRate,
+		"channels":    a.channels,
+	}
+	err := a.stream.Send(*chunk)
+	streamChunkPool.Put(chunk)
+	return err
 }
 
 // DuiceAudio返回已解码的音频块 。
@@ -682,11 +690,13 @@ func NewTextStreamAdapter(stream *BidirectionalStream) *TextStreamAdapter {
 
 // 发送文本数据 。
 func (t *TextStreamAdapter) SendText(text string, isFinal bool) error {
-	return t.stream.Send(StreamChunk{
-		Type:    StreamTypeText,
-		Text:    text,
-		IsFinal: isFinal,
-	})
+	chunk := streamChunkPool.Get().(*StreamChunk)
+	chunk.Type = StreamTypeText
+	chunk.Text = text
+	chunk.IsFinal = isFinal
+	err := t.stream.Send(*chunk)
+	streamChunkPool.Put(chunk)
+	return err
 }
 
 // 接收文本返回文本块 。
@@ -757,10 +767,11 @@ func NewStreamWriter(stream *BidirectionalStream) *StreamWriter {
 }
 
 func (w *StreamWriter) Write(p []byte) (n int, err error) {
-	err = w.stream.Send(StreamChunk{
-		Type: StreamTypeText,
-		Data: p,
-	})
+	chunk := streamChunkPool.Get().(*StreamChunk)
+	chunk.Type = StreamTypeText
+	chunk.Data = p
+	err = w.stream.Send(*chunk)
+	streamChunkPool.Put(chunk)
 	if err != nil {
 		return 0, err
 	}

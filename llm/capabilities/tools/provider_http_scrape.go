@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -141,6 +142,32 @@ var htmlScriptStyleRe = regexp.MustCompile(`(?is)<(script|style|noscript)[^>]*>.
 var multiSpaceRe = regexp.MustCompile(`[ \t]+`)
 var multiNewlineRe = regexp.MustCompile(`\n{3,}`)
 
+// --- HTML → Markdown / Text 转换预编译正则（避免每次调用重复编译）---
+var htmlScrapeReCache sync.Map
+
+func getScrapeCompiledPattern(pattern string) *regexp.Regexp {
+	if v, ok := htmlScrapeReCache.Load(pattern); ok {
+		return v.(*regexp.Regexp)
+	}
+	re := regexp.MustCompile(pattern)
+	actual, loaded := htmlScrapeReCache.LoadOrStore(pattern, re)
+	if loaded {
+		return actual.(*regexp.Regexp)
+	}
+	return re
+}
+
+var (
+	htmlBrRe     = regexp.MustCompile(`(?i)<br\s*/?>|</p>|</div>|</li>`)
+	htmlLiRe     = regexp.MustCompile(`(?i)<li[^>]*>`)
+	htmlStrongBRe = regexp.MustCompile(`(?i)<strong[^>]*>(.*?)</strong>|<b[^>]*>(.*?)</b>`)
+	htmlEmIRe    = regexp.MustCompile(`(?i)<em[^>]*>(.*?)</em>|<i[^>]*>(.*?)</i>`)
+	htmlCodeRe   = regexp.MustCompile(`(?i)<code[^>]*>(.*?)</code>`)
+	htmlMdLinkRe = regexp.MustCompile(`(?is)<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>`)
+	htmlMdImgRe  = regexp.MustCompile(`(?i)<img[^>]+src="([^"]*)"[^>]*(?:alt="([^"]*)")?[^>]*/?>`)
+	htmlSrcRe    = regexp.MustCompile(`src="([^"]*)"`)
+)
+
 func stripHTMLTags(s string) string {
 	return strings.TrimSpace(htmlTagRe.ReplaceAllString(s, ""))
 }
@@ -153,7 +180,7 @@ func htmlToText(rawHTML string) string {
 	text = htmlCommentRe.ReplaceAllString(text, "")
 	// 块级元素换行
 	for _, tag := range []string{"p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "blockquote"} {
-		text = regexp.MustCompile(`(?i)</?`+tag+`[^>]*>`).ReplaceAllString(text, "\n")
+		text = getScrapeCompiledPattern(`(?i)</?`+tag+`[^>]*>`).ReplaceAllString(text, "\n")
 	}
 	// 移除所有标签
 	text = htmlTagRe.ReplaceAllString(text, "")
@@ -173,7 +200,7 @@ func htmlToBasicMarkdown(rawHTML string) string {
 	// 标题
 	for i := 6; i >= 1; i-- {
 		prefix := strings.Repeat("#", i)
-		re := regexp.MustCompile(fmt.Sprintf(`(?is)<h%d[^>]*>(.*?)</h%d>`, i, i))
+		re := getScrapeCompiledPattern(fmt.Sprintf(`(?is)<h%d[^>]*>(.*?)</h%d>`, i, i))
 		md = re.ReplaceAllStringFunc(md, func(s string) string {
 			m := re.FindStringSubmatch(s)
 			if len(m) >= 2 {
@@ -184,9 +211,8 @@ func htmlToBasicMarkdown(rawHTML string) string {
 	}
 
 	// 链接
-	linkRe := regexp.MustCompile(`(?is)<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>`)
-	md = linkRe.ReplaceAllStringFunc(md, func(s string) string {
-		m := linkRe.FindStringSubmatch(s)
+	md = htmlMdLinkRe.ReplaceAllStringFunc(md, func(s string) string {
+		m := htmlMdLinkRe.FindStringSubmatch(s)
 		if len(m) >= 3 {
 			return "[" + strings.TrimSpace(stripHTMLTags(m[2])) + "](" + m[1] + ")"
 		}
@@ -194,9 +220,8 @@ func htmlToBasicMarkdown(rawHTML string) string {
 	})
 
 	// 图片
-	imgRe := regexp.MustCompile(`(?i)<img[^>]+src="([^"]*)"[^>]*(?:alt="([^"]*)")?[^>]*/?>`)
-	md = imgRe.ReplaceAllStringFunc(md, func(s string) string {
-		m := imgRe.FindStringSubmatch(s)
+	md = htmlMdImgRe.ReplaceAllStringFunc(md, func(s string) string {
+		m := htmlMdImgRe.FindStringSubmatch(s)
 		if len(m) >= 2 {
 			alt := ""
 			if len(m) >= 3 {
@@ -208,14 +233,11 @@ func htmlToBasicMarkdown(rawHTML string) string {
 	})
 
 	// 段落和换行
-	md = regexp.MustCompile(`(?i)<br\s*/?>|</p>|</div>|</li>`).ReplaceAllString(md, "\n")
-	md = regexp.MustCompile(`(?i)<li[^>]*>`).ReplaceAllString(md, "\n- ")
-	md = regexp.MustCompile(`(?i)<strong[^>]*>(.*?)</strong>|<b[^>]*>(.*?)</b>`).
-		ReplaceAllString(md, "**$1$2**")
-	md = regexp.MustCompile(`(?i)<em[^>]*>(.*?)</em>|<i[^>]*>(.*?)</i>`).
-		ReplaceAllString(md, "*$1$2*")
-	md = regexp.MustCompile(`(?i)<code[^>]*>(.*?)</code>`).
-		ReplaceAllString(md, "`$1`")
+	md = htmlBrRe.ReplaceAllString(md, "\n")
+	md = htmlLiRe.ReplaceAllString(md, "\n- ")
+	md = htmlStrongBRe.ReplaceAllString(md, "**$1$2**")
+	md = htmlEmIRe.ReplaceAllString(md, "*$1$2*")
+	md = htmlCodeRe.ReplaceAllString(md, "`$1`")
 
 	// 移除剩余标签
 	md = htmlTagRe.ReplaceAllString(md, "")
@@ -261,7 +283,7 @@ func extractHTMLImages(rawHTML string) []ScrapedImage {
 	matches := htmlImgRe.FindAllString(rawHTML, -1)
 	images := make([]ScrapedImage, 0, len(matches))
 	for _, tag := range matches {
-		srcM := regexp.MustCompile(`src="([^"]*)"`).FindStringSubmatch(tag)
+		srcM := htmlSrcRe.FindStringSubmatch(tag)
 		if len(srcM) < 2 {
 			continue
 		}

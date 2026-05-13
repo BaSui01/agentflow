@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/cryptoutil"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -58,10 +59,10 @@ func (s *HTTPServer) authenticate(r *http.Request) bool {
 	// 支持“ Bearer <token>” 格式
 	if strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimPrefix(auth, "Bearer ")
-		return secureTokenEqual(token, s.config.AuthToken)
+		return cryptoutil.SecureTokenEqual(token, s.config.AuthToken)
 	}
 
-	return secureTokenEqual(auth, s.config.AuthToken)
+	return cryptoutil.SecureTokenEqual(auth, s.config.AuthToken)
 }
 
 // /. 熟知/代理人.json

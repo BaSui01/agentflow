@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // DuckDuckGoConfig 配置 DuckDuckGo 搜索提供者。
@@ -39,9 +41,7 @@ func NewDuckDuckGoSearchProvider(cfg DuckDuckGoConfig) *DuckDuckGoSearchProvider
 	}
 	return &DuckDuckGoSearchProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

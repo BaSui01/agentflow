@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // BraveConfig 配置 Brave Search 提供者。
@@ -44,9 +46,7 @@ func NewBraveSearchProvider(cfg BraveConfig) *BraveSearchProvider {
 	}
 	return &BraveSearchProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

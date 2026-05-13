@@ -2,8 +2,8 @@ package execution
 
 // DependenciesSatisfied reports whether cap can run with the current completed
 // and failed dependency state.
-func DependenciesSatisfied(cap string, deps map[string][]string, completed map[string]bool, failed map[string]error) bool {
-	capDeps := deps[cap]
+func DependenciesSatisfied(capability string, deps map[string][]string, completed map[string]bool, failed map[string]error) bool {
+	capDeps := deps[capability]
 	if len(capDeps) == 0 {
 		return true
 	}
@@ -22,7 +22,7 @@ func DependenciesSatisfied(cap string, deps map[string][]string, completed map[s
 
 // BuildCapabilityInput wraps originalInput with upstream dependency results.
 func BuildCapabilityInput(
-	cap string,
+	capability string,
 	originalInput any,
 	deps map[string][]string,
 	lookupResult func(string) (any, bool),
@@ -34,7 +34,7 @@ func BuildCapabilityInput(
 		return capInput
 	}
 
-	capDeps := deps[cap]
+	capDeps := deps[capability]
 	if len(capDeps) == 0 {
 		return capInput
 	}

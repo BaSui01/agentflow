@@ -71,7 +71,8 @@ func (s *MongoRegistryStore) Load(ctx context.Context, id string) (*tools.AgentI
 }
 
 func (s *MongoRegistryStore) LoadAll(ctx context.Context) ([]*tools.AgentInfo, error) {
-	opts := options.Find().SetLimit(1000)
+	// TODO: add cursor-based pagination (currently limited to 500)
+	opts := options.Find().SetLimit(500)
 	cursor, err := s.coll.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		return nil, err

@@ -641,14 +641,33 @@ func (s *redisToolApprovalGrantStore) List(ctx context.Context) ([]*ToolApproval
 	if s == nil || s.client == nil {
 		return nil, nil
 	}
-	keys, err := s.client.Keys(ctx, s.keyPrefix+":*").Result()
-	if err != nil {
+
+	// SCAN instead of KEYS to avoid blocking Redis
+	var allKeys []string
+	iter := s.client.Scan(ctx, 0, s.keyPrefix+":*", 100).Iterator()
+	for iter.Next(ctx) {
+		allKeys = append(allKeys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
 		return nil, err
 	}
-	out := make([]*ToolApprovalGrant, 0, len(keys))
+
+	if len(allKeys) == 0 {
+		return nil, nil
+	}
+
+	// Pipeline batch GET to eliminate N+1 problem
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(allKeys))
+	for i, key := range allKeys {
+		cmds[i] = pipe.Get(ctx, key)
+	}
+	_, _ = pipe.Exec(ctx) // individual errors handled below
+
+	out := make([]*ToolApprovalGrant, 0, len(allKeys))
 	now := time.Now()
-	for _, key := range keys {
-		raw, getErr := s.client.Get(ctx, key).Bytes()
+	for i, key := range allKeys {
+		raw, getErr := cmds[i].Bytes()
 		if getErr == redis.Nil {
 			continue
 		}
@@ -673,13 +692,32 @@ func (s *redisToolApprovalGrantStore) CleanupExpired(ctx context.Context, now ti
 	if s == nil || s.client == nil {
 		return 0, nil
 	}
-	keys, err := s.client.Keys(ctx, s.keyPrefix+":*").Result()
-	if err != nil {
+
+	// SCAN instead of KEYS to avoid blocking Redis
+	var allKeys []string
+	iter := s.client.Scan(ctx, 0, s.keyPrefix+":*", 100).Iterator()
+	for iter.Next(ctx) {
+		allKeys = append(allKeys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
 		return 0, err
 	}
+
+	if len(allKeys) == 0 {
+		return 0, nil
+	}
+
+	// Pipeline batch GET to eliminate N+1 problem
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(allKeys))
+	for i, key := range allKeys {
+		cmds[i] = pipe.Get(ctx, key)
+	}
+	_, _ = pipe.Exec(ctx) // individual errors handled below
+
 	removed := 0
-	for _, key := range keys {
-		raw, getErr := s.client.Get(ctx, key).Bytes()
+	for i, key := range allKeys {
+		raw, getErr := cmds[i].Bytes()
 		if getErr == redis.Nil {
 			continue
 		}

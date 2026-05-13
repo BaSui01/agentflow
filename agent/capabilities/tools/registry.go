@@ -119,7 +119,7 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger, opts ...R
 		config = DefaultRegistryConfig()
 	}
 	if logger == nil {
-		panic("agent.CapabilityRegistry: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 
 	r := &CapabilityRegistry{

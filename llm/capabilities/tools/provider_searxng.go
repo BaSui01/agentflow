@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // SearXNGConfig 配置 SearXNG 搜索提供者。
@@ -41,9 +43,7 @@ func NewSearXNGSearchProvider(cfg SearXNGConfig) *SearXNGSearchProvider {
 	}
 	return &SearXNGSearchProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

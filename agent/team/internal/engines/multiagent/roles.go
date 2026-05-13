@@ -348,8 +348,12 @@ func (p *RolePipeline) executeStageRole(
 ) {
 	defer wg.Done()
 
-	sem <- struct{}{}
-	defer func() { <-sem }()
+	select {
+	case sem <- struct{}{}:
+		defer func() { <-sem }()
+	case <-ctx.Done():
+		return
+	}
 
 	instance := p.newRoleInstance(roleType, def, roleInput)
 	p.storeRoleInstance(instance)

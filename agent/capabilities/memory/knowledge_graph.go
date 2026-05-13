@@ -264,7 +264,9 @@ func (g *InMemoryKnowledgeGraph) dfs(ctx context.Context, current, target string
 		if visited[next] {
 			continue
 		}
-		g.dfs(ctx, next, target, depth-1, visited, append(path, next), paths)
+		path = append(path, next)
+		g.dfs(ctx, next, target, depth-1, visited, path, paths)
+		path = path[:len(path)-1] // backtrack
 	}
 
 	// 遍历入边（双向搜索）
@@ -277,6 +279,8 @@ func (g *InMemoryKnowledgeGraph) dfs(ctx context.Context, current, target string
 		if visited[next] {
 			continue
 		}
-		g.dfs(ctx, next, target, depth-1, visited, append(path, next), paths)
+		path = append(path, next)
+		g.dfs(ctx, next, target, depth-1, visited, path, paths)
+		path = path[:len(path)-1] // backtrack
 	}
 }

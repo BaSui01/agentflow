@@ -10,21 +10,21 @@ func BuildExecutionLevels(order []string, deps map[string][]string) [][]string {
 	assigned := make(map[string]int) // capability -> level index
 	levels := make([][]string, 0)
 
-	for _, cap := range order {
+	for _, capability := range order {
 		level := 0
-		if capDeps, ok := deps[cap]; ok {
+		if capDeps, ok := deps[capability]; ok {
 			for _, d := range capDeps {
-				if dl, found := assigned[d]; found && dl+1 > level {
+				if dl, found := assigned[d]; found && dl >= level {
 					level = dl + 1
 				}
 			}
 		}
-		assigned[cap] = level
+		assigned[capability] = level
 
 		for len(levels) <= level {
 			levels = append(levels, nil)
 		}
-		levels[level] = append(levels[level], cap)
+		levels[level] = append(levels[level], capability)
 	}
 
 	return levels

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // JinaConfig 配置 Jina Reader 抓取提供者。
@@ -41,9 +43,7 @@ func NewJinaScraperProvider(cfg JinaReaderConfig) *JinaScraperProvider {
 	}
 	return &JinaScraperProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

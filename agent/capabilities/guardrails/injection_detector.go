@@ -17,7 +17,11 @@ func getCompiledPattern(pattern string) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	regexCache.Store(pattern, re)
+	actual, loaded := regexCache.LoadOrStore(pattern, re)
+	if loaded {
+		// Another goroutine already cached this pattern, use the cached copy
+		return actual.(*regexp.Regexp), nil
+	}
 	return re, nil
 }
 

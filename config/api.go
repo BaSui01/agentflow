@@ -9,8 +9,6 @@
 package config
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/cryptoutil"
 	"github.com/BaSui01/agentflow/pkg/httputil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -870,7 +869,7 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 			apiKey := r.Header.Get("X-API-Key")
 			// 不再支持 query string 传递 API key（安全风险：会暴露在日志和浏览器历史中）
 
-			if !secureTokenEqual(apiKey, m.apiKey) {
+			if !cryptoutil.SecureTokenEqual(apiKey, m.apiKey) {
 				m.handler.logger.Warn("config api authentication failed",
 					m.handler.auditFields(r, "authorize", "failed",
 						zap.String("provided_api_key", MaskAPIKey(apiKey)),
@@ -943,12 +942,6 @@ func (m *ConfigAPIMiddleware) LogRequests(next http.HandlerFunc, logger func(met
 			logger(r.Method, r.URL.Path, wrapped.StatusCode(), time.Since(start))
 		}
 	}
-}
-
-func secureTokenEqual(provided, expected string) bool {
-	providedHash := sha256.Sum256([]byte(provided))
-	expectedHash := sha256.Sum256([]byte(expected))
-	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
 }
 
 func requestIDFromRequest(r *http.Request) string {

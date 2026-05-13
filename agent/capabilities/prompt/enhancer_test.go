@@ -63,10 +63,10 @@ func TestPromptTemplateLibrary(t *testing.T) {
 		t.Fatalf("rendered template did not substitute variables:\n%s", rendered)
 	}
 
-	if _, err := lib.RenderTemplate("code_generation", map[string]string{"language": "Go"}); err == nil {
+	if _, renderErr := lib.RenderTemplate("code_generation", map[string]string{"language": "Go"}); renderErr == nil {
 		t.Fatal("RenderTemplate should reject missing variables")
 	}
-	if _, err := lib.RenderTemplate("missing", nil); err == nil {
+	if _, renderErr := lib.RenderTemplate("missing", nil); renderErr == nil {
 		t.Fatal("RenderTemplate should reject unknown templates")
 	}
 

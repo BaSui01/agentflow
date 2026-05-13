@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	agentcore "github.com/BaSui01/agentflow/agent/core"
@@ -75,7 +74,11 @@ func (b *BaseAgent) finishRuntimePersistenceOnExit(ctx context.Context, session 
 	logger := runtimePersistenceLogger(b)
 	if r := recover(); r != nil {
 		panicErr := agentcore.PanicPayloadToError(r)
-		if updateErr := b.persistence.UpdateRunStatus(ctx, session.runID, "failed", nil, fmt.Sprintf("panic: %v", r)); updateErr != nil {
+		panicMsg := panicErr.Error()
+		if len(panicMsg) > 256 {
+			panicMsg = panicMsg[:256]
+		}
+		if updateErr := b.persistence.UpdateRunStatus(ctx, session.runID, "failed", nil, panicMsg); updateErr != nil {
 			logger.Warn("failed to mark run as failed after panic", zap.Error(updateErr))
 		}
 		logger.Error("panic during execution, run marked as failed",

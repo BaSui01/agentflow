@@ -44,7 +44,7 @@ type MCPClientManager struct {
 // NewMCPClientManager creates a new multi-server client manager.
 func NewMCPClientManager(logger *zap.Logger) *MCPClientManager {
 	if logger == nil {
-		panic("agent.MCPClientManager: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 	return &MCPClientManager{
 		clients:    make(map[string]*clientEntry),

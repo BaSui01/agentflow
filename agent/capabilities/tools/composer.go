@@ -422,11 +422,12 @@ func (c *CapabilityComposer) selectBestCapability(caps []CapabilityInfo) *Capabi
 	}
 
 	candidates := make([]tooldiscovery.ScoredCandidate, 0, len(caps))
-	for _, cap := range caps {
+	for i := range caps {
+		capability := &caps[i]
 		candidates = append(candidates, tooldiscovery.ScoredCandidate{
-			ID:    cap.AgentID,
-			Score: cap.Score,
-			Load:  cap.Load,
+			ID:    capability.AgentID,
+			Score: capability.Score,
+			Load:  capability.Load,
 		})
 	}
 	best, ok := tooldiscovery.BestCandidate(candidates)

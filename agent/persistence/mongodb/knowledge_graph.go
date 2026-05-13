@@ -244,7 +244,8 @@ func (g *MongoKnowledgeGraph) entityExists(ctx context.Context, id string) error
 
 // loadAdjacency loads all relations and builds adjacency lists.
 func (g *MongoKnowledgeGraph) loadAdjacency(ctx context.Context) (outAdj, inAdj map[string][]string, err error) {
-	opts := options.Find().SetLimit(10000)
+	// TODO: add cursor-based pagination (currently limited to 1000)
+	opts := options.Find().SetLimit(1000)
 	cursor, err := g.relations.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		return nil, nil, err

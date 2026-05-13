@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/types"
@@ -17,6 +18,24 @@ import (
 // 只要还在收到数据，就不会超时；只有在超过此时间没有新数据时才触发超时.
 const DefaultInactivityTimeout = 5 * time.Minute
 const steeringDrainTimeout = 100 * time.Millisecond
+
+// toolCallAccumulator 从流式 chunk 中累积工具调用数据.
+type toolCallAccumulator struct {
+	id           string
+	name         string
+	argsFinal    json.RawMessage
+	argsBuilding strings.Builder
+}
+
+// reactPools holds sync.Pool instances to reduce GC pressure on hot paths.
+var (
+	messageSlicePool = sync.Pool{
+		New: func() any { return make([]types.Message, 0, 16) },
+	}
+	toolCallByIDPool = sync.Pool{
+		New: func() any { return make(map[string]*toolCallAccumulator, 4) },
+	}
+)
 
 // ReActConfig 定义了 ReAct 循环配置.
 type ReActConfig struct {
@@ -67,7 +86,9 @@ func (r *ReActExecutor) steerChOrNil() <-chan SteeringMessage {
 // Execute 运行 ReAct 循环，返回最终响应和所有步骤.
 func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, []ReActStep, error) {
 	steps := make([]ReActStep, 0)
-	messages := append([]types.Message{}, req.Messages...)
+	msgBuf := messageSlicePool.Get().([]types.Message)
+	defer messageSlicePool.Put(msgBuf[:0])
+	messages := append(msgBuf[:0], req.Messages...)
 	var lastResp *llm.ChatResponse // 保留最后一次有效响应
 	var totalUsage llm.ChatUsage   // 累计所有迭代的 token 用量
 	var prevPromptTokens int       // 上一轮的 PromptTokens，用于计算增量
@@ -213,6 +234,138 @@ type LLMCallInfo struct {
 	Response llm.ChatResponse `json:"response"`
 }
 
+// resetInactivityTimer 安全重置一个激活的 timer，避免竞态.
+func resetInactivityTimer(timer *time.Timer, timeout time.Duration) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(timeout)
+}
+
+// collectToolCallsFromDelta 从流式 chunk delta 中累积工具调用数据.
+func (r *ReActExecutor) collectToolCallsFromDelta(
+	deltaToolCalls []types.ToolCall,
+	toolCallByID *map[string]*toolCallAccumulator,
+	toolCallOrder *[]string,
+	iteration int,
+) {
+	if len(deltaToolCalls) == 0 {
+		return
+	}
+	if *toolCallByID == nil {
+		*toolCallByID = make(map[string]*toolCallAccumulator)
+	}
+	for _, tc := range deltaToolCalls {
+		key := fmt.Sprintf("idx_%d", tc.Index)
+		acc := (*toolCallByID)[key]
+		if acc == nil {
+			acc = &toolCallAccumulator{}
+			(*toolCallByID)[key] = acc
+			*toolCallOrder = append(*toolCallOrder, key)
+		}
+		if strings.TrimSpace(tc.ID) != "" {
+			acc.id = strings.TrimSpace(tc.ID)
+		}
+		if strings.TrimSpace(tc.Name) != "" {
+			acc.name = strings.TrimSpace(tc.Name)
+		}
+		if acc.id == "" {
+			acc.id = fmt.Sprintf("call_%d_%d", iteration, tc.Index+1)
+		}
+		if len(tc.Arguments) == 0 || len(acc.argsFinal) > 0 {
+			continue
+		}
+		var argSegStr string
+		if err := json.Unmarshal(tc.Arguments, &argSegStr); err == nil {
+			acc.argsBuilding.WriteString(argSegStr)
+			continue
+		}
+		if json.Valid(tc.Arguments) {
+			acc.argsFinal = append([]byte(nil), tc.Arguments...)
+			continue
+		}
+		acc.argsBuilding.WriteString(string(tc.Arguments))
+	}
+}
+
+// buildNativeToolCalls 从累积器构建原生工具调用列表.
+// 返回 nil 表示参数无效且已发送错误事件，调用方应 return.
+func (r *ReActExecutor) buildNativeToolCalls(
+	toolCallByID map[string]*toolCallAccumulator,
+	toolCallOrder []string,
+	eventCh chan<- ReActStreamEvent,
+) []types.ToolCall {
+	nativeToolCalls := make([]types.ToolCall, 0, len(toolCallOrder))
+	for _, id := range toolCallOrder {
+		acc := toolCallByID[id]
+		if acc == nil {
+			continue
+		}
+		args := json.RawMessage(nil)
+		if len(acc.argsFinal) > 0 {
+			args = acc.argsFinal
+		} else {
+			raw := strings.TrimSpace(acc.argsBuilding.String())
+			if raw != "" {
+				if !json.Valid([]byte(raw)) {
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("invalid tool call arguments (id=%s tool=%s): %s", acc.id, acc.name, raw)}
+					return nil
+				}
+				args = json.RawMessage(raw)
+			}
+		}
+		nativeToolCalls = append(nativeToolCalls, types.ToolCall{ID: acc.id, Name: acc.name, Arguments: args})
+	}
+	return nativeToolCalls
+}
+
+// sendFinalAnswer 发送最终的流式完成事件.
+func (r *ReActExecutor) sendFinalAnswer(
+	eventCh chan<- ReActStreamEvent,
+	iteration int,
+	lastChunkID, lastProvider, lastModel, lastFinishReason string,
+	lastUsage *llm.ChatUsage,
+	assembledMessage types.Message,
+) {
+	final := &llm.ChatResponse{
+		ID: lastChunkID, Provider: lastProvider, Model: lastModel,
+		Choices: []llm.ChatChoice{{Index: 0, FinishReason: lastFinishReason, Message: assembledMessage}},
+	}
+	if lastUsage != nil {
+		final.Usage = *lastUsage
+	}
+	eventCh <- ReActStreamEvent{Type: ReActEventCompleted, Iteration: iteration, FinalResponse: final}
+}
+
+// executeToolCallBatch 执行一批工具调用并返回结果.
+// steeringApplied 为 true 时表示 toolSteering 已处理，newMessages 是更新后的消息列表。
+func (r *ReActExecutor) executeToolCallBatch(
+	ctx context.Context,
+	assembledMessage types.Message,
+	messages []types.Message,
+	eventCh chan<- ReActStreamEvent,
+) (toolResults []types.ToolResult, newMessages []types.Message, steeringApplied bool) {
+	if streamExec, ok := r.toolExecutor.(StreamableToolExecutor); ok {
+		var toolSteering *SteeringMessage
+		toolResults, toolSteering = r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
+		if toolSteering != nil {
+			rc := ""
+			if assembledMessage.ReasoningContent != nil {
+				rc = *assembledMessage.ReasoningContent
+			}
+			if msgs, ok := r.applySteering(*toolSteering, messages, assembledMessage.Content, rc, eventCh); ok {
+				return toolResults, msgs, true
+			}
+		}
+	} else {
+		toolResults = r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
+	}
+	return toolResults, messages, false
+}
+
 // ExecuteStream 执行流式 ReAct 循环.
 // 支持 Steering：通过 SetSteeringChannel 设置的通道接收实时引导/停止后发送指令。
 func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest) (<-chan ReActStreamEvent, error) {
@@ -220,7 +373,9 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 
 	go func() {
 		defer close(eventCh)
-		messages := append([]types.Message{}, req.Messages...)
+		msgBuf := messageSlicePool.Get().([]types.Message)
+		defer messageSlicePool.Put(msgBuf[:0])
+		messages := append(msgBuf[:0], req.Messages...)
 
 		for i := 0; i < r.config.MaxIterations; i++ {
 			select {
@@ -256,12 +411,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			var (
 				assembledMessage types.Message
 				toolCallOrder    []string
-				toolCallByID     map[string]*struct {
-					id           string
-					name         string
-					argsFinal    json.RawMessage
-					argsBuilding strings.Builder
-				}
+				toolCallByID     map[string]*toolCallAccumulator
 				lastChunkID, lastProvider, lastModel, lastFinishReason string
 				lastUsage                                              *llm.ChatUsage
 				steering                                               *SteeringMessage
@@ -283,13 +433,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 					}
 
 					// 收到数据，重置空闲超时计时器
-					if !inactivityTimer.Stop() {
-						select {
-						case <-inactivityTimer.C:
-						default:
-						}
-					}
-					inactivityTimer.Reset(inactivityTimeout)
+					resetInactivityTimer(inactivityTimer, inactivityTimeout)
 
 					eventCh <- ReActStreamEvent{Type: ReActEventLLMChunk, Chunk: &chunk}
 
@@ -335,55 +479,17 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 						assembledMessage.ThinkingBlocks = append(assembledMessage.ThinkingBlocks, chunk.Delta.ThinkingBlocks...)
 					}
 					if len(chunk.Delta.ToolCalls) > 0 {
-						if toolCallByID == nil {
-							toolCallByID = make(map[string]*struct {
-								id           string
-								name         string
-								argsFinal    json.RawMessage
-								argsBuilding strings.Builder
-							})
-						}
-						for _, tc := range chunk.Delta.ToolCalls {
-							// 用 index 作为聚合 key（OpenAI 流式协议：首 chunk 含 id/name，
-							// 后续 chunk 同一 index 的 id/name 为空，只有 arguments 增量）
-							key := fmt.Sprintf("idx_%d", tc.Index)
-							acc := toolCallByID[key]
-							if acc == nil {
-								acc = &struct {
-									id           string
-									name         string
-									argsFinal    json.RawMessage
-									argsBuilding strings.Builder
-								}{}
-								toolCallByID[key] = acc
-								toolCallOrder = append(toolCallOrder, key)
+					if toolCallByID == nil {
+						toolCallByID = toolCallByIDPool.Get().(map[string]*toolCallAccumulator)
+						defer func() {
+							for k := range toolCallByID {
+								delete(toolCallByID, k)
 							}
-							// 首 chunk 带 id，后续为空 — 只在非空时更新
-							if strings.TrimSpace(tc.ID) != "" {
-								acc.id = strings.TrimSpace(tc.ID)
-							}
-							if strings.TrimSpace(tc.Name) != "" {
-								acc.name = strings.TrimSpace(tc.Name)
-							}
-							// 兜底：如果最后仍无 id，生成一个
-							if acc.id == "" {
-								acc.id = fmt.Sprintf("call_%d_%d", i+1, tc.Index+1)
-							}
-							if len(tc.Arguments) == 0 || len(acc.argsFinal) > 0 {
-								continue
-							}
-							var argSegStr string
-							if err := json.Unmarshal(tc.Arguments, &argSegStr); err == nil {
-								acc.argsBuilding.WriteString(argSegStr)
-								continue
-							}
-							if json.Valid(tc.Arguments) {
-								acc.argsFinal = append([]byte(nil), tc.Arguments...)
-								continue
-							}
-							acc.argsBuilding.WriteString(string(tc.Arguments))
-						}
+							toolCallByIDPool.Put(toolCallByID)
+						}()
 					}
+					r.collectToolCallsFromDelta(chunk.Delta.ToolCalls, &toolCallByID, &toolCallOrder, i+1)
+				}
 
 				case steerMsg := <-r.steerChOrNil():
 					steering = &steerMsg
@@ -442,59 +548,23 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			}
 
 			assembledMessage.Role = llm.RoleAssistant
-			nativeToolCalls := make([]types.ToolCall, 0, len(toolCallOrder))
-			for _, id := range toolCallOrder {
-				acc := toolCallByID[id]
-				if acc == nil {
-					continue
-				}
-				args := json.RawMessage(nil)
-				if len(acc.argsFinal) > 0 {
-					args = acc.argsFinal
-				} else {
-					raw := strings.TrimSpace(acc.argsBuilding.String())
-					if raw != "" {
-						if !json.Valid([]byte(raw)) {
-							eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("invalid tool call arguments (id=%s tool=%s): %s", acc.id, acc.name, raw)}
-							return
-						}
-						args = json.RawMessage(raw)
-					}
-				}
-				nativeToolCalls = append(nativeToolCalls, types.ToolCall{ID: acc.id, Name: acc.name, Arguments: args})
+			assembledMessage.ToolCalls = r.buildNativeToolCalls(toolCallByID, toolCallOrder, eventCh)
+			if assembledMessage.ToolCalls == nil {
+				// buildNativeToolCalls 已发送错误事件
+				return
 			}
-			assembledMessage.ToolCalls = nativeToolCalls
 
 			if len(assembledMessage.ToolCalls) == 0 {
-				final := &llm.ChatResponse{
-					ID: lastChunkID, Provider: lastProvider, Model: lastModel,
-					Choices: []llm.ChatChoice{{Index: 0, FinishReason: lastFinishReason, Message: assembledMessage}},
-				}
-				if lastUsage != nil {
-					final.Usage = *lastUsage
-				}
-				eventCh <- ReActStreamEvent{Type: ReActEventCompleted, Iteration: i + 1, FinalResponse: final}
+				r.sendFinalAnswer(eventCh, i+1, lastChunkID, lastProvider, lastModel, lastFinishReason, lastUsage, assembledMessage)
 				return
 			}
 
 			eventCh <- ReActStreamEvent{Type: ReActEventToolsStart, ToolCalls: assembledMessage.ToolCalls}
 			// 获取工具执行结果（优先流式执行器）
-			var toolResults []types.ToolResult
-			if streamExec, ok := r.toolExecutor.(StreamableToolExecutor); ok {
-				var toolSteering *SteeringMessage
-				toolResults, toolSteering = r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
-				if toolSteering != nil {
-					rc := ""
-					if assembledMessage.ReasoningContent != nil {
-						rc = *assembledMessage.ReasoningContent
-					}
-					if newMsgs, ok := r.applySteering(*toolSteering, messages, assembledMessage.Content, rc, eventCh); ok {
-						messages = newMsgs
-						continue
-					}
-				}
-			} else {
-				toolResults = r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
+			toolResults, newMsgs, steeringApplied := r.executeToolCallBatch(ctx, assembledMessage, messages, eventCh)
+			if steeringApplied {
+				messages = newMsgs
+				continue
 			}
 			eventCh <- ReActStreamEvent{Type: ReActEventToolsEnd, ToolResults: toolResults}
 			if handoffResp, ok := synthesizeHandoffFinalResponse(&llm.ChatResponse{

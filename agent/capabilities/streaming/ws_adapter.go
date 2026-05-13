@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 	"go.uber.org/zap"
@@ -108,7 +109,9 @@ func AcceptWebSocket(w http.ResponseWriter, r *http.Request, allowedOrigins []st
 // url 是 WebSocket 服务端地址（如 "ws://localhost:8080/stream"）。
 func WebSocketStreamFactory(url string, logger *zap.Logger) func() (StreamConnection, error) {
 	return func() (StreamConnection, error) {
-		conn, _, err := websocket.Dial(context.Background(), url, nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		conn, _, err := websocket.Dial(ctx, url, nil)
 		if err != nil {
 			return nil, fmt.Errorf("websocket dial: %w", err)
 		}
