@@ -68,8 +68,6 @@ func TestNewTiktokenTokenizer(t *testing.T) {
 	}
 }
 
-
-
 func requireTiktokenAvailable(t *testing.T, tok *TiktokenTokenizer) {
 	t.Helper()
 	if _, err := tok.CountTokens("health-check"); err != nil {
@@ -95,7 +93,6 @@ func TestTiktokenTokenizer_CountTokens(t *testing.T) {
 	require.NoError(t, err)
 	requireTiktokenAvailable(t, tok)
 
-
 	count, err := tok.CountTokens("Hello, world!")
 	require.NoError(t, err)
 	assert.Greater(t, count, 0)
@@ -107,7 +104,6 @@ func TestTiktokenTokenizer_Encode_Decode(t *testing.T) {
 	tok, err := NewTiktokenTokenizer("gpt-4")
 	require.NoError(t, err)
 	requireTiktokenAvailable(t, tok)
-
 
 	text := "Hello, world!"
 	tokens, err := tok.Encode(text)
@@ -125,7 +121,6 @@ func TestTiktokenTokenizer_CountMessages(t *testing.T) {
 	tok, err := NewTiktokenTokenizer("gpt-4")
 	require.NoError(t, err)
 	requireTiktokenAvailable(t, tok)
-
 
 	messages := []Message{
 		{Role: "user", Content: "Hello"},
