@@ -73,6 +73,8 @@
 - **Provider Retry Wrapper**: Exponential backoff retry for recoverable errors only
 - **API Key Pool**: Multi-key rotation and rate limit detection
 - **OpenAI Compatibility Layer**: Unified adapter for OpenAI-compatible APIs
+- **Gemini Compatibility Base**: `llm/providers/geminicompat/` provides shared Gemini generateContent API implementation, supporting streaming output, thinking mode, structured output, and native tool calling
+- **Anthropic Compatibility Base**: `llm/providers/anthropiccompat/` provides shared Anthropic Messages API implementation, supporting thinking blocks, redacted_thinking, tool calling, and streaming SSE
 
 ### 🤖 Intelligent Agent System
 
@@ -133,6 +135,7 @@
 - **Config Hot-Reload with Rollback**: File watcher auto-reload, versioned history, one-click rollback, validation hooks
 - **MCP WebSocket Heartbeat Reconnect**: Exponential backoff reconnect, connection state monitoring
 - **Canary Deployment**: Staged traffic shifting (10%→50%→100%), auto-rollback, error rate/latency monitoring
+- **Cron Scheduler**: `pkg/scheduler/` provides cron-expression scheduled task runner, supporting Agent timed execution, runtime enable/disable, and multi-timezone configuration
 
 ---
 
