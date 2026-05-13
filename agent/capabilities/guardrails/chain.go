@@ -152,8 +152,8 @@ func (c *ValidatorChain) Validate(ctx context.Context, content string) (*Validat
 
 	// 创建聚合结果
 	result := NewValidationResult()
-	result.Metadata["validators_executed"] = make([]string, 0)
-	result.Metadata["execution_order"] = make([]string, 0)
+	result.Metadata["validators_executed"] = make([]string, 0, len(validators))
+	result.Metadata["execution_order"] = make([]string, 0, len(validators))
 
 	// 按顺序执行验证器
 	for _, v := range validators {
@@ -219,8 +219,8 @@ func (c *ValidatorChain) Validate(ctx context.Context, content string) (*Validat
 func (c *ValidatorChain) validateParallel(ctx context.Context, validators []Validator, content string) (*ValidationResult, error) {
 	if len(validators) == 0 {
 		result := NewValidationResult()
-		result.Metadata["validators_executed"] = make([]string, 0)
-		result.Metadata["execution_order"] = make([]string, 0)
+		result.Metadata["validators_executed"] = make([]string, 0, 0)
+		result.Metadata["execution_order"] = make([]string, 0, 0)
 		return result, nil
 	}
 
@@ -314,11 +314,10 @@ func (c *ValidatorChain) ValidateWithCallback(
 
 	// 创建聚合结果
 	result := NewValidationResult()
-	result.Metadata["validators_executed"] = make([]string, 0)
-	result.Metadata["execution_order"] = make([]string, 0)
+	result.Metadata["validators_executed"] = make([]string, 0, len(validators))
+	result.Metadata["execution_order"] = make([]string, 0, len(validators))
 
 	for _, v := range validators {
-		// 检查上下文
 		select {
 		case <-ctx.Done():
 			return result, ctx.Err()

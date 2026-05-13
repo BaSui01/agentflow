@@ -7,7 +7,8 @@ func discoveryFilterAgent(agent *AgentInfo) tooldiscovery.FilterAgent {
 		return tooldiscovery.FilterAgent{}
 	}
 	capabilities := make([]tooldiscovery.FilterCapability, 0, len(agent.Capabilities))
-	for _, capability := range agent.Capabilities {
+	for i := range agent.Capabilities {
+		capability := &agent.Capabilities[i]
 		capabilities = append(capabilities, tooldiscovery.FilterCapability{
 			Name: capability.Capability.Name,
 			Tags: append([]string(nil), capability.Tags...),

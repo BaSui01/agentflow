@@ -11,6 +11,21 @@ const (
 	defaultLoopIterationBudget       = 3
 	defaultReflectionIterationBudget = 3
 	defaultQualityThreshold          = 0.7
+	defaultMaxTotalTokens            = 0   // 0 means no token budget
+	defaultMaxWallClock              = 0   // 0 means no wall-clock budget
+	defaultCodexModeLoopBudget       = 100 // codex_mode autonomous iteration budget
+)
+
+// AutonomyLevel controls how much freedom the agent has to iterate.
+type AutonomyLevel string
+
+const (
+	// AutonomyNormal is the default: bounded iterations with validation gates.
+	AutonomyNormal AutonomyLevel = "normal"
+	// AutonomyExtended allows more iterations but still respects budgets.
+	AutonomyExtended AutonomyLevel = "extended"
+	// AutonomyCodexMode lets the agent run until task completion or budget exhaustion.
+	AutonomyCodexMode AutonomyLevel = "codex_mode"
 )
 
 // LoopControlPolicy consolidates budgets and thresholds that govern a closed-loop
@@ -22,6 +37,12 @@ type LoopControlPolicy struct {
 	RetryBudget               int
 	QualityThreshold          float64
 	CriticPrompt              string
+	// Autonomy controls the agent's freedom to iterate; defaults to normal.
+	Autonomy AutonomyLevel
+	// MaxTotalTokens caps cumulative token usage (0 = no limit).
+	MaxTotalTokens int
+	// MaxWallClock limits total wall-clock execution time (0 = no limit).
+	MaxWallClock int // seconds
 }
 
 // ReflectionPolicyConfig is the subset of the policy that the reflection path
@@ -69,6 +90,19 @@ func LoopControlPolicyFromConfig(cfg types.AgentConfig, runtimeGuardrailsCfg *gu
 	}
 	if control.MaxLoopIterations > 0 {
 		policy.LoopIterationBudget = control.MaxLoopIterations
+	}
+	// Apply autonomy level from config.
+	if autonomy := control.Autonomy; autonomy != "" {
+		policy.Autonomy = AutonomyLevel(strings.ToLower(string(autonomy)))
+		if policy.Autonomy == AutonomyCodexMode && policy.LoopIterationBudget == defaultLoopIterationBudget {
+			policy.LoopIterationBudget = defaultCodexModeLoopBudget
+		}
+	}
+	if control.MaxTotalTokens > 0 {
+		policy.MaxTotalTokens = control.MaxTotalTokens
+	}
+	if control.MaxWallClock > 0 {
+		policy.MaxWallClock = control.MaxWallClock
 	}
 	if runtimeGuardrailsCfg != nil {
 		if runtimeGuardrailsCfg.MaxRetries > policy.RetryBudget {

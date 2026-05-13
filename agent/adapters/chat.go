@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"strings"
+	"sync"
 
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
@@ -11,6 +12,11 @@ import (
 // LLM contract DTO consumed by gateways/providers.
 type ChatRequestAdapter interface {
 	Build(options types.ExecutionOptions, messages []types.Message) (*types.ChatRequest, error)
+}
+
+// messageSlicePool reduces GC pressure for frequent message slice copies.
+var messageSlicePool = sync.Pool{
+	New: func() any { return make([]types.Message, 0, 8) },
 }
 
 // DefaultChatRequestAdapter is the runtime's canonical chat request adapter.
@@ -28,7 +34,7 @@ func (DefaultChatRequestAdapter) Build(options types.ExecutionOptions, messages 
 	req := &types.ChatRequest{
 		Model:                options.Model.Model,
 		RoutePolicy:          strings.TrimSpace(options.Model.RoutePolicy),
-		Messages:             append([]types.Message(nil), messages...),
+		Messages:             append(make([]types.Message, 0, len(messages)), messages...),
 		MaxTokens:            options.Model.MaxTokens,
 		Temperature:          options.Model.Temperature,
 		TopP:                 options.Model.TopP,

@@ -120,8 +120,13 @@ func (s *RedisMemoryStore) List(ctx context.Context, pattern string, limit int) 
 		return nil, err
 	}
 
-	keys, err := s.client.Keys(ctx, s.redisKey(patternOrAll(pattern))).Result()
-	if err != nil {
+	// SCAN instead of KEYS to avoid blocking Redis
+	var allKeys []string
+	iter := s.client.Scan(ctx, 0, s.redisKey(patternOrAll(pattern)), 100).Iterator()
+	for iter.Next(ctx) {
+		allKeys = append(allKeys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
 		return nil, fmt.Errorf("redis list memory keys: %w", err)
 	}
 
@@ -129,8 +134,8 @@ func (s *RedisMemoryStore) List(ctx context.Context, pattern string, limit int) 
 		value     any
 		createdAt time.Time
 	}
-	items := make([]item, 0, len(keys))
-	for _, key := range keys {
+	items := make([]item, 0, len(allKeys))
+	for _, key := range allKeys {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -166,14 +171,19 @@ func (s *RedisMemoryStore) Clear(ctx context.Context) error {
 		return err
 	}
 
-	keys, err := s.client.Keys(ctx, s.redisKey("*")).Result()
-	if err != nil {
+	// SCAN instead of KEYS to avoid blocking Redis
+	var allKeys []string
+	iter := s.client.Scan(ctx, 0, s.redisKey("*"), 100).Iterator()
+	for iter.Next(ctx) {
+		allKeys = append(allKeys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
 		return fmt.Errorf("redis list memory keys: %w", err)
 	}
-	if len(keys) == 0 {
+	if len(allKeys) == 0 {
 		return nil
 	}
-	if err := s.client.Del(ctx, keys...).Err(); err != nil {
+	if err := s.client.Del(ctx, allKeys...).Err(); err != nil {
 		return fmt.Errorf("redis clear memory keys: %w", err)
 	}
 	return nil

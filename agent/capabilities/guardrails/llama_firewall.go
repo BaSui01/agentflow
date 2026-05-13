@@ -238,7 +238,7 @@ type ShadowAIStats struct {
 
 // 添加Pattern 添加自定义检测模式 。
 func (d *ShadowAIDetector) AddPattern(name, patternType, patternStr, severity, description string) error {
-	re, err := regexp.Compile("(?i)" + patternStr)
+	re, err := getCompiledPattern("(?i)" + patternStr)
 	if err != nil {
 		return err
 	}

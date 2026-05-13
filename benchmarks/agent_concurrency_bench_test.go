@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -145,10 +146,12 @@ func BenchmarkAgentExecute_Serial(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		resp, _ := http.Post(server.URL+"/api/v1/agents/execute", "application/json", bytes.NewReader(reqBody))
-		if resp != nil {
-			resp.Body.Close()
+		resp, err := http.Post(server.URL+"/api/v1/agents/execute", "application/json", bytes.NewReader(reqBody))
+		if err != nil {
+			b.Fatal(err)
 		}
+		defer resp.Body.Close()
+		io.Copy(io.Discard, resp.Body)
 	}
 }
 
@@ -173,10 +176,12 @@ func BenchmarkAgentExecute_Concurrent5(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, _ := http.Post(server.URL+"/api/v1/agents/execute", "application/json", bytes.NewReader(reqBody))
-			if resp != nil {
-				resp.Body.Close()
+			resp, err := http.Post(server.URL+"/api/v1/agents/execute", "application/json", bytes.NewReader(reqBody))
+			if err != nil {
+				b.Fatal(err)
 			}
+			defer resp.Body.Close()
+			io.Copy(io.Discard, resp.Body)
 		}
 	})
 }
@@ -202,10 +207,12 @@ func BenchmarkAgentExecute_Concurrent10(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, _ := http.Post(server.URL+"/api/v1/agents/execute", "application/json", bytes.NewReader(reqBody))
-			if resp != nil {
-				resp.Body.Close()
+			resp, err := http.Post(server.URL+"/api/v1/agents/execute", "application/json", bytes.NewReader(reqBody))
+			if err != nil {
+				b.Fatal(err)
 			}
+			defer resp.Body.Close()
+			io.Copy(io.Discard, resp.Body)
 		}
 	})
 }

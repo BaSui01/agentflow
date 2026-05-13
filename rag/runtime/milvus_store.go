@@ -228,7 +228,7 @@ func (s *MilvusStore) doJSON(ctx context.Context, method, path string, in any, o
 			return fmt.Errorf("marshal request: %w", err)
 		}
 		body = bytes.NewReader(b)
-		s.logger.Debug("milvus request", zap.String("method", method), zap.String("path", path), zap.String("body", string(b)))
+		s.logger.Debug("milvus request", zap.String("method", method), zap.String("path", path), zap.Int("body_len", len(b)))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
@@ -243,12 +243,13 @@ func (s *MilvusStore) doJSON(ctx context.Context, method, path string, in any, o
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	const maxMilvusRespSize = 10 << 20 // 10MB
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxMilvusRespSize))
 	if err != nil {
 		return fmt.Errorf("read response: %w", err)
 	}
 
-	s.logger.Debug("milvus response", zap.Int("status", resp.StatusCode), zap.String("body", string(respBody)))
+	s.logger.Debug("milvus response", zap.Int("status", resp.StatusCode), zap.Int("body_len", len(respBody)))
 
 	// Milvus REST API 返回 200 甚至是错误, 请检查响应体
 	var baseResp struct {

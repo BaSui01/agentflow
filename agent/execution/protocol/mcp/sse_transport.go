@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 type SSETransport struct {
@@ -42,7 +44,7 @@ func WithSSEHeader(key, value string) SSETransportOption {
 func NewSSETransport(baseURL string, opts ...SSETransportOption) *SSETransport {
 	t := &SSETransport{
 		baseURL:    strings.TrimSuffix(baseURL, "/"),
-		httpClient: &http.Client{},
+		httpClient: httpclient.NewFactory(httpclient.WithTimeout(0)).Client(),
 		headers:    make(map[string]string),
 		sendCh:     make(chan *MCPMessage, 16),
 		recvCh:     make(chan *MCPMessage, 16),

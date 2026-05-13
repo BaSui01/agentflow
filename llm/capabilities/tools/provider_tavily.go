@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // TavilyConfig 配置 Tavily 搜索提供者。
@@ -41,9 +43,7 @@ func NewTavilySearchProvider(cfg TavilyConfig) *TavilySearchProvider {
 	}
 	return &TavilySearchProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

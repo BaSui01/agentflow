@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // BingConfig 配置 Bing Web Search 提供者。
@@ -44,9 +46,7 @@ func NewBingSearchProvider(cfg BingConfig) *BingSearchProvider {
 	}
 	return &BingSearchProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

@@ -35,7 +35,7 @@ func WithToolsChangedHandler(fn ToolsChangedHandler) ClientOption {
 
 func NewDefaultMCPClient(transport Transport, logger *zap.Logger, opts ...ClientOption) *DefaultMCPClient {
 	if logger == nil {
-		panic("agent.MCPClient: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 	c := &DefaultMCPClient{
 		transport: transport,

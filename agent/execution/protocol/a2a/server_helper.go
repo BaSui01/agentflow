@@ -2,8 +2,6 @@ package a2a
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,12 +10,6 @@ import (
 	"github.com/BaSui01/agentflow/agent/persistence"
 	"go.uber.org/zap"
 )
-
-func secureTokenEqual(provided, expected string) bool {
-	providedHash := sha256.Sum256([]byte(provided))
-	expectedHash := sha256.Sum256([]byte(expected))
-	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
-}
 
 func validateIncomingMessage(msg *A2AMessage) error {
 	if msg.ID == "" {

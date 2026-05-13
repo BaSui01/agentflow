@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/pkg/httpclient"
 )
 
 // FirecrawlConfig 配置 Firecrawl 提供者。
@@ -42,9 +44,7 @@ func NewFirecrawlProvider(cfg FirecrawlConfig) *FirecrawlProvider {
 	}
 	return &FirecrawlProvider{
 		cfg: cfg,
-		client: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		client: httpclient.NewFactory(httpclient.WithTimeout(cfg.Timeout)).Client(),
 	}
 }
 

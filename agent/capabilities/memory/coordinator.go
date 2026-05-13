@@ -25,7 +25,7 @@ func NewCoordinator(agentID string, memory MemoryManager, logger *zap.Logger) *C
 	}
 	return &Coordinator{
 		memory:       memory,
-		recentMemory: make([]MemoryRecord, 0),
+		recentMemory: make([]MemoryRecord, 0, MaxRecentMemory),
 		agentID:      agentID,
 		logger:       logger.With(zap.String("component", "memory_coordinator")),
 	}

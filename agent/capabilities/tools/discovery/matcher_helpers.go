@@ -55,7 +55,7 @@ func IsExcludedAgent(agentID string, excluded []string) bool {
 
 // SemanticScore calculates keyword-based similarity between a task description
 // and the agent plus capability descriptions.
-func SemanticScore(agentDescription string, capabilityDescriptions []string, taskDescription string) (float64, float64) {
+func SemanticScore(agentDescription string, capabilityDescriptions []string, taskDescription string) (semanticScore float64, coverage float64) {
 	taskWords := TokenizeForSemanticMatch(taskDescription)
 	if len(taskWords) == 0 {
 		return 0, 0

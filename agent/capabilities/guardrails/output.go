@@ -341,7 +341,7 @@ func (f *ContentFilter) AddPattern(pattern string) error {
 		regexPattern = "(?i)" + pattern
 	}
 
-	compiled, err := regexp.Compile(regexPattern)
+	compiled, err := getCompiledPattern(regexPattern)
 	if err != nil {
 		return err
 	}

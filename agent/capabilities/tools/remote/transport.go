@@ -172,24 +172,40 @@ func (t *DefaultRemoteToolTransport) invokeStdio(ctx context.Context, target Rem
 }
 
 func (t *DefaultRemoteToolTransport) invokeA2A(ctx context.Context, target RemoteToolTarget, req ToolInvocationRequest) (ToolInvocationResult, error) {
-	payload := map[string]any{
+	payload := a2aToolPayload(target, req)
+	if target.A2ASender != nil {
+		return invokeA2ASender(ctx, target, payload)
+	}
+
+	envelope, err := t.postA2AToolMessage(ctx, target, payload)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	return resultFromA2AEnvelope(envelope)
+}
+
+func a2aToolPayload(target RemoteToolTarget, req ToolInvocationRequest) map[string]any {
+	return map[string]any{
 		"tool_name": chooseRemoteToolName(target, req),
 		"arguments": decodeRemoteArguments(req.Arguments),
 		"input":     strings.TrimSpace(req.Input),
 		"metadata":  cloneStringMap(req.Metadata),
 	}
-	if target.A2ASender != nil {
-		value, err := target.A2ASender.SendTask(ctx, strings.TrimSpace(target.Endpoint), firstNonEmpty(strings.TrimSpace(target.AgentID), "agentflow"), payload)
-		if err != nil {
-			return ToolInvocationResult{}, err
-		}
-		raw, err := normalizeRemoteValueResult(value)
-		if err != nil {
-			return ToolInvocationResult{}, err
-		}
-		return ToolInvocationResult{Result: raw}, nil
-	}
+}
 
+func invokeA2ASender(ctx context.Context, target RemoteToolTarget, payload map[string]any) (ToolInvocationResult, error) {
+	value, err := target.A2ASender.SendTask(ctx, strings.TrimSpace(target.Endpoint), firstNonEmpty(strings.TrimSpace(target.AgentID), "agentflow"), payload)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	raw, err := normalizeRemoteValueResult(value)
+	if err != nil {
+		return ToolInvocationResult{}, err
+	}
+	return ToolInvocationResult{Result: raw}, nil
+}
+
+func (t *DefaultRemoteToolTransport) postA2AToolMessage(ctx context.Context, target RemoteToolTarget, payload map[string]any) (map[string]json.RawMessage, error) {
 	body, err := json.Marshal(map[string]any{
 		"id":        strings.TrimSpace(target.ToolName) + "-remote-task",
 		"type":      "task",
@@ -199,11 +215,11 @@ func (t *DefaultRemoteToolTransport) invokeA2A(ctx context.Context, target Remot
 		"timestamp": time.Now().UTC(),
 	})
 	if err != nil {
-		return ToolInvocationResult{}, err
+		return nil, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(strings.TrimSpace(target.Endpoint), "/")+"/a2a/messages", bytes.NewReader(body))
 	if err != nil {
-		return ToolInvocationResult{}, err
+		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
@@ -216,28 +232,31 @@ func (t *DefaultRemoteToolTransport) invokeA2A(ctx context.Context, target Remot
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return ToolInvocationResult{}, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ToolInvocationResult{}, err
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return ToolInvocationResult{}, fmt.Errorf("a2a remote tool returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+		return nil, fmt.Errorf("a2a remote tool returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
 	}
 	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal(rawBody, &envelope); err != nil {
-		return ToolInvocationResult{}, err
+	if unmarshalErr := json.Unmarshal(rawBody, &envelope); unmarshalErr != nil {
+		return nil, unmarshalErr
 	}
+	return envelope, nil
+}
+
+func resultFromA2AEnvelope(envelope map[string]json.RawMessage) (ToolInvocationResult, error) {
 	if msgType, ok := envelope["type"]; ok {
 		var typ string
-		if err := json.Unmarshal(msgType, &typ); err == nil && typ == "error" {
+		if decodeErr := json.Unmarshal(msgType, &typ); decodeErr == nil && typ == "error" {
 			return ToolInvocationResult{}, fmt.Errorf("a2a remote tool returned error response")
 		}
 	}
-	payloadRaw := envelope["payload"]
-	raw, err := normalizeRemoteJSONResult(payloadRaw)
+	raw, err := normalizeRemoteJSONResult(envelope["payload"])
 	if err != nil {
 		return ToolInvocationResult{}, err
 	}
