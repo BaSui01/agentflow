@@ -89,7 +89,9 @@ English | [中文](README.md)
 - **Provider Retry Wrapper** - RetryableProvider with exponential backoff, only retries recoverable errors
 - **Provider Factory Functions** - Configuration-driven Provider instantiation (standard chat entry: `llm/providers/vendor.NewChatProviderFromConfig`)
 - **OpenAI Compatibility Layer** - Unified adapter for OpenAI-compatible APIs (9 providers slimmed to ~30 lines)
-- **Protocol-Compatible HTTP Inbounds** - `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, and `/v1beta/models/{model}:generateContent` all converge on the same `ChatService -> llm/gateway` chain, while Vertex AI `generateContent` paths remain provider outbound protocols
+- **Gemini Compatibility Base** - `llm/providers/geminicompat/` provides shared Gemini generateContent API implementation with streaming, thinking mode, structured output, and native tool calling
+- **Anthropic Compatibility Base** - `llm/providers/anthropiccompat/` provides shared Anthropic Messages API implementation with thinking blocks, redacted_thinking, tool use, and streaming SSE
+- **Protocol-Compatible HTTP Inbounds** - `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, and `/v1beta/models/{model}:generateContent` all converge on the same `ChatService -> llm/gateway` chain; Gemini inbound endpoints are dispatched through a single `HandleGeminiCompatDispatch` handler for both generateContent and streamGenerateContent; Vertex AI `generateContent` paths remain provider outbound protocols
 - **API Key Pool** - Multi-key rotation, rate limit detection
 
 ### 🎨 Multimodal Capabilities
@@ -107,12 +109,13 @@ English | [中文](README.md)
 
 - **Resilience** - Retry, idempotency, circuit breaker
 - **Observability** - Prometheus metrics, OpenTelemetry tracing
-- **Caching** - Multi-level cache strategies
-- **API Security Middleware** - API Key authentication, IP rate limiting, CORS, Panic recovery, request logging
+- **Caching** - Multi-tier caching strategies
+- **API Security Middleware** - API Key auth, IP rate limiting, CORS, panic recovery, request logging
 - **Cost Control & Budget Management** - Token counting, periodic reset, cost reports, optimization suggestions
-- **Configuration Hot-Reload & Rollback** - File watch auto-reload, versioned history, one-click rollback, validation hooks
-- **MCP WebSocket Heartbeat Reconnection** - Exponential backoff reconnection, connection state monitoring
-- **Canary Deployment** - Staged traffic shifting (10%→50%→100%), auto-rollback, error rate/latency monitoring
+- **Hot Reload & Rollback** - File-watch auto-reload, versioned history, one-click rollback, validation hooks
+- **MCP WebSocket Heartbeat Reconnect** - Exponential backoff reconnect, connection state monitoring
+- **Canary Deployment** - Staged traffic switching (10%→50%→100%), auto-rollback, error rate/latency monitoring
+- **Cron Scheduler** - `pkg/scheduler/` provides cron-expression task scheduling with Agent timed execution, runtime pause/resume, and multi-timezone support
 
 ## 🚀 Quick Start
 
@@ -493,7 +496,7 @@ agentflow/
 ├── llm/                      # Layer 1: LLM abstraction layer (directory-only container; no root Go files)
 │   ├── batch/                # Batch request processing
 │   ├── cache/                # Prompt cache / tool cache
-│   ├── capabilities/         # Image / Video / Audio / Embedding / Rerank / Moderation / 3D / Music / Avatar
+│   ├── capabilities/         # Image / Video / Audio / Embedding / Rerank / Moderation / 3D / Music / Avatar / Multimodal / Tools
 │   ├── circuitbreaker/       # Circuit breaker
 │   ├── config/               # LLM config policies
 │   ├── core/                 # Provider / request-response / gateway contracts
@@ -532,7 +535,9 @@ agentflow/
 │   ├── execution/            # Execution layer (context/loop/protocol + pipeline.go)
 │   ├── integration/          # Integration layer (deployment/hosted/k8s/lsp/voice)
 │   ├── observability/        # Observability layer (monitoring/evaluation/hitl/events)
-│   └── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
+│   ├── persistence/          # Persistence layer (checkpoint/conversation/artifacts/mongodb)
+│   ├── runtime/              # Single-agent runtime (Builder / executor / lifecycle / orchestration)
+│   └── team/                 # Multi-agent team (Team / Crew / execution modes / registrycore)
 │
 ├── rag/                      # Layer 2: RAG retrieval capability (directory-only container; no root Go files)
 │   ├── core/                 # Retrieval contracts / document / vector store abstractions
@@ -557,7 +562,7 @@ agentflow/
 ├── internal/                 # Composition-root support: startup builders / bridges
 │   ├── app/bootstrap/        # Runtime assembly, dependency wiring, handler construction
 │   ├── app/service/          # Internal service layer (tool registry, etc.)
-│   └── usecase/              # Use-case layer (chat/workflow/authorization, etc.)
+│   └── usecase/              # Use-case layer (agent/chat/authorization/workflow/rag/tool/multimodal/cost/apikey/protocol)
 │
 ├── config/                   # Configuration management
 │   ├── loader.go             # Configuration loader

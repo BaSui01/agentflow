@@ -50,6 +50,7 @@ type Message struct {
 ```
 
 **角色类型**:
+
 - `RoleSystem` - 系统提示词
 - `RoleUser` - 用户消息
 - `RoleAssistant` - 助手回复
@@ -307,11 +308,20 @@ type ChatUsage struct {
 // 创建混合检索器
 func NewHybridRetriever(config HybridRetrievalConfig, logger *zap.Logger) *HybridRetriever
 
-// 索引文档
-func (r *HybridRetriever) IndexDocuments(docs []Document)
+// 创建带向量存储的混合检索器
+func NewHybridRetrieverWithVectorStore(config HybridRetrievalConfig, vectorStore VectorStore, logger *zap.Logger) *HybridRetriever
 
-// 检索
+// 索引文档
+func (r *HybridRetriever) IndexDocuments(docs []Document) error
+
+// 增量索引单篇文档
+func (r *HybridRetriever) AddDocument(ctx context.Context, doc Document) error
+
+// 检索（Copy-on-Read：先复制数据再释放锁，BM25 与向量检索并行无锁执行）
 func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]RetrievalResult, error)
+
+// 设置 tokenizer，用于精确估算返回结果的上下文 token 数
+func (r *HybridRetriever) SetTokenizer(t *tokenizer.RAGAdapter)
 ```
 
 ### MultiHopReasoner

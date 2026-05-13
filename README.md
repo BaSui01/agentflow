@@ -92,7 +92,9 @@
 - **API Key 池** - 多 Key 轮询、限流检测
 - **Provider 工厂函数** — 配置驱动的 Provider 实例化（标准 chat 入口：`llm/providers/vendor.NewChatProviderFromConfig`）
 - **OpenAI 兼容层** — 统一适配 OpenAI 兼容 API（9 个 provider 瘦身至 ~30 行）
-- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1beta/models/{model}:generateContent` 统一收口到同一 `ChatService -> llm/gateway` 主链；Vertex AI `generateContent` 路径保持 provider 出站协议边界
+- **Gemini 兼容基座** — `llm/providers/geminicompat/` 提供 Gemini generateContent API 共享实现，支持流式输出、思考模式、结构化输出与原生工具调用
+- **Anthropic 兼容基座** — `llm/providers/anthropiccompat/` 提供 Anthropic Messages API 共享实现，支持 thinking blocks、redacted_thinking、工具调用与流式 SSE
+- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1beta/models/{model}:generateContent` 统一收口到同一 `ChatService -> llm/gateway` 主链；Gemini 入站端点通过单一 `HandleGeminiCompatDispatch` 统一分发 generateContent 与 streamGenerateContent；Vertex AI `generateContent` 路径保持 provider 出站协议边界
 
 ### 🎨 多模态能力
 
@@ -115,6 +117,7 @@
 - **配置热重载与回滚** - 文件监听自动重载、版本化历史、一键回滚、验证钩子
 - **MCP WebSocket 心跳重连** — 指数退避重连、连接状态监控
 - **金丝雀发布 (Canary)** — 分阶段流量切换（10%→50%→100%）、自动回滚、错误率/延迟监控
+- **Cron 调度器** — `pkg/scheduler/` 提供 cron 表达式定时任务调度，支持 Agent 定时执行、运行时启停与多时区配置
 
 ## ⚠️ 认证迁移说明（2026-03）
 
@@ -506,7 +509,7 @@ agentflow/
 ├── llm/                      # Layer 1: LLM 抽象层（目录容器；root 无 Go 文件）
 │   ├── batch/                # 批量请求处理
 │   ├── cache/                # 提示缓存 / 工具缓存
-│   ├── capabilities/         # Image / Video / Audio / Embedding / Rerank / Moderation / 3D / Music / Avatar
+│   ├── capabilities/         # Image / Video / Audio / Embedding / Rerank / Moderation / 3D / Music / Avatar / Multimodal / Tools
 │   ├── circuitbreaker/       # 熔断器
 │   ├── config/               # LLM 配置策略
 │   ├── core/                 # Provider / request-response / gateway contracts
@@ -542,7 +545,9 @@ agentflow/
 │   ├── execution/            # 执行层（context/loop/protocol + pipeline.go）
 │   ├── integration/          # 集成层（deployment/hosted/k8s/lsp/voice）
 │   ├── observability/        # 可观测层（monitoring/evaluation/hitl/events）
-│   └── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
+│   ├── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
+│   ├── runtime/              # 单 Agent 运行时（Builder / 执行器 / 生命周期 / 编排子目录）
+│   └── team/                 # 多 Agent 团队（Team / Crew / 执行模式 / registrycore）
 │
 ├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）
 │   ├── core/                 # 检索契约 / document / vector store 抽象
@@ -570,7 +575,7 @@ agentflow/
 ├── internal/                 # 组合根支撑：启动期 builder / wiring / bridge
 │   ├── app/bootstrap/        # runtime 构建、依赖注入、handler 装配
 │   ├── app/service/          # 内部服务层（tool registry 等）
-│   └── usecase/              # 用例层（chat/workflow/authorization 等）
+│   └── usecase/              # 用例层（agent/chat/authorization/workflow/rag/tool/multimodal/cost/apikey/protocol）
 │
 ├── config/                   # 配置管理
 │   ├── loader.go             # 配置加载器

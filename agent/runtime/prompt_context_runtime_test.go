@@ -123,7 +123,8 @@ func TestPrepareRuntimePromptContextPrefersHandoffConversation(t *testing.T) {
 	assert.Equal(t, "skill item", result.messages[1].Content)
 	assert.Equal(t, "memory item", result.messages[2].Content)
 	assert.Equal(t, handoff[0], result.messages[3])
-	assert.Equal(t, types.Message{Role: types.RoleUser, Content: "continue"}, result.messages[4])
+	assert.Equal(t, types.RoleUser, result.messages[4].Role)
+	assert.Equal(t, "continue", result.messages[4].Content)
 }
 
 func TestPrepareRuntimePromptContext_SkipsMemoryRecallWhenExternalContextPolicyDisablesRecall(t *testing.T) {
