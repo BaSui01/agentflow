@@ -3,7 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
-	"sync"
+
+	toolstore "github.com/BaSui01/agentflow/agent/capabilities/tools/store"
 )
 
 // RegistryStore defines the persistence interface for agent registry data.
@@ -19,54 +20,54 @@ type RegistryStore interface {
 // InMemoryRegistryStore is a RegistryStore backed by an in-memory map.
 // It preserves the existing default behavior of CapabilityRegistry.
 type InMemoryRegistryStore struct {
-	mu     sync.RWMutex
-	agents map[string]*AgentInfo
+	inner *toolstore.InMemoryRegistryStore[*AgentInfo]
 }
 
 // NewInMemoryRegistryStore creates a new InMemoryRegistryStore.
 func NewInMemoryRegistryStore() *InMemoryRegistryStore {
+	inner, err := toolstore.NewInMemoryRegistryStore(agentInfoStoreKey, validateAgentInfoForStore)
+	if err != nil {
+		panic(err)
+	}
 	return &InMemoryRegistryStore{
-		agents: make(map[string]*AgentInfo),
+		inner: inner,
 	}
 }
 
-func (s *InMemoryRegistryStore) Save(_ context.Context, agent *AgentInfo) error {
+func agentInfoStoreKey(agent *AgentInfo) (string, error) {
+	if agent == nil || agent.Card == nil {
+		return "", fmt.Errorf("invalid agent info")
+	}
+	return agent.Card.Name, nil
+}
+
+func validateAgentInfoForStore(agent *AgentInfo) error {
 	if agent == nil || agent.Card == nil {
 		return fmt.Errorf("invalid agent info")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.agents[agent.Card.Name] = agent
 	return nil
 }
 
-func (s *InMemoryRegistryStore) Load(_ context.Context, id string) (*AgentInfo, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	info, ok := s.agents[id]
-	if !ok {
+func (s *InMemoryRegistryStore) Save(ctx context.Context, agent *AgentInfo) error {
+	return s.inner.Save(ctx, agent)
+}
+
+func (s *InMemoryRegistryStore) Load(ctx context.Context, id string) (*AgentInfo, error) {
+	info, err := s.inner.Load(ctx, id)
+	if err != nil {
 		return nil, fmt.Errorf("agent %s not found", id)
 	}
 	return info, nil
 }
 
-func (s *InMemoryRegistryStore) LoadAll(_ context.Context) ([]*AgentInfo, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]*AgentInfo, 0, len(s.agents))
-	for _, info := range s.agents {
-		result = append(result, info)
-	}
-	return result, nil
+func (s *InMemoryRegistryStore) LoadAll(ctx context.Context) ([]*AgentInfo, error) {
+	return s.inner.LoadAll(ctx)
 }
 
-func (s *InMemoryRegistryStore) Delete(_ context.Context, id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.agents[id]; !ok {
+func (s *InMemoryRegistryStore) Delete(ctx context.Context, id string) error {
+	if err := s.inner.Delete(ctx, id); err != nil {
 		return fmt.Errorf("agent %s not found", id)
 	}
-	delete(s.agents, id)
 	return nil
 }
 

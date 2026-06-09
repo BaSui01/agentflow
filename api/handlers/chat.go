@@ -160,16 +160,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 				zap.String("request_id", requestID),
 				zap.Error(chunk.Err),
 			)
-			// SSE 错误事件 — 包含 code 与 message，使用 json.Marshal 转义防止 JSON 注入
-			errPayload, marshalErr := json.Marshal(map[string]string{
-				"code":    string(chunk.Err.Code),
-				"message": chunk.Err.Message,
-			})
-			if marshalErr != nil {
-				h.logger.Error("failed to marshal error payload", zap.Error(marshalErr))
-				errPayload = []byte(`{"code":"INTERNAL_ERROR","message":"internal error"}`)
-			}
-			if err := writeSSE(w, []byte("event: error\n"), []byte("data: "), errPayload, []byte("\n\n")); err != nil {
+			if err := writeSSETypesErrorEvent(w, chunk.Err, requestID); err != nil {
 				h.logger.Error("failed to write SSE error event", zap.Error(err))
 			}
 			flusher.Flush()

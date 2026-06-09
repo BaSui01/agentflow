@@ -109,6 +109,15 @@ type ChatRequest struct {
 	Phase              string               `json:"phase,omitempty"`
 }
 
+// NewSimpleChatRequest creates a ChatRequest with the given model and messages.
+// Messages are deep-copied to prevent mutation of the caller's slice.
+func NewSimpleChatRequest(model string, messages []Message) *ChatRequest {
+	return &ChatRequest{
+		Model:    model,
+		Messages: append([]Message(nil), messages...),
+	}
+}
+
 // ChatResponse 表示聊天补全响应。
 type ChatResponse struct {
 	ID                string       `json:"id,omitempty"`

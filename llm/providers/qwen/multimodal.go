@@ -168,34 +168,9 @@ func (p *QwenProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerati
 	return providerbase.GenerateAudioOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/compatible-mode/v1/audio/speech", BuildHeadersFunc: p.ApplyHeaders}, req)
 }
 
-// TranscribeAudio Qwen 不支持音频转录.
-func (p *QwenProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "audio transcription")
-}
-
 // CreateEmbedding 使用 Qwen 创建嵌入.
 // Endpoint: POST /compatible-mode/v1/embeddings
 // Models: text-embedding-v4, text-embedding-v3, text-embedding-v2
 func (p *QwenProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
 	return providerbase.CreateEmbeddingOpenAICompat(ctx, providerbase.OpenAICompatParams{Client: p.Client, BaseURL: p.Cfg.BaseURL, APIKey: p.ResolveAPIKey(ctx), ProviderName: p.Name(), Endpoint: "/compatible-mode/v1/embeddings", BuildHeadersFunc: p.ApplyHeaders}, req)
-}
-
-// CreateFineTuningJob Qwen 不支持微调.
-func (p *QwenProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// ListFineTuningJobs Qwen 不支持微调.
-func (p *QwenProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// GetFineTuningJob Qwen 不支持微调.
-func (p *QwenProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
-}
-
-// CancelFineTuningJob Qwen 不支持微调.
-func (p *QwenProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	return providerbase.NotSupportedError(p.Name(), "fine-tuning")
 }

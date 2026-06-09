@@ -399,8 +399,8 @@ func (r *CapabilityRegistry) FindCapabilities(ctx context.Context, capabilityNam
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	agentCaps, exists := r.capabilityIndex[capabilityName]
-	if !exists {
+	agentCaps := r.capabilityIndex.Capabilities(capabilityName)
+	if len(agentCaps) == 0 {
 		return []CapabilityInfo{}, nil
 	}
 

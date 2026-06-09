@@ -6,6 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +31,7 @@ func RegisterChat(mux *http.ServeMux, chatHandler *handlers.ChatHandler, logger 
 	mux.HandleFunc("POST /v1/chat/completions", chatHandler.HandleOpenAICompatChatCompletions)
 	mux.HandleFunc("POST /v1/responses", chatHandler.HandleOpenAICompatResponses)
 	mux.HandleFunc("POST /v1/messages", chatHandler.HandleAnthropicCompatMessages)
+	mux.HandleFunc("POST "+llmgateway.GeminiCompatHTTPRoutePath, chatHandler.HandleGeminiCompatDispatch)
 	logger.Info("Chat API routes registered")
 }
 

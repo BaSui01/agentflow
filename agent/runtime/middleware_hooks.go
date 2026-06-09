@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +22,9 @@ const (
 type HookAction string
 
 const (
-	HookActionPass    HookAction = "pass"
-	HookActionAbort   HookAction = "abort"
-	HookActionModify  HookAction = "modify"
+	HookActionPass   HookAction = "pass"
+	HookActionAbort  HookAction = "abort"
+	HookActionModify HookAction = "modify"
 )
 
 type HookResult struct {
@@ -113,24 +114,104 @@ type AuthzMiddleware struct {
 	authorize AuthorizeFunc
 }
 
+type toolAuthorizationInput struct {
+	ToolCall  *types.ToolCall
+	ToolRisks map[string]string
+	AgentID   string
+}
+
 func NewAuthzMiddleware(authorize AuthorizeFunc) *AuthzMiddleware {
 	return &AuthzMiddleware{authorize: authorize}
 }
 
-func (m *AuthzMiddleware) Name() string    { return "authz_middleware" }
+func authzRiskTierForToolRisk(name, risk string) types.RiskTier {
+	switch strings.TrimSpace(risk) {
+	case toolRiskSafeRead:
+		return types.RiskSafeRead
+	case toolRiskRequiresApproval:
+		return types.RiskExecution
+	case string(types.RiskMutating):
+		return types.RiskMutating
+	case string(types.RiskExecution):
+		return types.RiskExecution
+	case string(types.RiskNetworkExecution):
+		return types.RiskNetworkExecution
+	case string(types.RiskAdmin):
+		return types.RiskAdmin
+	case "":
+		return authzRiskTierForToolRisk(name, classifyToolRiskByName(name))
+	default:
+		return types.RiskExecution
+	}
+}
+
+func authzToolCallInput(input any) (call *types.ToolCall, risks map[string]string, agentID string, ok bool) {
+	switch v := input.(type) {
+	case *types.ToolCall:
+		return v, nil, "", v != nil
+	case types.ToolCall:
+		call := v
+		return &call, nil, "", true
+	case *toolAuthorizationInput:
+		if v == nil || v.ToolCall == nil {
+			return nil, nil, "", false
+		}
+		return v.ToolCall, v.ToolRisks, strings.TrimSpace(v.AgentID), true
+	case toolAuthorizationInput:
+		if v.ToolCall == nil {
+			return nil, nil, "", false
+		}
+		return v.ToolCall, v.ToolRisks, strings.TrimSpace(v.AgentID), true
+	default:
+		return nil, nil, "", false
+	}
+}
+
+func authzToolRiskFromMap(name string, risks map[string]string) string {
+	if len(risks) == 0 {
+		return ""
+	}
+	risk, ok := risks[strings.TrimSpace(name)]
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(risk)
+}
+
+func (m *AuthzMiddleware) Name() string     { return "authz_middleware" }
 func (m *AuthzMiddleware) Point() HookPoint { return HookBeforeTool }
 
 func (m *AuthzMiddleware) Execute(ctx context.Context, input any) (HookResult, error) {
-	toolCall, ok := input.(*types.ToolCall)
-	if !ok || toolCall == nil {
+	toolCall, toolRisks, agentID, ok := authzToolCallInput(input)
+	if !ok {
 		return HookResult{Action: HookActionPass}, nil
+	}
+
+	toolRisk := authzToolRiskFromMap(toolCall.Name, toolRisks)
+	if agentID == "" {
+		if ctxAgentID, ok := types.AgentID(ctx); ok {
+			agentID = strings.TrimSpace(ctxAgentID)
+		}
+	}
+	metadata := map[string]string{
+		"runtime":          "agent_runtime",
+		"hosted_tool_risk": firstNonEmpty(toolRisk, classifyToolRiskByName(toolCall.Name)),
+	}
+	reqContext := map[string]any{
+		"tool_call_id": toolCall.ID,
+		"metadata":     metadata,
+	}
+	if agentID != "" {
+		reqContext["agent_id"] = agentID
+		metadata["agent_id"] = agentID
 	}
 
 	req := types.AuthorizationRequest{
 		ResourceKind: types.ResourceTool,
 		ResourceID:   toolCall.Name,
 		Action:       types.ActionExecute,
-		RiskTier:     types.RiskExecution,
+		RiskTier:     authzRiskTierForToolRisk(toolCall.Name, toolRisk),
+		Context:      reqContext,
 	}
 
 	if principal, ok := types.PrincipalFromContext(ctx); ok {
@@ -166,7 +247,7 @@ func NewInputGuardrailMiddleware(checkFunc func(ctx context.Context, input any) 
 	return &InputGuardrailMiddleware{checkFunc: checkFunc}
 }
 
-func (m *InputGuardrailMiddleware) Name() string    { return "input_guardrail" }
+func (m *InputGuardrailMiddleware) Name() string     { return "input_guardrail" }
 func (m *InputGuardrailMiddleware) Point() HookPoint { return HookBeforeModel }
 func (m *InputGuardrailMiddleware) Execute(ctx context.Context, input any) (HookResult, error) {
 	return m.checkFunc(ctx, input)
@@ -180,7 +261,7 @@ func NewOutputGuardrailMiddleware(checkFunc func(ctx context.Context, output any
 	return &OutputGuardrailMiddleware{checkFunc: checkFunc}
 }
 
-func (m *OutputGuardrailMiddleware) Name() string    { return "output_guardrail" }
+func (m *OutputGuardrailMiddleware) Name() string     { return "output_guardrail" }
 func (m *OutputGuardrailMiddleware) Point() HookPoint { return HookAfterOutput }
 func (m *OutputGuardrailMiddleware) Execute(ctx context.Context, input any) (HookResult, error) {
 	return m.checkFunc(ctx, input)

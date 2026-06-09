@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -142,5 +143,56 @@ func createSkillFixture(t *testing.T, root, id, name, instructions string) {
 
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.json"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
+	}
+}
+
+func TestSkillManagerSearchDelegatesToDiscoveryHelpers(t *testing.T) {
+	source, err := os.ReadFile("manager.go")
+	if err != nil {
+		t.Fatalf("read manager.go: %v", err)
+	}
+	body := string(source)
+
+	for _, want := range []string{
+		"tooldiscovery.TokenizeSkillQuery",
+		"tooldiscovery.ScoreSkillMetadataMatch",
+		"tooldiscovery.SortSkillSearchResults",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected manager.go to contain %q", want)
+		}
+	}
+	if strings.Contains(body, "unicode.IsLetter") {
+		t.Fatalf("expected skill search tokenization to live in discovery subpackage")
+	}
+}
+
+func TestSkillToDiscoveredSkillDelegatesToDiscoveryProfileConverter(t *testing.T) {
+	source, err := os.ReadFile("manager.go")
+	if err != nil {
+		t.Fatalf("read manager.go: %v", err)
+	}
+	body := string(source)
+
+	if !strings.Contains(body, "tooldiscovery.DiscoveredSkillFromProfile") {
+		t.Fatalf("expected skillToDiscoveredSkill to delegate to discovery converter")
+	}
+	if strings.Contains(body, "append([]string{}, s.Tags...") {
+		t.Fatalf("expected tag copy logic to live in discovery converter")
+	}
+}
+
+func TestSkillIndexMetadataDelegatesToDiscoveryProfileConverter(t *testing.T) {
+	source, err := os.ReadFile("manager.go")
+	if err != nil {
+		t.Fatalf("read manager.go: %v", err)
+	}
+	body := string(source)
+
+	if !strings.Contains(body, "tooldiscovery.SkillIndexEntryFromProfile") {
+		t.Fatalf("expected skill index metadata construction to delegate to discovery converter")
+	}
+	if !strings.Contains(body, "func skillProfile") {
+		t.Fatalf("expected shared skillProfile adapter for discovery conversions")
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	tooldiscovery "github.com/BaSui01/agentflow/agent/capabilities/tools/discovery"
+	toolexecution "github.com/BaSui01/agentflow/agent/capabilities/tools/execution"
 	"go.uber.org/zap"
 )
 
@@ -419,98 +421,39 @@ func (c *CapabilityComposer) selectBestCapability(caps []CapabilityInfo) *Capabi
 		return nil
 	}
 
-	// 依积分递减排序,再依负载递增排序
-	sort.Slice(caps, func(i, j int) bool {
-		if caps[i].Score != caps[j].Score {
-			return caps[i].Score > caps[j].Score
+	candidates := make([]tooldiscovery.ScoredCandidate, 0, len(caps))
+	for _, cap := range caps {
+		candidates = append(candidates, tooldiscovery.ScoredCandidate{
+			ID:    cap.AgentID,
+			Score: cap.Score,
+			Load:  cap.Load,
+		})
+	}
+	best, ok := tooldiscovery.BestCandidate(candidates)
+	if !ok {
+		return nil
+	}
+	for i := range caps {
+		if caps[i].AgentID == best.ID && caps[i].Score == best.Score && caps[i].Load == best.Load {
+			return &caps[i]
 		}
-		return caps[i].Load < caps[j].Load
-	})
-
+	}
 	return &caps[0]
 }
 
 // 计数能力
 func (c *CapabilityComposer) countCapabilitiesForAgent(capMap map[string]string, agentID string) int {
-	count := 0
-	for _, id := range capMap {
-		if id == agentID {
-			count++
-		}
-	}
-	return count
+	return tooldiscovery.CountAssignmentsForOwner(capMap, agentID)
 }
 
 // 计算Execution Order根据依赖性计算执行命令.
 func (c *CapabilityComposer) calculateExecutionOrder(capabilities []string, dependencies map[string][]string) []string {
-	// 地形类型
-	inDegree := make(map[string]int)
-	for _, cap := range capabilities {
-		if _, exists := inDegree[cap]; !exists {
-			inDegree[cap] = 0
-		}
-	}
-
-	for _, deps := range dependencies {
-		for _, dep := range deps {
-			inDegree[dep]++
-		}
-	}
-
-	// 找到没有边缘的所有节点
-	queue := make([]string, 0)
-	for capabilityName, degree := range inDegree {
-		if degree == 0 {
-			queue = append(queue, capabilityName)
-		}
-	}
-
-	order := make([]string, 0, len(capabilities))
-	for len(queue) > 0 {
-		// 从队列中弹出
-		capabilityName := queue[0]
-		queue = queue[1:]
-		order = append(order, capabilityName)
-
-		// 减少依赖能力的学位
-		if deps, exists := dependencies[capabilityName]; exists {
-			for _, dep := range deps {
-				inDegree[dep]--
-				if inDegree[dep] == 0 {
-					queue = append(queue, dep)
-				}
-			}
-		}
-	}
-
-	// 反转顺序，让依赖项优先执行。
-	for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
-		order[i], order[j] = order[j], order[i]
-	}
-
-	return order
+	return toolexecution.CalculateExecutionOrder(capabilities, dependencies)
 }
 
 // 如果某个能力具有循环依赖性,则有循环依赖性检查。
 func (c *CapabilityComposer) hasCircularDependency(capabilityName string, visited map[string]bool) bool {
-	if visited[capabilityName] {
-		return true
-	}
-
-	visited[capabilityName] = true
-	deps, exists := c.dependencyGraph[capabilityName]
-	if !exists {
-		return false
-	}
-
-	for _, dep := range deps {
-		if c.hasCircularDependency(dep, visited) {
-			return true
-		}
-	}
-
-	delete(visited, capabilityName)
-	return false
+	return toolexecution.HasCircularDependency(c.dependencyGraph, capabilityName)
 }
 
 // 如果切片含有字符串,则包含检查。

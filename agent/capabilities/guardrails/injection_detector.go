@@ -325,6 +325,9 @@ func (d *InjectionDetector) Validate(ctx context.Context, content string) (*Vali
 		Message:  formatInjectionErrorMessage(matches),
 		Severity: highestSeverity,
 	})
+	if compareSeverity(highestSeverity, SeverityHigh) >= 0 {
+		result.Tripwire = true
+	}
 
 	// 记录检测信息到 metadata
 	result.Metadata["injection_detected"] = true

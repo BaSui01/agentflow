@@ -45,6 +45,25 @@
 | compat 厂商 request hook / 校验 | `llm/providers/vendor/chat_profiles.go` | DeepSeek / Qwen / Grok / Kimi 等 compat provider 的字段修正与本地拒绝 |
 | 工具授权统一入口 | `internal/usecase/authorization_service.go` | 工具执行 / 审批 / HITL 主链 |
 
+### AgentConfig 遗留表面废弃时间表
+
+`types.AgentConfig` 的正式主面是 `Model / Control / Tools`。`LLM / Runtime / Context / Features / Extensions` 仅作为历史配置文件与旧 JSON 的迁移入口保留，不再作为新代码、新示例或新字段扩展位置。
+
+废弃节奏如下：
+
+| 阶段 | 时间表 | 行为 |
+|---|---|---|
+| 当前版本起 | 当前版本起 | 新功能只进入 `Model / Control / Tools`；新增文档、示例、测试不得再推荐 `LLM / Runtime / Context / Features / Extensions`。 |
+| 下一 minor 版本 | 下一 minor 版本 | `LLM / Runtime / Context / Features / Extensions` 标记为 deprecated；配置加载与 `legacy-only JSON` 仍会在反序列化阶段归一化到正式主面，formal + legacy 同时存在时以 formal 为准。 |
+| 下一 major 版本 | 下一 major 版本 | legacy 表面从公开配置契约中移除或降为内部迁移适配层；运行时不再新增 legacy merge 分支。 |
+
+迁移规则：
+
+1. 业务代码直接构造 `types.AgentConfig{Model, Control, Tools}`。
+2. 配置文件中的 `legacy-only JSON` 允许继续被读取，但加载后必须进入正式主面再交给 `ExecutionOptions()`。
+3. 若同一配置同时写了 formal 与 legacy 字段，formal 字段优先；不要通过“补一个 legacy fallback”修复新功能。
+4. 新增模型、控制或工具字段时，同步检查 `types/execution_options.go`、`types/config.go`、`agent/adapters/chat.go` 与本指南，不再扩展旧表面。
+
 ---
 
 ## 3. 当前正式主面已经覆盖了什么

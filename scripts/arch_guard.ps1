@@ -90,8 +90,10 @@ foreach ($module in $zeroRootModules) {
 # Rule 2: single-file pkg directory allowlist (aligned with architecture_guard_test.go)
 $allowOneFilePkg = @(
     "cache",
-    "database",
+    "httpclient",
+    "httputil",
     "jsonschema",
+    "jsonutil",
     "metrics",
     "openapi",
     "server",

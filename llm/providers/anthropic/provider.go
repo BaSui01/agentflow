@@ -33,6 +33,7 @@ import (
 // 3. 流式响应使用 SSE 格式但结构不同
 // 4. ToolCall 结构和字段名称有差异
 type ClaudeProvider struct {
+	*providerbase.MultimodalAdapter
 	cfg           providers.ClaudeConfig
 	client        *http.Client
 	logger        *zap.Logger
@@ -58,9 +59,10 @@ func NewClaudeProvider(cfg providers.ClaudeConfig, logger *zap.Logger) *ClaudePr
 	}
 
 	return &ClaudeProvider{
-		cfg:    cfg,
-		client: tlsutil.SecureHTTPClient(timeout),
-		logger: logger,
+		MultimodalAdapter: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "claude"}),
+		cfg:               cfg,
+		client:            tlsutil.SecureHTTPClient(timeout),
+		logger:            logger,
 		rewriterChain: middleware.NewRewriterChain(
 			middleware.NewXMLToolRewriter(),
 			middleware.NewEmptyToolsCleaner(),

@@ -209,3 +209,31 @@ func TestValidateModelName(t *testing.T) {
 		t.Errorf("empty allowed should pass: %v", err)
 	}
 }
+
+func TestStreamSSEAccumulatesOpenAICompatToolCallDeltas(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"id":"s1","model":"m","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup_weather","arguments":"{\"city\":"}}]}}]}`,
+		`data: {"id":"s1","model":"m","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"type":"function","function":{"arguments":"\"Paris\"}"}}]},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`,
+		``,
+	}, "\n\n")
+
+	stream := StreamSSE(context.Background(), io.NopCloser(strings.NewReader(body)), "compat")
+	var toolCalls []types.ToolCall
+	for chunk := range stream {
+		if chunk.Err != nil {
+			t.Fatalf("unexpected stream error: %v", chunk.Err)
+		}
+		toolCalls = append(toolCalls, chunk.Delta.ToolCalls...)
+	}
+
+	if len(toolCalls) != 1 {
+		t.Fatalf("expected one complete tool call, got %d: %#v", len(toolCalls), toolCalls)
+	}
+	if toolCalls[0].ID != "call_1" || toolCalls[0].Name != "lookup_weather" {
+		t.Fatalf("unexpected tool call metadata: %#v", toolCalls[0])
+	}
+	if got, want := string(toolCalls[0].Arguments), `{"city":"Paris"}`; got != want {
+		t.Fatalf("tool call arguments mismatch: got=%s want=%s", got, want)
+	}
+}

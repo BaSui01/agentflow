@@ -78,9 +78,14 @@ func (b *BaseAgent) startReactStreaming(ctx context.Context, pr *preparedRequest
 	reactReq.Model = effectiveToolModel(pr.req.Model, pr.options.Tools.ToolModel)
 	ctx = withRuntimeApprovalEmitter(ctx, emit, pr)
 	toolProtocol := b.toolProtocolRuntime().Prepare(b, pr)
+	ctx = withRuntimeAgentID(ctx, b.config.Core.ID)
+	toolExecutor := toolProtocol.Executor
+	if toolProtocol.Authorize != nil {
+		toolExecutor = authorizedToolExecutor{prepared: toolProtocol}
+	}
 	executor := llmtools.NewReActExecutor(
 		pr.toolProvider,
-		toolProtocol.Executor,
+		toolExecutor,
 		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 		b.logger,
 	)
@@ -600,9 +605,14 @@ func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedReq
 	reactReq.Model = effectiveToolModel(pr.req.Model, pr.options.Tools.ToolModel)
 	reactIterationBudget := reactToolLoopBudget(pr)
 	toolProtocol := b.toolProtocolRuntime().Prepare(b, pr)
+	ctx = withRuntimeAgentID(ctx, b.config.Core.ID)
+	toolExecutor := toolProtocol.Executor
+	if toolProtocol.Authorize != nil {
+		toolExecutor = authorizedToolExecutor{prepared: toolProtocol}
+	}
 	executor := llmtools.NewReActExecutor(
 		pr.toolProvider,
-		toolProtocol.Executor,
+		toolExecutor,
 		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 		b.logger,
 	)
@@ -618,6 +628,16 @@ func reactToolLoopBudget(pr *preparedRequest) int {
 		return pr.maxReActIter
 	}
 	return 10
+}
+
+func withRuntimeAgentID(ctx context.Context, agentID string) context.Context {
+	if strings.TrimSpace(agentID) == "" {
+		return ctx
+	}
+	if _, ok := types.AgentID(ctx); ok {
+		return ctx
+	}
+	return types.WithAgentID(ctx, agentID)
 }
 
 // StreamCompletion 流式调用 LLM。

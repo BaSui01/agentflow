@@ -243,7 +243,7 @@ func TestReActExecutor_Execute_ContextCancelledBeforeFirstLLMCall(t *testing.T) 
 	if err == nil {
 		t.Fatalf("expected context cancellation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "context cancelled") {
+	if !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("expected context cancellation error, got %v", err)
 	}
 	if resp != nil {
@@ -294,7 +294,7 @@ func TestReActExecutor_Execute_ContextCancelledAfterToolResultStopsNextLLMCall(t
 	if err == nil {
 		t.Fatalf("expected context cancellation error, got nil")
 	}
-	if !strings.Contains(err.Error(), "context cancelled") {
+	if !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("expected context cancellation error, got %v", err)
 	}
 	if provider.calls != 1 {

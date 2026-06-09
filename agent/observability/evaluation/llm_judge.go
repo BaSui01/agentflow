@@ -194,7 +194,7 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 
 	// 调用 LLM 进行评估
 	req := newJudgeChatRequest(j.config.Model, []types.Message{
-		{Role: llmcore.RoleUser, Content: prompt},
+		types.NewUserMessage(prompt),
 	}, 0.1)
 	so, err := structured.NewStructuredOutput[llmJudgeStructuredResult](j.gateway)
 	if err != nil {

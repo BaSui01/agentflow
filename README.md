@@ -92,7 +92,9 @@
 - **API Key 池** - 多 Key 轮询、限流检测
 - **Provider 工厂函数** — 配置驱动的 Provider 实例化（标准 chat 入口：`llm/providers/vendor.NewChatProviderFromConfig`）
 - **OpenAI 兼容层** — 统一适配 OpenAI 兼容 API（9 个 provider 瘦身至 ~30 行）
-- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages` 统一收口到同一 `ChatService -> llm/gateway` 主链；Gemini / Vertex `generateContent` 路径保持 provider 出站协议边界
+- **Gemini 兼容基座** — `llm/providers/geminicompat/` 提供 Gemini generateContent API 共享实现，支持流式输出、思考模式、结构化输出与原生工具调用
+- **Anthropic 兼容基座** — `llm/providers/anthropiccompat/` 提供 Anthropic Messages API 共享实现，支持 thinking blocks、redacted_thinking、工具调用与流式 SSE
+- **协议兼容 HTTP 入站** — `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1beta/models/{model}:generateContent` 统一收口到同一 `ChatService -> llm/gateway` 主链；Gemini 入站端点通过单一 `HandleGeminiCompatDispatch` 统一分发 generateContent 与 streamGenerateContent；Vertex AI `generateContent` 路径保持 provider 出站协议边界
 
 ### 🎨 多模态能力
 
@@ -115,6 +117,7 @@
 - **配置热重载与回滚** - 文件监听自动重载、版本化历史、一键回滚、验证钩子
 - **MCP WebSocket 心跳重连** — 指数退避重连、连接状态监控
 - **金丝雀发布 (Canary)** — 分阶段流量切换（10%→50%→100%）、自动回滚、错误率/延迟监控
+- **Cron 调度器** — `pkg/scheduler/` 提供 cron 表达式定时任务调度，支持 Agent 定时执行、运行时启停与多时区配置
 
 ## ⚠️ 认证迁移说明（2026-03）
 
@@ -482,16 +485,16 @@ internal/app/bootstrap/ = 启动期装配与 bridge，属于组合根支撑，�
 
 ### 允许依赖 / 禁止依赖矩阵
 
-| 源目录 | 允许依赖 | 禁止依赖 |
-| --- | --- | --- |
-| `types/` | 无 | `llm/`、`agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/`、`config/`、`pkg/` |
-| `llm/` | `types/`、`pkg/`、`config/` | `agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/` |
-| `agent/` | `types/`、`llm/`、`rag/`、`pkg/`、`config/` | `workflow/`、`api/`、`cmd/`、`internal/` |
-| `rag/` | `types/`、`llm/`、`pkg/`、`config/` | `agent/`、`workflow/`、`api/`、`cmd/`、`internal/` |
+| 源目录      | 允许依赖                                                   | 禁止依赖                                                                              |
+| ----------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `types/`    | 无                                                         | `llm/`、`agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/`、`config/`、`pkg/` |
+| `llm/`      | `types/`、`pkg/`、`config/`                                | `agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/`                            |
+| `agent/`    | `types/`、`llm/`、`rag/`、`pkg/`、`config/`                | `workflow/`、`api/`、`cmd/`、`internal/`                                              |
+| `rag/`      | `types/`、`llm/`、`pkg/`、`config/`                        | `agent/`、`workflow/`、`api/`、`cmd/`、`internal/`                                    |
 | `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |
-| `api/` | `types/`、`llm/`、`agent/`、`rag/`、`workflow/`、`config/` | provider 实现细节、组合根逻辑 |
-| `cmd/` | 通过 `internal/app/bootstrap` 装配各层 | 业务实现下沉、绕过 bootstrap 直拼底层细节 |
-| `pkg/` | `types/` 与必要的 `pkg/*` | `api/`、`cmd/` |
+| `api/`      | `types/`、`llm/`、`agent/`、`rag/`、`workflow/`、`config/` | provider 实现细节、组合根逻辑                                                         |
+| `cmd/`      | 通过 `internal/app/bootstrap` 装配各层                     | 业务实现下沉、绕过 bootstrap 直拼底层细节                                             |
+| `pkg/`      | `types/` 与必要的 `pkg/*`                                  | `api/`、`cmd/`                                                                        |
 
 ```
 agentflow/
@@ -504,30 +507,47 @@ agentflow/
 │   └── tool.go               # ToolSchema, ToolResult
 │
 ├── llm/                      # Layer 1: LLM 抽象层（目录容器；root 无 Go 文件）
-│   ├── providers/            # Provider 实现
-│   │   ├── openai/           # OpenAI
-│   │   ├── anthropic/        # Claude
-│   │   ├── gemini/           # Gemini
-│   │   ├── openaicompat/     # Compat Chat 基座
-│   │   ├── vendor/           # Chat factory + vendor profiles
-│   │   └── ...               # 多模态 / 厂商特化能力实现
-│   ├── runtime/              # Router / policy / compose
-│   ├── gateway/              # 统一能力入口
 │   ├── batch/                # 批量请求处理
-│   ├── capabilities/         # Image / Video / Audio / Rerank ...
+│   ├── cache/                # 提示缓存 / 工具缓存
+│   ├── capabilities/         # Image / Video / Audio / Embedding / Rerank / Moderation / 3D / Music / Avatar / Multimodal / Tools
+│   ├── circuitbreaker/       # 熔断器
+│   ├── config/               # LLM 配置策略
 │   ├── core/                 # Provider / request-response / gateway contracts
-│   ├── tokenizer/            # 统一 Token 计数器
-│   └── tools/                # 工具执行
+│   ├── gateway/              # 统一能力入口
+│   ├── idempotency/          # 幂等请求
+│   ├── internal/             # 官方 SDK 封装（anthropicofficial / googlegenai / openaiofficial）
+│   ├── middleware/           # XML 工具格式 / 重写器链
+│   ├── observability/        # 成本追踪 / 指标 / 分布式追踪
+│   ├── providers/            # Provider 实现
+│   │   ├── anthropic/        # Claude
+│   │   ├── anthropiccompat/  # Anthropic Messages API 兼容基座
+│   │   ├── base/             # Provider 基类
+│   │   ├── doubao/           # 豆包
+│   │   ├── gemini/           # Gemini
+│   │   ├── geminicompat/     # Gemini generateContent API 兼容基座
+│   │   ├── glm/              # 智谱 GLM
+│   │   ├── grok/             # xAI Grok
+│   │   ├── minimax/          # MiniMax
+│   │   ├── mistral/          # Mistral
+│   │   ├── openai/           # OpenAI
+│   │   ├── openaicompat/     # Compat Chat 基座
+│   │   ├── qwen/             # 通义千问
+│   │   └── vendor/           # Chat factory + vendor profiles
+│   ├── runtime/              # Router / policy / compose
+│   ├── streaming/            # 流式背压 / 零拷贝
+│   └── tokenizer/            # 统一 Token 计数器
 │
 ├── agent/                    # Layer 2: Agent 核心（目录容器；root 无 Go 文件）
 │   ├── adapters/             # 适配层（chat/declarative/structured/handoff）
-│   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming）
+│   ├── capabilities/         # 能力层（memory/reasoning/planning/tools/guardrails/streaming/prompt）
 │   ├── collaboration/        # 协作层（federation 联邦编排）
 │   ├── core/                 # 核心层（registry/helpers/extension contracts）
-│   ├── execution/            # 执行层（runtime/context/loop/protocol/orchestration）
+│   ├── execution/            # 执行层（context/loop/protocol + pipeline.go）
 │   ├── integration/          # 集成层（deployment/hosted/k8s/lsp/voice）
-│   ├── observability/        # 可观测层（monitoring/evaluation/hitl）
-│   └── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
+│   ├── observability/        # 可观测层（monitoring/evaluation/hitl/events）
+│   ├── persistence/          # 持久化层（checkpoint/conversation/artifacts/mongodb）
+│   ├── runtime/              # 单 Agent 运行时（Builder / 执行器 / 生命周期 / 编排子目录）
+│   └── team/                 # 多 Agent 团队（Team / Crew / 执行模式 / registrycore）
 │
 ├── rag/                      # Layer 2: RAG 检索能力（目录容器；root 无 Go 文件）
 │   ├── core/                 # 检索契约 / document / vector store 抽象
@@ -553,7 +573,9 @@ agentflow/
 │   └── routes/               # 路由注册
 │
 ├── internal/                 # 组合根支撑：启动期 builder / wiring / bridge
-│   └── app/bootstrap/        # runtime 构建、依赖注入、handler 装配
+│   ├── app/bootstrap/        # runtime 构建、依赖注入、handler 装配
+│   ├── app/service/          # 内部服务层（tool registry 等）
+│   └── usecase/              # 用例层（agent/chat/authorization/workflow/rag/tool/multimodal/cost/apikey/protocol）
 │
 ├── config/                   # 配置管理
 │   ├── loader.go             # 配置加载器
@@ -564,8 +586,25 @@ agentflow/
 │   └── doc.go                # 包文档
 │
 ├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）
+│   ├── cache/                # 缓存抽象
+│   ├── common/               # 通用工具
+│   ├── database/             # 数据库工具
+│   ├── httpclient/           # HTTP 客户端
+│   ├── httputil/             # HTTP 工具
+│   ├── jsonschema/           # JSON Schema
+│   ├── jsonutil/             # JSON 工具
+│   ├── metrics/              # 指标收集
+│   ├── middleware/            # 中间件
+│   ├── migration/            # 数据库迁移
+│   ├── mongodb/              # MongoDB 工具
+│   ├── openapi/              # OpenAPI 工具生成
+│   ├── scheduler/            # 调度器
+│   ├── server/               # 服务器工具
 │   ├── service/              # 生命周期服务注册与总线
-│   └── openapi/              # OpenAPI 工具生成
+│   ├── storage/              # 存储抽象
+│   ├── telemetry/            # 遥测
+│   ├── tlsutil/              # TLS 工具
+│   └── tokenizer/            # Token 计数工具
 │
 ├── cmd/agentflow/            # 应用入口与运行时装配
 │   ├── main.go               # CLI 入口（serve/migrate/health/version）
@@ -580,38 +619,40 @@ agentflow/
 │   ├── server_hotreload.go   # 热重载管理器初始化
 │   └── server_shutdown.go    # 优雅关闭流程
 │
-└── examples/                 # 示例代码（20 个场景）
+└── examples/                 # 示例代码（22+ 个场景 + 辅助目录）
 ```
 
 ## 📖 示例
 
-| 示例                                                       | 说明              |
-| ---------------------------------------------------------- | ----------------- |
-| [01_simple_chat](examples/01_simple_chat/)                 | 基础对话          |
-| [02_streaming](examples/02_streaming/)                     | 流式响应          |
-| [03_tool_use](examples/03_tool_use/)                       | 工具调用          |
-| [04_custom_agent](examples/04_custom_agent/)               | 自定义 Agent      |
-| [05_workflow](examples/05_workflow/)                       | 工作流编排        |
-| [06_advanced_features](examples/06_advanced_features/)     | 高级特性          |
-| [07_mid_priority_features](examples/07_mid_priority_features/) | 中优先级特性  |
-| [08_low_priority_features](examples/08_low_priority_features/) | 低优先级特性  |
-| [09_full_integration](examples/09_full_integration/)       | 完整集成          |
-| [11_multi_provider_apis](examples/11_multi_provider_apis/) | 多提供商 API      |
-| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG 系统          |
-| [13_new_providers](examples/13_new_providers/)             | 新提供商          |
-| [14_guardrails](examples/14_guardrails/)                   | 安全护栏          |
-| [15_structured_output](examples/15_structured_output/)     | 结构化输出        |
-| [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A 协议          |
+| 示例                                                               | 说明            |
+| ------------------------------------------------------------------ | --------------- |
+| [01_simple_chat](examples/01_simple_chat/)                         | 基础对话        |
+| [02_streaming](examples/02_streaming/)                             | 流式响应        |
+| [03_tool_use](examples/03_tool_use/)                               | 工具调用        |
+| [04_custom_agent](examples/04_custom_agent/)                       | 自定义 Agent    |
+| [05_workflow](examples/05_workflow/)                               | 工作流编排      |
+| [06_advanced_features](examples/06_advanced_features/)             | 高级特性        |
+| [07_mid_priority_features](examples/07_mid_priority_features/)     | 中优先级特性    |
+| [08_low_priority_features](examples/08_low_priority_features/)     | 低优先级特性    |
+| [09_full_integration](examples/09_full_integration/)               | 完整集成        |
+| [11_multi_provider_apis](examples/11_multi_provider_apis/)         | 多提供商 API    |
+| [12_complete_rag_system](examples/12_complete_rag_system/)         | RAG 系统        |
+| [13_new_providers](examples/13_new_providers/)                     | 新提供商        |
+| [14_guardrails](examples/14_guardrails/)                           | 安全护栏        |
+| [15_structured_output](examples/15_structured_output/)             | 结构化输出      |
+| [16_a2a_protocol](examples/16_a2a_protocol/)                       | A2A 协议        |
+| [17_high_priority_features](examples/17_high_priority_features/)   | 高优先级特性    |
 | [18_advanced_agent_features](examples/18_advanced_agent_features/) | 高级 Agent 特性 |
-| [19_2026_features](examples/19_2026_features/)             | 2026 新特性       |
-| [20_multimodal_providers](examples/20_multimodal_providers/) | 多模态提供商    |
-| [21_research_workflow](examples/21_research_workflow/)     | 研究工作流        |
+| [19_2026_features](examples/19_2026_features/)                     | 2026 新特性     |
+| [20_multimodal_providers](examples/20_multimodal_providers/)       | 多模态提供商    |
+| [21_research_workflow](examples/21_research_workflow/)             | 研究工作流      |
+| [22_sdk_official_surface](examples/22_sdk_official_surface/)       | SDK 官方入口    |
 
 ## 📚 文档
 
 - [快速开始](docs/cn/tutorials/01.快速开始.md)
 - [Provider 配置指南](docs/cn/tutorials/02.Provider配置指南.md)
-- [近12个月主流多模态模型总表](docs/cn/guides/近12个月主流多模态模型总表.md)
+- [近 12 个月主流多模态模型总表](docs/cn/guides/近12个月主流多模态模型总表.md)
 - [Agent 开发教程](docs/cn/tutorials/03.Agent开发教程.md)
 - [架构文档索引](docs/architecture/README.md)
 - [Agent 框架现状与收口改进计划](docs/architecture/Agent框架现状与收口改进计划-2026-04-25.md)
@@ -648,4 +689,3 @@ agentflow/
 ## 📄 License
 
 MIT License - 详见 [LICENSE](LICENSE)
-

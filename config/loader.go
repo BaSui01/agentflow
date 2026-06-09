@@ -107,19 +107,19 @@ type Config struct {
 // ServerConfig 服务器配置
 type ServerConfig struct {
 	// HTTP 端口
-	HTTPPort int `yaml:"http_port" env:"HTTP_PORT"`
+	HTTPPort int `yaml:"http_port" env:"HTTP_PORT" reload:"HTTP server port" restart:"true" sensitive:"false"`
 	// Metrics 端口
-	MetricsPort int `yaml:"metrics_port" env:"METRICS_PORT"`
+	MetricsPort int `yaml:"metrics_port" env:"METRICS_PORT" reload:"Metrics server port" restart:"true" sensitive:"false"`
 	// Metrics 监听地址；默认仅监听 loopback，生产若需外部抓取必须显式放开。
-	MetricsBindAddress string `yaml:"metrics_bind_address" env:"METRICS_BIND_ADDRESS"`
+	MetricsBindAddress string `yaml:"metrics_bind_address" env:"METRICS_BIND_ADDRESS" reload:"Metrics server bind address" restart:"true" sensitive:"false"`
 	// 运行环境；用于固化生产环境安全默认值。
 	Environment string `yaml:"environment" env:"ENVIRONMENT" json:"environment,omitempty"`
 	// 是否启用 pprof 诊断端点；默认关闭，避免在 metrics 端口暴露 profiling 能力。
-	EnablePProf bool `yaml:"enable_pprof" env:"ENABLE_PPROF" json:"enable_pprof,omitempty"`
+	EnablePProf bool `yaml:"enable_pprof" env:"ENABLE_PPROF" json:"enable_pprof,omitempty" reload:"Enable pprof endpoints on the metrics server" restart:"true" sensitive:"false"`
 	// 读取超时
-	ReadTimeout time.Duration `yaml:"read_timeout" env:"READ_TIMEOUT"`
+	ReadTimeout time.Duration `yaml:"read_timeout" env:"READ_TIMEOUT" reload:"HTTP read timeout" restart:"true" sensitive:"false"`
 	// 写入超时
-	WriteTimeout time.Duration `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
+	WriteTimeout time.Duration `yaml:"write_timeout" env:"WRITE_TIMEOUT" reload:"HTTP write timeout" restart:"true" sensitive:"false"`
 	// 优雅关闭超时
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env:"SHUTDOWN_TIMEOUT"`
 	// CORS 允许的源
@@ -171,15 +171,15 @@ type AgentConfig struct {
 	// 系统提示词
 	SystemPrompt string `yaml:"system_prompt" env:"SYSTEM_PROMPT"`
 	// 最大迭代次数
-	MaxIterations int `yaml:"max_iterations" env:"MAX_ITERATIONS"`
+	MaxIterations int `yaml:"max_iterations" env:"MAX_ITERATIONS" reload:"Maximum agent iterations" restart:"false" sensitive:"false"`
 	// 温度参数
-	Temperature float64 `yaml:"temperature" env:"TEMPERATURE"`
+	Temperature float64 `yaml:"temperature" env:"TEMPERATURE" reload:"LLM temperature parameter" restart:"false" sensitive:"false"`
 	// 最大 Token 数
-	MaxTokens int `yaml:"max_tokens" env:"MAX_TOKENS"`
+	MaxTokens int `yaml:"max_tokens" env:"MAX_TOKENS" reload:"Maximum tokens for LLM" restart:"false" sensitive:"false"`
 	// 超时时间
-	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT" reload:"Agent execution timeout" restart:"false" sensitive:"false"`
 	// 是否启用流式输出
-	StreamEnabled bool `yaml:"stream_enabled" env:"STREAM_ENABLED"`
+	StreamEnabled bool `yaml:"stream_enabled" env:"STREAM_ENABLED" reload:"Enable streaming responses" restart:"false" sensitive:"false"`
 	// 记忆配置
 	Memory MemoryConfig `yaml:"memory" env:"MEMORY"`
 	// 检查点配置
@@ -215,9 +215,9 @@ type MemoryConfig struct {
 // RedisConfig Redis 配置
 type RedisConfig struct {
 	// 地址
-	Addr string `yaml:"addr" env:"ADDR"`
+	Addr string `yaml:"addr" env:"ADDR" reload:"Redis address" restart:"true" sensitive:"false"`
 	// 密码
-	Password string `yaml:"password" env:"PASSWORD"`
+	Password string `yaml:"password" env:"PASSWORD" reload:"Redis password" restart:"true" sensitive:"true"`
 	// 数据库编号
 	DB int `yaml:"db" env:"DB"`
 	// 连接池大小
@@ -231,13 +231,13 @@ type DatabaseConfig struct {
 	// 驱动类型: postgres, mysql, sqlite
 	Driver string `yaml:"driver" env:"DRIVER"`
 	// 主机
-	Host string `yaml:"host" env:"HOST"`
+	Host string `yaml:"host" env:"HOST" reload:"Database host" restart:"true" sensitive:"false"`
 	// 端口
-	Port int `yaml:"port" env:"PORT"`
+	Port int `yaml:"port" env:"PORT" reload:"Database port" restart:"true" sensitive:"false"`
 	// 用户名
 	User string `yaml:"user" env:"USER"`
 	// 密码
-	Password string `yaml:"password" env:"PASSWORD"`
+	Password string `yaml:"password" env:"PASSWORD" reload:"Database password" restart:"true" sensitive:"true"`
 	// 数据库名
 	Name string `yaml:"name" env:"NAME"`
 	// SSL 模式
@@ -253,11 +253,11 @@ type DatabaseConfig struct {
 // QdrantConfig Qdrant 向量存储配置
 type QdrantConfig struct {
 	// 主机
-	Host string `yaml:"host" env:"HOST"`
+	Host string `yaml:"host" env:"HOST" reload:"Qdrant host" restart:"true" sensitive:"false"`
 	// gRPC 端口
 	Port int `yaml:"port" env:"PORT"`
 	// API Key（可选）
-	APIKey string `yaml:"api_key" env:"API_KEY"`
+	APIKey string `yaml:"api_key" env:"API_KEY" reload:"Qdrant API key" restart:"true" sensitive:"true"`
 	// 默认集合名
 	Collection string `yaml:"collection" env:"COLLECTION"`
 }
@@ -382,7 +382,7 @@ type LLMConnectionConfig struct {
 	// API Key（通用）
 	// X-006: 安全建议 — 生产环境中应通过环境变量 AGENTFLOW_LLM_API_KEY 设置，
 	// 避免在 YAML 配置文件中明文存储 API Key。
-	APIKey string `yaml:"api_key" env:"API_KEY"`
+	APIKey string `yaml:"api_key" env:"API_KEY" reload:"LLM API key" restart:"true" sensitive:"true"`
 	// 工具调用阶段 API Key（可选，未设置时回退 api_key）
 	ToolAPIKey string `yaml:"tool_api_key" env:"TOOL_API_KEY"`
 	// 基础 URL（可选）
@@ -390,11 +390,11 @@ type LLMConnectionConfig struct {
 	// 工具调用阶段基础 URL（可选，未设置时回退 base_url）
 	ToolBaseURL string `yaml:"tool_base_url" env:"TOOL_BASE_URL"`
 	// 请求超时
-	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT" reload:"LLM request timeout" restart:"false" sensitive:"false"`
 	// 工具调用阶段请求超时（可选，未设置时回退 timeout）
 	ToolTimeout time.Duration `yaml:"tool_timeout" env:"TOOL_TIMEOUT"`
 	// 最大重试次数
-	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES"`
+	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES" reload:"Maximum LLM request retries" restart:"false" sensitive:"false"`
 	// 工具调用阶段最大重试次数（可选，未设置时回退 max_retries）
 	ToolMaxRetries int `yaml:"tool_max_retries" env:"TOOL_MAX_RETRIES"`
 	// 模型目录 JSON 快照路径（可选，未设置时使用内置默认快照）。
@@ -418,17 +418,17 @@ type MultimodalConfig struct {
 	// 是否启用多模态 API 路由
 	Enabled bool `yaml:"enabled" env:"ENABLED"`
 	// 引用图上传的最大字节数
-	ReferenceMaxSizeBytes int64 `yaml:"reference_max_size_bytes" env:"REFERENCE_MAX_SIZE_BYTES"`
+	ReferenceMaxSizeBytes int64 `yaml:"reference_max_size_bytes" env:"REFERENCE_MAX_SIZE_BYTES" reload:"Multimodal reference max upload size in bytes" restart:"false" sensitive:"false"`
 	// 引用图默认存活时长
-	ReferenceTTL time.Duration `yaml:"reference_ttl" env:"REFERENCE_TTL"`
+	ReferenceTTL time.Duration `yaml:"reference_ttl" env:"REFERENCE_TTL" reload:"Multimodal reference TTL" restart:"false" sensitive:"false"`
 	// 引用图存储后端（仅支持 redis）
-	ReferenceStoreBackend string `yaml:"reference_store_backend" env:"REFERENCE_STORE_BACKEND"`
+	ReferenceStoreBackend string `yaml:"reference_store_backend" env:"REFERENCE_STORE_BACKEND" reload:"Multimodal reference store backend (redis only)" restart:"true" sensitive:"false"`
 	// 引用图存储 key 前缀（Redis 后端使用）
-	ReferenceStoreKeyPrefix string `yaml:"reference_store_key_prefix" env:"REFERENCE_STORE_KEY_PREFIX"`
+	ReferenceStoreKeyPrefix string `yaml:"reference_store_key_prefix" env:"REFERENCE_STORE_KEY_PREFIX" reload:"Multimodal reference store key prefix" restart:"true" sensitive:"false"`
 	// 默认图像提供商标识（openai/gemini 等）
-	DefaultImageProvider string `yaml:"default_image_provider" env:"DEFAULT_IMAGE_PROVIDER"`
+	DefaultImageProvider string `yaml:"default_image_provider" env:"DEFAULT_IMAGE_PROVIDER" reload:"Default multimodal image provider" restart:"false" sensitive:"false"`
 	// 默认视频提供商标识（runway/veo 等）
-	DefaultVideoProvider string `yaml:"default_video_provider" env:"DEFAULT_VIDEO_PROVIDER"`
+	DefaultVideoProvider string `yaml:"default_video_provider" env:"DEFAULT_VIDEO_PROVIDER" reload:"Default multimodal video provider" restart:"false" sensitive:"false"`
 	// 默认对话模型（多模态 chat 未传 model 时使用；空则回退 agent.model）
 	DefaultChatModel string `yaml:"default_chat_model" env:"DEFAULT_CHAT_MODEL"`
 	// 图像提供商配置
@@ -438,54 +438,54 @@ type MultimodalConfig struct {
 }
 
 type MultimodalImageConfig struct {
-	OpenAIAPIKey     string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-"`
+	OpenAIAPIKey     string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-" reload:"Multimodal OpenAI image API key" restart:"true" sensitive:"true"`
 	OpenAIBaseURL    string `yaml:"openai_base_url" env:"OPENAI_BASE_URL"`
-	GeminiAPIKey     string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-"`
-	FluxAPIKey       string `yaml:"flux_api_key" env:"FLUX_API_KEY" json:"-"`
-	FluxBaseURL      string `yaml:"flux_base_url" env:"FLUX_BASE_URL"`
-	StabilityAPIKey  string `yaml:"stability_api_key" env:"STABILITY_API_KEY" json:"-"`
-	StabilityBaseURL string `yaml:"stability_base_url" env:"STABILITY_BASE_URL"`
-	IdeogramAPIKey   string `yaml:"ideogram_api_key" env:"IDEOGRAM_API_KEY" json:"-"`
-	IdeogramBaseURL  string `yaml:"ideogram_base_url" env:"IDEOGRAM_BASE_URL"`
-	TongyiAPIKey     string `yaml:"tongyi_api_key" env:"TONGYI_API_KEY" json:"-"`
-	TongyiBaseURL    string `yaml:"tongyi_base_url" env:"TONGYI_BASE_URL"`
-	ZhipuAPIKey      string `yaml:"zhipu_api_key" env:"ZHIPU_API_KEY" json:"-"`
-	ZhipuBaseURL     string `yaml:"zhipu_base_url" env:"ZHIPU_BASE_URL"`
-	BaiduAPIKey      string `yaml:"baidu_api_key" env:"BAIDU_API_KEY" json:"-"`
-	BaiduSecretKey   string `yaml:"baidu_secret_key" env:"BAIDU_SECRET_KEY" json:"-"`
-	BaiduBaseURL     string `yaml:"baidu_base_url" env:"BAIDU_BASE_URL"`
-	DoubaoAPIKey     string `yaml:"doubao_api_key" env:"DOUBAO_API_KEY" json:"-"`
-	DoubaoBaseURL    string `yaml:"doubao_base_url" env:"DOUBAO_BASE_URL"`
-	TencentSecretId  string `yaml:"tencent_secret_id" env:"TENCENT_SECRET_ID" json:"-"`
-	TencentSecretKey string `yaml:"tencent_secret_key" env:"TENCENT_SECRET_KEY" json:"-"`
-	TencentBaseURL   string `yaml:"tencent_base_url" env:"TENCENT_BASE_URL"`
+	GeminiAPIKey     string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-" reload:"Multimodal Gemini image API key" restart:"true" sensitive:"true"`
+	FluxAPIKey       string `yaml:"flux_api_key" env:"FLUX_API_KEY" json:"-" reload:"Multimodal Flux (BFL) image API key" restart:"true" sensitive:"true"`
+	FluxBaseURL      string `yaml:"flux_base_url" env:"FLUX_BASE_URL" reload:"Multimodal Flux image base URL" restart:"true" sensitive:"false"`
+	StabilityAPIKey  string `yaml:"stability_api_key" env:"STABILITY_API_KEY" json:"-" reload:"Multimodal Stability AI image API key" restart:"true" sensitive:"true"`
+	StabilityBaseURL string `yaml:"stability_base_url" env:"STABILITY_BASE_URL" reload:"Multimodal Stability AI image base URL" restart:"true" sensitive:"false"`
+	IdeogramAPIKey   string `yaml:"ideogram_api_key" env:"IDEOGRAM_API_KEY" json:"-" reload:"Multimodal Ideogram image API key" restart:"true" sensitive:"true"`
+	IdeogramBaseURL  string `yaml:"ideogram_base_url" env:"IDEOGRAM_BASE_URL" reload:"Multimodal Ideogram image base URL" restart:"true" sensitive:"false"`
+	TongyiAPIKey     string `yaml:"tongyi_api_key" env:"TONGYI_API_KEY" json:"-" reload:"Multimodal Tongyi Wanxiang (阿里通义万相) image API key" restart:"true" sensitive:"true"`
+	TongyiBaseURL    string `yaml:"tongyi_base_url" env:"TONGYI_BASE_URL" reload:"Multimodal Tongyi image base URL" restart:"true" sensitive:"false"`
+	ZhipuAPIKey      string `yaml:"zhipu_api_key" env:"ZHIPU_API_KEY" json:"-" reload:"Multimodal Zhipu (智谱) image API key" restart:"true" sensitive:"true"`
+	ZhipuBaseURL     string `yaml:"zhipu_base_url" env:"ZHIPU_BASE_URL" reload:"" restart:"true" sensitive:"false"`
+	BaiduAPIKey      string `yaml:"baidu_api_key" env:"BAIDU_API_KEY" json:"-" reload:"Multimodal Baidu (文心) image API key (client_id)" restart:"true" sensitive:"true"`
+	BaiduSecretKey   string `yaml:"baidu_secret_key" env:"BAIDU_SECRET_KEY" json:"-" reload:"Multimodal Baidu image secret (client_secret)" restart:"true" sensitive:"true"`
+	BaiduBaseURL     string `yaml:"baidu_base_url" env:"BAIDU_BASE_URL" reload:"" restart:"true" sensitive:"false"`
+	DoubaoAPIKey     string `yaml:"doubao_api_key" env:"DOUBAO_API_KEY" json:"-" reload:"Multimodal Doubao (豆包/火山) image API key" restart:"true" sensitive:"true"`
+	DoubaoBaseURL    string `yaml:"doubao_base_url" env:"DOUBAO_BASE_URL" reload:"" restart:"true" sensitive:"false"`
+	TencentSecretId  string `yaml:"tencent_secret_id" env:"TENCENT_SECRET_ID" json:"-" reload:"Multimodal Tencent Hunyuan (腾讯混元生图) SecretId" restart:"true" sensitive:"true"`
+	TencentSecretKey string `yaml:"tencent_secret_key" env:"TENCENT_SECRET_KEY" json:"-" reload:"Multimodal Tencent Hunyuan SecretKey" restart:"true" sensitive:"true"`
+	TencentBaseURL   string `yaml:"tencent_base_url" env:"TENCENT_BASE_URL" reload:"" restart:"true" sensitive:"false"`
 }
 
 type MultimodalVideoConfig struct {
-	RunwayAPIKey    string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
-	RunwayBaseURL   string `yaml:"runway_base_url" env:"RUNWAY_BASE_URL"`
-	VeoAPIKey       string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
-	VeoBaseURL      string `yaml:"veo_base_url" env:"VEO_BASE_URL"`
-	GoogleAPIKey    string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
-	GoogleBaseURL   string `yaml:"google_base_url" env:"GOOGLE_BASE_URL"`
-	SoraAPIKey      string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-"`
-	SoraBaseURL     string `yaml:"sora_base_url" env:"SORA_BASE_URL"`
-	KlingAPIKey     string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-"`
-	KlingBaseURL    string `yaml:"kling_base_url" env:"KLING_BASE_URL"`
-	LumaAPIKey      string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-"`
-	LumaBaseURL     string `yaml:"luma_base_url" env:"LUMA_BASE_URL"`
-	MiniMaxAPIKey   string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
-	MiniMaxBaseURL  string `yaml:"minimax_base_url" env:"MINIMAX_BASE_URL"`
-	SeedanceAPIKey  string `yaml:"seedance_api_key" env:"SEEDANCE_API_KEY" json:"-"`
-	SeedanceBaseURL string `yaml:"seedance_base_url" env:"SEEDANCE_BASE_URL"`
+	RunwayAPIKey    string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-" reload:"Multimodal Runway video API key" restart:"true" sensitive:"true"`
+	RunwayBaseURL   string `yaml:"runway_base_url" env:"RUNWAY_BASE_URL" reload:"Multimodal Runway video base URL" restart:"true" sensitive:"false"`
+	VeoAPIKey       string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-" reload:"Multimodal Veo video API key" restart:"true" sensitive:"true"`
+	VeoBaseURL      string `yaml:"veo_base_url" env:"VEO_BASE_URL" reload:"Multimodal Veo video base URL" restart:"true" sensitive:"false"`
+	GoogleAPIKey    string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-" reload:"Multimodal Google video API key" restart:"true" sensitive:"true"`
+	GoogleBaseURL   string `yaml:"google_base_url" env:"GOOGLE_BASE_URL" reload:"Multimodal Google multimodal base URL" restart:"true" sensitive:"false"`
+	SoraAPIKey      string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-" reload:"Multimodal Sora video API key" restart:"true" sensitive:"true"`
+	SoraBaseURL     string `yaml:"sora_base_url" env:"SORA_BASE_URL" reload:"Multimodal Sora video base URL" restart:"true" sensitive:"false"`
+	KlingAPIKey     string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-" reload:"Multimodal Kling video API key" restart:"true" sensitive:"true"`
+	KlingBaseURL    string `yaml:"kling_base_url" env:"KLING_BASE_URL" reload:"Multimodal Kling video base URL" restart:"true" sensitive:"false"`
+	LumaAPIKey      string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-" reload:"Multimodal Luma video API key" restart:"true" sensitive:"true"`
+	LumaBaseURL     string `yaml:"luma_base_url" env:"LUMA_BASE_URL" reload:"Multimodal Luma video base URL" restart:"true" sensitive:"false"`
+	MiniMaxAPIKey   string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-" reload:"Multimodal MiniMax video API key" restart:"true" sensitive:"true"`
+	MiniMaxBaseURL  string `yaml:"minimax_base_url" env:"MINIMAX_BASE_URL" reload:"Multimodal MiniMax video base URL" restart:"true" sensitive:"false"`
+	SeedanceAPIKey  string `yaml:"seedance_api_key" env:"SEEDANCE_API_KEY" json:"-" reload:"Multimodal Seedance (即梦) video API key" restart:"true" sensitive:"true"`
+	SeedanceBaseURL string `yaml:"seedance_base_url" env:"SEEDANCE_BASE_URL" reload:"Multimodal Seedance (即梦) video base URL" restart:"true" sensitive:"false"`
 }
 
 // LogConfig 日志配置
 type LogConfig struct {
 	// 日志级别: debug, info, warn, error
-	Level string `yaml:"level" env:"LEVEL"`
+	Level string `yaml:"level" env:"LEVEL" reload:"Log level (debug, info, warn, error)" restart:"false" sensitive:"false"`
 	// 输出格式: json, console
-	Format string `yaml:"format" env:"FORMAT"`
+	Format string `yaml:"format" env:"FORMAT" reload:"Log format (json, console)" restart:"false" sensitive:"false"`
 	// 输出路径
 	OutputPaths []string `yaml:"output_paths" env:"OUTPUT_PATHS"`
 	// 是否启用调用者信息
@@ -497,7 +497,7 @@ type LogConfig struct {
 // TelemetryConfig 遥测配置
 type TelemetryConfig struct {
 	// 是否启用
-	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	Enabled bool `yaml:"enabled" env:"ENABLED" reload:"Enable telemetry" restart:"false" sensitive:"false"`
 	// OTLP 端点
 	OTLPEndpoint string `yaml:"otlp_endpoint" env:"OTLP_ENDPOINT"`
 	// 是否使用非加密连接（仅用于开发/测试环境）
@@ -505,7 +505,7 @@ type TelemetryConfig struct {
 	// 服务名称
 	ServiceName string `yaml:"service_name" env:"SERVICE_NAME"`
 	// 采样率
-	SampleRate float64 `yaml:"sample_rate" env:"SAMPLE_RATE"`
+	SampleRate float64 `yaml:"sample_rate" env:"SAMPLE_RATE" reload:"Telemetry sample rate" restart:"false" sensitive:"false"`
 }
 
 // ToolsConfig 工具提供者配置

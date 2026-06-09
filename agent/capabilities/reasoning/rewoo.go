@@ -152,7 +152,7 @@ Rules:
 
 	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Tools = []types.ToolSchema{toolPlanToolSchema()}
 			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
@@ -291,7 +291,7 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 
 	resp, err := invokeChatGateway(ctx, r.gateway, newGatewayChatRequest(
 		defaultModel(r.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 1000

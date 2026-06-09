@@ -207,10 +207,14 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 			}
 
 			if i < rp.retryPolicy.MaxRetries {
+				timer := time.NewTimer(backoff)
 				select {
 				case <-callCtx.Done():
+					if !timer.Stop() {
+						<-timer.C
+					}
 					return callCtx.Err()
-				case <-time.After(backoff):
+				case <-timer.C:
 				}
 				backoff = time.Duration(float64(backoff) * rp.retryPolicy.Multiplier)
 				if backoff > rp.retryPolicy.MaxBackoff {

@@ -182,3 +182,72 @@ func TestEvaluate_StopOnFailure_NoZeroValueDilution(t *testing.T) {
 	// Summary.TotalTasks must equal len(report.Results)
 	assert.Equal(t, len(report.Results), report.Summary.TotalTasks)
 }
+
+// failingBatchEvalExecutor returns configured execution errors by task input.
+type failingBatchEvalExecutor struct {
+	errorsByInput map[string]error
+}
+
+func (m *failingBatchEvalExecutor) Execute(ctx context.Context, input string) (string, int, error) {
+	if err := m.errorsByInput[input]; err != nil {
+		return "", 0, err
+	}
+	return input, 1, nil
+}
+
+func TestEvaluateBatch_ErrorDetailsPreserved(t *testing.T) {
+	cfg := DefaultEvaluatorConfig()
+	cfg.BatchSize = 2
+	cfg.Concurrency = 1
+	cfg.RetryOnError = false
+	cfg.CollectMetrics = false
+	cfg.EnableAlerts = false
+
+	evaluator := NewEvaluator(cfg, zap.NewNop())
+	suites := []*EvalSuite{
+		{ID: "pass-1", Name: "passing suite", Tasks: []EvalTask{{ID: "task-pass", Input: "ok", Expected: "ok"}}},
+		{ID: "fail-1", Name: "first failing suite", Tasks: []EvalTask{{ID: "task-fail-1", Input: "timeout"}}},
+		{ID: "fail-2", Name: "second failing suite", Tasks: []EvalTask{{ID: "task-fail-2", Input: "bad-format"}}},
+	}
+	agent := &failingBatchEvalExecutor{errorsByInput: map[string]error{
+		"timeout":    fmt.Errorf("LLM timeout after 30s"),
+		"bad-format": fmt.Errorf("invalid response format"),
+	}}
+
+	reports, err := evaluator.EvaluateBatch(context.Background(), suites, agent)
+	require.Error(t, err)
+	require.Len(t, reports, len(suites))
+	require.NotNil(t, reports[0])
+	require.NotNil(t, reports[1])
+	require.NotNil(t, reports[2])
+	assert.NotEmpty(t, reports[1].Results[0].Error)
+	assert.NotEmpty(t, reports[2].Results[0].Error)
+
+	message := err.Error()
+	assert.Contains(t, message, "batch evaluation had 2 errors")
+	assert.Contains(t, message, "suite fail-1")
+	assert.Contains(t, message, "LLM timeout after 30s")
+	assert.Contains(t, message, "suite fail-2")
+	assert.Contains(t, message, "invalid response format")
+}
+
+func TestEvaluateBatch_AllSuccessReturnsNilError(t *testing.T) {
+	cfg := DefaultEvaluatorConfig()
+	cfg.BatchSize = 2
+	cfg.Concurrency = 1
+	cfg.RetryOnError = false
+	cfg.CollectMetrics = false
+	cfg.EnableAlerts = false
+
+	evaluator := NewEvaluator(cfg, zap.NewNop())
+	suites := []*EvalSuite{
+		{ID: "pass-1", Tasks: []EvalTask{{ID: "task-1", Input: "ok-1", Expected: "ok-1"}}},
+		{ID: "pass-2", Tasks: []EvalTask{{ID: "task-2", Input: "ok-2", Expected: "ok-2"}}},
+	}
+
+	reports, err := evaluator.EvaluateBatch(context.Background(), suites, &failingBatchEvalExecutor{})
+	require.NoError(t, err)
+	require.Len(t, reports, len(suites))
+	assert.Equal(t, "pass-1", reports[0].SuiteID)
+	assert.Equal(t, "pass-2", reports[1].SuiteID)
+}

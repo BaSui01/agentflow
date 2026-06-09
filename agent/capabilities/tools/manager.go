@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
+	tooldiscovery "github.com/BaSui01/agentflow/agent/capabilities/tools/discovery"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -175,13 +175,30 @@ func skillToDiscoveredSkill(s *Skill) *types.DiscoveredSkill {
 	if s == nil {
 		return nil
 	}
+	discovered := tooldiscovery.DiscoveredSkillFromProfile(skillProfile(s))
 	return &types.DiscoveredSkill{
+		ID:           discovered.ID,
+		Name:         discovered.Name,
+		Description:  discovered.Description,
+		Instructions: discovered.Instructions,
+		Category:     discovered.Category,
+		Tags:         discovered.Tags,
+	}
+}
+
+func skillProfile(s *Skill) tooldiscovery.SkillProfile {
+	if s == nil {
+		return tooldiscovery.SkillProfile{}
+	}
+	return tooldiscovery.SkillProfile{
 		ID:           s.ID,
 		Name:         s.Name,
 		Description:  s.Description,
 		Instructions: s.Instructions,
+		Version:      s.Version,
 		Category:     s.Category,
-		Tags:         append([]string{}, s.Tags...),
+		Tags:         s.Tags,
+		Author:       s.Author,
 	}
 }
 
@@ -328,7 +345,7 @@ func (m *DefaultSkillManager) SearchSkills(query string) []*SkillMetadata {
 	defer m.mu.RUnlock()
 
 	query = strings.ToLower(query)
-	tokens := tokenizeQuery(query)
+	tokens := tooldiscovery.TokenizeSkillQuery(query)
 
 	type scoredMetadata struct {
 		meta  *SkillMetadata
@@ -344,16 +361,21 @@ func (m *DefaultSkillManager) SearchSkills(query string) []*SkillMetadata {
 		}
 	}
 
-	sort.Slice(scored, func(i, j int) bool {
-		if scored[i].score != scored[j].score {
-			return scored[i].score > scored[j].score
-		}
-		return scored[i].meta.Name < scored[j].meta.Name
-	})
-
-	result := make([]*SkillMetadata, 0, len(scored))
+	sortable := make([]tooldiscovery.SkillSearchResult, 0, len(scored))
+	byID := make(map[string]scoredMetadata, len(scored))
 	for _, item := range scored {
-		result = append(result, item.meta)
+		sortable = append(sortable, tooldiscovery.SkillSearchResult{
+			ID:    item.meta.ID,
+			Name:  item.meta.Name,
+			Score: item.score,
+		})
+		byID[item.meta.ID] = item
+	}
+	tooldiscovery.SortSkillSearchResults(sortable)
+
+	result := make([]*SkillMetadata, 0, len(sortable))
+	for _, item := range sortable {
+		result = append(result, byID[item.ID].meta)
 	}
 
 	return result
@@ -370,14 +392,15 @@ func (m *DefaultSkillManager) RegisterSkill(skill *Skill) error {
 	m.inMemory[skill.ID] = skill.Clone()
 
 	// 添加到索引
+	entry := tooldiscovery.SkillIndexEntryFromProfile(skillProfile(skill), "")
 	m.index[skill.ID] = &SkillMetadata{
-		ID:          skill.ID,
-		Name:        skill.Name,
-		Description: skill.Description,
-		Category:    skill.Category,
-		Tags:        skill.Tags,
-		Version:     skill.Version,
-		Path:        "", // 内存中的技能没有路径
+		ID:          entry.ID,
+		Name:        entry.Name,
+		Description: entry.Description,
+		Category:    entry.Category,
+		Tags:        entry.Tags,
+		Version:     entry.Version,
+		Path:        entry.Path,
 	}
 
 	// 如果配置了自动加载，直接加载
@@ -465,15 +488,16 @@ func (m *DefaultSkillManager) ScanDirectory(dir string) error {
 		}
 
 		// 添加到索引
+		entry := tooldiscovery.SkillIndexEntryFromProfile(skillProfile(skill), skillDir)
 		m.mu.Lock()
 		m.index[skill.ID] = &SkillMetadata{
-			ID:          skill.ID,
-			Name:        skill.Name,
-			Description: skill.Description,
-			Category:    skill.Category,
-			Tags:        skill.Tags,
-			Version:     skill.Version,
-			Path:        skillDir,
+			ID:          entry.ID,
+			Name:        entry.Name,
+			Description: entry.Description,
+			Category:    entry.Category,
+			Tags:        entry.Tags,
+			Version:     entry.Version,
+			Path:        entry.Path,
 		}
 		m.mu.Unlock()
 
@@ -554,86 +578,17 @@ func (m *DefaultSkillManager) ClearCache() {
 }
 
 func tokenizeQuery(query string) []string {
-	if query == "" {
-		return nil
-	}
-	tokens := strings.FieldsFunc(query, func(r rune) bool {
-		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-')
-	})
-	if len(tokens) == 0 {
-		return nil
-	}
-
-	unique := make(map[string]struct{}, len(tokens))
-	result := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		token = strings.ToLower(strings.TrimSpace(token))
-		if token == "" {
-			continue
-		}
-		if _, exists := unique[token]; exists {
-			continue
-		}
-		unique[token] = struct{}{}
-		result = append(result, token)
-	}
-
-	return result
+	return tooldiscovery.TokenizeSkillQuery(query)
 }
 
 func scoreMetadataMatch(meta *SkillMetadata, query string, tokens []string) float64 {
 	if meta == nil {
 		return 0
 	}
-	if query == "" {
-		return 1
-	}
-
-	name := strings.ToLower(meta.Name)
-	description := strings.ToLower(meta.Description)
-	category := strings.ToLower(meta.Category)
-
-	score := 0.0
-	if strings.Contains(name, query) {
-		score += 0.45
-	}
-	if strings.Contains(description, query) {
-		score += 0.25
-	}
-	if strings.Contains(category, query) {
-		score += 0.15
-	}
-
-	tagMatched := false
-	for _, tag := range meta.Tags {
-		if strings.Contains(strings.ToLower(tag), query) {
-			tagMatched = true
-			break
-		}
-	}
-	if tagMatched {
-		score += 0.15
-	}
-
-	if len(tokens) > 0 {
-		matched := 0
-		for _, token := range tokens {
-			if strings.Contains(name, token) || strings.Contains(description, token) || strings.Contains(category, token) {
-				matched++
-				continue
-			}
-			for _, tag := range meta.Tags {
-				if strings.Contains(strings.ToLower(tag), token) {
-					matched++
-					break
-				}
-			}
-		}
-		score += 0.4 * float64(matched) / float64(len(tokens))
-	}
-
-	if score > 1 {
-		return 1
-	}
-	return score
+	return tooldiscovery.ScoreSkillMetadataMatch(tooldiscovery.SkillSearchProfile{
+		Name:        meta.Name,
+		Description: meta.Description,
+		Category:    meta.Category,
+		Tags:        meta.Tags,
+	}, query, tokens)
 }

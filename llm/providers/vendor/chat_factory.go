@@ -8,7 +8,9 @@ import (
 	llm "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/providers"
 	claude "github.com/BaSui01/agentflow/llm/providers/anthropic"
+	"github.com/BaSui01/agentflow/llm/providers/anthropiccompat"
 	"github.com/BaSui01/agentflow/llm/providers/gemini"
+	"github.com/BaSui01/agentflow/llm/providers/geminicompat"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
@@ -40,6 +42,10 @@ func NewChatProviderFromConfig(name string, cfg ChatProviderConfig, logger *zap.
 		return newGeminiChatProvider(providerCode, cfg, logger), nil
 	case "qwen":
 		return newCompatBuiltInChatProvider(providerCode, cfg, logger)
+	case "anthropic-compat", "claude-compat", "anthropic-messages-compat":
+		return newAnthropicCompatChatProvider(providerCode, cfg, logger)
+	case "gemini-compat", "google-compat":
+		return newGeminiCompatChatProvider(providerCode, cfg, logger)
 	case "deepseek", "glm", "grok", "kimi", "mistral", "minimax", "hunyuan", "doubao", "llama":
 		return newCompatBuiltInChatProvider(providerCode, cfg, logger)
 	default:
@@ -65,6 +71,11 @@ func canonicalizeChatProviderConfig(name string, cfg ChatProviderConfig) (string
 			cfg.Extra["auth_type"] = "oauth"
 		}
 		return "gemini-vertex", cfg
+	case "deepseek-anthropic":
+		if cfg.BaseURL == "" {
+			cfg.BaseURL = "https://api.deepseek.com/anthropic"
+		}
+		return "anthropic-compat", cfg
 	default:
 		return providerCode, cfg
 	}
@@ -160,4 +171,76 @@ func newOpenAICompatChatProvider(providerCode string, cfg ChatProviderConfig, lo
 		zap.String("provider", providerCode),
 		zap.String("base_url", cfg.BaseURL))
 	return openaicompat.New(compatCfg, logger), nil
+}
+
+func newAnthropicCompatChatProvider(providerCode string, cfg ChatProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		return nil, fmt.Errorf("provider %q requires base_url", providerCode)
+	}
+
+	compatCfg := anthropiccompat.Config{
+		ProviderName:  providerCode,
+		APIKey:        cfg.APIKey,
+		APIKeys:       cfg.APIKeys,
+		BaseURL:       cfg.BaseURL,
+		DefaultModel:  cfg.Model,
+		FallbackModel: chooseFallbackModel(cfg),
+	}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["endpoint_path"].(string); ok {
+			compatCfg.EndpointPath = v
+		}
+		if v, ok := cfg.Extra["models_endpoint"].(string); ok {
+			compatCfg.ModelsEndpoint = v
+		}
+		if v, ok := cfg.Extra["auth_header"].(string); ok {
+			compatCfg.AuthHeaderName = v
+		}
+		if v, ok := cfg.Extra["supports_tools"].(bool); ok {
+			compatCfg.SupportsTools = &v
+		}
+	}
+
+	logger.Info("creating generic Anthropic-compatible chat provider",
+		zap.String("provider", providerCode),
+		zap.String("base_url", cfg.BaseURL))
+	return anthropiccompat.New(compatCfg, logger), nil
+}
+
+func newGeminiCompatChatProvider(providerCode string, cfg ChatProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	if strings.TrimSpace(cfg.BaseURL) == "" {
+		return nil, fmt.Errorf("provider %q requires base_url", providerCode)
+	}
+
+	compatCfg := geminicompat.Config{
+		ProviderName:  providerCode,
+		APIKey:        cfg.APIKey,
+		APIKeys:       cfg.APIKeys,
+		BaseURL:       cfg.BaseURL,
+		DefaultModel:  cfg.Model,
+		FallbackModel: chooseFallbackModel(cfg),
+	}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["models_endpoint"].(string); ok {
+			compatCfg.ModelsEndpoint = v
+		}
+		if v, ok := cfg.Extra["auth_header"].(string); ok {
+			compatCfg.AuthHeaderName = v
+		}
+		if v, ok := cfg.Extra["supports_tools"].(bool); ok {
+			compatCfg.SupportsTools = &v
+		}
+	}
+
+	logger.Info("creating generic Gemini-compatible chat provider",
+		zap.String("provider", providerCode),
+		zap.String("base_url", cfg.BaseURL))
+	return geminicompat.New(compatCfg, logger), nil
+}
+
+func chooseFallbackModel(cfg ChatProviderConfig) string {
+	if strings.TrimSpace(cfg.Model) != "" {
+		return cfg.Model
+	}
+	return "unknown"
 }

@@ -12,6 +12,8 @@ import (
 // Mistral AI 使用 OpenAI 兼容的 API 格式.
 type MistralProvider struct {
 	*openaicompat.Provider
+	multimodal *providerbase.MultimodalAdapter
+	fineTuning *providerbase.FineTuningAdapter
 }
 
 // newMistralCapabilityHost 创建 Mistral capability host。
@@ -21,7 +23,7 @@ func newMistralCapabilityHost(cfg providers.MistralConfig, logger *zap.Logger) *
 		cfg.BaseURL = "https://api.mistral.ai"
 	}
 
-	return &MistralProvider{
+	p := &MistralProvider{
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "mistral",
 			APIKey:        cfg.APIKey,
@@ -32,7 +34,11 @@ func newMistralCapabilityHost(cfg providers.MistralConfig, logger *zap.Logger) *
 			Timeout:       cfg.Timeout,
 			RequestHook:   mistralRequestHook,
 		}, logger),
+		multimodal: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "mistral"}),
+		fineTuning: providerbase.NewFineTuningAdapter(providerbase.FineTuningAdapterConfig{Endpoint: "/v1/fine_tuning/jobs"}),
 	}
+	p.fineTuning.BindProvider(p.Provider)
+	return p
 }
 
 // newMistralProvider 仅供本包测试与能力承载复用；公共 chat 入口统一走 vendor factory。

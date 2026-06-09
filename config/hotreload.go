@@ -130,425 +130,53 @@ type HotReloadableField struct {
 
 // --- 可热重载字段注册表 ---
 
-// hotReloadableFields 定义哪些配置字段可以热重载
-var hotReloadableFields = map[string]HotReloadableField{
-	// 日志配置-可以热重载
-	"Log.Level": {
-		Path:            "Log.Level",
-		Description:     "Log level (debug, info, warn, error)",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Log.Format": {
-		Path:            "Log.Format",
-		Description:     "Log format (json, console)",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
+// hotReloadableFields is derived from `reload`, `restart`, and `sensitive`
+// struct tags on Config and nested config structs. Keep hot-reload metadata next
+// to the field definition instead of maintaining a parallel path-key registry.
+var hotReloadableFields = buildHotReloadableFields(reflect.TypeOf(Config{}))
 
-	// 代理配置 - 可以热重载
-	"Agent.MaxIterations": {
-		Path:            "Agent.MaxIterations",
-		Description:     "Maximum agent iterations",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Agent.Temperature": {
-		Path:            "Agent.Temperature",
-		Description:     "LLM temperature parameter",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Agent.MaxTokens": {
-		Path:            "Agent.MaxTokens",
-		Description:     "Maximum tokens for LLM",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Agent.Timeout": {
-		Path:            "Agent.Timeout",
-		Description:     "Agent execution timeout",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Agent.StreamEnabled": {
-		Path:            "Agent.StreamEnabled",
-		Description:     "Enable streaming responses",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
+func buildHotReloadableFields(root reflect.Type) map[string]HotReloadableField {
+	fields := make(map[string]HotReloadableField)
+	collectHotReloadableFields(fields, "", root)
+	return fields
+}
 
-	// LLM配置-可以热重载
-	"LLM.MaxRetries": {
-		Path:            "LLM.MaxRetries",
-		Description:     "Maximum LLM request retries",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"LLM.Timeout": {
-		Path:            "LLM.Timeout",
-		Description:     "LLM request timeout",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
+func collectHotReloadableFields(fields map[string]HotReloadableField, prefix string, t reflect.Type) {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return
+	}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		path := field.Name
+		if prefix != "" {
+			path = prefix + "." + field.Name
+		}
 
-	// 多模态配置 - 可以热重载
-	"Multimodal.ReferenceMaxSizeBytes": {
-		Path:            "Multimodal.ReferenceMaxSizeBytes",
-		Description:     "Multimodal reference max upload size in bytes",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Multimodal.ReferenceTTL": {
-		Path:            "Multimodal.ReferenceTTL",
-		Description:     "Multimodal reference TTL",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Multimodal.ReferenceStoreBackend": {
-		Path:            "Multimodal.ReferenceStoreBackend",
-		Description:     "Multimodal reference store backend (redis only)",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.ReferenceStoreKeyPrefix": {
-		Path:            "Multimodal.ReferenceStoreKeyPrefix",
-		Description:     "Multimodal reference store key prefix",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.DefaultImageProvider": {
-		Path:            "Multimodal.DefaultImageProvider",
-		Description:     "Default multimodal image provider",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Multimodal.DefaultVideoProvider": {
-		Path:            "Multimodal.DefaultVideoProvider",
-		Description:     "Default multimodal video provider",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
+		if field.Tag.Get("reload") != "" {
+			fields[path] = HotReloadableField{
+				Path:            path,
+				Description:     field.Tag.Get("reload"),
+				RequiresRestart: parseBoolTag(field.Tag.Get("restart")),
+				Sensitive:       parseBoolTag(field.Tag.Get("sensitive")),
+			}
+		}
+		collectHotReloadableFields(fields, path, field.Type)
+	}
+}
 
-	// 遥测配置 - 可以热重载
-	"Telemetry.Enabled": {
-		Path:            "Telemetry.Enabled",
-		Description:     "Enable telemetry",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-	"Telemetry.SampleRate": {
-		Path:            "Telemetry.SampleRate",
-		Description:     "Telemetry sample rate",
-		RequiresRestart: false,
-		Sensitive:       false,
-	},
-
-	// 服务器配置 - 需要重新启动
-	"Server.HTTPPort": {
-		Path:            "Server.HTTPPort",
-		Description:     "HTTP server port",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Server.MetricsPort": {
-		Path:            "Server.MetricsPort",
-		Description:     "Metrics server port",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Server.MetricsBindAddress": {
-		Path:            "Server.MetricsBindAddress",
-		Description:     "Metrics server bind address",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Server.EnablePProf": {
-		Path:            "Server.EnablePProf",
-		Description:     "Enable pprof endpoints on the metrics server",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Server.ReadTimeout": {
-		Path:            "Server.ReadTimeout",
-		Description:     "HTTP read timeout",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Server.WriteTimeout": {
-		Path:            "Server.WriteTimeout",
-		Description:     "HTTP write timeout",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-
-	// 数据库配置 - 需要重新启动
-	"Database.Host": {
-		Path:            "Database.Host",
-		Description:     "Database host",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Database.Port": {
-		Path:            "Database.Port",
-		Description:     "Database port",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Database.Password": {
-		Path:            "Database.Password",
-		Description:     "Database password",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-
-	// Redis 配置 - 需要重新启动
-	"Redis.Addr": {
-		Path:            "Redis.Addr",
-		Description:     "Redis address",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Redis.Password": {
-		Path:            "Redis.Password",
-		Description:     "Redis password",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-
-	// LLM API 密钥 - 需要重新启动
-	"LLM.APIKey": {
-		Path:            "LLM.APIKey",
-		Description:     "LLM API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.OpenAIAPIKey": {
-		Path:            "Multimodal.Image.OpenAIAPIKey",
-		Description:     "Multimodal OpenAI image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.GeminiAPIKey": {
-		Path:            "Multimodal.Image.GeminiAPIKey",
-		Description:     "Multimodal Gemini image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.FluxAPIKey": {
-		Path:            "Multimodal.Image.FluxAPIKey",
-		Description:     "Multimodal Flux (BFL) image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.FluxBaseURL": {
-		Path:            "Multimodal.Image.FluxBaseURL",
-		Description:     "Multimodal Flux image base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.StabilityAPIKey": {
-		Path:            "Multimodal.Image.StabilityAPIKey",
-		Description:     "Multimodal Stability AI image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.StabilityBaseURL": {
-		Path:            "Multimodal.Image.StabilityBaseURL",
-		Description:     "Multimodal Stability AI image base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.IdeogramAPIKey": {
-		Path:            "Multimodal.Image.IdeogramAPIKey",
-		Description:     "Multimodal Ideogram image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.IdeogramBaseURL": {
-		Path:            "Multimodal.Image.IdeogramBaseURL",
-		Description:     "Multimodal Ideogram image base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.TongyiAPIKey": {
-		Path:            "Multimodal.Image.TongyiAPIKey",
-		Description:     "Multimodal Tongyi Wanxiang (阿里通义万相) image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.TongyiBaseURL": {
-		Path:            "Multimodal.Image.TongyiBaseURL",
-		Description:     "Multimodal Tongyi image base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.ZhipuAPIKey": {
-		Path:            "Multimodal.Image.ZhipuAPIKey",
-		Description:     "Multimodal Zhipu (智谱) image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.ZhipuBaseURL": {
-		Path:            "Multimodal.Image.ZhipuBaseURL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.BaiduAPIKey": {
-		Path:            "Multimodal.Image.BaiduAPIKey",
-		Description:     "Multimodal Baidu (文心) image API key (client_id)",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.BaiduSecretKey": {
-		Path:            "Multimodal.Image.BaiduSecretKey",
-		Description:     "Multimodal Baidu image secret (client_secret)",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.BaiduBaseURL": {
-		Path:            "Multimodal.Image.BaiduBaseURL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.DoubaoAPIKey": {
-		Path:            "Multimodal.Image.DoubaoAPIKey",
-		Description:     "Multimodal Doubao (豆包/火山) image API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.DoubaoBaseURL": {
-		Path:            "Multimodal.Image.DoubaoBaseURL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Image.TencentSecretId": {
-		Path:            "Multimodal.Image.TencentSecretId",
-		Description:     "Multimodal Tencent Hunyuan (腾讯混元生图) SecretId",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.TencentSecretKey": {
-		Path:            "Multimodal.Image.TencentSecretKey",
-		Description:     "Multimodal Tencent Hunyuan SecretKey",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Image.TencentBaseURL": {
-		Path:            "Multimodal.Image.TencentBaseURL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.RunwayAPIKey": {
-		Path:            "Multimodal.Video.RunwayAPIKey",
-		Description:     "Multimodal Runway video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.VeoAPIKey": {
-		Path:            "Multimodal.Video.VeoAPIKey",
-		Description:     "Multimodal Veo video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.GoogleAPIKey": {
-		Path:            "Multimodal.Video.GoogleAPIKey",
-		Description:     "Multimodal Google video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.SoraAPIKey": {
-		Path:            "Multimodal.Video.SoraAPIKey",
-		Description:     "Multimodal Sora video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.KlingAPIKey": {
-		Path:            "Multimodal.Video.KlingAPIKey",
-		Description:     "Multimodal Kling video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.LumaAPIKey": {
-		Path:            "Multimodal.Video.LumaAPIKey",
-		Description:     "Multimodal Luma video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.MiniMaxAPIKey": {
-		Path:            "Multimodal.Video.MiniMaxAPIKey",
-		Description:     "Multimodal MiniMax video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.SeedanceAPIKey": {
-		Path:            "Multimodal.Video.SeedanceAPIKey",
-		Description:     "Multimodal Seedance (即梦) video API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
-	"Multimodal.Video.RunwayBaseURL": {
-		Path:            "Multimodal.Video.RunwayBaseURL",
-		Description:     "Multimodal Runway video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.VeoBaseURL": {
-		Path:            "Multimodal.Video.VeoBaseURL",
-		Description:     "Multimodal Veo video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.GoogleBaseURL": {
-		Path:            "Multimodal.Video.GoogleBaseURL",
-		Description:     "Multimodal Google multimodal base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.SoraBaseURL": {
-		Path:            "Multimodal.Video.SoraBaseURL",
-		Description:     "Multimodal Sora video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.KlingBaseURL": {
-		Path:            "Multimodal.Video.KlingBaseURL",
-		Description:     "Multimodal Kling video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.LumaBaseURL": {
-		Path:            "Multimodal.Video.LumaBaseURL",
-		Description:     "Multimodal Luma video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.MiniMaxBaseURL": {
-		Path:            "Multimodal.Video.MiniMaxBaseURL",
-		Description:     "Multimodal MiniMax video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Multimodal.Video.SeedanceBaseURL": {
-		Path:            "Multimodal.Video.SeedanceBaseURL",
-		Description:     "Multimodal Seedance (即梦) video base URL",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-
-	// Qdrant 配置 - 需要重新启动
-	"Qdrant.Host": {
-		Path:            "Qdrant.Host",
-		Description:     "Qdrant host",
-		RequiresRestart: true,
-		Sensitive:       false,
-	},
-	"Qdrant.APIKey": {
-		Path:            "Qdrant.APIKey",
-		Description:     "Qdrant API key",
-		RequiresRestart: true,
-		Sensitive:       true,
-	},
+func parseBoolTag(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "yes", "y":
+		return true
+	default:
+		return false
+	}
 }
 
 // --- 热重载管理器选项 ---

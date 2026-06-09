@@ -200,7 +200,7 @@ Rules:
 
 	resp, err := invokeChatGateway(ctx, d.gateway, newGatewayChatRequest(
 		defaultModel(d.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Tools = []types.ToolSchema{nextStepsToolSchema()}
 			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
@@ -360,7 +360,7 @@ Think through this step and provide your reasoning and conclusion.`, node.Descri
 
 	resp, err := invokeChatGateway(ctx, d.gateway, newGatewayChatRequest(
 		defaultModel(d.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.5
 			req.MaxTokens = 1000
@@ -524,7 +524,7 @@ Synthesize a final answer based on these results.`, task, joinStrings(results, "
 
 	resp, err := invokeChatGateway(ctx, d.gateway, newGatewayChatRequest(
 		defaultModel(d.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 1000

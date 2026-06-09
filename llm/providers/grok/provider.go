@@ -14,6 +14,7 @@ const defaultGrokBaseURL = "https://api.x.ai"
 // Grok 使用 OpenAI 兼容的 API 格式；默认 Base URL https://api.x.ai
 type GrokProvider struct {
 	*openaicompat.Provider
+	*providerbase.MultimodalAdapter
 }
 
 // newGrokCapabilityHost 创建 Grok capability host。
@@ -34,6 +35,7 @@ func newGrokCapabilityHost(cfg providers.GrokConfig, logger *zap.Logger) *GrokPr
 			Timeout:       cfg.Timeout,
 			RequestHook:   grokRequestHook,
 		}, logger),
+		MultimodalAdapter: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "grok"}),
 	}
 }
 

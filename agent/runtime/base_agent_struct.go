@@ -3,8 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
 	agentadapters "github.com/BaSui01/agentflow/agent/adapters"
 	guardrails "github.com/BaSui01/agentflow/agent/capabilities/guardrails"
 	reasoning "github.com/BaSui01/agentflow/agent/capabilities/reasoning"
@@ -15,6 +13,8 @@ import (
 	types "github.com/BaSui01/agentflow/types"
 	zap "go.uber.org/zap"
 	semaphore "golang.org/x/sync/semaphore"
+	"strings"
+	"sync"
 )
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
@@ -72,6 +72,7 @@ type BaseAgent struct {
 	optionsResolver   ExecutionOptionsResolver
 	requestAdapter    agentadapters.ChatRequestAdapter
 	toolProtocol      ToolProtocolRuntime
+	authorize         AuthorizeFunc
 	reasoningRuntime  ReasoningRuntime
 }
 
@@ -128,6 +129,7 @@ func BuildBaseAgent(
 
 	return ba, nil
 }
+
 // CompletionDecision is the normalized evaluation result for loop execution.
 type CompletionDecision struct {
 	Solved         bool         `json:"solved"`
@@ -150,6 +152,7 @@ type LoopReflectionResult struct {
 	Critique    *Critique
 	Observation *LoopObservation
 }
+
 // ExecutionFunc is the core agent execution function signature.
 type ExecutionFunc = agentexec.Func[*Input, *Output]
 
@@ -163,6 +166,7 @@ type ExecutionPipeline = agentexec.Pipeline[*Input, *Output]
 func NewExecutionPipeline(core ExecutionFunc) *ExecutionPipeline {
 	return agentexec.NewPipeline[*Input, *Output](core)
 }
+
 // Merged from loop_control_policy.go.
 
 type LoopControlPolicy = loopcore.LoopControlPolicy

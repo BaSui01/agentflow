@@ -113,10 +113,14 @@ func (r *backoffRetryer) DoWithResult(ctx context.Context, fn func() (any, error
 			}
 
 			// 等待延迟，同时监听 context 取消
+			timer := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return nil, fmt.Errorf("重试被取消: %w", ctx.Err())
-			case <-time.After(delay):
+			case <-timer.C:
 				// 继续重试
 			}
 		}

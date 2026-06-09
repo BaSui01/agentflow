@@ -131,7 +131,7 @@ func (b *BaseAgent) assembleMessages(
 	msgCap := 1 + len(ephemeralLayers) + len(skillContext) + len(memoryContext) + len(conversation) + 1
 	messages := make([]types.Message, 0, msgCap)
 	if strings.TrimSpace(systemPrompt) != "" {
-		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
+		messages = append(messages, types.NewSystemMessage(systemPrompt))
 	}
 	for _, layer := range ephemeralLayers {
 		if strings.TrimSpace(layer.Content) == "" {
@@ -147,13 +147,13 @@ func (b *BaseAgent) assembleMessages(
 		if strings.TrimSpace(item) == "" {
 			continue
 		}
-		messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+		messages = append(messages, types.NewSystemMessage(item))
 	}
 	for _, item := range memoryContext {
-		messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+		messages = append(messages, types.NewSystemMessage(item))
 	}
 	messages = append(messages, conversation...)
-	messages = append(messages, types.Message{Role: types.RoleUser, Content: userInput})
+	messages = append(messages, types.NewUserMessage(userInput))
 	return messages, nil
 }
 
@@ -266,31 +266,31 @@ func (b *BaseAgent) estimateContextStatus(
 	}
 	messages := make([]types.Message, 0, 1+len(skillContext)+len(memoryContext)+len(conversation)+len(retrieval)+len(toolStates)+1)
 	if strings.TrimSpace(systemPrompt) != "" {
-		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
+		messages = append(messages, types.NewSystemMessage(systemPrompt))
 	}
 	for _, item := range skillContext {
 		if strings.TrimSpace(item) != "" {
-			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+			messages = append(messages, types.NewSystemMessage(item))
 		}
 	}
 	for _, item := range memoryContext {
 		if strings.TrimSpace(item) != "" {
-			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+			messages = append(messages, types.NewSystemMessage(item))
 		}
 	}
 	messages = append(messages, conversation...)
 	for _, item := range retrieval {
 		if strings.TrimSpace(item.Content) != "" {
-			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item.Content})
+			messages = append(messages, types.NewSystemMessage(item.Content))
 		}
 	}
 	for _, item := range toolStates {
 		if strings.TrimSpace(item.Summary) != "" {
-			messages = append(messages, types.Message{Role: types.RoleSystem, Content: item.Summary})
+			messages = append(messages, types.NewSystemMessage(item.Summary))
 		}
 	}
 	if input != nil && strings.TrimSpace(input.Content) != "" {
-		messages = append(messages, types.Message{Role: types.RoleUser, Content: input.Content})
+		messages = append(messages, types.NewUserMessage(input.Content))
 	}
 	status := b.contextManager.GetStatus(messages)
 	return &status

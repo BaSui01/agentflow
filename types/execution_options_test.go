@@ -1,6 +1,9 @@
 package types
 
 import (
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,6 +194,30 @@ func TestAgentConfigExecutionOptions_PrefersFormalMainFace(t *testing.T) {
 	assert.Equal(t, "tool-model", options.Tools.ToolModel)
 }
 
+func TestAgentConfigHasFormalMainFaceUsesGenericFormalSurfaceDetection(t *testing.T) {
+	source, err := os.ReadFile("execution_options.go")
+	require.NoError(t, err)
+
+	body := string(source)
+	start := strings.Index(body, "func (c AgentConfig) hasFormalMainFace() bool")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(body[start:], "\nfunc mergeModelOptions")
+	require.NotEqual(t, -1, end)
+	fn := body[start : start+end]
+
+	assert.Contains(t, fn, "formalSurfaceHasValues")
+	assert.NotContains(t, fn, "c.Model.")
+	assert.NotContains(t, fn, "c.Control.")
+	assert.NotContains(t, fn, "c.Tools.")
+}
+
+func TestAgentConfigHasFormalMainFaceDetectsRepresentativeFormalFields(t *testing.T) {
+	assert.False(t, (AgentConfig{}).hasFormalMainFace())
+	assert.True(t, (AgentConfig{Model: ModelOptions{Model: "gpt-5.4"}}).hasFormalMainFace())
+	assert.True(t, (AgentConfig{Control: AgentControlOptions{Timeout: 5 * time.Second}}).hasFormalMainFace())
+	assert.True(t, (AgentConfig{Tools: ToolProtocolOptions{DisableTools: true}}).hasFormalMainFace())
+}
+
 func TestAgentConfigExecutionOptions_FormalModelFieldsAreMergedAndCloned(t *testing.T) {
 	maxCompletionTokens := 2048
 	frequencyPenalty := float32(0.2)
@@ -317,4 +344,60 @@ func TestAgentConfigExecutionOptions_FormalModelFieldsAreMergedAndCloned(t *test
 	assert.Equal(t, []string{"sig-1"}, options.Model.ThoughtSignatures)
 	assert.Equal(t, int32(-1), *options.Model.ThinkingBudget)
 	assert.True(t, *options.Model.IncludeThoughts)
+}
+
+func TestAgentConfigJSONUnmarshalNormalizesLegacyRuntimeSurface(t *testing.T) {
+	payload := []byte(`{
+		"core":{"id":"agent-1","name":"Agent","type":"assistant"},
+		"llm":{"provider":"openai","model":"legacy-model","max_tokens":123,"temperature":0.3,"stop":["STOP"]},
+		"runtime":{"system_prompt":"legacy prompt","tools":["search"],"handoffs":["reviewer"],"max_react_iterations":4,"tool_model":"tool-model"},
+		"features":{"memory":{"enabled":true,"disable_on_external_context":true}},
+		"metadata":{"tenant":"t1"}
+	}`)
+
+	var cfg AgentConfig
+	require.NoError(t, json.Unmarshal(payload, &cfg))
+
+	assert.Equal(t, "openai", cfg.Model.Provider)
+	assert.Equal(t, "legacy-model", cfg.Model.Model)
+	assert.Equal(t, 123, cfg.Model.MaxTokens)
+	assert.Equal(t, float32(0.3), cfg.Model.Temperature)
+	assert.Equal(t, []string{"STOP"}, cfg.Model.Stop)
+	assert.Equal(t, "legacy prompt", cfg.Control.SystemPrompt)
+	assert.Equal(t, 4, cfg.Control.MaxReActIterations)
+	require.NotNil(t, cfg.Control.MemoryExternalContext)
+	assert.True(t, cfg.Control.MemoryExternalContext.DisableAllOnExternalContext)
+	assert.Equal(t, []string{"search"}, cfg.Tools.AllowedTools)
+	assert.Equal(t, []string{"reviewer"}, cfg.Tools.Handoffs)
+	assert.Equal(t, "tool-model", cfg.Tools.ToolModel)
+	require.NotNil(t, cfg.Tools.Subagents)
+	require.NotNil(t, cfg.Tools.Subagents.AllowHandoffs)
+	assert.True(t, *cfg.Tools.Subagents.AllowHandoffs)
+
+	options := cfg.ExecutionOptions()
+	assert.Equal(t, cfg.Model, options.Model)
+	assert.Equal(t, cfg.Control.SystemPrompt, options.Control.SystemPrompt)
+	assert.Equal(t, cfg.Tools.AllowedTools, options.Tools.AllowedTools)
+}
+
+func TestAgentConfigJSONUnmarshalFormalSurfaceOverridesLegacyRuntimeSurface(t *testing.T) {
+	payload := []byte(`{
+		"core":{"id":"agent-1","name":"Agent","type":"assistant"},
+		"model":{"provider":"formal-provider","model":"formal-model","max_tokens":456},
+		"control":{"system_prompt":"formal prompt","max_react_iterations":7},
+		"tools":{"allowed_tools":["formal-tool"],"tool_model":"formal-tool-model"},
+		"llm":{"provider":"legacy-provider","model":"legacy-model","max_tokens":123},
+		"runtime":{"system_prompt":"legacy prompt","tools":["legacy-tool"],"max_react_iterations":4,"tool_model":"legacy-tool-model"}
+	}`)
+
+	var cfg AgentConfig
+	require.NoError(t, json.Unmarshal(payload, &cfg))
+
+	assert.Equal(t, "formal-provider", cfg.Model.Provider)
+	assert.Equal(t, "formal-model", cfg.Model.Model)
+	assert.Equal(t, 456, cfg.Model.MaxTokens)
+	assert.Equal(t, "formal prompt", cfg.Control.SystemPrompt)
+	assert.Equal(t, 7, cfg.Control.MaxReActIterations)
+	assert.Equal(t, []string{"formal-tool"}, cfg.Tools.AllowedTools)
+	assert.Equal(t, "formal-tool-model", cfg.Tools.ToolModel)
 }

@@ -136,6 +136,21 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 								}
 								toolAccumulator.Register(itemID, toolType, name, tc.ID)
 								toolAccumulator.Append(itemID, argDelta)
+								if json.Valid(toolAccumulator.payloads[itemID]) && strings.TrimSpace(toolAccumulator.names[itemID]) != "" {
+									call, ok := toolAccumulator.CompleteFunction(itemID)
+									if ok {
+										call.Index = parseStreamToolCallIndex(itemID)
+										chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, call)
+									}
+									delete(toolTypesByItemID, itemID)
+									toolOrderByChoice[choice.Index] = removeStreamToolCallItemID(toolOrderByChoice[choice.Index], itemID)
+									if len(toolOrderByChoice[choice.Index]) == 0 {
+										delete(toolOrderByChoice, choice.Index)
+										delete(toolSeenByChoice, choice.Index)
+									} else {
+										delete(toolSeenByChoice[choice.Index], itemID)
+									}
+								}
 							}
 						}
 					}
@@ -194,6 +209,15 @@ func parseStreamToolCallIndex(itemID string) int {
 		return 0
 	}
 	return toolIndex
+}
+
+func removeStreamToolCallItemID(items []string, target string) []string {
+	for i, item := range items {
+		if item == target {
+			return append(items[:i], items[i+1:]...)
+		}
+	}
+	return items
 }
 
 func toolJSONDeltaFromRaw(raw json.RawMessage) string {

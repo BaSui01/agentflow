@@ -348,17 +348,17 @@ func TestResponseWriter(t *testing.T) {
 	rw := NewResponseWriter(w)
 
 	// 初始状态
-	assert.Equal(t, http.StatusOK, rw.StatusCode)
-	assert.False(t, rw.Written)
+	assert.Equal(t, http.StatusOK, rw.StatusCode())
+	assert.False(t, rw.Written())
 
 	// 写入状态码
 	rw.WriteHeader(http.StatusCreated)
-	assert.Equal(t, http.StatusCreated, rw.StatusCode)
-	assert.True(t, rw.Written)
+	assert.Equal(t, http.StatusCreated, rw.StatusCode())
+	assert.True(t, rw.Written())
 
 	// 再次写入应该被忽略
 	rw.WriteHeader(http.StatusBadRequest)
-	assert.Equal(t, http.StatusCreated, rw.StatusCode)
+	assert.Equal(t, http.StatusCreated, rw.StatusCode())
 
 	// 写入内容
 	n, err := rw.Write([]byte("test"))

@@ -375,14 +375,3 @@ func TestConfigAPIMiddleware_LogRequests_NilLogger(t *testing.T) {
 		handler(w, req)
 	})
 }
-
-// --- responseWriter captures status ---
-
-func TestResponseWriter_CapturesStatus(t *testing.T) {
-	inner := httptest.NewRecorder()
-	rw := &responseWriter{ResponseWriter: inner, status: http.StatusOK}
-
-	rw.WriteHeader(http.StatusNotFound)
-	assert.Equal(t, http.StatusNotFound, rw.status)
-	assert.Equal(t, http.StatusNotFound, inner.Code)
-}

@@ -246,7 +246,7 @@ Rules:
 
 	resp, err := invokeChatGateway(ctx, p.gateway, newGatewayChatRequest(
 		defaultModel(p.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Tools = []types.ToolSchema{executionPlanToolSchema()}
 			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
@@ -352,7 +352,7 @@ Execute this step and provide the result.`, plan.Goal, strings.Join(context, "\n
 
 	resp, err := invokeChatGateway(ctx, p.gateway, newGatewayChatRequest(
 		defaultModel(p.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.5
 			req.MaxTokens = 1000
@@ -400,7 +400,7 @@ Rules:
 
 	resp, err := invokeChatGateway(ctx, p.gateway, newGatewayChatRequest(
 		defaultModel(p.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Tools = []types.ToolSchema{executionPlanToolSchema()}
 			req.ToolChoice = &types.ToolChoice{Mode: types.ToolChoiceModeRequired}
@@ -450,7 +450,7 @@ Based on these results, provide a clear and complete final answer.`, task, strin
 
 	resp, err := invokeChatGateway(ctx, p.gateway, newGatewayChatRequest(
 		defaultModel(p.config.Model),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 1000

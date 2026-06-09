@@ -23,6 +23,24 @@ func RegisterDefaultRuntimeAgentFactory(
 	ledger observability.Ledger,
 	logger *zap.Logger,
 ) {
+	RegisterDefaultRuntimeAgentFactoryWithAuthorization(agentRegistry, gateway, toolGateway, checkpointManager, modelCatalog, ledger, nil, logger)
+}
+
+// RegisterDefaultRuntimeAgentFactoryWithAuthorization wires the default
+// runtime-backed agent factory and passes the shared authorization service into
+// the agent runtime tool protocol.
+func RegisterDefaultRuntimeAgentFactoryWithAuthorization(
+	agentRegistry *agent.AgentRegistry,
+	gateway llmcore.Gateway,
+	toolGateway llmcore.Gateway,
+	checkpointManager *agent.CheckpointManager,
+	modelCatalog *types.ModelCatalog,
+	ledger observability.Ledger,
+	authorizationService interface {
+		Authorize(context.Context, types.AuthorizationRequest) (*types.AuthorizationDecision, error)
+	},
+	logger *zap.Logger,
+) {
 	if gateway == nil {
 		return
 	}
@@ -48,6 +66,9 @@ func RegisterDefaultRuntimeAgentFactory(
 			EventBus:             bus,
 			CheckpointManager:    checkpointManager,
 			ModelCatalog:         modelCatalog,
+		}
+		if authorizationService != nil {
+			opts.Authorize = authorizationService.Authorize
 		}
 		opts.EnableAll = false
 		if factoryLogger == nil {

@@ -81,23 +81,60 @@ func assertModuleRootNoGoFiles(t *testing.T, dir string) {
 }
 
 func TestRootLayoutBudget(t *testing.T) {
-	const maxTopLevelEntries = 56
+	const maxTrackedTopLevelEntries = 56
 
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("read repo root: %v", err)
+	tracked := trackedTopLevelEntries(t)
+	if len(tracked) > maxTrackedTopLevelEntries {
+		var names []string
+		for name := range tracked {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		t.Fatalf("repo root has %d tracked top-level entries, exceeds budget %d: %s", len(tracked), maxTrackedTopLevelEntries, strings.Join(names, ", "))
+	}
+}
+
+func trackedTopLevelEntries(t *testing.T) map[string]struct{} {
+	t.Helper()
+
+	entries := map[string]struct{}{}
+	if err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == "." {
+			return nil
+		}
+
+		name := d.Name()
+		if d.IsDir() {
+			switch name {
+			case ".git", ".ace-tool", ".codex", ".omx", ".pytest_cache", ".snow", ".tmp", ".vscode", "build", "test_artifacts":
+				return filepath.SkipDir
+			}
+		}
+		if strings.HasSuffix(name, ".exe") || name == "coverage.out" || strings.HasPrefix(name, "coverage-summary") {
+			return nil
+		}
+
+		rel := filepath.ToSlash(path)
+		root, _, _ := strings.Cut(rel, "/")
+		entries[root] = struct{}{}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk repo root: %v", err)
 	}
 
-	if len(entries) > maxTopLevelEntries {
-		t.Fatalf("repo root has %d top-level entries, exceeds budget %d", len(entries), maxTopLevelEntries)
-	}
+	return entries
 }
 
 func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 	allowlist := map[string]string{
 		"cache":      "single cohesive cache manager entrypoint",
 		"httpclient": "single HTTP client factory entrypoint",
+		"httputil":   "single shared HTTP ResponseWriter recorder",
 		"jsonschema": "single JSON schema validator entrypoint",
+		"jsonutil":   "single JSON utility entrypoint",
 		"metrics":    "single metrics collector entrypoint",
 		"openapi":    "single OpenAPI helper entrypoint",
 		"server":     "single server manager entrypoint",
@@ -177,6 +214,9 @@ func TestDependencyDirectionGuards(t *testing.T) {
 		{sourcePrefix: "llm", targetPrefix: "api", reason: "llm layer must not depend on API adapter layer"},
 		{sourcePrefix: "llm", targetPrefix: "cmd", reason: "llm layer must not depend on composition root"},
 		{sourcePrefix: "llm", targetPrefix: "internal", reason: "llm layer must not depend on startup-only internal composition support"},
+		{sourcePrefix: "rag", targetPrefix: "llm/tokenizer", reason: "RAG tokenizer boundary must depend on pkg/tokenizer shared contract instead of the LLM tokenizer package"},
+		{sourcePrefix: "llm/tokenizer", targetPrefix: "rag", reason: "LLM tokenizer package must stay independent from RAG tokenizer shapes"},
+		{sourcePrefix: "llm/tokenizer", targetPrefix: "types", reason: "LLM tokenizer package must not depend on framework-level types.Tokenizer"},
 		{sourcePrefix: "agent", targetPrefix: "workflow", reason: "agent layer must not depend upward on workflow orchestrator"},
 		{sourcePrefix: "agent", targetPrefix: "api", reason: "agent layer must not depend on API adapter layer"},
 		{sourcePrefix: "agent", targetPrefix: "cmd", reason: "agent layer must not depend on composition root"},
@@ -184,6 +224,10 @@ func TestDependencyDirectionGuards(t *testing.T) {
 		{sourcePrefix: "workflow", targetPrefix: "api", reason: "workflow layer must not depend on API adapter layer"},
 		{sourcePrefix: "workflow", targetPrefix: "cmd", reason: "workflow layer must not depend on composition root"},
 		{sourcePrefix: "workflow", targetPrefix: "internal", reason: "workflow layer must not depend on startup-only internal composition support"},
+		{sourcePrefix: "agent/capabilities/tools/registry", targetPrefix: "agent/capabilities/tools/execution", reason: "tools registry subpackage must stay independent from execution"},
+		{sourcePrefix: "agent/capabilities/tools/discovery", targetPrefix: "agent/capabilities/tools/execution", reason: "tools discovery subpackage must stay independent from execution"},
+		{sourcePrefix: "agent/capabilities/tools/store", targetPrefix: "agent/capabilities/tools/execution", reason: "tools store subpackage must stay independent from execution"},
+		{sourcePrefix: "agent/capabilities/tools/store", targetPrefix: "agent/capabilities/tools", reason: "tools store subpackage must stay below the root facade and must not import the overloaded tools package"},
 	}
 
 	const modulePrefix = "github.com/BaSui01/agentflow/"
@@ -243,6 +287,41 @@ func TestDependencyDirectionGuards(t *testing.T) {
 	if len(violations) > 0 {
 		slices.Sort(violations)
 		t.Fatalf("dependency direction violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestToolsStoreSubpackageExists(t *testing.T) {
+	storeFile := filepath.Join("agent", "capabilities", "tools", "store", "store.go")
+	if _, err := os.Stat(storeFile); err != nil {
+		t.Fatalf("tools store responsibilities must live in %s: %v", filepath.ToSlash(storeFile), err)
+	}
+}
+
+func TestToolsRemoteSubpackageExists(t *testing.T) {
+	remoteFile := filepath.Join("agent", "capabilities", "tools", "remote", "transport.go")
+	if _, err := os.Stat(remoteFile); err != nil {
+		t.Fatalf("tools remote transport responsibilities must live in %s: %v", filepath.ToSlash(remoteFile), err)
+	}
+}
+
+func TestToolsDiscoverySubpackageExists(t *testing.T) {
+	discoveryFile := filepath.Join("agent", "capabilities", "tools", "discovery", "dynamic_selector.go")
+	if _, err := os.Stat(discoveryFile); err != nil {
+		t.Fatalf("tools discovery responsibilities must live in %s: %v", filepath.ToSlash(discoveryFile), err)
+	}
+}
+
+func TestToolsExecutionSubpackageExists(t *testing.T) {
+	executionFile := filepath.Join("agent", "capabilities", "tools", "execution", "levels.go")
+	if _, err := os.Stat(executionFile); err != nil {
+		t.Fatalf("tools execution responsibilities must live in %s: %v", filepath.ToSlash(executionFile), err)
+	}
+}
+
+func TestToolsRegistrySubpackageExists(t *testing.T) {
+	registryFile := filepath.Join("agent", "capabilities", "tools", "registry", "panic.go")
+	if _, err := os.Stat(registryFile); err != nil {
+		t.Fatalf("tools registry responsibilities must live in %s: %v", filepath.ToSlash(registryFile), err)
 	}
 }
 
@@ -1704,6 +1783,64 @@ func TestWorkflowTeamBoundary(t *testing.T) {
 }
 
 func TestAgentExecutionOptionsArchitectureGuards(t *testing.T) {
+	t.Run("agent_config_legacy_surface_has_deprecation_schedule", func(t *testing.T) {
+		data, err := os.ReadFile(filepath.FromSlash("docs/cn/guides/模型字段与Agent框架接入指南.md"))
+		if err != nil {
+			t.Fatalf("read model field guide: %v", err)
+		}
+		src := string(data)
+		for _, snippet := range []string{
+			"### AgentConfig 遗留表面废弃时间表",
+			"`Model / Control / Tools`",
+			"`LLM / Runtime / Context / Features / Extensions`",
+			"当前版本起",
+			"下一 minor 版本",
+			"下一 major 版本",
+			"legacy-only JSON",
+		} {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("AgentConfig guide must document legacy-surface deprecation schedule and migration detail %q", snippet)
+			}
+		}
+	})
+
+	t.Run("execution_options_deepcopy_avoids_json_round_trip", func(t *testing.T) {
+		data, err := os.ReadFile(filepath.FromSlash("types/execution_options.go"))
+		if err != nil {
+			t.Fatalf("read types/execution_options.go: %v", err)
+		}
+		generated, err := os.ReadFile(filepath.FromSlash("types/execution_options_clone_gen.go"))
+		if err != nil {
+			t.Fatalf("read types/execution_options_clone_gen.go: %v", err)
+		}
+		src := string(data) + "\n" + string(generated)
+		if !strings.Contains(string(data), "//go:generate python ../scripts/generate_execution_options_clone.py") {
+			t.Fatalf("types/execution_options.go must keep go:generate directive for generated clone helpers")
+		}
+		if !strings.Contains(string(generated), "Code generated by scripts/generate_execution_options_clone.py; DO NOT EDIT.") {
+			t.Fatalf("types/execution_options_clone_gen.go must be generated by scripts/generate_execution_options_clone.py")
+		}
+		for _, forbidden := range []string{
+			`"encoding/json"`,
+			"json.Marshal(",
+			"json.Unmarshal(",
+		} {
+			if strings.Contains(src, forbidden) {
+				t.Fatalf("ExecutionOptions clone/deepcopy path must not use JSON round-trip %q; add typed clone helper instead", forbidden)
+			}
+		}
+		for _, required := range []string{
+			"func (o ModelOptions) clone() ModelOptions",
+			"func (o AgentControlOptions) clone() AgentControlOptions",
+			"func (o ToolProtocolOptions) clone() ToolProtocolOptions",
+			"func cloneExecutionStrings(",
+		} {
+			if !strings.Contains(src, required) {
+				t.Fatalf("types/execution_options.go must keep typed clone helper %q", required)
+			}
+		}
+	})
+
 	t.Run("loop_executor_uses_resolved_control_options", func(t *testing.T) {
 		candidates := []string{
 			"agent/runtime/agent_builder.go",

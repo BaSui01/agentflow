@@ -330,7 +330,7 @@ Generate queries that explore NEW aspects not covered by previous findings.`, co
 
 	parseResult, err := generateStructured[[]string](ctx, id.gateway, newGatewayChatRequest(
 		"",
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.7
 			req.MaxTokens = 500
@@ -389,7 +389,7 @@ Return the findings using the provided structured output schema.`, query)
 
 	parseResult, err := generateStructured[[]researchFinding](ctx, id.gateway, newGatewayChatRequest(
 		"",
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 800
@@ -437,7 +437,7 @@ Return the directions using the provided structured output schema.`, task, findi
 
 	parseResult, err := generateStructured[[]researchDirection](ctx, id.gateway, newGatewayChatRequest(
 		"",
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.6
 			req.MaxTokens = 600
@@ -472,7 +472,7 @@ Be thorough but concise.`, task, findingsStr.String())
 
 	resp, err := invokeChatGateway(ctx, id.gateway, newGatewayChatRequest(
 		defaultModel(id.config.SynthesisModel),
-		[]types.Message{{Role: llmcore.RoleUser, Content: prompt}},
+		[]types.Message{types.NewUserMessage(prompt)},
 		func(req *llmcore.ChatRequest) {
 			req.Temperature = 0.3
 			req.MaxTokens = 2000

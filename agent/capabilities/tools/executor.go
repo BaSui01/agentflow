@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	toolexecution "github.com/BaSui01/agentflow/agent/capabilities/tools/execution"
 	"go.uber.org/zap"
 )
 
@@ -20,6 +21,7 @@ type AgentExecutor interface {
 type CompositionExecutor struct {
 	agentExecutor AgentExecutor
 	logger        *zap.Logger
+	maxParallel   int
 }
 
 // NewCompositionExecutor creates a new CompositionExecutor.
@@ -30,6 +32,7 @@ func NewCompositionExecutor(executor AgentExecutor, logger *zap.Logger) *Composi
 	return &CompositionExecutor{
 		agentExecutor: executor,
 		logger:        logger.With(zap.String("component", "composition_executor")),
+		maxParallel:   10,
 	}
 }
 
@@ -113,10 +116,20 @@ func (e *CompositionExecutor) Execute(ctx context.Context, result *CompositionRe
 		)
 
 		var wg sync.WaitGroup
+		var sem chan struct{}
+		if e.maxParallel > 0 {
+			sem = make(chan struct{}, e.maxParallel)
+		}
 		for _, capName := range runnable {
 			wg.Add(1)
+			if sem != nil {
+				sem <- struct{}{}
+			}
 			go func(cap string) {
 				defer wg.Done()
+				if sem != nil {
+					defer func() { <-sem }()
+				}
 
 				agentID, ok := result.CapabilityMap[cap]
 				if !ok {
@@ -167,59 +180,15 @@ func (e *CompositionExecutor) Execute(ctx context.Context, result *CompositionRe
 	return execResult, nil
 }
 
-// buildExecutionLevels groups capabilities into dependency levels.
-// Level 0 has no dependencies; level N depends only on capabilities in levels < N.
 func (e *CompositionExecutor) buildExecutionLevels(order []string, deps map[string][]string) [][]string {
-	if len(order) == 0 {
-		return nil
-	}
-
-	assigned := make(map[string]int) // capability → level index
-	levels := make([][]string, 0)
-
-	for _, cap := range order {
-		level := 0
-		if capDeps, ok := deps[cap]; ok {
-			for _, d := range capDeps {
-				if dl, found := assigned[d]; found {
-					if dl+1 > level {
-						level = dl + 1
-					}
-				}
-			}
-		}
-		assigned[cap] = level
-
-		// Grow levels slice if needed.
-		for len(levels) <= level {
-			levels = append(levels, nil)
-		}
-		levels[level] = append(levels[level], cap)
-	}
-
-	return levels
+	return toolexecution.BuildExecutionLevels(order, deps)
 }
 
 // depsMetOrFailed returns true if all dependencies of cap are either completed
 // successfully or have failed (so we skip this cap rather than block forever).
 // A capability is runnable only if all its deps completed without error.
 func (e *CompositionExecutor) depsMetOrFailed(cap string, deps map[string][]string, completed map[string]bool, errors map[string]error) bool {
-	capDeps, ok := deps[cap]
-	if !ok || len(capDeps) == 0 {
-		return true
-	}
-	for _, d := range capDeps {
-		if !completed[d] {
-			if _, failed := errors[d]; failed {
-				// Dependency failed — skip this capability too.
-				return false
-			}
-			// Dependency not yet done and not failed — shouldn't happen within
-			// level-based execution, but guard against it.
-			return false
-		}
-	}
-	return true
+	return toolexecution.DependenciesSatisfied(cap, deps, completed, errors)
 }
 
 // buildCapabilityInput constructs the input for a capability execution.
@@ -231,26 +200,10 @@ func (e *CompositionExecutor) buildCapabilityInput(
 	results map[string]any,
 	mu *sync.Mutex,
 ) map[string]any {
-	capInput := map[string]any{
-		"input": originalInput,
-	}
-
-	capDeps, ok := deps[cap]
-	if !ok || len(capDeps) == 0 {
-		return capInput
-	}
-
-	mu.Lock()
-	upstream := make(map[string]any, len(capDeps))
-	for _, d := range capDeps {
-		if r, found := results[d]; found {
-			upstream[d] = r
-		}
-	}
-	mu.Unlock()
-
-	if len(upstream) > 0 {
-		capInput["upstream"] = upstream
-	}
-	return capInput
+	return toolexecution.BuildCapabilityInput(cap, originalInput, deps, func(dep string) (any, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		result, ok := results[dep]
+		return result, ok
+	})
 }

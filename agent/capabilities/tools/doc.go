@@ -1,26 +1,33 @@
-// Package skills 提供 Agent 技能发现、加载与执行能力。
+// Package tools exposes the public facade for AgentFlow tool capability plumbing.
 //
-// # 职责划分
+// The root package keeps stable user-facing constructors, interfaces, type aliases,
+// and thin adapters while implementation details are split by responsibility into
+// focused subpackages. New shared logic should live in the owning subpackage first;
+// root files should delegate to those helpers rather than reintroducing a god package.
 //
-// 本包存在两套并行体系，职责边界如下：
+// # 子包职责与依赖图
 //
-// ## Registry（运行时注册 + 执行）
+// Current internal ownership is:
 //
-//   - 职责：技能运行时注册、按 ID 查找、按类别/标签搜索、执行调用（Invoke）
-//   - 数据结构：SkillDefinition + SkillHandler，以 SkillInstance 形式存储
-//   - 典型用法：Agent 在运行时通过 Register 注册技能，通过 Invoke 执行
-//   - 生命周期：进程内内存，无持久化
+//   - registry/: capability indexes, panic recovery helpers, registry-oriented lookup
+//     primitives, and registry health/query support.
+//   - discovery/: matching, candidate selection, skill descriptors, skill search,
+//     discovery filtering, and discovery-facing DTO conversion.
+//   - execution/: tool input preparation, execution levels, composition ordering,
+//     dependency checks, timeout/concurrency execution helpers.
+//   - remote/: remote tool transport, HTTP/MCP/A2A/stdin transport normalization,
+//     discovery protocol URL/query helpers.
+//   - store/: storage primitives used by the tools facade.
 //
-// ## SkillManager（发现 + 加载 + 评分）
+// Dependency direction for the tools subtree is intentionally narrow:
 //
-//   - 职责：技能发现（DiscoverSkills）、目录扫描（ScanDirectory）、索引刷新（RefreshIndex）、
-//     按任务匹配与评分、加载/卸载技能
-//   - 数据结构：Skill + SkillMetadata，支持磁盘目录与内存注册
-//   - 典型用法：根据任务描述发现并加载最匹配的技能，支持依赖加载与缓存
-//   - 生命周期：可扫描目录、可持久化索引
+//   - tools facade -> registry/, discovery/, execution/, remote/, store/
+//   - registry/ -> no execution dependency
+//   - discovery/ -> no execution dependency
+//   - store/ -> no execution dependency
+//   - remote/ owns protocol/transport helpers and does not import the tools facade
 //
-// ## 协作关系
-//
-// Registry 与 SkillManager 可独立使用，也可通过 DiscoveryBridge 桥接：
-// SkillManager 负责发现与加载，Registry 负责注册与执行。
+// Keep public API compatibility at the tools facade boundary. Internal helpers should
+// move toward the owning subpackage, with root package functions reduced to adapters
+// that translate existing public types into subpackage-owned contracts.
 package tools

@@ -184,14 +184,18 @@ func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.Too
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
+			timer := time.NewTimer(p.config.RetryDelay)
 			select {
 			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return llmpkg.ToolResult{
 					ToolCallID: call.ID,
 					Name:       call.Name,
 					Error:      "context cancelled during retry",
 				}
-			case <-time.After(p.config.RetryDelay):
+			case <-timer.C:
 			}
 			p.logger.Debug("retrying tool execution",
 				zap.String("tool", call.Name),
@@ -238,8 +242,8 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 	}
 
 	// 检查率限制
-	if reg, ok := p.registry.(*DefaultRegistry); ok {
-		if err := reg.checkRateLimit(call.Name); err != nil {
+	if reg, ok := p.registry.(RateLimitedRegistry); ok {
+		if err := reg.CheckRateLimit(call.Name); err != nil {
 			result.Error = fmt.Sprintf("rate limit exceeded: %s", err.Error())
 			result.Duration = time.Since(start)
 			return result

@@ -1,0 +1,46 @@
+# AgentFlow Configuration Example
+# Copy to config.yaml and adjust for your environment.
+# All values can be overridden via AGENTFLOW_<SECTION>_<KEY> environment variables.
+
+server:
+  http_port: 8080
+  metrics_port: 9091
+  metrics_bind_address: "127.0.0.1"
+  enable_pprof: false
+  environment: "development"
+  allow_no_auth: true
+  # api_keys: ["your-api-key-here"]
+
+agent:
+  name: "my-agent"
+  model: "gpt-4o-mini"
+  max_iterations: 10
+  temperature: 0.7
+  # autonomy: "codex_mode"    # normal | extended | codex_mode
+  # max_total_tokens: 200000
+  # max_wall_clock: 600
+
+llm:
+  api_key: "sk-xxx"
+  # To use channel-based routing instead of a single key:
+  # main_provider_mode: channel_routed
+  providers:
+    openai:
+      api_key: "sk-xxx"
+      base_url: "https://api.openai.com"
+    # anthropic:
+    #   api_key: "sk-ant-xxx"
+
+rag:
+  web_search:
+    enabled: true
+    timeout: 30s
+    # tavily_api_key: "tvly-xxx"
+
+redis:
+  addr: "redis:6379"
+  db: 0
+
+log:
+  level: "info"
+  format: "json"

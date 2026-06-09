@@ -205,6 +205,41 @@ func TestPauseResume_MultipleSignalsDoNotPanic(t *testing.T) {
 	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
 }
 
+func TestPauseResume_ResumeAfterPendingPauseDoesNotStall(t *testing.T) {
+	cfg := testConfig(t)
+	e := NewExecutor(cfg, nil)
+
+	step1Started := make(chan struct{})
+	step1Gate := make(chan struct{})
+
+	steps := []StepFunc{
+		func(ctx context.Context, state any) (any, error) {
+			close(step1Started)
+			select {
+			case <-step1Gate:
+				return "step1-done", nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+		func(_ context.Context, _ any) (any, error) {
+			return "step2-done", nil
+		},
+	}
+
+	exec := e.CreateExecution("pause-resume-pending-test", steps)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, e.Start(ctx, exec.ID, nil))
+
+	<-step1Started
+	require.NoError(t, e.Pause(exec.ID))
+	require.NoError(t, e.Resume(exec.ID))
+
+	close(step1Gate)
+	waitForState(t, exec, ExecutionStateCompleted, 5*time.Second)
+}
+
 func TestCheckpointSaveLoad(t *testing.T) {
 	cfg := testConfig(t)
 	e := NewExecutor(cfg, nil)

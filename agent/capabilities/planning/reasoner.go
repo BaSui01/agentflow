@@ -34,14 +34,8 @@ func NewLLMReasoner(gateway llmcore.Gateway, model string, logger *zap.Logger) *
 // along with a confidence score extracted from the response.
 func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string, confidence float64, err error) {
 	req := newReasonerChatRequest(r.model, []types.Message{
-		{
-			Role:    llmcore.RoleSystem,
-			Content: reasoningSystemPrompt,
-		},
-		{
-			Role:    llmcore.RoleUser,
-			Content: prompt,
-		},
+		types.NewSystemMessage(reasoningSystemPrompt),
+		types.NewUserMessage(prompt),
 	}, 0.3)
 
 	resp, err := r.invokeChat(ctx, req)
@@ -68,20 +62,7 @@ func (r *LLMReasoner) invokeChat(ctx context.Context, req *llmcore.ChatRequest) 
 	if r.gateway == nil {
 		return nil, fmt.Errorf("gateway is not configured")
 	}
-	resp, err := r.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  req.Model,
-		TraceID:    req.TraceID,
-		Payload:    req,
-	})
-	if err != nil {
-		return nil, err
-	}
-	chatResp, ok := resp.Output.(*llmcore.ChatResponse)
-	if !ok || chatResp == nil {
-		return nil, fmt.Errorf("invalid chat response from gateway")
-	}
-	return chatResp, nil
+	return llmcore.InvokeChat(ctx, r.gateway, req)
 }
 
 // parseConfidence extracts a confidence value from the LLM response.

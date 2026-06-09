@@ -1,12 +1,10 @@
 package runtime
 
 import (
-	"fmt"
 	"math"
 	"strings"
 	"unicode"
 
-	lltok "github.com/BaSui01/agentflow/llm/tokenizer"
 	"go.uber.org/zap"
 )
 
@@ -624,7 +622,7 @@ func (c *DocumentChunker) identifyStructuralBlocks(content string) []StructuralB
 }
 
 // SimpleTokenizer 简单分词器（1 token ≈ 4 字符）。
-// 仅用于测试和快速原型。生产环境请使用 NewTiktokenAdapter 创建基于 tiktoken 的分词器。
+// 仅用于测试和快速原型。生产环境请通过 pkg/tokenizer 共享契约创建精确分词器，并使用 NewSharedTokenizerAdapter 注入。
 type SimpleTokenizer struct{}
 
 func (t *SimpleTokenizer) CountTokens(text string) int {
@@ -649,7 +647,7 @@ func (t *SimpleTokenizer) Encode(text string) []int {
 //   - ASCII/Latin text: ~4 characters per token (consistent with GPT-family BPE)
 //   - Whitespace-delimited words shorter than 3 chars count as 1 token each
 //
-// For production accuracy, prefer NewTiktokenAdapter which uses real BPE encoding.
+// For production accuracy, adapt an exact shared tokenizer with NewSharedTokenizerAdapter.
 type EnhancedTokenizer struct{}
 
 func (t *EnhancedTokenizer) CountTokens(text string) int {
@@ -789,21 +787,4 @@ func (c *DocumentChunker) tfidfCosineSimilarity(s1, s2 string, idf map[string]fl
 		return 0
 	}
 	return dot / (math.Sqrt(norm1) * math.Sqrt(norm2))
-}
-
-// NewTiktokenAdapter 创建一个基于 tiktoken 的 rag.Tokenizer 适配器。
-// model 参数指定 tiktoken 模型（如 "gpt-4o", "gpt-4", "gpt-3.5-turbo"）。
-func NewTiktokenAdapter(model string, logger *zap.Logger) (Tokenizer, error) {
-	tok, err := lltok.NewTiktokenTokenizer(model)
-	if err != nil {
-		return nil, fmt.Errorf("create tiktoken tokenizer: %w", err)
-	}
-	return NewLLMTokenizerAdapter(tok, logger), nil
-}
-
-// NewEstimatorAdapter 创建一个基于 llm/tokenizer.EstimatorTokenizer 的 rag.Tokenizer 适配器。
-// 比 SimpleTokenizer 更精确（CJK 感知），且不需要外部编码数据下载。
-// model 参数仅用于标识，maxTokens 指定模型上下文长度（0 使用默认值 4096）。
-func NewEstimatorAdapter(model string, maxTokens int, logger *zap.Logger) Tokenizer {
-	return NewLLMTokenizerAdapter(lltok.NewEstimatorTokenizer(model, maxTokens), logger)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	tooldiscovery "github.com/BaSui01/agentflow/agent/capabilities/tools/discovery"
 	"go.uber.org/zap"
 )
 
@@ -133,44 +134,38 @@ func (b *SkillDiscoveryBridge) UnregisterSkill(ctx context.Context, skillID stri
 
 // skillToDescriptor converts a Skill to a CapabilityDescriptor.
 func skillToDescriptor(skill *Skill, agentID string) *CapabilityDescriptor {
-	return &CapabilityDescriptor{
-		Name:        skill.ID,
+	desc := tooldiscovery.SkillDescriptorFromProfile(tooldiscovery.SkillProfile{
+		ID:          skill.ID,
+		Name:        skill.Name,
 		Description: skill.Description,
-		Category:    mapSkillCategoryToCapType(skill.Category),
-		AgentID:     agentID,
-		AgentName:   skill.Name,
+		Version:     skill.Version,
+		Category:    skill.Category,
 		Tags:        skill.Tags,
-		Metadata:    buildSkillMetadata(skill),
+		Author:      skill.Author,
+	}, agentID, time.Now())
+	return &CapabilityDescriptor{
+		Name:        desc.Name,
+		Description: desc.Description,
+		Category:    desc.Category,
+		AgentID:     desc.AgentID,
+		AgentName:   desc.AgentName,
+		Tags:        desc.Tags,
+		Metadata:    desc.Metadata,
 	}
 }
 
 // mapSkillCategoryToCapType maps a skill category string to a capability type string.
 func mapSkillCategoryToCapType(category string) string {
-	switch SkillCategory(category) {
-	case CategoryCoding, CategoryAutomation:
-		return "task"
-	case CategoryResearch, CategoryData, CategoryReasoning:
-		return "query"
-	case CategoryCommunication:
-		return "stream"
-	default:
-		return "task"
-	}
+	return tooldiscovery.MapSkillCategoryToCapabilityType(category)
 }
 
 // buildSkillMetadata builds metadata map from skill fields.
 func buildSkillMetadata(skill *Skill) map[string]string {
-	meta := map[string]string{
-		"source":    "skills",
-		"skill_id":  skill.ID,
-		"version":   skill.Version,
-		"synced_at": time.Now().Format(time.RFC3339),
-	}
-	if skill.Category != "" {
-		meta["category"] = skill.Category
-	}
-	if skill.Author != "" {
-		meta["author"] = skill.Author
-	}
-	return meta
+	desc := tooldiscovery.SkillDescriptorFromProfile(tooldiscovery.SkillProfile{
+		ID:       skill.ID,
+		Version:  skill.Version,
+		Category: skill.Category,
+		Author:   skill.Author,
+	}, "", time.Now())
+	return desc.Metadata
 }

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/httputil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
@@ -43,11 +44,11 @@ type ConfigAPIHandler struct {
 }
 
 type apiResponse struct {
-	Success   bool       `json:"success"`
-	Data      any        `json:"data,omitempty"`
-	Error     *apiError  `json:"error,omitempty"`
-	Timestamp time.Time  `json:"timestamp"`
-	RequestID string     `json:"request_id,omitempty"`
+	Success   bool      `json:"success"`
+	Data      any       `json:"data,omitempty"`
+	Error     *apiError `json:"error,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	RequestID string    `json:"request_id,omitempty"`
 }
 
 type apiError struct {
@@ -934,25 +935,14 @@ func (m *ConfigAPIMiddleware) LogRequests(next http.HandlerFunc, logger func(met
 		start := time.Now()
 
 		// 包装响应编写器以捕获状态代码
-		wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		wrapped := httputil.NewResponseRecorder(w)
 
 		next(wrapped, r)
 
 		if logger != nil {
-			logger(r.Method, r.URL.Path, wrapped.status, time.Since(start))
+			logger(r.Method, r.URL.Path, wrapped.StatusCode(), time.Since(start))
 		}
 	}
-}
-
-// responseWriter 包装 http.ResponseWriter 来捕获状态码
-type responseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *responseWriter) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
 }
 
 func secureTokenEqual(provided, expected string) bool {

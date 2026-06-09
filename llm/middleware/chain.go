@@ -121,10 +121,14 @@ func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 				}
 
 				if i < maxRetries {
+					timer := time.NewTimer(backoff * time.Duration(i+1))
 					select {
 					case <-ctx.Done():
+						if !timer.Stop() {
+							<-timer.C
+						}
 						return nil, ctx.Err()
-					case <-time.After(backoff * time.Duration(i+1)):
+					case <-timer.C:
 					}
 				}
 			}

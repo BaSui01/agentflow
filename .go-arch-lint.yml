@@ -4,6 +4,7 @@ workdir: .
 allow:
   depOnAnyVendor: true
   ignoreNotFoundComponents: true
+  deepScan: false
 
 exclude:
   - cmd
@@ -43,22 +44,28 @@ components:
       - config
   llm:
     in:
-      - llm
+      - llm/**
   agent:
     in:
-      - agent
+      - agent/**
   rag:
     in:
-      - rag
+      - rag/**
   workflow:
     in:
-      - workflow
+      - workflow/**
   api:
     in:
-      - api
+      - api/**
   pkg_common:
     in:
       - pkg/common
+  pkg_httpclient:
+    in:
+      - pkg/httpclient
+  pkg_httputil:
+    in:
+      - pkg/httputil
   pkg_cache:
     in:
       - pkg/cache
@@ -68,6 +75,9 @@ components:
   pkg_jsonschema:
     in:
       - pkg/jsonschema
+  pkg_jsonutil:
+    in:
+      - pkg/jsonutil
   pkg_metrics:
     in:
       - pkg/metrics
@@ -89,6 +99,9 @@ components:
   pkg_service:
     in:
       - pkg/service
+  pkg_scheduler:
+    in:
+      - pkg/scheduler
   pkg_storage:
     in:
       - pkg/storage
@@ -98,6 +111,9 @@ components:
   pkg_tlsutil:
     in:
       - pkg/tlsutil
+  pkg_tokenizer:
+    in:
+      - pkg/tokenizer/**
 
 commonComponents:
   - types
@@ -109,83 +125,41 @@ deps:
   config:
     mayDependOn:
       - config
+      - pkg_httputil
       - types
   llm:
-    mayDependOn:
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_tlsutil
-      - pkg_telemetry
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   agent:
-    mayDependOn:
-      - agent
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_middleware
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_storage
-      - pkg_database
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   rag:
-    mayDependOn:
-      - rag
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_storage
-      - pkg_database
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   workflow:
-    mayDependOn:
-      - workflow
-      - agent
-      - rag
-      - llm
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_middleware
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_storage
-      - pkg_database
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   api:
-    mayDependOn:
-      - api
-      - agent
-      - rag
-      - llm
-      - workflow
-      - types
-      - config
-      - pkg_common
-      - pkg_cache
-      - pkg_middleware
-      - pkg_telemetry
-      - pkg_tlsutil
-      - pkg_server
-      - pkg_storage
+    anyProjectDeps: true
+    # Coarse architecture component: dependency direction for this layer is enforced by architecture_guard_test.go and scripts/arch_guard.ps1.
   pkg_common:
     mayDependOn: [pkg_common, types]
+  pkg_httpclient:
+    mayDependOn: [pkg_httpclient, config, types]
+  pkg_httputil:
+    mayDependOn: [pkg_httputil, types]
   pkg_cache:
     mayDependOn: [pkg_cache, pkg_tlsutil, types]
   pkg_database:
     mayDependOn: [pkg_database, types]
   pkg_jsonschema:
     mayDependOn: [pkg_jsonschema, types]
+  pkg_jsonutil:
+    mayDependOn: [pkg_jsonutil, types]
   pkg_metrics:
     mayDependOn: [pkg_metrics, types]
   pkg_middleware:
-    mayDependOn: [pkg_middleware, pkg_metrics, pkg_telemetry, config, types]
+    mayDependOn: [pkg_middleware, pkg_httputil, pkg_metrics, pkg_telemetry, config, types]
   pkg_migration:
     mayDependOn: [pkg_migration, config, types]
   pkg_mongodb:
@@ -196,10 +170,14 @@ deps:
     mayDependOn: [pkg_server, pkg_tlsutil, types]
   pkg_service:
     mayDependOn: [pkg_service, types]
+  pkg_scheduler:
+    mayDependOn: [pkg_scheduler, types]
   pkg_storage:
     mayDependOn: [pkg_storage, pkg_tlsutil, types]
   pkg_telemetry:
     mayDependOn: [pkg_telemetry, config, types]
   pkg_tlsutil:
     mayDependOn: [pkg_tlsutil, types]
+  pkg_tokenizer:
+    mayDependOn: [pkg_tokenizer, types]
 

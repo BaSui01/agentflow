@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -147,4 +148,14 @@ func TestBuildSkillMetadata(t *testing.T) {
 	assert.Equal(t, "coding", meta["category"])
 	assert.Equal(t, "test-author", meta["author"])
 	assert.NotEmpty(t, meta["synced_at"])
+}
+
+func TestSkillDiscoveryBridgeUsesDiscoveryDescriptorHelpers(t *testing.T) {
+	source, err := os.ReadFile("discovery_bridge.go")
+	require.NoError(t, err)
+	body := string(source)
+
+	assert.Contains(t, body, "tooldiscovery.SkillDescriptorFromProfile")
+	assert.Contains(t, body, "tooldiscovery.MapSkillCategoryToCapabilityType")
+	assert.NotContains(t, body, "switch SkillCategory(category)")
 }

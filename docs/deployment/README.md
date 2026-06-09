@@ -75,11 +75,11 @@ kubectl get pods -l app.kubernetes.io/name=agentflow
 
 ## 部署选项
 
-| 方式 | 适用场景 | 复杂度 | 文档 |
-|------|----------|--------|------|
-| Docker Compose | 本地开发、测试 | ⭐ | [docker.md](./docker.md) |
-| Docker | 单机部署 | ⭐⭐ | [docker.md](./docker.md) |
-| Kubernetes + Helm | 生产环境 | ⭐⭐⭐ | [kubernetes.md](./kubernetes.md) |
+| 方式              | 适用场景       | 复杂度 | 文档                             |
+| ----------------- | -------------- | ------ | -------------------------------- |
+| Docker Compose    | 本地开发、测试 | ⭐     | [docker.md](./docker.md)         |
+| Docker            | 单机部署       | ⭐⭐   | [docker.md](./docker.md)         |
+| Kubernetes + Helm | 生产环境       | ⭐⭐⭐ | [kubernetes.md](./kubernetes.md) |
 
 ## 基础设施上线清单
 
@@ -121,7 +121,13 @@ log:
   format: "json"
 ```
 
-当前仓库未提供独立 `config.example.yaml`。部署时请参考：
+仓库根目录已提供 `config.example.yaml`，可直接复制使用：
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+部署时还可以参考：
 
 - [docker-compose.yml](/E:/code/agentflow/docker-compose.yml)
 - [deployments/helm/agentflow/values.yaml](/E:/code/agentflow/deployments/helm/agentflow/values.yaml)
@@ -133,29 +139,29 @@ log:
 
 所有配置项都可以通过环境变量覆盖，格式为 `AGENTFLOW_<SECTION>_<KEY>`：
 
-| 环境变量 | 说明 | 默认值 |
-|----------|------|--------|
-| `AGENTFLOW_SERVER_HTTP_PORT` | HTTP 端口 | 8080 |
-| `AGENTFLOW_SERVER_METRICS_PORT` | 指标端口 | 9091 |
-| `AGENTFLOW_SERVER_METRICS_BIND_ADDRESS` | 指标服务监听地址 | `127.0.0.1` |
-| `AGENTFLOW_SERVER_ENABLE_PPROF` | 是否启用 pprof | `false` |
-| `AGENTFLOW_AGENT_MODEL` | 默认模型 | gpt-4 |
-| `AGENTFLOW_AGENT_MAX_ITERATIONS` | 最大迭代次数 | 10 |
-| `AGENTFLOW_REDIS_ADDR` | Redis 地址 | localhost:6379 |
-| `AGENTFLOW_DATABASE_HOST` | 数据库主机 | localhost |
-| `AGENTFLOW_LLM_API_KEY` | LLM API Key | - |
-| `AGENTFLOW_LOG_LEVEL` | 日志级别 | info |
+| 环境变量                                | 说明             | 默认值         |
+| --------------------------------------- | ---------------- | -------------- |
+| `AGENTFLOW_SERVER_HTTP_PORT`            | HTTP 端口        | 8080           |
+| `AGENTFLOW_SERVER_METRICS_PORT`         | 指标端口         | 9091           |
+| `AGENTFLOW_SERVER_METRICS_BIND_ADDRESS` | 指标服务监听地址 | `127.0.0.1`    |
+| `AGENTFLOW_SERVER_ENABLE_PPROF`         | 是否启用 pprof   | `false`        |
+| `AGENTFLOW_AGENT_MODEL`                 | 默认模型         | gpt-4          |
+| `AGENTFLOW_AGENT_MAX_ITERATIONS`        | 最大迭代次数     | 10             |
+| `AGENTFLOW_REDIS_ADDR`                  | Redis 地址       | localhost:6379 |
+| `AGENTFLOW_DATABASE_HOST`               | 数据库主机       | localhost      |
+| `AGENTFLOW_LLM_API_KEY`                 | LLM API Key      | -              |
+| `AGENTFLOW_LOG_LEVEL`                   | 日志级别         | info           |
 
 ## 健康检查
 
 AgentFlow 提供以下健康检查端点：
 
-| 端点 | 说明 | 用途 |
-|------|------|------|
-| `/health` | 轻量存活检查，不探测外部依赖 | Kubernetes liveness probe |
-| `/healthz` | 轻量存活检查（别名） | 兼容性 |
-| `/ready` | 依赖就绪检查，会执行已注册健康检查 | Kubernetes readiness probe |
-| `/readyz` | 依赖就绪检查（别名） | 兼容性 |
+| 端点       | 说明                               | 用途                       |
+| ---------- | ---------------------------------- | -------------------------- |
+| `/health`  | 轻量存活检查，不探测外部依赖       | Kubernetes liveness probe  |
+| `/healthz` | 轻量存活检查（别名）               | 兼容性                     |
+| `/ready`   | 依赖就绪检查，会执行已注册健康检查 | Kubernetes readiness probe |
+| `/readyz`  | 依赖就绪检查（别名）               | 兼容性                     |
 
 ### 示例响应
 
@@ -204,12 +210,12 @@ serviceMonitor:
 
 ### 主要指标
 
-| 指标名称 | 类型 | 说明 |
-|----------|------|------|
-| `agentflow_requests_total` | Counter | 请求总数 |
-| `agentflow_request_duration_seconds` | Histogram | 请求延迟 |
-| `agentflow_llm_tokens_total` | Counter | LLM Token 使用量 |
-| `agentflow_agent_iterations_total` | Counter | Agent 迭代次数 |
+| 指标名称                             | 类型      | 说明             |
+| ------------------------------------ | --------- | ---------------- |
+| `agentflow_requests_total`           | Counter   | 请求总数         |
+| `agentflow_request_duration_seconds` | Histogram | 请求延迟         |
+| `agentflow_llm_tokens_total`         | Counter   | LLM Token 使用量 |
+| `agentflow_agent_iterations_total`   | Counter   | Agent 迭代次数   |
 
 ### Grafana 仪表盘
 

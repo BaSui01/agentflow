@@ -255,7 +255,7 @@ llm:
 import (
     "context"
     "github.com/BaSui01/agentflow/config"
-    "github.com/BaSui01/agentflow/llm"
+    llm "github.com/BaSui01/agentflow/llm/core"
     "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
     "go.uber.org/zap"
     "gorm.io/gorm"

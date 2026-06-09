@@ -20,6 +20,7 @@ func (b *BaseAgent) SetMaxConcurrency(n int) {
 	b.execSem.Release(1)
 	b.execSem = semaphore.NewWeighted(int64(n))
 }
+
 // SetRetrievalProvider configures retrieval-backed context injection.
 func (b *BaseAgent) SetRetrievalProvider(provider RetrievalProvider) {
 	b.retriever = provider
@@ -29,6 +30,7 @@ func (b *BaseAgent) SetRetrievalProvider(provider RetrievalProvider) {
 func (b *BaseAgent) SetToolStateProvider(provider ToolStateProvider) {
 	b.toolState = provider
 }
+
 // SetContextManager 设置上下文管理器
 func (b *BaseAgent) SetContextManager(cm ContextManager) {
 	b.contextManager = cm
@@ -37,6 +39,7 @@ func (b *BaseAgent) SetContextManager(cm ContextManager) {
 		b.logger.Info("context manager enabled")
 	}
 }
+
 // SetPromptStore sets the prompt store provider.
 func (b *BaseAgent) SetPromptStore(store PromptStoreProvider) {
 	b.persistence.SetPromptStore(store)
@@ -51,6 +54,7 @@ func (b *BaseAgent) SetConversationStore(store ConversationStoreProvider) {
 func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
 	b.persistence.SetRunStore(store)
 }
+
 // SetReasoningRegistry stores the reasoning registry used by the default loop executor.
 func (b *BaseAgent) SetReasoningRegistry(registry *reasoning.PatternRegistry) {
 	b.reasoningRegistry = registry
@@ -81,6 +85,7 @@ func (b *BaseAgent) executionOptionsResolver() ExecutionOptionsResolver {
 	}
 	return b.optionsResolver
 }
+
 // SetChatRequestAdapter stores the adapter used to build ChatRequest DTOs.
 func (b *BaseAgent) SetChatRequestAdapter(adapter agentadapters.ChatRequestAdapter) {
 	if adapter == nil {
@@ -112,11 +117,19 @@ func (b *BaseAgent) toolProtocolRuntime() ToolProtocolRuntime {
 	}
 	return b.toolProtocol
 }
+
+// SetAuthorizeFunc stores the runtime authorization callback used before
+// executing prepared tool calls.
+func (b *BaseAgent) SetAuthorizeFunc(authorize AuthorizeFunc) {
+	b.authorize = authorize
+}
+
 // SetReasoningRuntime stores the runtime that unifies reasoning selection,
 // execution, and reflection for the default loop executor.
 func (b *BaseAgent) SetReasoningRuntime(runtime ReasoningRuntime) {
 	b.reasoningRuntime = runtime
 }
+
 // SetTraceFeedbackPlanner stores the planner used to decide whether recent
 // trace synopsis/history should be injected back into runtime prompt layers.
 func (b *BaseAgent) SetTraceFeedbackPlanner(planner TraceFeedbackPlanner) {

@@ -132,6 +132,10 @@ func LookupChatCapabilityMatrix(providerCode string) (ChatCapabilityMatrix, bool
 		return ChatCapabilityMatrix{NativeSDK: true, NativeToolCalling: true, StructuredOutput: true, Streaming: true}, true
 	case "gemini", "google", "google-genai", "vertex-ai", "vertexai", "gemini-vertex":
 		return ChatCapabilityMatrix{NativeSDK: true, NativeToolCalling: true, StructuredOutput: true, Streaming: true}, true
+	case "anthropic-compat", "claude-compat", "anthropic-messages-compat":
+		return ChatCapabilityMatrix{NativeSDK: false, NativeToolCalling: true, StructuredOutput: false, Streaming: true}, true
+	case "gemini-compat", "google-compat":
+		return ChatCapabilityMatrix{NativeSDK: false, NativeToolCalling: true, StructuredOutput: true, Streaming: true}, true
 	default:
 		profile, ok := compatProviderProfiles[code]
 		if !ok {

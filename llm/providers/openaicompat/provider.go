@@ -147,6 +147,18 @@ func (p *Provider) ResolveAPIKey(ctx context.Context) string {
 	return p.resolveAPIKey(ctx)
 }
 
+// BaseParams returns shared OpenAI-compatible transport parameters for
+// provider-local capability adapters.
+func (p *Provider) BaseParams(ctx context.Context) providerbase.OpenAICompatParams {
+	return providerbase.OpenAICompatParams{
+		Client:           p.Client,
+		BaseURL:          p.Cfg.BaseURL,
+		APIKey:           p.ResolveAPIKey(ctx),
+		ProviderName:     p.Name(),
+		BuildHeadersFunc: p.ApplyHeaders,
+	}
+}
+
 // buildHeaders applies headers to the HTTP request.
 func (p *Provider) buildHeaders(req *http.Request, apiKey string) {
 	if p.Cfg.BuildHeaders != nil {

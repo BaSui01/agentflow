@@ -203,6 +203,7 @@ func TestGrokProvider_NotSupported(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
+			assert.Equal(t, http.StatusNotImplemented, llmErr.HTTPStatus)
 			assert.Equal(t, "grok", llmErr.Provider)
 		})
 	}

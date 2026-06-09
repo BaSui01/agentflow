@@ -21,6 +21,52 @@ func TestNewQueryRouter_NilLogger(t *testing.T) {
 	require.NotNil(t, router)
 }
 
+type countingQueryLLMProvider struct {
+	response string
+	calls    int
+}
+
+func (p *countingQueryLLMProvider) Complete(ctx context.Context, prompt string) (string, error) {
+	p.calls++
+	return p.response, nil
+}
+
+func TestQueryRouter_Route_SkipsLLMWhenRulesAreConfident(t *testing.T) {
+	cfg := DefaultQueryRouterConfig()
+	cfg.EnableLLMRouting = true
+	cfg.EnableCache = false
+	cfg.ConfidenceThreshold = 0.5
+	llm := &countingQueryLLMProvider{response: `{"strategy":"graph_rag","confidence":1.0,"reasoning":"force expensive route"}`}
+	router := NewQueryRouter(cfg, nil, llm, zap.NewNop())
+
+	decision, err := router.Route(context.Background(), "what is AI")
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	assert.Equal(t, 0, llm.calls, "confident rule routing must not pay the LLM routing cost")
+	assert.NotEqual(t, StrategyGraphRAG, decision.SelectedStrategy)
+}
+
+func TestQueryRouter_Route_UsesLLMWhenRulesAreLowConfidence(t *testing.T) {
+	cfg := QueryRouterConfig{
+		Strategies: []StrategyConfig{
+			{Strategy: StrategyVector, Enabled: true, Weight: 0.01},
+		},
+		DefaultStrategy:     StrategyHybrid,
+		EnableLLMRouting:    true,
+		EnableCache:         false,
+		ConfidenceThreshold: 0.8,
+	}
+	llm := &countingQueryLLMProvider{response: `{"strategy":"bm25","confidence":0.95,"reasoning":"low rule confidence"}`}
+	router := NewQueryRouter(cfg, nil, llm, zap.NewNop())
+
+	decision, err := router.Route(context.Background(), "ambiguous")
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	assert.Equal(t, 1, llm.calls)
+	assert.Equal(t, StrategyBM25, decision.SelectedStrategy)
+	assert.Equal(t, "low rule confidence", decision.Reasoning)
+}
+
 func TestQueryRouter_Route_ShortQuery(t *testing.T) {
 	cfg := DefaultQueryRouterConfig()
 	cfg.EnableLLMRouting = false

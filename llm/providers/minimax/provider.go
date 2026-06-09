@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -15,6 +16,7 @@ import (
 // 新模型（如 MiniMax-M2.7 / MiniMax-M2.5 等）支持标准 JSON tool calling。
 type MiniMaxProvider struct {
 	*openaicompat.Provider
+	*providerbase.MultimodalAdapter
 }
 
 // newMiniMaxCapabilityHost 创建 MiniMax capability host。
@@ -39,6 +41,7 @@ func newMiniMaxCapabilityHost(cfg providers.MiniMaxConfig, logger *zap.Logger) *
 			Timeout:       cfg.Timeout,
 			SupportsTools: &supportsTools,
 		}, logger),
+		MultimodalAdapter: providerbase.NewMultimodalAdapter(providerbase.MultimodalAdapterConfig{ProviderName: "minimax"}),
 	}
 }
 

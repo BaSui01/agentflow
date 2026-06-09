@@ -429,43 +429,11 @@ func buildSDKResponseToolChoice(choice any, tools []any) responses.ResponseNewPa
 	default:
 		return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
 	}
-	normalized := providerbase.NormalizeToolChoice(choice)
-	switch normalized.Mode {
-	case "tool":
-		name := strings.TrimSpace(normalized.SpecificName)
-		if name == "" {
-			return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
-		}
-		if toolType := findResponseToolTypeByName(tools, name); toolType == types.ToolTypeCustom {
-			return responses.ResponseNewParamsToolChoiceUnion{
-				OfCustomTool: &responses.ToolChoiceCustomParam{Name: name},
-			}
-		}
-		return responses.ResponseNewParamsToolChoiceUnion{
-			OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: name},
-		}
-	case "any", "validated":
-		allowedTools := buildAllowedToolsChoice(tools)
-		if len(allowedTools) == 0 {
-			return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
-		}
-		return responses.ResponseNewParamsToolChoiceUnion{
-			OfAllowedTools: &responses.ToolChoiceAllowedParam{
-				Mode:  responses.ToolChoiceAllowedModeRequired,
-				Tools: allowedTools,
-			},
-		}
-	case "auto":
-		return responses.ResponseNewParamsToolChoiceUnion{
-			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsAuto),
-		}
-	case "none":
-		return responses.ResponseNewParamsToolChoiceUnion{
-			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsNone),
-		}
-	default:
-		return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
+	resolved := resolveOpenAIToolChoice(choice, tools)
+	if !resolved.isEmpty() {
+		return buildResponseToolChoiceUnion(resolved)
 	}
+	return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
 }
 
 func buildAllowedToolsChoice(tools []any) []map[string]any {

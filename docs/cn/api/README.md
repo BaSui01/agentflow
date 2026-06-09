@@ -50,6 +50,7 @@ type Message struct {
 ```
 
 **角色类型**:
+
 - `RoleSystem` - 系统提示词
 - `RoleUser` - 用户消息
 - `RoleAssistant` - 助手回复
@@ -201,12 +202,10 @@ func (b *BaseAgent) Teardown(ctx context.Context) error
 
 - `agent.NewAgentBuilder(...)`：细粒度高级 builder，适合逐项注入底层依赖
 - `agent.AgentRegistry.Register(...)` / `agent.AgentRegistry.Create(...)` / `agent.InitGlobalRegistry(...)`：typed factory 扩展入口，适合按类型分发构造逻辑
-- `agent.BuildBaseAgent(...)`：最低层 primitive 构件，仅建议用于底层封装或高级扩展
 
 说明：
 
 - `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`。
-- `agent.NewAgentBuilder(...)`、`agent.CreateAgent(...)`、`agent.BuildBaseAgent(...)` 不再作为 `agent` 子模块的正式主入口；它们保留为高级扩展或底层封装面，不应与 `agent/runtime.Builder` 同级推荐。
 - 包级 `agent.CreateAgent(...)` 只是全局 registry 的便捷包装；如果你明确在做 registry 扩展，优先直接调用 `AgentRegistry.Create(...)`，不要把它当作通用构造入口。
 - 默认单 Agent 请求不会经 `multiagent` 模式分发；`multiagent` 仅用于 `agent_ids` 多目标协作请求。
 - `Output` 中的 `current_stage / iteration_count / selected_reasoning_mode / stop_reason / checkpoint_id / resumable` 是默认闭环执行和恢复链路的统一可观测字段。
@@ -309,11 +308,20 @@ type ChatUsage struct {
 // 创建混合检索器
 func NewHybridRetriever(config HybridRetrievalConfig, logger *zap.Logger) *HybridRetriever
 
-// 索引文档
-func (r *HybridRetriever) IndexDocuments(docs []Document)
+// 创建带向量存储的混合检索器
+func NewHybridRetrieverWithVectorStore(config HybridRetrievalConfig, vectorStore VectorStore, logger *zap.Logger) *HybridRetriever
 
-// 检索
+// 索引文档
+func (r *HybridRetriever) IndexDocuments(docs []Document) error
+
+// 增量索引单篇文档
+func (r *HybridRetriever) AddDocument(ctx context.Context, doc Document) error
+
+// 检索（Copy-on-Read：先复制数据再释放锁，BM25 与向量检索并行无锁执行）
 func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]RetrievalResult, error)
+
+// 设置 tokenizer，用于精确估算返回结果的上下文 token 数
+func (r *HybridRetriever) SetTokenizer(t *tokenizer.RAGAdapter)
 ```
 
 ### MultiHopReasoner

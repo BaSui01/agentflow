@@ -44,12 +44,12 @@ docker-compose ps
 
 ### 服务说明
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| agentflow | 8080, 9091 | 主服务 |
-| redis | 6379 | 短期记忆缓存 |
-| postgres | 5432 | 元数据存储 |
-| qdrant | 6333, 6334 | 向量存储 |
+| 服务      | 端口       | 说明         |
+| --------- | ---------- | ------------ |
+| agentflow | 8080, 9091 | 主服务       |
+| redis     | 6379       | 短期记忆缓存 |
+| postgres  | 5432       | 元数据存储   |
+| qdrant    | 6333, 6334 | 向量存储     |
 
 ### 启动带监控的环境
 
@@ -59,6 +59,7 @@ docker-compose --profile monitoring up -d
 ```
 
 监控服务：
+
 - Prometheus: http://localhost:9092
 - Grafana: http://localhost:3000（admin/admin）
 
@@ -124,7 +125,7 @@ docker run -d \
 mkdir -p ./config
 
 # 复制示例配置
-cp deployments/docker/config.example.yaml ./config/config.yaml
+cp config.example.yaml ./config/config.yaml
 
 # 编辑配置
 vim ./config/config.yaml
@@ -228,6 +229,7 @@ AGENTFLOW_LOG_FORMAT=json
 ```
 
 说明：
+
 - `metrics` 默认只绑定 `127.0.0.1`
 - 若需要从容器外抓取 `/metrics`，请显式设置 `AGENTFLOW_SERVER_METRICS_BIND_ADDRESS=0.0.0.0`
 - `pprof` 默认关闭，只有设置 `AGENTFLOW_SERVER_ENABLE_PPROF=true` 时才会暴露 `/debug/pprof/*`
@@ -249,10 +251,10 @@ services:
 
 ```yaml
 volumes:
-  agentflow_data:    # 应用数据
-  redis_data:        # Redis 数据
-  postgres_data:     # PostgreSQL 数据
-  qdrant_data:       # Qdrant 向量数据
+  agentflow_data: # 应用数据
+  redis_data: # Redis 数据
+  postgres_data: # PostgreSQL 数据
+  qdrant_data: # Qdrant 向量数据
 ```
 
 ### 备份数据

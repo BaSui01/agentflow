@@ -30,6 +30,7 @@ type PreparedToolProtocol struct {
 	HandoffTools map[string]RuntimeHandoffTarget
 	ToolRisks    map[string]string
 	AllowedTools []string
+	Authorize    AuthorizeFunc
 }
 
 // ToolProtocolRuntime resolves the tool execution contract for a prepared request.
@@ -42,6 +43,10 @@ type ToolProtocolRuntime interface {
 // DefaultToolProtocolRuntime preserves the current runtime behavior while
 // centralizing handoff + tool manager orchestration behind a single interface.
 type DefaultToolProtocolRuntime struct{}
+
+type authorizedToolExecutor struct {
+	prepared *PreparedToolProtocol
+}
 
 func NewDefaultToolProtocolRuntime() ToolProtocolRuntime {
 	return DefaultToolProtocolRuntime{}
@@ -68,6 +73,7 @@ func (DefaultToolProtocolRuntime) Prepare(owner *BaseAgent, pr *preparedRequest)
 		HandoffTools: cloneRuntimeHandoffMap(pr.handoffTools),
 		ToolRisks:    cloneStringMap(pr.toolRisks),
 		AllowedTools: allowed,
+		Authorize:    owner.authorize,
 	}
 }
 
@@ -75,7 +81,49 @@ func (DefaultToolProtocolRuntime) Execute(ctx context.Context, prepared *Prepare
 	if prepared == nil || prepared.Executor == nil {
 		return nil
 	}
+	if prepared.Authorize != nil {
+		return executeAuthorizedToolCalls(ctx, prepared, calls)
+	}
 	return prepared.Executor.Execute(ctx, calls)
+}
+
+func executeAuthorizedToolCalls(ctx context.Context, prepared *PreparedToolProtocol, calls []types.ToolCall) []types.ToolResult {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]types.ToolResult, 0, len(calls))
+	authz := NewAuthzMiddleware(prepared.Authorize)
+	for _, call := range calls {
+		result, err := authz.Execute(ctx, &toolAuthorizationInput{
+			ToolCall:  &call,
+			ToolRisks: prepared.ToolRisks,
+		})
+		if err != nil {
+			out = append(out, types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: err.Error()})
+			continue
+		}
+		if result.Action == HookActionAbort {
+			out = append(out, types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: result.Reason})
+			continue
+		}
+		out = append(out, prepared.Executor.ExecuteOne(ctx, call))
+	}
+	return out
+}
+
+func (e authorizedToolExecutor) Execute(ctx context.Context, calls []types.ToolCall) []types.ToolResult {
+	if e.prepared == nil {
+		return nil
+	}
+	return executeAuthorizedToolCalls(ctx, e.prepared, calls)
+}
+
+func (e authorizedToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) types.ToolResult {
+	results := e.Execute(ctx, []types.ToolCall{call})
+	if len(results) == 0 {
+		return types.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: "no tool result"}
+	}
+	return results[0]
 }
 
 func (DefaultToolProtocolRuntime) ToMessages(results []types.ToolResult) []types.Message {

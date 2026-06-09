@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
+	"go.uber.org/zap"
 )
 
 type anthropicCompatMessagesRequest struct {
@@ -134,7 +135,9 @@ func (h *ChatHandler) HandleAnthropicCompatMessages(w http.ResponseWriter, r *ht
 	}
 
 	out := toAnthropicCompatMessageResponse(h.converter.ToAPIResponseFromUsecase(result.Response))
-	writeAnthropicCompatJSON(w, http.StatusOK, out)
+	if err := writeAnthropicCompatJSON(w, http.StatusOK, out); err != nil {
+		h.logger.Debug("Anthropic compatible response write failed", zap.Error(err))
+	}
 }
 
 func (h *ChatHandler) handleAnthropicCompatMessagesStream(w http.ResponseWriter, r *http.Request, req *api.ChatRequest) {
@@ -180,13 +183,8 @@ func (h *ChatHandler) handleAnthropicCompatMessagesStream(w http.ResponseWriter,
 
 	for item := range stream {
 		if item.Err != nil {
-			_ = writeSSEEventJSON(w, "error", anthropicCompatErrorEnvelope{
-				Type: "error",
-				Error: anthropicCompatError{
-					Type:    anthropicCompatErrorType(item.Err),
-					Message: item.Err.Message,
-				},
-			})
+			_, payload := anthropicCompatErrorEnvelopeFromTypes(item.Err)
+			_ = writeSSEEventJSON(w, "error", payload)
 			flusher.Flush()
 			return
 		}
@@ -740,30 +738,15 @@ func anthropicCompatStopReason(raw string) string {
 	}
 }
 
-func writeAnthropicCompatJSON(w http.ResponseWriter, status int, payload any) {
+func writeAnthropicCompatJSON(w http.ResponseWriter, status int, payload any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	return json.NewEncoder(w).Encode(payload)
 }
 
 func writeAnthropicCompatError(w http.ResponseWriter, err *types.Error) {
-	if err == nil {
-		err = types.NewInternalError("internal error")
-	}
-	status := err.HTTPStatus
-	if status == 0 {
-		status = mapErrorCodeToHTTPStatus(err.Code)
-	}
-	if status == 0 {
-		status = http.StatusInternalServerError
-	}
-	writeAnthropicCompatJSON(w, status, anthropicCompatErrorEnvelope{
-		Type: "error",
-		Error: anthropicCompatError{
-			Type:    anthropicCompatErrorType(err),
-			Message: err.Message,
-		},
-	})
+	status, payload := anthropicCompatErrorEnvelopeFromTypes(err)
+	_ = writeAnthropicCompatJSON(w, status, payload)
 }
 
 func anthropicCompatErrorType(err *types.Error) string {

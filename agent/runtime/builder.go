@@ -58,6 +58,7 @@ type BuildOptions struct {
 	ExecutionOptionsResolver ExecutionOptionsResolver
 	ChatRequestAdapter       agentadapters.ChatRequestAdapter
 	ToolProtocolRuntime      ToolProtocolRuntime
+	Authorize                AuthorizeFunc
 	ReasoningRuntime         ReasoningRuntime
 	ModelCatalog             *types.ModelCatalog
 
@@ -207,6 +208,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*BaseAgent,
 	ag.SetExecutionOptionsResolver(opts.ExecutionOptionsResolver)
 	ag.SetChatRequestAdapter(opts.ChatRequestAdapter)
 	ag.SetToolProtocolRuntime(opts.ToolProtocolRuntime)
+	ag.SetAuthorizeFunc(opts.Authorize)
 	ag.SetReasoningRuntime(opts.ReasoningRuntime)
 	ag.SetPromptStore(opts.PromptStore)
 	ag.SetConversationStore(opts.ConversationStore)

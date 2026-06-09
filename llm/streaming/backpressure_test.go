@@ -113,3 +113,48 @@ func TestDropPolicyOldest_DropsOldToken(t *testing.T) {
 	assert.Equal(t, "d", tok3.Content)
 }
 
+func TestStreamMultiplexer_SlowConsumerDoesNotBlockFastConsumer(t *testing.T) {
+	source := NewBackpressureStream(BackpressureConfig{
+		BufferSize:    2,
+		HighWaterMark: 0.9,
+		LowWaterMark:  0.1,
+		DropPolicy:    DropPolicyBlock,
+	})
+	mux := NewStreamMultiplexer(source)
+
+	slow := mux.AddConsumer(BackpressureConfig{
+		BufferSize:    1,
+		HighWaterMark: 0.5,
+		LowWaterMark:  0.1,
+		DropPolicy:    DropPolicyBlock,
+	})
+	fast := mux.AddConsumer(BackpressureConfig{
+		BufferSize:    2,
+		HighWaterMark: 0.9,
+		LowWaterMark:  0.1,
+		DropPolicy:    DropPolicyBlock,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	mux.Start(ctx)
+
+	require.NoError(t, source.Write(ctx, Token{Content: "first", Index: 1}))
+	_, err := slow.Read(ctx)
+	require.NoError(t, err)
+	_, err = fast.Read(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, source.Write(ctx, Token{Content: "blocks-slow", Index: 2}))
+	require.Eventually(t, func() bool { return slow.BufferLevel() >= 1.0 }, time.Second, 10*time.Millisecond)
+
+	require.NoError(t, source.Write(ctx, Token{Content: "reaches-fast", Index: 3}))
+	fastReadCtx, fastCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer fastCancel()
+	tok, err := fast.Read(fastReadCtx)
+	require.NoError(t, err)
+	assert.Equal(t, "blocks-slow", tok.Content)
+	tok, err = fast.Read(fastReadCtx)
+	require.NoError(t, err)
+	assert.Equal(t, "reaches-fast", tok.Content)
+}
