@@ -900,7 +900,7 @@ func demoFullModuleIntegrationReachability() {
 
 		// generic helpers + test utility modules
 		cb := llm_circuitbreaker.NewCircuitBreaker(nil, nil)
-		llm_circuitbreaker.CallWithResultTyped[int](cb, context.Background(), func() (int, error) { return 1, nil })
+		llm_circuitbreaker.CallWithResultTyped[int](cb, context.Background(), func(context.Context) (int, error) { return 1, nil })
 
 		idm := llm_idempotency.NewMemoryManager(nil)
 		llm_idempotency.SetTyped[map[string]any](idm, context.Background(), "k", map[string]any{"ok": true}, time.Second)

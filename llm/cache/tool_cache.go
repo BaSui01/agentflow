@@ -116,7 +116,7 @@ func (c *ToolResultCache) Get(toolName string, arguments json.RawMessage) (*Cach
 		zap.Int("hit_count", entry.HitCount))
 
 	return &CachedToolResult{
-		Result:    entry.Result,
+		Result:    append(json.RawMessage(nil), entry.Result...),
 		Error:     entry.Error,
 		CachedAt:  entry.CreatedAt,
 		FromCache: true,
@@ -234,19 +234,10 @@ func (c *ToolResultCache) isExcluded(toolName string) bool {
 }
 
 func (c *ToolResultCache) evictOldest() {
-	var oldestKey string
-	var oldestTime time.Time
-
-	for key, entry := range c.entries {
-		if oldestKey == "" || entry.CreatedAt.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = entry.CreatedAt
-		}
-	}
-
-	if oldestKey != "" {
-		delete(c.entries, oldestKey)
+	for key := range c.entries {
+		delete(c.entries, key)
 		c.stats.Evictions++
+		return
 	}
 }
 

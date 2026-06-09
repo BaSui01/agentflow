@@ -71,7 +71,7 @@ func (cb *simpleCircuitBreaker) State() circuitbreaker.State {
 
 // 调用以断路器保护功能执行 。
 // 使用 mutex 保护状态检查与转换的原子性，防止并发调用导致状态不一致。
-func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func() error) error {
+func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
 	cb.mu.Lock()
 	state := circuitbreaker.State(cb.state.Load())
 
@@ -86,7 +86,7 @@ func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func() error) error
 	}
 	cb.mu.Unlock()
 
-	err := fn()
+	err := fn(ctx)
 
 	if err != nil {
 		cb.recordFailure()
@@ -191,12 +191,12 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 	var resp *ChatResponse
 	var lastErr error
 
-	err := rp.circuitBreaker.Call(ctx, func() error {
+	err := rp.circuitBreaker.Call(ctx, func(callCtx context.Context) error {
 		backoff := rp.retryPolicy.InitialBackoff
 
 		for i := 0; i <= rp.retryPolicy.MaxRetries; i++ {
 			var err error
-			resp, err = rp.provider.Completion(ctx, req)
+			resp, err = rp.provider.Completion(callCtx, req)
 			if err == nil {
 				return nil
 			}
@@ -207,20 +207,20 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 			}
 
 			if i < rp.retryPolicy.MaxRetries {
-					timer := time.NewTimer(backoff)
-					select {
-					case <-ctx.Done():
-						if !timer.Stop() {
-							<-timer.C
-						}
-						return ctx.Err()
-					case <-timer.C:
+				timer := time.NewTimer(backoff)
+				select {
+				case <-callCtx.Done():
+					if !timer.Stop() {
+						<-timer.C
 					}
-					backoff = time.Duration(float64(backoff) * rp.retryPolicy.Multiplier)
-					if backoff > rp.retryPolicy.MaxBackoff {
-						backoff = rp.retryPolicy.MaxBackoff
-					}
+					return callCtx.Err()
+				case <-timer.C:
 				}
+				backoff = time.Duration(float64(backoff) * rp.retryPolicy.Multiplier)
+				if backoff > rp.retryPolicy.MaxBackoff {
+					backoff = rp.retryPolicy.MaxBackoff
+				}
+			}
 		}
 		return lastErr
 	})

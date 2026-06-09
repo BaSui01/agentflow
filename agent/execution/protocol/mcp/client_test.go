@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -172,4 +174,44 @@ func TestMCPClient_Close(t *testing.T) {
 	err := client.Close()
 	require.NoError(t, err)
 	assert.True(t, closed)
+}
+
+func TestMCPClient_StartNotificationListener_DoesNotBlockSubsequentNotificationsOnSlowRefresh(t *testing.T) {
+	transport := &clientMockTransport{}
+	blockRefresh := make(chan struct{})
+	var receiveCount int32
+	var refreshCount int32
+
+	transport.receiveFunc = func(ctx context.Context) (*MCPMessage, error) {
+		switch atomic.AddInt32(&receiveCount, 1) {
+		case 1:
+			return &MCPMessage{JSONRPC: "2.0", Method: "notifications/tools/list_changed"}, nil
+		case 2:
+			return &MCPMessage{JSONRPC: "2.0", Method: "notifications/tools/list_changed"}, nil
+		default:
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+	}
+	client := NewDefaultMCPClient(transport, zap.NewNop(), WithToolsChangedHandler(func(ctx context.Context, tools []MCPTool) {}))
+	client.refreshToolsFn = func(ctx context.Context) ([]MCPTool, error) {
+		atomic.AddInt32(&refreshCount, 1)
+		<-blockRefresh
+		return []MCPTool{{Name: "echo"}}, nil
+	}
+	notificationCount := atomic.Int32{}
+	client.onNotification = func(msg *MCPMessage) {
+		if msg != nil && msg.Method == "notifications/tools/list_changed" {
+			notificationCount.Add(1)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client.StartNotificationListener(ctx)
+
+	require.Eventually(t, func() bool { return notificationCount.Load() >= 2 }, time.Second, 10*time.Millisecond)
+
+	close(blockRefresh)
+	require.Eventually(t, func() bool { return atomic.LoadInt32(&refreshCount) >= 2 }, time.Second, 10*time.Millisecond)
 }

@@ -182,7 +182,7 @@ func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) 
 	// 持久化任务
 	if s.taskStore != nil {
 		persistTask := s.convertToPersistTask(task)
-		if err := s.taskStore.SaveTask(r.Context(), persistTask); err != nil {
+		if err := s.taskStore.SaveTask(ctx, persistTask); err != nil {
 			s.logger.Error("failed to persist task",
 				zap.String("task_id", taskID),
 				zap.Error(err),

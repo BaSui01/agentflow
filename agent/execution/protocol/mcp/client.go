@@ -22,6 +22,8 @@ type DefaultMCPClient struct {
 	logger         *zap.Logger
 	nextID         atomic.Int64
 	toolsChangedFn ToolsChangedHandler
+	refreshToolsFn func(context.Context) ([]MCPTool, error)
+	onNotification func(*MCPMessage)
 	notifDone      chan struct{}
 }
 
@@ -45,6 +47,7 @@ func NewDefaultMCPClient(transport Transport, logger *zap.Logger, opts ...Client
 	for _, opt := range opts {
 		opt(c)
 	}
+	c.refreshToolsFn = c.RefreshTools
 	return c
 }
 
@@ -271,13 +274,15 @@ func (c *DefaultMCPClient) StartNotificationListener(ctx context.Context) {
 			if msg == nil {
 				continue
 			}
+			if c.onNotification != nil {
+				c.onNotification(msg)
+			}
 			if msg.Method == "notifications/tools/list_changed" && c.toolsChangedFn != nil {
-				tools, err := c.ListTools(ctx)
-				if err != nil {
-					c.logger.Warn("failed to refresh tools after list_changed", zap.Error(err))
-					continue
-				}
-				c.toolsChangedFn(ctx, tools)
+				go func() {
+					if _, err := c.refreshToolsFn(ctx); err != nil {
+						c.logger.Warn("failed to refresh tools after list_changed", zap.Error(err))
+					}
+				}()
 			}
 		}
 	}()

@@ -63,6 +63,9 @@ components:
   pkg_httpclient:
     in:
       - pkg/httpclient
+  pkg_httputil:
+    in:
+      - pkg/httputil
   pkg_cache:
     in:
       - pkg/cache
@@ -72,6 +75,9 @@ components:
   pkg_jsonschema:
     in:
       - pkg/jsonschema
+  pkg_jsonutil:
+    in:
+      - pkg/jsonutil
   pkg_metrics:
     in:
       - pkg/metrics
@@ -93,6 +99,9 @@ components:
   pkg_service:
     in:
       - pkg/service
+  pkg_scheduler:
+    in:
+      - pkg/scheduler
   pkg_storage:
     in:
       - pkg/storage
@@ -102,6 +111,9 @@ components:
   pkg_tlsutil:
     in:
       - pkg/tlsutil
+  pkg_tokenizer:
+    in:
+      - pkg/tokenizer/**
 
 commonComponents:
   - types
@@ -113,6 +125,7 @@ deps:
   config:
     mayDependOn:
       - config
+      - pkg_httputil
       - types
   llm:
     anyProjectDeps: true
@@ -133,16 +146,20 @@ deps:
     mayDependOn: [pkg_common, types]
   pkg_httpclient:
     mayDependOn: [pkg_httpclient, config, types]
+  pkg_httputil:
+    mayDependOn: [pkg_httputil, types]
   pkg_cache:
     mayDependOn: [pkg_cache, pkg_tlsutil, types]
   pkg_database:
     mayDependOn: [pkg_database, types]
   pkg_jsonschema:
     mayDependOn: [pkg_jsonschema, types]
+  pkg_jsonutil:
+    mayDependOn: [pkg_jsonutil, types]
   pkg_metrics:
     mayDependOn: [pkg_metrics, types]
   pkg_middleware:
-    mayDependOn: [pkg_middleware, pkg_metrics, pkg_telemetry, config, types]
+    mayDependOn: [pkg_middleware, pkg_httputil, pkg_metrics, pkg_telemetry, config, types]
   pkg_migration:
     mayDependOn: [pkg_migration, config, types]
   pkg_mongodb:
@@ -153,10 +170,14 @@ deps:
     mayDependOn: [pkg_server, pkg_tlsutil, types]
   pkg_service:
     mayDependOn: [pkg_service, types]
+  pkg_scheduler:
+    mayDependOn: [pkg_scheduler, types]
   pkg_storage:
     mayDependOn: [pkg_storage, pkg_tlsutil, types]
   pkg_telemetry:
     mayDependOn: [pkg_telemetry, config, types]
   pkg_tlsutil:
     mayDependOn: [pkg_tlsutil, types]
+  pkg_tokenizer:
+    mayDependOn: [pkg_tokenizer, types]
 

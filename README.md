@@ -491,7 +491,7 @@ internal/app/bootstrap/ = 启动期装配与 bridge，属于组合根支撑，�
 | `llm/`      | `types/`、`pkg/`、`config/`                                | `agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/`                            |
 | `agent/`    | `types/`、`llm/`、`rag/`、`pkg/`、`config/`                | `workflow/`、`api/`、`cmd/`、`internal/`                                              |
 | `rag/`      | `types/`、`llm/`、`pkg/`、`config/`                        | `agent/`、`workflow/`、`api/`、`cmd/`、`internal/`                                    |
-| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/`      | `api/`、`cmd/`、`internal/`、`agent/persistence`                                      |
+| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |
 | `api/`      | `types/`、`llm/`、`agent/`、`rag/`、`workflow/`、`config/` | provider 实现细节、组合根逻辑                                                         |
 | `cmd/`      | 通过 `internal/app/bootstrap` 装配各层                     | 业务实现下沉、绕过 bootstrap 直拼底层细节                                             |
 | `pkg/`      | `types/` 与必要的 `pkg/*`                                  | `api/`、`cmd/`                                                                        |

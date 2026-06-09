@@ -94,7 +94,7 @@ func (s *MemoryTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 		task.ID = uuid.New().String()
 	} else {
 		if _, exists := s.tasks[task.ID]; exists {
-			task.ID = uuid.New().String()
+			return ErrAlreadyExists
 		}
 	}
 

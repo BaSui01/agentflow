@@ -40,6 +40,23 @@ func TestCostCalculator_UpdatePrices(t *testing.T) {
 	assert.Equal(t, 0.001, price.PriceInput)
 }
 
+func TestCostCalculator_UpdateUnitPrices(t *testing.T) {
+	calc := NewCostCalculator()
+
+	calc.UpdateUnitPrices([]UnitPrice{
+		{Provider: "openai-tts", Model: "tts-1", Capability: "audio", PriceUnit: 0.1},
+		{Provider: "openai-stt", Model: "whisper-1", Capability: "audio", PriceUnit: 0.2},
+	})
+
+	price := calc.GetUnitPrice("openai-tts", "tts-1", "audio")
+	require.NotNil(t, price)
+	assert.Equal(t, 0.1, price.PriceUnit)
+
+	price = calc.GetUnitPrice("openai-stt", "whisper-1", "audio")
+	require.NotNil(t, price)
+	assert.Equal(t, 0.2, price.PriceUnit)
+}
+
 func TestCostCalculator_DefaultPrices_Coverage(t *testing.T) {
 	calc := NewCostCalculator()
 
@@ -194,4 +211,3 @@ func TestMetrics_RecordToolCall(t *testing.T) {
 	m.RecordToolCall(context.Background(), "search", 100*time.Millisecond, true)
 	m.RecordToolCall(context.Background(), "calc", 50*time.Millisecond, false)
 }
-

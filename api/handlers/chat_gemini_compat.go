@@ -9,12 +9,12 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/internal/usecase"
-	"github.com/BaSui01/agentflow/llm/internal/googlegenai"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 )
 
 // =============================================================================
-// Gemini generateContent API compatible types
+// Gemini-compatible request and response types.
 // =============================================================================
 
 type geminiCompatGenerateRequest struct {
@@ -113,21 +113,20 @@ type geminiCompatUsageMetadata struct {
 // HandleGeminiCompatGenerateContent
 // =============================================================================
 
-// geminiCompatRoutePattern matches URLs like /v1beta/models/gemini-2.5-flash:generateContent
-var geminiCompatRoutePattern = regexp.MustCompile(`^` + googlegenai.GeminiCompatHTTPRoutePath + `(.+):(` + googlegenai.GeminiCompatStreamAction + `|` + googlegenai.GeminiCompatGenerateAction + `)$`)
-
+// geminiCompatRoutePattern matches the public Gemini-compatible model action route.
+var geminiCompatRoutePattern = regexp.MustCompile(`^` + llmgateway.GeminiCompatHTTPRoutePath + `(.+):(` + llmgateway.GeminiCompatStreamAction + `|` + llmgateway.GeminiCompatGenerateAction + `)$`)
 
 // HandleGeminiCompatDispatch routes to the correct handler based on the URL suffix.
 func (h *ChatHandler) HandleGeminiCompatDispatch(w http.ResponseWriter, r *http.Request) {
 	matches := geminiCompatRoutePattern.FindStringSubmatch(r.URL.Path)
 	if len(matches) != 3 {
-		h.writeGeminiCompatError(w, types.NewError(types.ErrInvalidRequest, "invalid Gemini API path: expect " + googlegenai.GeminiCompatHTTPRoutePath + "{model}:" + googlegenai.GeminiCompatGenerateAction + " or :" + googlegenai.GeminiCompatStreamAction).WithHTTPStatus(http.StatusNotFound))
+		h.writeGeminiCompatError(w, types.NewError(types.ErrInvalidRequest, "invalid Gemini API path: expect "+llmgateway.GeminiCompatHTTPRoutePath+"{model}:"+llmgateway.GeminiCompatGenerateAction+" or :"+llmgateway.GeminiCompatStreamAction).WithHTTPStatus(http.StatusNotFound))
 		return
 	}
 	switch matches[2] {
-	case googlegenai.GeminiCompatStreamAction:
+	case llmgateway.GeminiCompatStreamAction:
 		h.HandleGeminiCompatStreamGenerateContent(w, r)
-	case googlegenai.GeminiCompatGenerateAction:
+	case llmgateway.GeminiCompatGenerateAction:
 		h.HandleGeminiCompatGenerateContent(w, r)
 	default:
 		h.writeGeminiCompatError(w, types.NewError(types.ErrInvalidRequest, "unknown Gemini API action").WithHTTPStatus(http.StatusNotFound))

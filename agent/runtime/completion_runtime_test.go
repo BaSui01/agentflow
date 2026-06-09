@@ -97,6 +97,7 @@ func TestFinalizeDirectStreamingResponseEmitsMessageAndLoopStop(t *testing.T) {
 func TestReactToolLoopBudgetDefaultsToExecutorBudget(t *testing.T) {
 	assert.Equal(t, 10, reactToolLoopBudget(nil))
 	assert.Equal(t, 10, reactToolLoopBudget(&preparedRequest{}))
+	assert.Equal(t, 10, reactToolLoopBudget(&preparedRequest{maxReActIter: -1}))
 }
 
 func TestReactToolLoopBudgetUsesPreparedOverride(t *testing.T) {

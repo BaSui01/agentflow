@@ -85,6 +85,14 @@ func (s *HTTPServer) convertToPersistTask(task *asyncTask) *persistence.AsyncTas
 		UpdatedAt: task.UpdatedAt,
 	}
 
+	if task.Message != nil {
+		persistTask.MessageFrom = task.Message.From
+		persistTask.MessageTo = task.Message.To
+		persistTask.MessageType = string(task.Message.Type)
+		persistTask.MessageTimestamp = task.Message.Timestamp
+		persistTask.MessageReplyTo = task.Message.ReplyTo
+	}
+
 	persistTask.Status = toPersistenceTaskStatus(task.Status)
 
 	if task.Error != "" {
@@ -120,8 +128,13 @@ func (s *HTTPServer) convertFromPersistTask(persistTask *persistence.AsyncTask) 
 	// 从输入中重建信件
 	if persistTask.Input != nil {
 		task.Message = &A2AMessage{
-			ID:      persistTask.ID,
-			Payload: persistTask.Input,
+			ID:        persistTask.ID,
+			Type:      A2AMessageType(persistTask.MessageType),
+			From:      persistTask.MessageFrom,
+			To:        persistTask.MessageTo,
+			Payload:   persistTask.Input,
+			Timestamp: persistTask.MessageTimestamp,
+			ReplyTo:   persistTask.MessageReplyTo,
 		}
 	}
 

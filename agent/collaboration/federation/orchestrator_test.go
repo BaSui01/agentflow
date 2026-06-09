@@ -143,6 +143,28 @@ func TestOrchestrator_ListNodes(t *testing.T) {
 	assert.Len(t, nodes, 5)
 }
 
+func TestOrchestrator_ListNodes_ReturnsDetachedCopies(t *testing.T) {
+	orch := newTestOrchestrator(t)
+	orch.RegisterNode(&FederatedNode{
+		ID:           "node-1",
+		Name:         "worker-1",
+		Capabilities: []string{"llm"},
+		Metadata:     map[string]string{"env": "test"},
+	})
+
+	nodes := orch.ListNodes()
+	require.Len(t, nodes, 1)
+	nodes[0].Status = NodeStatusOffline
+	nodes[0].Capabilities[0] = "mutated"
+	nodes[0].Metadata["env"] = "prod"
+
+	again := orch.ListNodes()
+	require.Len(t, again, 1)
+	assert.Equal(t, NodeStatusOnline, again[0].Status)
+	assert.Equal(t, []string{"llm"}, again[0].Capabilities)
+	assert.Equal(t, "test", again[0].Metadata["env"])
+}
+
 func TestOrchestrator_SubmitTask(t *testing.T) {
 	ctx := testutil.TestContext(t)
 
@@ -241,6 +263,39 @@ func TestOrchestrator_GetTask(t *testing.T) {
 	retrieved, ok := orch.GetTask(task.ID)
 	require.True(t, ok)
 	assert.Equal(t, task.ID, retrieved.ID)
+}
+
+func TestOrchestrator_GetTask_ReturnsDetachedCopy(t *testing.T) {
+	orch := newTestOrchestrator(t)
+	original := &FederatedTask{
+		ID:           "task-1",
+		Type:         "test",
+		SourceNode:   "local-node",
+		TargetNodes:  []string{"node-1"},
+		RequiredCaps: []string{"llm"},
+		Status:       TaskStatusRunning,
+		Results:      map[string]any{"node-1": "ok"},
+	}
+
+	orch.mu.Lock()
+	orch.tasks[original.ID] = original
+	orch.mu.Unlock()
+
+	retrieved, ok := orch.GetTask(original.ID)
+	require.True(t, ok)
+	require.NotNil(t, retrieved)
+
+	retrieved.Status = TaskStatusFailed
+	retrieved.TargetNodes[0] = "mutated"
+	retrieved.RequiredCaps[0] = "mutated"
+	retrieved.Results["node-1"] = "changed"
+
+	again, ok := orch.GetTask(original.ID)
+	require.True(t, ok)
+	assert.Equal(t, TaskStatusRunning, again.Status)
+	assert.Equal(t, []string{"node-1"}, again.TargetNodes)
+	assert.Equal(t, []string{"llm"}, again.RequiredCaps)
+	assert.Equal(t, "ok", again.Results["node-1"])
 }
 
 func TestOrchestrator_Concurrent(t *testing.T) {

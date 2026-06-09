@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,6 +38,23 @@ func TestMemoryTaskStore_SaveTask_ClosedStore(t *testing.T) {
 	store.Close()
 	err := store.SaveTask(context.Background(), &AsyncTask{ID: "x"})
 	assert.ErrorIs(t, err, ErrStoreClosed)
+}
+
+func TestMemoryTaskStore_SaveTask_IDConflictReturnsAlreadyExists(t *testing.T) {
+	store := newTestMemoryTaskStore(t)
+	ctx := context.Background()
+
+	first := &AsyncTask{ID: "t1", AgentID: "agent-1", Status: TaskStatusPending}
+	require.NoError(t, store.SaveTask(ctx, first))
+
+	conflict := &AsyncTask{ID: "t1", AgentID: "agent-1", Status: TaskStatusRunning}
+	err := store.SaveTask(ctx, conflict)
+	require.ErrorIs(t, err, ErrAlreadyExists)
+	assert.Equal(t, "t1", conflict.ID)
+
+	got, err := store.GetTask(ctx, "t1")
+	require.NoError(t, err)
+	assert.Equal(t, TaskStatusPending, got.Status)
 }
 
 func TestMemoryTaskStore_GetTask_NotFound(t *testing.T) {
@@ -151,7 +169,7 @@ func TestMemoryTaskStore_ListTasks_LimitAndOffset(t *testing.T) {
 	store := newTestMemoryTaskStore(t)
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: time.Now().String(), AgentID: "a1", Status: TaskStatusPending, CreatedAt: time.Now().Add(time.Duration(i) * time.Second)}))
+		require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: fmt.Sprintf("task-%d", i), AgentID: "a1", Status: TaskStatusPending, CreatedAt: time.Now().Add(time.Duration(i) * time.Second)}))
 	}
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{Limit: 2, Offset: 1})

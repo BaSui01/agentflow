@@ -335,6 +335,32 @@ func TestCreatePendingInterruptCancelCleansPendingAndPersistsStatus(t *testing.T
 	assert.NotNil(t, loaded.ResolvedAt)
 }
 
+func TestCreatePendingInterrupt_TimeoutIndependentFromCanceledParentContext(t *testing.T) {
+	store := NewInMemoryInterruptStore()
+	m := NewInterruptManager(store, nil)
+
+	parentCtx, cancel := context.WithCancel(context.Background())
+	interrupt, err := m.CreatePendingInterrupt(parentCtx, InterruptOptions{
+		WorkflowID: "wf_pending_unbound_timeout",
+		Type:       InterruptTypeApproval,
+		Timeout:    25 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, interrupt)
+	require.Len(t, m.GetPendingInterrupts("wf_pending_unbound_timeout"), 1)
+
+	cancel()
+
+	require.Eventually(t, func() bool {
+		return len(m.GetPendingInterrupts("wf_pending_unbound_timeout")) == 0
+	}, time.Second, 5*time.Millisecond)
+
+	loaded, err := store.Load(context.Background(), interrupt.ID)
+	require.NoError(t, err)
+	assert.Equal(t, InterruptStatusTimeout, loaded.Status)
+	assert.NotNil(t, loaded.ResolvedAt)
+}
+
 // --- Store Save error ---
 
 func TestCreateInterruptStoreSaveError(t *testing.T) {

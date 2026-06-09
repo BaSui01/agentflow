@@ -478,7 +478,7 @@ Dependency shorthand:
 | `llm/`      | `types/`, `pkg/`, `config/`                                | `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/`                            |
 | `agent/`    | `types/`, `llm/`, `rag/`, `pkg/`, `config/`                | `workflow/`, `api/`, `cmd/`, `internal/`                                              |
 | `rag/`      | `types/`, `llm/`, `pkg/`, `config/`                        | `agent/`, `workflow/`, `api/`, `cmd/`, `internal/`                                    |
-| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/`      | `api/`, `cmd/`, `internal/`, `agent/persistence`                                      |
+| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |
 | `api/`      | `types/`, `llm/`, `agent/`, `rag/`, `workflow/`, `config/` | provider implementation details, composition-root logic                               |
 | `cmd/`      | all runtime assembly through `internal/app/bootstrap`      | hidden business implementation, bypassing bootstrap wiring                            |
 | `pkg/`      | `types/` and necessary `pkg/*`                             | `api/`, `cmd/`                                                                        |

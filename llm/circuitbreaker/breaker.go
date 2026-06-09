@@ -79,10 +79,10 @@ func DefaultConfig() *Config {
 // CircuitBreaker 熔断器接口
 type CircuitBreaker interface {
 	// Call 执行调用，如果熔断器打开则返回错误
-	Call(ctx context.Context, fn func() error) error
+	Call(ctx context.Context, fn func(context.Context) error) error
 
 	// CallWithResult 执行调用并返回结果
-	CallWithResult(ctx context.Context, fn func() (any, error)) (any, error)
+	CallWithResult(ctx context.Context, fn func(context.Context) (any, error)) (any, error)
 
 	// State 获取当前状态
 	State() State
@@ -131,16 +131,16 @@ func NewCircuitBreaker(config *Config, logger *zap.Logger) CircuitBreaker {
 }
 
 // Call 实现 CircuitBreaker.Call
-func (b *breaker) Call(ctx context.Context, fn func() error) error {
-	_, err := b.CallWithResult(ctx, func() (any, error) {
-		return nil, fn()
+func (b *breaker) Call(ctx context.Context, fn func(context.Context) error) error {
+	_, err := b.CallWithResult(ctx, func(callCtx context.Context) (any, error) {
+		return nil, fn(callCtx)
 	})
 	return err
 }
 
 // CallWithResult 实现 CircuitBreaker.CallWithResult
 // 核心逻辑：状态机转换 + 失败计数 + 超时控制
-func (b *breaker) CallWithResult(ctx context.Context, fn func() (any, error)) (any, error) {
+func (b *breaker) CallWithResult(ctx context.Context, fn func(context.Context) (any, error)) (any, error) {
 	// 检查熔断器状态
 	if err := b.beforeCall(); err != nil {
 		return nil, err
@@ -153,8 +153,11 @@ func (b *breaker) CallWithResult(ctx context.Context, fn func() (any, error)) (a
 	// 执行调用
 	resultCh := make(chan callResult, 1)
 	go func() {
-		result, err := fn()
-		resultCh <- callResult{result: result, err: err}
+		result, err := fn(callCtx)
+		select {
+		case resultCh <- callResult{result: result, err: err}:
+		case <-callCtx.Done():
+		}
 	}()
 
 	// 等待结果或超时
@@ -344,4 +347,3 @@ var (
 	ErrCircuitOpen            = errors.New("熔断器已打开")
 	ErrTooManyCallsInHalfOpen = errors.New("半开状态下调用次数过多")
 )
-

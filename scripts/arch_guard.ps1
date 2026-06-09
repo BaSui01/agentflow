@@ -91,7 +91,9 @@ foreach ($module in $zeroRootModules) {
 $allowOneFilePkg = @(
     "cache",
     "httpclient",
+    "httputil",
     "jsonschema",
+    "jsonutil",
     "metrics",
     "openapi",
     "server",

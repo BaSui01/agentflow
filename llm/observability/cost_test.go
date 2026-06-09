@@ -68,3 +68,13 @@ func TestCostCalculator_SetPrice(t *testing.T) {
 	}
 }
 
+func TestCostCalculator_CalculateUnits(t *testing.T) {
+	calc := NewCostCalculator()
+	calc.SetUnitPrice("audio-prov", "tts-model", "audio", 0.25)
+
+	cost := calc.CalculateUnits("audio-prov", "tts-model", "audio", 3)
+	expected := 0.75
+	if cost != expected {
+		t.Errorf("CalculateUnits() = %v, want %v", cost, expected)
+	}
+}
